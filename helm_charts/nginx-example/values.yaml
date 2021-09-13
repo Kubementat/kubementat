@@ -1,0 +1,90 @@
+# Default values for nginx-example.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+# rolling update config
+rollingUpdate:
+  # how many replicas can at most be unavailable during the update
+  maxUnavailable: 0
+  # how many replicas can be created more than the configured replicaCount?
+  maxSurge: 1
+
+# resource requests and limitations
+# We usually recommend not to specify default resources and to leave this as a conscious
+# choice for the user. This also increases chances charts run on environments with little
+# resources, such as Minikube. If you do want to specify resources, uncomment the following
+# lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+resources: {}
+  # requests:
+  #   memory: "64Mi"
+  #   cpu: "100m"
+  # limits:
+  #   memory: "128Mi"
+  #   cpu: "200m"
+
+
+image:
+  repository: nginx
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets: []
+# [
+#   {
+#     "name": "docker-registry-secret"
+#   }
+# ]
+
+nameOverride: ""
+fullnameOverride: ""
+
+configuration:
+  secrets: []
+  env:
+    PORT: 80
+    SOME_CONFIGURATION_VARIABLE: 'Some value'
+
+hostAliases: {}
+
+podAnnotations:
+  # enable linkerd proxy injection if linkerd is configured
+  linkerd.io/inject: enabled
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: false
+  annotations:
+    ingress.kubernetes.io/rewrite-target: /
+    kubernetes.io/tls-acme: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+  hosts:
+    - host: nginx.yourdomain.com
+      paths:
+        - path: /
+  tls:
+   - secretName: nginx-example-tls-secret
+     hosts:
+       - nginx.yourdomain.com
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

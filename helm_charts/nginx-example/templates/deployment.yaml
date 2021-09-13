@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nginx-example.fullname" . }}
+  labels:
+    {{- include "nginx-example.labels" . | nindent 4 }}
+spec:
+  # Blue green deployment config for pods
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.rollingUpdate.maxUnavailable }}
+      maxSurge: {{ .Values.rollingUpdate.maxSurge }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "nginx-example.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        helm-revision: "{{ .Release.Revision }}"
+        {{- include "nginx-example.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.configuration.env.PORT }}
+              protocol: TCP
+          # continuous live check of the pod
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: 80
+          #   initialDelaySeconds: 20 # how long should we wait after pod startup for the checks to run in seconds
+          #   periodSeconds: 5 # execute all 5 seconds
+          #   timeoutSeconds: 1 # timeout for the connection in seconds
+          # # checks whether the pod is ready initially after startup
+          # startupProbe:
+          #   httpGet:
+          #     path: /
+          #     port: 80
+          #   initialDelaySeconds: 10 # how long should we wait after pod startup for the checks to run in seconds
+          #   periodSeconds: 5 # execute all 5 seconds
+          #   timeoutSeconds: 1 # timeout for the connection in seconds
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          # environment configuration variables
+          env:
+          {{- range $key, $val := .Values.configuration.env }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+          {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
