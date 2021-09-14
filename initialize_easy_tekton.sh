@@ -228,12 +228,12 @@ else
   echo "Found git_crypt_symmetric.key . Git crypt seems to be configured already. Skipping git-crypt configuration."
 fi
 
-# start cluster installation
-echo "Executing setup on cluster"
-pushd tekton_ci/automation
-./00_full_setup.sh dev dev1
-popd
-echo "Finished executing setup on cluster"
+# # start cluster installation
+# echo "Executing setup on cluster"
+# pushd tekton_ci/automation
+# ./00_full_setup.sh dev dev1
+# popd
+# echo "Finished executing setup on cluster"
 
 
 # Final output
@@ -253,3 +253,13 @@ echo "Finished initialization successfully!"
 echo "If you have any questions, feel free to create an issue via https://github.com/julweber/easy_tekton/issues"
 echo ""
 echo "##############################"
+echo ""
+echo "You can now use this configuration to roll out the platform components on the cluster via:"
+echo "cd tekton_ci/automation"
+echo "./00_full_setup.sh dev dev1"
+echo ""
+echo "In case you encounter error messages you can just rerun the full setup script to continue where the error occured."
+echo "The setup script is non-destructive"
+echo "##############################"
+echo ""
+echo "HAVE FUN WITH YOUR AUTOMATED KUBERNETES CLUSTER :D"
