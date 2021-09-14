@@ -71,6 +71,8 @@ kubectl delete namespace "$PROMETHEUS_BLACKBOX_EXPORTER_DEPLOYMENT_NAMESPACE" ||
 kubectl delete namespace "$GRAFANA_DEPLOYMENT_NAMESPACE" || true
 kubectl delete namespace "$LOKI_DEPLOYMENT_NAMESPACE" || true
 kubectl delete namespace "$VAULT_DEPLOYMENT_NAMESPACE" || true
+linkerd viz uninstall | kubectl delete -f -
+linkerd uninstall | kubectl delete -f -
 kubectl delete namespace "$LINKERD_VIZ_NAMESPACE" || true
 kubectl delete namespace "$LINKERD_NAMESPACE" || true
 echo "Finished deleting platform components"
