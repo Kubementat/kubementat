@@ -44,15 +44,20 @@ function check_required_environment_variables(){
 }
 
 function check_dependencies(){
+  echo "Checking local dependencies"
   command -v kubectl >/dev/null 2>&1 || { echo "kubectl is not installed. Aborting." >&2; exit 1; }
   command -v jq >/dev/null 2>&1 || { echo "jq is not installed. Aborting." >&2; exit 1; }
   command -v yq >/dev/null 2>&1 || { echo "yq is not installed. Aborting." >&2; exit 1; }
   command -v git >/dev/null 2>&1 || { echo "git is not installed. Aborting." >&2; exit 1; }
   command -v git-crypt >/dev/null 2>&1 || { echo "git-crypt is not installed. Aborting." >&2; exit 1; }
   command -v gpg >/dev/null 2>&1 || { echo "gpg is not installed. Aborting." >&2; exit 1; }
+  echo "Finished checking local dependencies"
+  echo "################"
+  echo ""
 }
 
 function check_cluster_and_access(){
+  echo "Checking cluster"
   echo "You are going to install easy_tekton automation to the following cluster:"
   kubectl cluster-info
 
@@ -71,6 +76,10 @@ function check_cluster_and_access(){
   kubectl auth can-i create role
   kubectl auth can-i create daemonset
   kubectl auth can-i create replicaset
+
+  echo "Finished checking cluster access"
+  echo "################"
+  echo ""
 }
 
 function generate_password(){
