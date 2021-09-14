@@ -1,4 +1,5 @@
 *.key
 deployer_ssh_key
 deployer_ssh_key.pub
-*.gpg
+gpg_private.key
+gpg_public_key.gpg
