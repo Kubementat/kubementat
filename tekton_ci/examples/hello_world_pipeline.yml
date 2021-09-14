@@ -1,0 +1,50 @@
+# kubectl apply -f hello_world_pipeline.yml
+
+## TASKS
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: greet-task
+spec:
+  steps:
+    - name: echo
+      image: alpine
+      command:
+        - echo
+      args:
+        - "Hello World"
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: show-env-task
+spec:
+  steps:
+    - name: show-env
+      image: busybox
+      env:
+        - name: "EXAMPLE_ENV_VAR"
+          value: "I AM AN EXAMPLE"
+      command:
+        - sh
+      args:
+        - "-c"
+        - "env"
+
+---
+
+## PIPELINE
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: hello-world-pipeline
+spec:
+  tasks:
+    - name: show-env
+      taskRef:
+        name: show-env-task
+    - name: greet
+      taskRef:
+        name: greet-task

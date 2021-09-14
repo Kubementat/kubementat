@@ -1,0 +1,173 @@
+# kubectl apply -n $namespace -f git-clone-with-ssh-auth.yml
+# example execution parameters:
+# git-url: ssh://git@github.com:julweber/easy_tekton.git
+# git-project-name: easy_tekton
+# git-revision: master
+# git-server-host: github.com
+# git-server-ssh-user: git
+
+# GIT_DEPLOYER_PRIVATE_KEY is read from a previously generated k8s secret within the same namespace with name git-deployer-ssh-key
+# GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64 is read from a previously generated k8s secret within the same namespace with name git-deployer-gpg-key
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: git-clone-with-ssh-auth
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The target folder for checking out git repositories.
+    mountPath: /workspace
+  params:
+  - name: git-url
+    description: git url to clone
+    type: string
+  - name: git-project-name
+    description: project directory name that will be used locally for the git clone call
+    type: string
+  - name: git-revision
+    description: git revision to checkout (branch, tag, sha, ref)
+    type: string
+    default: "master"
+  - name: git-server-host
+    description: the git server host to create an entry in the ssh config file
+    type: string
+  - name: git-server-port
+    description: the git server port to create an entry in the ssh config file
+    type: string
+    default: "22"
+  - name: git-server-ssh-user
+    description: the git server username for the ssh key
+    type: string
+    default: "git"
+  - name: git-crypt-unlock
+    description: should git-crypt unlock be executed on the repo after checkout? (true or false)
+    type: string
+    default: "false"
+  - name: docker-registry-base-url
+    description: The docker registry base url with path to load the CI image for tekton task execution from
+  stepTemplate:
+    env:
+      # ATTENTION: load keys from previously created k8s secret (see setup_pipelines.sh)
+      - name: GIT_DEPLOYER_PRIVATE_KEY
+        valueFrom:
+          secretKeyRef:
+            name: git-deployer-ssh-key
+            key: ssh-privatekey
+      - name: GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64
+        valueFrom:
+          secretKeyRef:
+            name: git-deployer-gpg-key
+            key: private-key
+
+  steps:
+    - name: git-clone
+      resources:
+        requests:
+          memory: 500Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+      image: "$(params.docker-registry-base-url)/ubuntu-ci-minimal:latest"
+      env:
+        - name: GIT_URL
+          value: "$(params.git-url)"
+        - name: GIT_PROJECT_NAME
+          value: "$(params.git-project-name)"
+        - name: GIT_REVISION
+          value: "$(params.git-revision)"
+        - name: GIT_SERVER_HOST
+          value: "$(params.git-server-host)"
+        - name: GIT_SERVER_PORT
+          value: "$(params.git-server-port)"
+        - name: GIT_SERVER_SSH_USER
+          value: "$(params.git-server-ssh-user)"
+        - name: GIT_CRYPT_UNLOCK
+          value: "$(params.git-crypt-unlock)"
+        - name: HOME
+          value: /root
+        - name: WORKSPACE_PATH
+          value: "$(workspaces.workspace.path)"
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        echo "#################################"
+        echo "USER: $(whoami)"
+        echo "HOME: $HOME"
+        echo "WORKSPACE_PATH: $WORKSPACE_PATH"
+        cd $WORKSPACE_PATH
+        echo "CURRENT PATH: $(pwd)"
+
+        # config
+        echo "GIT_URL: $GIT_URL"
+        echo "GIT_PROJECT_NAME: $GIT_PROJECT_NAME"
+        echo "GIT_REVISION: $GIT_REVISION"
+        echo "GIT_SERVER_HOST: $GIT_SERVER_HOST"
+        echo "GIT_SERVER_PORT: $GIT_SERVER_PORT"
+        echo "GIT_SERVER_SSH_USER: $GIT_SERVER_SSH_USER"
+        echo "GIT_CRYPT_UNLOCK: $GIT_CRYPT_UNLOCK"
+        echo "#################################"
+
+        # create deploy token
+        mkdir -p $HOME/.ssh
+        touch $HOME/.ssh/deploy_key
+        chmod 600 $HOME/.ssh/deploy_key
+        echo "$GIT_DEPLOYER_PRIVATE_KEY" > $HOME/.ssh/deploy_key
+
+        # configure deploy token for github
+        if [[ ! -f $HOME/.ssh/config ]]; then
+          touch $HOME/.ssh/config
+        fi
+
+        # redirection needs to be escaped
+        echo "Host $GIT_SERVER_HOST:$GIT_SERVER_PORT" >> $HOME/.ssh/config
+        echo "  HostName $GIT_SERVER_HOST" >> $HOME/.ssh/config
+        echo "  Port $GIT_SERVER_PORT" >> $HOME/.ssh/config
+        echo "  User $GIT_SERVER_SSH_USER" >> $HOME/.ssh/config
+        echo "  IdentityFile $HOME/.ssh/deploy_key" >> $HOME/.ssh/config
+        echo "  IdentitiesOnly yes" >> $HOME/.ssh/config
+        echo "  StrictHostKeyChecking no" >> $HOME/.ssh/config
+        chmod 400 $HOME/.ssh/config
+
+        # accept connections to github.com without confirmation
+        eval "$(ssh-agent)"
+        ssh-add ~/.ssh/deploy_key
+        ssh-keyscan -p "$GIT_SERVER_PORT" "$GIT_SERVER_HOST" >> $HOME/.ssh/known_hosts
+
+        # clone repo
+        echo "Cloning: $GIT_URL"
+        git clone $GIT_URL "$GIT_PROJECT_NAME"
+
+        cd $GIT_PROJECT_NAME
+        echo "CURRENT PATH: $(pwd)"
+
+        echo "####################"
+        echo "Checking out: $GIT_REVISION"
+        git checkout "$GIT_REVISION"
+        echo "####################"
+
+        if [[ "$GIT_CRYPT_UNLOCK" == "true" ]]; then
+          echo "Unlocking repo via git-crypt ..."
+
+          echo "Importing deployer gpg key from GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64 ..."
+          echo "$GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64" | base64 -d > gpg_private.key
+          gpg -k
+
+          gpg --import gpg_private.key
+
+          echo "Unlocking repo via git-crypt"
+          git-crypt unlock
+        fi
+
+        echo "####################"
+        commit_sha="$(git rev-parse HEAD)"
+        echo "Current commit SHA: $commit_sha"
+        echo "####################"
+        # writing commit SHA to file in workspace
+        echo "$commit_sha" > COMMIT_SHA
+
+        # check contents
+        ls -lacht

@@ -1,0 +1,30 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: setup-pipeline-redis-run
+spec:
+  # here we need to use our previously created service account (see setup_pipelines.sh)
+  # as we are deploying to another namespace than the tekton pipeline
+  # and want to grant according permissions for the helm deploy task
+  serviceAccountName: helm-deployer-sa
+  pipelineRef:
+    name: setup-pipeline-redis
+  timeout: 20m
+  params:
+    - name: environment
+      value: "dev"
+    - name: team
+      value: "dev1"
+    - name: docker-registry-base-url
+      value: DOCKER_REGISTRY_BASE_URL_PLACEHOLDER
+
+  workspaces:
+    - name: pipeline-workspace # this workspace name must be declared in the Pipeline
+      volumeClaimTemplate:
+        spec:
+          storageClassName: STORAGE_CLASS_PLACEHOLDER
+          accessModes:
+            - ReadWriteOnce # access mode may affect how you can use this volume in parallel tasks
+          resources:
+            requests:
+              storage: 100Mi

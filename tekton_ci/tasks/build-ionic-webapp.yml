@@ -1,0 +1,49 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-ionic-webapp
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder to list files.
+    mountPath: /workspace
+  params:
+    - name: build-subdirectory
+      description: the build sub-directory for executing mvn in
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+  steps:
+    - name: build-ionic-webapp
+      image: "$(params.docker-registry-base-url)/angular-ci:latest"
+      resources:
+        requests:
+          memory: 500Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+
+      env:
+        - name: WORKSPACE_PATH
+          value: "$(workspaces.workspace.path)"
+        - name: BUILD_SUBDIRECTORY
+          value: "$(params.build-subdirectory)"
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        echo "WORKSPACE_PATH: $WORKSPACE_PATH"
+        echo "BUILD_SUBDIRECTORY: $BUILD_SUBDIRECTORY"
+
+        cd $WORKSPACE_PATH/$BUILD_SUBDIRECTORY
+        echo "CURRENT PATH: $(pwd)"
+
+        echo "Install nodejs dependencies..."
+        npm install
+
+        echo "Run ionic build job..."
+        npm run build:browser -- --configuration=production
+
+        echo "Done! Listing built files:"
+        ls -lah platforms/browser/www

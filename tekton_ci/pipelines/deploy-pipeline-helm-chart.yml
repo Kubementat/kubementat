@@ -1,0 +1,45 @@
+################################
+# This pipeline deploys any given helm chart to a namespace
+################################
+
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: deploy-pipeline-helm-chart
+spec:
+  params:
+    - name: k8s-namespace
+      type: string
+      description: The namespace for the helm deployment.
+    - name: chart-repository-name
+    - name: chart-repository-url
+    - name: chart-name
+    - name: chart-version
+      default: ""
+    - name: helm-deployment-name
+    - name: overwrite-values
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+  tasks:
+
+    # deploy mysql via helm
+    - name: deploy-via-helm
+      taskRef:
+        name: deploy-remote-helm-chart
+      params:
+        - name: chart-repository-name
+          value: "$(params.chart-repository-name)"
+        - name: chart-repository-url
+          value: "$(params.chart-repository-url)"
+        - name: chart-name
+          value: "$(params.chart-name)"
+        - name: chart-version
+          value: "$(params.chart-version)"
+        - name: k8s-namespace
+          value: "$(params.k8s-namespace)"
+        - name: helm-deployment-name
+          value: "$(params.helm-deployment-name)"
+        - name: overwrite-values
+          value: "$(params.overwrite-values)"
+        - name: docker-registry-base-url
+          value: "$(params.docker-registry-base-url)"

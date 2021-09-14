@@ -1,0 +1,23 @@
+# kubectl apply -n dev1-pipelines -f delete-pipeline-redis-run.yml
+
+# This deletes the helm deployment named "redis" using the "delete-pipeline-helm-deployment" pipeline
+
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: delete-pipeline-redis-run
+spec:
+  # here we need to use our previously created service account (see setup_pipelines.sh)
+  # as we are deploying to another namespace than the tekton pipeline
+  # and want to grant according permissions for the helm deploy task
+  serviceAccountName: helm-deployer-sa
+  pipelineRef:
+    name: delete-pipeline-helm-deployment
+  timeout: 10m
+  params:
+    - name: k8s-namespace
+      value: "dev1"
+    - name: helm-deployment-name
+      value: "redis"
+    - name: docker-registry-base-url
+      value: DOCKER_REGISTRY_BASE_URL_PLACEHOLDER

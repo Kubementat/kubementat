@@ -1,0 +1,35 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: echo
+spec:
+  params:
+    - name: echo-message
+      description: the message to put out on the console
+      type: string
+      default: "ECHO"
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+  steps:
+    - name: echo
+      image: "$(params.docker-registry-base-url)/ubuntu-ci-minimal:latest"
+      resources:
+        requests:
+          memory: 50Mi
+          cpu: 100m
+        limits:
+          memory: 100Mi
+          cpu: 200m
+      env:
+        - name: WORKSPACE_PATH
+          value: "$(workspaces.workspace.path)"
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        echo "###########################"
+        echo "ENV:"
+        env
+        echo "###########################"
+
+        echo "$(params.echo-message)"

@@ -1,0 +1,22 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: build-pipeline-ci-images-run
+spec:
+  pipelineRef:
+    name: build-pipeline-ci-images
+  serviceAccountName: default
+  timeout: 15m
+  params:
+    - name: docker-registry-base-url
+      value: DOCKER_REGISTRY_BASE_URL_PLACEHOLDER
+  workspaces:
+    - name: pipeline-workspace # this workspace name must be declared in the Pipeline
+      volumeClaimTemplate:
+        spec:
+          storageClassName: STORAGE_CLASS_PLACEHOLDER
+          accessModes:
+            - ReadWriteOnce # access mode may affect how you can use this volume in parallel tasks
+          resources:
+            requests:
+              storage: 100Mi

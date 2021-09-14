@@ -1,0 +1,12 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerBinding
+metadata:
+  name: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-trigger-binding
+spec:
+  params:
+    - name: gitrevision
+      value: $(body.checkout_sha)
+    # - name: namespace
+    #   value: dev1-pipelines
+    # - name: gitrepositoryurl
+    #   value: "https://github.com/\$(body.repository.full_name)"

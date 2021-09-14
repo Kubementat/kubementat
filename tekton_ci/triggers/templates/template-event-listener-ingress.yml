@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-event-listener-ingress
+  annotations:
+    kubernetes.io/tls-acme: 'true'
+    nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
+spec:
+  rules:
+    - host: APP_NAME_PLACEHOLDER.trigger-hooks.TEAM_PLACEHOLDER.BASE_DOMAIN_PLACEHOLDER
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: el-APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-event-listener
+                port:
+                  number: 8080
+  tls:
+    - hosts:
+        - APP_NAME_PLACEHOLDER.trigger-hooks.TEAM_PLACEHOLDER.BASE_DOMAIN_PLACEHOLDER
+      secretName: APP_NAME_PLACEHOLDER-trigger-hooks-TEAM_PLACEHOLDER-tls-secret

@@ -1,0 +1,76 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: create-mysql-database
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder with the platform_config repository and previously generated db-schema.sql
+    mountPath: /workspace
+  params:
+    - name: environment
+      description: The application environment to use for loading configuration. E.g. dev, prod
+      # default: dev
+    - name: team
+      description: The k8s namespace to use for the deployment
+    - name: path-to-configuration
+      description: |
+        The path to the configuration files for reading credentials.
+        This should contain platform_config
+      default: "$(workspaces.workspace.path)/easy_tekton"
+    - name: database-name
+      description: The name of the database to create
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+
+  steps:
+    - name: create-mysql-database
+      image: "$(params.docker-registry-base-url)/ubuntu-ci-minimal:latest"
+      resources:
+        requests:
+          memory: 500Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        # configure env:
+        ENVIRONMENT="$(params.environment)"
+        TEAM="$(params.team)"
+        PATH_TO_CONFIGURATION="$(params.path-to-configuration)"
+        DATABASE_NAME="$(params.database-name)"
+
+        echo "########################"
+        echo "Parameters:"
+        echo "environment: $ENVIRONMENT"
+        echo "team: $TEAM"
+        echo "path-to-configuration: $PATH_TO_CONFIGURATION"
+        echo "database-name: $DATABASE_NAME"
+        echo "########################"
+        echo ""
+
+        echo "Loading MYSQL config from platform_config ..."
+        CONFIG_FILE="${PATH_TO_CONFIGURATION}/platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json"
+
+        MYSQL_HOST="$(jq -r '.MYSQL_HOST' $CONFIG_FILE)"
+        MYSQL_USERNAME="root"
+        MYSQL_ROOT_PASSWORD="$(jq -r '.MYSQL_ROOT_PASSWORD' $CONFIG_FILE)"
+        MYSQL_DATABASE_NAME="$(jq -r '.MYSQL_DATABASE_NAME' $CONFIG_FILE)"
+
+        echo "#####################"
+        echo "Showing existing databases:"
+        mysql -h $MYSQL_HOST -u $MYSQL_USERNAME --password="$MYSQL_ROOT_PASSWORD" $MYSQL_DATABASE_NAME -e "SHOW DATABASES;"
+
+        echo "#####################"
+        echo "Creating database $DATABASE_NAME ... "
+        echo "mysql -h $MYSQL_HOST -u $MYSQL_USERNAME --password=HIDDEN $MYSQL_DATABASE_NAME -e 'CREATE DATABASE IF NOT EXISTS \`$DATABASE_NAME\`;'"
+
+        mysql -h $MYSQL_HOST -u $MYSQL_USERNAME --password="$MYSQL_ROOT_PASSWORD" $MYSQL_DATABASE_NAME -e "CREATE DATABASE IF NOT EXISTS \`$DATABASE_NAME\`;"
+
+        echo "#####################"
+        echo "Showing databases:"
+        mysql -h $MYSQL_HOST -u $MYSQL_USERNAME --password="$MYSQL_ROOT_PASSWORD" $MYSQL_DATABASE_NAME -e "SHOW DATABASES;"

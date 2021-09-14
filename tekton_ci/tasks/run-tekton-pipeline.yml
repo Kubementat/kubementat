@@ -1,0 +1,96 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: run-tekton-pipeline
+spec:
+  workspaces:
+    - name: workspace
+      description: |
+        The workspace folder with the automation repository including helm charts and platform_config.
+      mountPath: /workspace
+
+  params:
+    - name: environment
+      description: the target environment for the installation
+      type: string
+      # default: "dev"
+    - name: team
+      description: the target team name for the installation
+      type: string
+    - name: path-to-configuration
+      description: |
+        The path to the configuration files for reading credentials.
+        This should contain platform_config and tekton_ci
+      default: "$(workspaces.workspace.path)/easy_tekton"
+    - name: polling-sleep-time
+      description: "How many seconds should be waited while polling the tekton pipeline-run status"
+      default: "3"
+    - name: path-to-pipeline-run-file
+      description: |
+        The path to the pipeline run file within the config repo
+        e.g.: "$(workspaces.workspace.path)/easy_tekton/tekton_ci/pipeline-runs/dev1/deploy-pipeline-nginx-example-run.yml"
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+  steps:
+    - name: run-tekton-pipeline
+      resources:
+        requests:
+          memory: 500Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+      image: "$(params.docker-registry-base-url)/ubuntu-ci-minimal:latest"
+      env:
+        - name: ENVIRONMENT
+          value: "$(params.environment)"
+        - name: TEAM
+          value: "$(params.team)"
+        - name: PATH_TO_CONFIGURATION
+          value: "$(params.path-to-configuration)"
+        - name: PATH_TO_PIPELINE_RUN_FILE
+          value: "$(params.path-to-pipeline-run-file)"
+        - name: POLLING_SLEEP_TIME
+          value: "$(params.polling-sleep-time)"
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        echo "###########################"
+        echo "ENV:"
+        env
+        cd $PATH_TO_CONFIGURATION/tekton_ci/automation/
+        echo "CURRENT_PATH: $(pwd)"
+        echo "###########################"
+
+        echo ""
+        echo "Running pipeline run file: $PATH_TO_PIPELINE_RUN_FILE"
+        echo "for ENV: $ENVIRONMENT and team: $TEAM"
+        echo ""
+
+        source run_pipeline.sh "$ENVIRONMENT" "$TEAM" "$PATH_TO_PIPELINE_RUN_FILE" false
+
+        echo "PIPELINE_RUN_NAME: $PIPELINE_RUN_NAME"
+        while true; do
+          echo "Checking run status of pipeline-run: $PIPELINE_RUN_NAME ..."
+          run_status_json="$(tkn pipelinerun describe "$PIPELINE_RUN_NAME" -n "$PIPELINE_NAMESPACE" -o json | jq -r '.status.conditions[0]')"
+          run_status="$(echo "$run_status_json" | jq -r '.status')"
+          run_reason="$(echo "$run_status_json" | jq -r '.reason')"
+          run_message="$(echo "$run_status_json" | jq -r '.message')"
+
+          if [[ "$run_status" == "True" ]]; then
+            echo "Finished running pipeline-run: $PIPELINE_RUN_NAME successfully"
+            echo "$run_message"
+            break
+          elif [[ "$run_status" == "False" ]]; then
+            echo "Finished running pipeline-run: $PIPELINE_RUN_NAME with failure."
+            echo "$run_message"
+            exit 1
+          else
+            echo "Pipeline-run: $PIPELINE_RUN_NAME is still running"
+            echo "$run_message"
+          fi
+          echo "Pipeline-run: $PIPELINE_RUN_NAME is still executing. Rechecking in $POLLING_SLEEP_TIME seconds..."
+          echo ""
+          sleep $POLLING_SLEEP_TIME
+        done

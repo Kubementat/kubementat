@@ -1,0 +1,19 @@
+# This pipeline serves for test purposes and checks whether the general pipeline execution (without workspace/volume usage) is working as expected
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: hello-world-pipeline
+spec:
+  params:
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+
+  tasks:
+    - name: echo-hello-world
+      taskRef:
+        name: echo
+      params:
+        - name: echo-message
+          value: "Hello World! I am running from tekton!"
+        - name: docker-registry-base-url
+          value: "$(params.docker-registry-base-url)"

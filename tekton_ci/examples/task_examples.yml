@@ -1,0 +1,77 @@
+#
+# resource definitions
+#
+
+# git resource example
+apiVersion: tekton.dev/v1beta1
+kind: PipelineResource
+metadata:
+  name: git-concourse-kubernetes-poc
+spec:
+  type: git
+  params:
+    - name: revision
+      value: master
+    - name: url
+      value: https://github.com/julweber/concourse_kubernetes_poc
+
+---
+
+#
+# tasks
+#
+
+# hello-world task
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: echo-hello-world
+spec:
+  steps:
+    - name: echo
+      image: ubuntu
+      command:
+        - echo
+      args:
+        - "Hello World"
+    - name: second-step
+      image: ubuntu
+      env:
+        - name: "EXAMPLE_ENV_VAR"
+          value: "I AM AN EXAMPLE"
+      command:
+        - sh
+      args:
+        - "-c"
+        - "echo 'OS-RELASE:'; env; cat /etc/os-release"
+
+---
+
+# task example for using inputs and parameters
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: input-example-task
+spec:
+  params:
+    - name: filename
+      type: string
+      description: The filename of the file to cat
+      default: README.md
+  resources:
+    inputs:
+      - name: git-source
+        type: git
+  steps:
+    - name: cat-file
+      image: ubuntu
+      command:
+        - cat
+      args:
+        - $(resources.inputs.git-source.path)/$(params.filename)
+    - name: echo-hello
+      image: ubuntu
+      command:
+        - echo
+      args:
+        - "Hello World 2"

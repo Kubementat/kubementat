@@ -1,0 +1,106 @@
+################################
+# This pipeline deploys a redis backing service instance for an environment and team
+# See team and environment for details of the deployment
+################################
+
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: setup-pipeline-redis
+spec:
+  workspaces:
+    - name: pipeline-workspace
+  params:
+    - name: environment
+      type: string
+      description: The name of the app environment (e.g. dev)
+      # default: dev
+    - name: team
+      type: string
+      description: The name of the team to run the pipeline for. Results in redis deployment namespace
+
+    # Platform configuration
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+
+    # AUTOMATION REPOSITORY SECTION
+    - name: automation-git-url
+      description: |
+        The git url of the automation repository to use (your fork of the easy_tekton repos address)
+        e.g.: if you would use the easy_tekton default location: ssh://git@github.com:julweber/easy_tekton.git
+    - name: automation-git-project-name
+      description: |
+        your local directory name for the repository
+        this should be set to "easy_tekton" despite you change a lot of code in this repo ;)
+      default: "easy_tekton"
+    - name: automation-git-revision
+      description: |
+        the git revision to checkout
+        for the automation repository we are using master most of the time
+      default: "master"
+    - name: automation-git-server-host
+      description: |
+        this should match the hostname provided in automation-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+        e.g.: github.com
+    - name: automation-git-server-port
+      description: |
+        the git server ssh port
+        this should match the port provided (or 22 if no port is provided) in automation-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+      default: "22"
+    - name: automation-git-server-ssh-user
+      description: |
+        the git server ssh user
+        this should match the username provided in automation-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+      default: "git"
+    - name: automation-git-crypt-unlock
+      description: |
+        should a git-crypt unlock be executed on the checked out repo?
+      default: "true"
+
+  tasks:
+    # clone automation source repo for deploy steps
+    - name: git-clone-automation
+      taskRef:
+        name: git-clone-with-ssh-auth
+      params:
+        - name: git-url
+          value: "$(params.automation-git-url)"
+        - name: git-project-name
+          value: "$(params.automation-git-project-name)"
+        - name: git-revision
+          value: "$(params.automation-git-revision)"
+        - name: git-server-host
+          value: "$(params.automation-git-server-host)"
+        - name: git-server-port
+          value: "$(params.automation-git-server-port)"
+        - name: git-server-ssh-user
+          value: "$(params.automation-git-server-ssh-user)"
+        - name: git-crypt-unlock
+          value: "$(params.automation-git-crypt-unlock)"
+        - name: docker-registry-base-url
+          value: "$(params.docker-registry-base-url)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
+
+    # deploy redis via helm
+    - name: deploy-redis
+      runAfter:
+        - git-clone-automation
+      taskRef:
+        name: run-automation-script-for-environment
+      params:
+        - name: docker-registry-base-url
+          value: "$(params.docker-registry-base-url)"
+        - name: path-to-automation-script
+          value: "/workspace/easy_tekton/tekton_ci/scripts/install_redis_helm_chart.sh"
+        - name: environment
+          value: "$(params.environment)"
+        - name: team
+          value: "$(params.team)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace

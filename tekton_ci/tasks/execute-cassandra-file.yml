@@ -1,0 +1,75 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: execute-cassandra-file
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder with the platform_config repository and previously generated db-schema.sql
+    mountPath: /workspace
+  params:
+    - name: environment
+      description: The application environment to use for loading configuration. E.g. dev, prod
+      # default: dev
+    - name: path-to-configuration
+      description: |
+        The path to the configuration files for reading credentials.
+        This should contain platform_config
+      default: "$(workspaces.workspace.path)/easy_tekton"
+    - name: team
+      description: The k8s namespace to use for the deployment
+    - name: cassandra-file-path
+      description: The filepath of the cql file to execute
+      default: "$(workspaces.workspace.path)/db-schema.sql"
+    - name: ignore-cql-failure
+      description: "Should excution errors within the given cql script be ingored (true/false)"
+      default: "false"
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+
+  steps:
+    - name: execute-cassandra-file
+      image: "$(params.docker-registry-base-url)/ubuntu-ci-minimal:latest"
+      resources:
+        requests:
+          memory: 500Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        # configure env:
+        ENVIRONMENT="$(params.environment)"
+        TEAM="$(params.team)"
+        PATH_TO_CONFIGURATION="$(params.path-to-configuration)"
+        CASSANDRA_FILE_PATH="$(params.cassandra-file-path)"
+        IGNORE_CQL_FAILURE="$(params.ignore-cql-failure)"
+        CASSANDRA_HOST="$(jq -r '.CASSANDRA_HOST' ${PATH_TO_CONFIGURATION}/platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.encrypted.json)"
+        CASSANDRA_PORT="9042"
+        CASSANDRA_ADMIN_USER="$(jq -r '.CASSANDRA_ADMIN_USER' ${PATH_TO_CONFIGURATION}/platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.encrypted.json)"
+        CASSANDRA_ADMIN_PASSWORD="$(jq -r '.CASSANDRA_ADMIN_PASSWORD' ${PATH_TO_CONFIGURATION}/platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.encrypted.json)"
+
+        # print config
+        echo "#################"
+        echo "ENVIRONMENT: ${ENVIRONMENT}"
+        echo "TEAM: ${TEAM}"
+        echo "PATH_TO_CONFIGURATION: ${PATH_TO_CONFIGURATION}"
+        echo "CASSANDRA_FILE_PATH: ${CASSANDRA_FILE_PATH}"
+        echo "CASSANDRA_HOST: ${CASSANDRA_HOST}"
+        echo "CASSANDRA_PORT: ${CASSANDRA_PORT}"
+        echo "IGNORE_CQL_FAILURE: ${IGNORE_CQL_FAILURE}"
+        echo "#################"
+
+        echo "Executing cassandra file from $CASSANDRA_FILE_PATH ..."
+
+        if [[ "$IGNORE_CQL_FAILURE" == "true" ]]; then
+          set +e
+        fi
+        cqlsh $CASSANDRA_HOST $CASSANDRA_PORT -u "${CASSANDRA_ADMIN_USER}" -p "${CASSANDRA_ADMIN_PASSWORD}" < $CASSANDRA_FILE_PATH
+        set -e
+
+        echo "Finished executing cassandra file."

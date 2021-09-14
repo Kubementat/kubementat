@@ -1,0 +1,19 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: EventListener
+metadata:
+  name: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-event-listener
+spec:
+  serviceAccountName: tekton-triggers-sa
+  triggers:
+    - name: push-trigger
+      interceptors:
+        - gitlab:
+            secretRef:
+              secretName: gitlab-trigger-webhook-secret
+              secretKey: secret
+            eventTypes:
+              - Push Hook
+      bindings:
+      - ref: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-trigger-binding
+      template:
+        ref: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-trigger-template

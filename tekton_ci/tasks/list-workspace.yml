@@ -1,0 +1,37 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: list-workspace
+spec:
+  params:
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder to list files.
+    mountPath: /workspace
+  steps:
+    - name: list
+      resources:
+        requests:
+          memory: 500Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+      image: "$(params.docker-registry-base-url)/ubuntu-ci-minimal:latest"
+      env:
+        - name: WORKSPACE_PATH
+          value: "$(workspaces.workspace.path)"
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        echo "Disk usage:"
+        df -h
+
+        echo "WORKSPACE_PATH: $WORKSPACE_PATH"
+
+        cd $WORKSPACE_PATH
+        ls -lacht

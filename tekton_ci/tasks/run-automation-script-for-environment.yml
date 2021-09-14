@@ -1,0 +1,59 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: run-automation-script-for-environment
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder with the automation repository including helm charts and platform_config.
+    mountPath: /workspace
+
+  params:
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+    - name: environment
+      description: the target environment for the installation
+      type: string
+      # default: "dev"
+    - name: team
+      description: the target team name for the installation
+      type: string
+    - name: path-to-automation-script
+      description: |
+        The path to the automation script that should be run for the given environment and team
+        e.g.: /workspace/easy_tekton/tekton_ci/scripts/install_mysql_helm_chart.sh
+
+  steps:
+    - name: run-automation-script
+      resources:
+        requests:
+          memory: 500Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+      image: "$(params.docker-registry-base-url)/ubuntu-ci-minimal:latest"
+      env:
+        - name: ENVIRONMENT
+          value: "$(params.environment)"
+        - name: TEAM
+          value: "$(params.team)"
+        - name: PATH_TO_AUTOMATION_SCRIPT
+          value: "$(params.path-to-automation-script)"
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        echo "###########################"
+        echo "ENV:"
+        env
+        echo "###########################"
+
+        export AUTOMATION_DIR="${PATH_TO_AUTOMATION_SCRIPT%/*}"
+        export SCRIPT_AUTOMATION_FILE="$(basename $PATH_TO_AUTOMATION_SCRIPT)"
+        cd $AUTOMATION_DIR
+        echo "CURRENT_PATH: $(pwd)"
+
+        echo "Executing: ./${SCRIPT_AUTOMATION_FILE} $ENVIRONMENT $TEAM"
+        ./$SCRIPT_AUTOMATION_FILE "$ENVIRONMENT" "$TEAM"

@@ -1,0 +1,119 @@
+
+# kubectl apply -n $namespace -f git-clone.yml
+# example execution parameters:
+# git-url: https://github.com/julweber/circle_ci_kubectl_helm_docker_image.git
+# git-project-name: circle_ci_kubectl_helm_docker_image
+# git-revision: master
+
+# GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64 is read from a previously generated k8s secret within the same namespace with name git-deployer-gpg-key
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: git-clone
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The target folder for checking out git repositories.
+    mountPath: /workspace
+  params:
+  - name: git-url
+    description: git url to clone
+    type: string
+  - name: git-project-name
+    description: project directory name that will be used locally for the git clone call
+    type: string
+  - name: git-revision
+    description: git revision to checkout (branch, tag, sha, ref)
+    type: string
+  - name: git-crypt-unlock
+    description: should git-crypt unlock be executed on the repo after checkout? (true or false)
+    type: string
+    default: "false"
+  - name: docker-registry-base-url
+    description: The docker registry base url with path to load the CI image for tekton task execution from
+  stepTemplate:
+    env:
+      # ATTENTION: load keys from previously created k8s secret (see setup_pipelines.sh)
+      - name: GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64
+        valueFrom:
+          secretKeyRef:
+            name: git-deployer-gpg-key
+            key: private-key
+
+  steps:
+    - name: git-clone
+      resources:
+        requests:
+          memory: 100Mi
+          cpu: 100m
+        limits:
+          memory: 512Mi
+          cpu: 500m
+      image: "$(params.docker-registry-base-url)/ubuntu-ci-minimal:latest"
+      env:
+        - name: GIT_URL
+          value: "$(params.git-url)"
+        - name: GIT_PROJECT_NAME
+          value: "$(params.git-project-name)"
+        - name: GIT_REVISION
+          value: "$(params.git-revision)"
+        - name: GIT_CRYPT_UNLOCK
+          value: "$(params.git-crypt-unlock)"
+        - name: HOME
+          value: /root
+        - name: WORKSPACE_PATH
+          value: "$(workspaces.workspace.path)"
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        echo "#################################"
+        echo "USER: $(whoami)"
+        echo "HOME: $HOME"
+        echo "WORKSPACE_PATH: $WORKSPACE_PATH"
+        cd $WORKSPACE_PATH
+        echo "CURRENT PATH: $(pwd)"
+
+        # config
+        echo "GIT_URL: $GIT_URL"
+        echo "GIT_PROJECT_NAME: $GIT_PROJECT_NAME"
+        echo "GIT_REVISION: $GIT_REVISION"
+        echo "GIT_CRYPT_UNLOCK: $GIT_CRYPT_UNLOCK"
+        echo "#################################"
+
+        # clone repo
+        echo "Cloning: $GIT_URL"
+        git clone $GIT_URL "$GIT_PROJECT_NAME"
+
+        cd $GIT_PROJECT_NAME
+        echo "CURRENT PATH: $(pwd)"
+
+        echo "####################"
+        echo "Checking out: $GIT_REVISION"
+        git checkout "$GIT_REVISION"
+        echo "####################"
+
+        if [[ "$GIT_CRYPT_UNLOCK" == "true" ]]; then
+          echo "Unlocking repo via git-crypt ..."
+
+          echo "Importing deployer gpg key from GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64 ..."
+          echo "$GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64" | base64 -d > gpg_private.key
+          gpg -k
+
+          gpg --import gpg_private.key
+
+          echo "Unlocking repo via git-crypt"
+          git-crypt unlock
+        fi
+
+        echo "####################"
+        commit_sha="$(git rev-parse HEAD)"
+        echo "Current commit SHA: $commit_sha"
+        echo "####################"
+        # writing commit SHA to file in workspace
+        echo "$commit_sha" > COMMIT_SHA
+
+        # check contents
+        ls -lacht

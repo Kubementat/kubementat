@@ -1,0 +1,63 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: mvn-package
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder to list files.
+    mountPath: /workspace
+  params:
+    - name: build-subdirectory
+      description: the build sub-directory for executing mvn in
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+    - name: additional-arguments
+      description: "A list of additional arguments to add to the mvn package command"
+      default: ""
+    - name: skip-tests
+      description: Should the tests be skipped (true/false)
+      default: "false"
+  steps:
+    - name: mvn-package
+      resources:
+        requests:
+          memory: 500Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+      image: "$(params.docker-registry-base-url)/ubuntu-ci:latest"
+      env:
+        - name: WORKSPACE_PATH
+          value: "$(workspaces.workspace.path)"
+        - name: BUILD_SUBDIRECTORY
+          value: "$(params.build-subdirectory)"
+        - name: ADDITIONAL_ARGUMENTS
+          value: "$(params.additional-arguments)"
+        - name: SKIP_TESTS
+          value: "$(params.skip-tests)"
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+        echo "#####################"
+        echo "MAVEN VERSION:"
+        mvn --version
+        echo "#####################"
+
+        echo "WORKSPACE_PATH: $WORKSPACE_PATH"
+        echo "BUILD_SUBDIRECTORY: $BUILD_SUBDIRECTORY"
+        echo "ADDITIONAL_ARGUMENTS: $ADDITIONAL_ARGUMENTS"
+        echo "SKIP_TESTS: $SKIP_TESTS"
+
+        cd $WORKSPACE_PATH/$BUILD_SUBDIRECTORY
+        echo "CURRENT PATH: $(pwd)"
+
+        additional_arguments="$ADDITIONAL_ARGUMENTS"
+        if [ "$SKIP_TESTS" == "true" ]; then
+          additional_arguments="${additional_arguments} -DskipTests"
+        fi
+
+        echo "Executing mvn command: mvn package $additional_arguments"
+        mvn package $additional_arguments

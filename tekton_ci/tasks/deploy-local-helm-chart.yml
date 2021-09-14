@@ -1,0 +1,110 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: deploy-local-helm-chart
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder with the automation repository including helm charts and platform_config.
+    mountPath: /workspace
+  params:
+    - name: environment
+      description: The application environment to use for loading configuration. E.g. dev, prod
+      # default: dev
+    - name: team
+      description: The k8s namespace to use for the deployment
+    - name: app-name
+      description: The name of the application (this is used for platform_config/ENV/TEAM/APP_NAME/values.encrypted.yaml)
+    - name: path-to-configuration
+      description: |
+        The path to the configuration files for reading credentials.
+        This should contain platform_config
+      default: "$(workspaces.workspace.path)/easy_tekton"
+    - name: docker-image-url
+      description: Url of the image repository for the deployment
+    - name: docker-image-tag
+      description: Tag to use for the deployment
+      default: "latest"
+    - name: path-to-chart
+      description: The path to the helm chart that should be deployed
+    - name: helm-deployment-name
+      description: The name to use for the helm deployment
+    - name: helm-timeout
+      description: "How long should helm wait for the deployment to finish? - e.g. 5m0s"
+      default: "5m0s"
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+  steps:
+    - name: deploy-via-helm
+      image: "$(params.docker-registry-base-url)/ubuntu-ci-minimal:latest"
+      resources:
+        requests:
+          memory: 500Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        # configure env:
+        ENVIRONMENT="$(params.environment)"
+        TEAM="$(params.team)"
+        APP_NAME="$(params.app-name)"
+        PATH_TO_CONFIGURATION="$(params.path-to-configuration)"
+        PATH_TO_CHART="$(params.path-to-chart)"
+        HELM_DEPLOYMENT_NAME="$(params.helm-deployment-name)"
+        DOCKER_IMAGE_URL="$(params.docker-image-url)"
+        DOCKER_IMAGE_TAG="$(params.docker-image-tag)"
+        HELM_TIMEOUT="$(params.helm-timeout)"
+
+        echo "########################"
+        echo "Parameters:"
+        echo "environment: $ENVIRONMENT"
+        echo "team: $TEAM"
+        echo "app-name: $APP_NAME"
+        echo "docker-image-url: $DOCKER_IMAGE_URL"
+        echo "docker-image-tag: $DOCKER_IMAGE_TAG"
+        echo "path-to-configuration: $PATH_TO_CONFIGURATION"
+        echo "path-to-chart: $PATH_TO_CHART"
+        echo "helm-deployment-name: $HELM_DEPLOYMENT_NAME"
+        echo "helm-timeout: $HELM_TIMEOUT"
+        echo "########################"
+        echo "Helm version:"
+        helm version
+        echo "########################"
+        echo ""
+
+        cd "$PATH_TO_CHART"
+        echo "CURRENT PATH: $(pwd)"
+
+        echo "########################"
+        echo "HELM CHART INFORMATION:"
+        helm show chart .
+        echo "########################"
+
+        echo "Listing existing helm deployments in namespace $TEAM :"
+        helm -n "$TEAM" ls --all
+        echo "########################"
+
+        echo "Deploying helm chart as deployment $HELM_DEPLOYMENT_NAME to namespace $TEAM ..."
+
+        # read values file from platform_config
+        HELM_VALUES_FILE="${PATH_TO_CONFIGURATION}/platform_config/${ENVIRONMENT}/${TEAM}/${APP_NAME}/values.encrypted.yaml"
+
+        helm upgrade -n "$TEAM" -i --wait --timeout "${HELM_TIMEOUT}" \
+        -f "$HELM_VALUES_FILE" \
+        --set image.tag="$DOCKER_IMAGE_TAG" \
+        --set image.repository="$DOCKER_IMAGE_URL" \
+        "$HELM_DEPLOYMENT_NAME" \
+        .
+
+        echo "########################"
+        echo "Listing existing helm deployments in namespace $TEAM after deployment:"
+        helm -n "$TEAM" ls --all
+
+        echo "########################"
+        echo "Showing status for deployment:"
+        helm -n "$TEAM" status "$HELM_DEPLOYMENT_NAME"

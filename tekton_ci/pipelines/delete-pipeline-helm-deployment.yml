@@ -1,0 +1,29 @@
+################################
+# This pipeline deploys any given helm chart to a namespace
+################################
+
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: delete-pipeline-helm-deployment
+spec:
+  params:
+    - name: k8s-namespace
+      type: string
+      description: The namespace for the helm deployment.
+    - name: helm-deployment-name
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+  tasks:
+
+    # deploy mysql via helm
+    - name: delete-via-helm
+      taskRef:
+        name: delete-helm-deployment
+      params:
+        - name: k8s-namespace
+          value: "$(params.k8s-namespace)"
+        - name: helm-deployment-name
+          value: "$(params.helm-deployment-name)"
+        - name: docker-registry-base-url
+          value: "$(params.docker-registry-base-url)"

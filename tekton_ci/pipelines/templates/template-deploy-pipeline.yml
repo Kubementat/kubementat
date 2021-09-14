@@ -1,0 +1,236 @@
+################################
+# This pipeline template serves as a starting point for deploying helm chart based apps
+# See team and environment for details of the deployment
+################################
+
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: deploy-pipeline-APP_NAME_PLACEHOLDER
+spec:
+  workspaces:
+    - name: pipeline-workspace
+  params:
+    # ENVIRONMENT AND TEAM SPECIFIC SECTION
+    - name: environment
+      type: string
+      description: The name of the environment to run the pipeline for. (e.g. dev, prod)
+      # default: dev
+    - name: team
+      type: string
+      description: The name of the team to run the pipeline for. Results in app deployment namespace (e.g. dev1, dev2, prod1, ...)
+      # default: "k8s/dev1"
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+
+    # AUTOMATION REPOSITORY SECTION
+    - name: automation-git-url
+      description: |
+        The git url of the automation repository to use (your fork of the easy_tekton repos address)
+        e.g.: if you would use the easy_tekton default location: ssh://git@github.com:julweber/easy_tekton.git
+    - name: automation-git-project-name
+      description: |
+        your local directory name for the repository
+        this should be set to "easy_tekton" despite you change a lot of code in this repo ;)
+      default: "easy_tekton"
+    - name: automation-git-revision
+      description: |
+        the git revision to checkout
+        for the automation repository we are using master most of the time
+      default: "master"
+    - name: automation-git-server-host
+      description: |
+        this should match the hostname provided in automation-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+        e.g.: github.com
+    - name: automation-git-server-port
+      description: |
+        the git server ssh port
+        this should match the port provided (or 22 if no port is provided) in automation-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+      default: "22"
+    - name: automation-git-server-ssh-user
+      description: |
+        the git server ssh user
+        this should match the username provided in automation-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+      default: "git"
+    - name: automation-git-crypt-unlock
+      description: |
+        should a git-crypt unlock be executed on the checked out repo?
+      default: "true"
+
+    # APP SPECIFIC SECTION
+    - name: app-name
+      default: "APP_NAME_PLACEHOLDER"
+
+    ## DOCKER IMAGE
+    - name: docker-image-url
+      type: string
+      description: The docker image url to use for the db setup and helm deployment
+    - name: docker-image-tag
+      type: string
+      description: The docker image tag to use for the db setup and helm deployment
+
+    ## APP GIT LOCATION
+    - name: app-git-url
+      description: The app git url of the app repo to execute the deploly for
+      default: "APP_GIT_URL_PLACEHOLDER"
+    - name: app-git-project-name
+      description: The git project name of the app repo to execute the deploly for
+      default: "APP_GIT_PROJECT_NAME_PLACEHOLDER"
+    - name: app-git-revision
+      description: The git branch/tag of the app repo to execute the deploy for
+      default: "k8s/$(params.team)"
+    - name: app-git-server-host
+      description: The git server host of the app repo to execute the deploy for
+      default: "APP_GIT_SERVER_HOST_PLACEHOLDER"
+    - name: app-git-server-port
+      description: The git server port of the app repo to execute the build for
+      default: "APP_GIT_SERVER_PORT_PLACEHOLDER"
+    - name: app-git-server-ssh-user
+      description: The git ssh user for the app repo to execute the build for
+      default: "APP_GIT_SERVER_SSH_USER_PLACEHOLDER"
+
+    # HELM CHART CONFIGURATION
+    - name: helm-path-to-chart
+      default: "/workspace/easy_tekton/helm_charts/APP_NAME_PLACEHOLDER"
+    - name: helm-deployment-name
+      default: APP_NAME_PLACEHOLDER
+
+  tasks:
+
+    # clone automation source repo for deploy steps
+    - name: git-clone-automation
+      taskRef:
+        name: git-clone-with-ssh-auth
+      params:
+        - name: git-url
+          value: "$(params.automation-git-url)"
+        - name: git-project-name
+          value: "$(params.automation-git-project-name)"
+        - name: git-revision
+          value: "$(params.automation-git-revision)"
+        - name: git-server-host
+          value: "$(params.automation-git-server-host)"
+        - name: git-server-port
+          value: "$(params.automation-git-server-port)"
+        - name: git-server-ssh-user
+          value: "$(params.automation-git-server-ssh-user)"
+        - name: git-crypt-unlock
+          value: "$(params.automation-git-crypt-unlock)"
+        - name: docker-registry-base-url
+          value: "$(params.docker-registry-base-url)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
+
+    # clone app source repo for build
+    - name: git-clone-app
+      taskRef:
+        name: git-clone-with-ssh-auth
+      params:
+        - name: docker-registry-base-url
+          value: "$(params.docker-registry-base-url)"
+        - name: git-url
+          value: "$(params.app-git-url)"
+        - name: git-project-name
+          value: "$(params.app-git-project-name)"
+        - name: git-revision
+          value: "$(params.app-git-revision)"
+        - name: git-server-host
+          value: "$(params.app-git-server-host)"
+        - name: git-server-port
+          value: "$(params.app-git-server-port)"
+        - name: git-server-ssh-user
+          value: "$(params.app-git-server-ssh-user)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
+
+    # list workspace contents
+    - name: list-workspace-contents
+      params:
+        - name: docker-registry-base-url
+          value: "$(params.docker-registry-base-url)"
+      runAfter:
+        - git-clone-automation
+        - git-clone-app
+      taskRef:
+        name: list-workspace
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
+
+    # TODO: generate the database schema
+    - name: generate-database-schema
+      runAfter:
+        - git-clone-automation
+        - git-clone-app
+      taskRef:
+        name: echo
+      params:
+        - name: echo-message
+          value: "PLEASE IMPLEMENT DATABASE SCHEMA GENERATION HERE"
+        - name: docker-registry-base-url
+          value: "$(params.docker-registry-base-url)"
+      # workspaces:
+      #   - name: workspace
+      #     workspace: pipeline-workspace
+
+    # TODO: implement according task and add config for it here
+    - name: app-database-setup
+      runAfter:
+        - generate-database-schema
+      taskRef:
+        name: echo
+      params:
+        - name: echo-message
+          value: "PLEASE IMPLEMENT DATABASE SETUP HERE"
+        - name: docker-registry-base-url
+          value: "$(params.docker-registry-base-url)"
+      # workspaces:
+      #   - name: workspace
+      #     workspace: pipeline-workspace
+
+    # TODO: implement according task and add config for it here
+    - name: app-database-seeds
+      runAfter:
+        - app-database-setup
+      taskRef:
+        name: echo
+      params:
+        - name: echo-message
+          value: "PLEASE IMPLEMENT DATABASE SEEDING HERE"
+        - name: docker-registry-base-url
+          value: "$(params.docker-registry-base-url)"
+      # workspaces:
+      #   - name: workspace
+      #     workspace: pipeline-workspace
+
+    # deploy app via helm chart and config in platform_config/ENVIRONMENT/TEAM/APP_NAME
+    - name: deploy-app-helm-chart
+      runAfter:
+        - app-database-seeds
+      taskRef:
+        name: deploy-local-helm-chart
+      params:
+        - name: docker-image-url
+          value: "$(params.docker-image-url)"
+        - name: docker-image-tag
+          value: "$(params.docker-image-tag)"
+        - name: path-to-chart
+          value: "$(params.helm-path-to-chart)"
+        - name: team
+          value: "$(params.team)"
+        - name: helm-deployment-name
+          value: "$(params.helm-deployment-name)"
+        - name: environment
+          value: "$(params.environment)"
+        - name: app-name
+          value: "$(params.app-name)"
+        - name: docker-registry-base-url
+          value: "$(params.docker-registry-base-url)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace

@@ -1,0 +1,61 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: delete-helm-deployment
+spec:
+  workspaces:
+    - name: workspace
+      description: |
+        The workspace folder with the automation repository including helm charts and platform_config.
+      mountPath: /workspace
+      optional: true
+
+  params:
+    - name: k8s-namespace
+      description: The k8s namespace to use for the deployment
+    - name: helm-deployment-name
+      description: The name to use for the helm deployment
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+  steps:
+    - name: delete-deployment-via-helm
+      image: "$(params.docker-registry-base-url)/ubuntu-ci-minimal:latest"
+      resources:
+        requests:
+          memory: 500Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        # configure env:
+        K8S_NAMESPACE="$(params.k8s-namespace)"
+        HELM_DEPLOYMENT_NAME="$(params.helm-deployment-name)"
+
+        echo "########################"
+        echo "Parameters:"
+        echo "K8S_NAMESPACE: $K8S_NAMESPACE"
+        echo "HELM_DEPLOYMENT_NAME: $HELM_DEPLOYMENT_NAME"
+        echo "########################"
+        echo "Helm version:"
+        helm version
+        echo "########################"
+        echo ""
+
+        echo "CURRENT PATH: $(pwd)"
+
+        echo "########################"
+        echo "Listing existing helm deployments in namespace $K8S_NAMESPACE :"
+        helm -n "$K8S_NAMESPACE" ls --all
+        echo "########################"
+
+        echo "Deleting helm deployment $HELM_DEPLOYMENT_NAME from namespace $K8S_NAMESPACE ..."
+
+        helm -n "${K8S_NAMESPACE}" uninstall "${HELM_DEPLOYMENT_NAME}"
+
+        echo "########################"
+        echo "Listing existing helm deployments in namespace $K8S_NAMESPACE after deployment:"
+        helm -n "$K8S_NAMESPACE" ls --all

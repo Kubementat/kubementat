@@ -1,0 +1,98 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: execute-mysql-file
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder with the platform_config repository and previously generated db-schema.sql
+    mountPath: /workspace
+  params:
+    - name: environment
+      description: The application environment to use for loading configuration. E.g. dev, prod
+      # default: dev
+    - name: app-name
+      description: The name of the application (this is used for platform_config/ENV/TEAM/APP_NAME/static.encrypted.json)
+    - name: path-to-configuration
+      description: |
+        The path to the configuration files for reading credentials.
+        This should contain platform_config
+      default: "$(workspaces.workspace.path)/easy_tekton"
+    - name: team
+      description: The k8s namespace to use for the deployment
+    - name: sql-file-path
+      description: The filepath of the sql file to execute
+      default: "$(workspaces.workspace.path)/db-schema.sql"
+    - name: ignore-sql-failure
+      description: Should errors resulting for the sql script execution be ignored in the task result
+      default: "false"
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+
+  steps:
+    - name: execute-mysql-file
+      image: "$(params.docker-registry-base-url)/ubuntu-ci-minimal:latest"
+      resources:
+        requests:
+          memory: 500Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        # configure env:
+        ENVIRONMENT="$(params.environment)"
+        TEAM="$(params.team)"
+        APP_NAME="$(params.app-name)"
+        PATH_TO_CONFIGURATION="$(params.path-to-configuration)"
+        SQL_FILE_PATH="$(params.sql-file-path)"
+        IGNORE_SQL_FAILURE="$(params.ignore-sql-failure)"
+
+        echo "########################"
+        echo "Parameters:"
+        echo "environment: $ENVIRONMENT"
+        echo "team: $TEAM"
+        echo "app-name: $APP_NAME"
+        echo "path-to-configuration: $PATH_TO_CONFIGURATION"
+        echo "sql-file-path: $SQL_FILE_PATH"
+        echo "ignore-sql-failure: $IGNORE_SQL_FAILURE"
+        echo "########################"
+        echo ""
+
+        echo "Loading MYSQL config from platform_config ..."
+        CONFIG_FILE="${PATH_TO_CONFIGURATION}/platform_config/${ENVIRONMENT}/${TEAM}/${APP_NAME}/static.encrypted.json"
+
+        MYSQL_HOST="$(jq -r '.MYSQL_HOST' $CONFIG_FILE)"
+        MYSQL_USERNAME="$(jq -r '.MYSQL_USERNAME' $CONFIG_FILE)"
+        MYSQL_USER_PASSWORD="$(jq -r '.MYSQL_USER_PASSWORD' $CONFIG_FILE)"
+        MYSQL_DATABASE_NAME="$(jq -r '.MYSQL_DATABASE_NAME' $CONFIG_FILE)"
+
+        echo "#####################"
+        echo "Showing existing databases:"
+        mysql -h $MYSQL_HOST -u $MYSQL_USERNAME --password="$MYSQL_USER_PASSWORD" $MYSQL_DATABASE_NAME -e "SHOW DATABASES;"
+
+        echo "#####################"
+        echo "Showing existing tables for database ${MYSQL_DATABASE_NAME} :"
+        mysql -h $MYSQL_HOST -u $MYSQL_USERNAME --password="$MYSQL_USER_PASSWORD" $MYSQL_DATABASE_NAME -e "SHOW TABLES;"
+
+        echo "#####################"
+        echo "Executing sql file ... "
+        echo "mysql -h $MYSQL_HOST -u $MYSQL_USERNAME --password=HIDDEN $MYSQL_DATABASE_NAME < $SQL_FILE_PATH"
+
+        if [[ "$IGNORE_SQL_FAILURE" == "true" ]]; then
+          set +e
+        fi
+        mysql -h $MYSQL_HOST -u $MYSQL_USERNAME --password="$MYSQL_USER_PASSWORD" $MYSQL_DATABASE_NAME < $SQL_FILE_PATH
+        set -e
+
+        echo "#####################"
+        echo "Showing databases:"
+        mysql -h $MYSQL_HOST -u $MYSQL_USERNAME --password="$MYSQL_USER_PASSWORD" $MYSQL_DATABASE_NAME -e "SHOW DATABASES;"
+
+        echo "#####################"
+        echo "Showing tables for database ${MYSQL_DATABASE_NAME} :"
+        mysql -h $MYSQL_HOST -u $MYSQL_USERNAME --password="$MYSQL_USER_PASSWORD" $MYSQL_DATABASE_NAME -e "SHOW TABLES;"

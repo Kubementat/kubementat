@@ -1,0 +1,46 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-and-push-docker-image
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder with the dockerfile and context.
+    mountPath: /workspace
+  params:
+    - name: path-to-context
+      description: The path to the build context, used by Kaniko
+    - name: path-to-dockerfile-within-context
+      description: The path to the Dockerfile within the given context, used by Kaniko
+      default: Dockerfile
+    - name: push-image-url
+      description: Url of image repository for the push
+    - name: push-image-tag
+      description: Tag to apply to the built image
+      default: "latest"
+    - name: extra-build-args
+      description: You can provide a list of additional build args here
+      type: array
+      default: []
+  steps:
+    - name: build-and-push
+      image: gcr.io/kaniko-project/executor:latest
+      resources:
+        requests:
+          memory: 500Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+      # specifying DOCKER_CONFIG is required to allow kaniko to detect docker credential
+      env:
+        - name: "DOCKER_CONFIG"
+          value: "/tekton/home/.docker/"
+      command:
+        - /kaniko/executor
+      args:
+        - $(params.extra-build-args[*])
+        - --dockerfile=$(params.path-to-dockerfile-within-context)
+        - --destination=$(params.push-image-url):$(params.push-image-tag)
+        - --context=$(params.path-to-context)

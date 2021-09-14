@@ -1,0 +1,12 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: hello-world-pipeline-run
+spec:
+  serviceAccountName: helm-deployer-sa
+  pipelineRef:
+    name: hello-world-pipeline
+  timeout: 10m
+  params:
+    - name: docker-registry-base-url
+      value: "DOCKER_REGISTRY_BASE_URL_PLACEHOLDER"
