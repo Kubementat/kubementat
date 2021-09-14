@@ -30,7 +30,9 @@ linkerd check --pre
 linkerd install | kubectl -n "$LINKERD_NAMESPACE" apply -f -
 # linkerd check
 
-linkerd viz install -f "../../platform_config/${ENVIRONMENT}/linkerd/viz_config.encrypted.yaml" | kubectl apply -f -
+# TODO: FIXME: use the existing prometheus for installing linkerd viz
+# linkerd viz install -f "../../platform_config/${ENVIRONMENT}/linkerd/viz_config.encrypted.yaml" | kubectl apply -f -
+linkerd viz install | kubectl apply -f -
 
 # linkerd example apps
 # curl -sL run.linkerd.io/emojivoto.yml | kubectl apply -f -
@@ -39,3 +41,6 @@ linkerd viz install -f "../../platform_config/${ENVIRONMENT}/linkerd/viz_config.
 # inject linkerd proxy
 # kubectl get -n emojivoto deploy -o yaml | linkerd inject - | kubectl apply -f -
 # linkerd -n emojivoto check --proxy
+
+# open dashboard
+# linkerd viz dashboard
