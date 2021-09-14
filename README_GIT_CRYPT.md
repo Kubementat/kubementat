@@ -29,10 +29,10 @@ gpg --import gpg_public_key.gpg
 ## ATTENTION: base64 behaves differently on some Operating system
 
 ### OS X Variant
-cat field-boundary-service-deployer.key | base64
+cat private.key | base64
 
 ### Arch linux variant
-cat field-boundary-service-deployer.key | base64 -w 0
+cat private.key | base64 -w 0
 
 # initialize (only executed when initializing a new repo with git crypt)
 git-crypt init
