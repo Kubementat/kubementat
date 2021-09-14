@@ -1,0 +1,20 @@
+{
+  "CASSANDRA_ADMIN_PASSWORD": "REPLACEME_CASSANDRA_ADMIN_PASSWORD",
+  "CASSANDRA_ADMIN_USER": "cassandradev1",
+  "CASSANDRA_HOST": "cassandra.dev1.svc.cluster.local",
+  "KAFKA_HOST": "kafka.dev1.svc.cluster.local",
+  "MONGODB_HOST": "mongodb-0.mongodb-headless.dev1.svc.cluster.local",
+  "MONGODB_ROOT_PASSWORD": "REPLACEME_MONGODB_ROOT_PASSWORD",
+  "MYSQL_DATABASE_CONFIGURATION": [
+    {
+      "DATABASE_NAME": "exampleapp",
+      "PASSWORD": "REPLACEME_EXAMPLE_APP_DATABASE_PASSWORD",
+      "USERNAME": "exampleapp"
+    }
+  ],
+  "MYSQL_DATABASE_NAME": "initial",
+  "MYSQL_HOST": "mysql.dev1.svc.cluster.local",
+  "MYSQL_ROOT_PASSWORD": "REPLACEME_MYSQL_ROOT_PASSWORD",
+  "REDIS_MASTER_HOST": "redis-master.dev1.svc.cluster.local",
+  "REDIS_PASSWORD": "REPLACEME_REDIS_PASSWORD"
+}

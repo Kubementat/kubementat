@@ -1,0 +1,33 @@
+replicaCount: 1
+
+service:
+  type: ClusterIP
+
+serverBlock: |-
+  server {
+    listen 0.0.0.0:8080;
+
+
+    # TODO: PLEASE INSERT YOUR PROXY CONFIGURATION HERE
+
+    # Here is an example configuration for the test app
+    location /test/ {
+      proxy_pass http://nginx-example.dev1.svc.cluster.local:80/;
+      proxy_hide_header Access-Control-Allow-Headers;
+      proxy_hide_header Access-Control-Allow-Methods;
+      proxy_hide_header Access-Control-Allow-Origin;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header Host $http_host;
+      proxy_read_timeout 3600;
+      expires 24h;
+    }
+  }
+
+resources:
+  requests:
+    memory: "20Mi"
+    cpu: "100m"
+  limits:
+    memory: "40Mi"
+    cpu: "200m"

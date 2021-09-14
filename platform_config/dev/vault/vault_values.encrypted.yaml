@@ -1,0 +1,24 @@
+injector:
+  # If true, will enable a node exporter metrics endpoint at /metrics.
+  metrics:
+    enabled: true
+
+    # True if you want to enable vault agent injection.
+  enabled: true
+
+server:
+  # If not set to true, Vault server will not be installed. See vault.mode in _helpers.tpl for implementation details
+  enabled: true
+
+# Vault UI
+ui:
+  # True if you want to create a Service entry for the Vault UI.
+  #
+  # serviceType can be used to control the type of service created. For
+  # example, setting this to "LoadBalancer" will create an external load
+  # balancer (for supported K8S installations) to access the UI.
+  enabled: true
+  serviceType: "ClusterIP"
+  serviceNodePort: null
+  externalPort: 8200
+  targetPort: 8200

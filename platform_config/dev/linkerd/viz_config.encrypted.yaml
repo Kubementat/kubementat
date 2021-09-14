@@ -1,0 +1,5 @@
+grafana:
+  enabled: false
+prometheus:
+  enabled: false
+prometheusUrl: http://prometheus-server.prometheus.svc.cluster.local
