@@ -86,6 +86,29 @@ function generate_password(){
   gpg --gen-random --armor 1 14
 }
 
+function does_file_with_pattern_exist {
+   local arg="$*"
+   local files=($arg)
+   [ ${#files[@]} -gt 1 ] || [ ${#files[@]} -eq 1 ] && [ -e "${files[0]}" ]
+}
+
+function write_config_from_templates_for_directory(){
+  local directory="$1"
+  echo "Generating default configuration for directory: $directory"
+  pushd "$directory" > /dev/null
+  if does_file_with_pattern_exist "*.template"; then
+    for template_file in *.template ; do
+      # skip static.* files
+      if [[ ! "$template_file" =~ static.* ]]; then
+        new_filename="${template_file//.template/}"
+        echo "  Creating file: $new_filename"
+        cp "$template_file" "$new_filename"
+      fi
+    done
+  fi
+  popd > /dev/null
+}
+
 ################## FUNCTION DEFINITION END ####################
 
 # initial checks
@@ -198,6 +221,16 @@ jq \
   '.CASSANDRA_ADMIN_PASSWORD |= $cassandra_pw | .MONGODB_ROOT_PASSWORD |= $mongodb_pw | .MYSQL_DATABASE_CONFIGURATION[0].PASSWORD |= $mysql_database_pw | .MYSQL_ROOT_PASSWORD |= $mysql_root_pw | .REDIS_PASSWORD |= $redis_pw' \
   platform_config/dev/dev1/static.encrypted.json.template >platform_config/dev/dev1/static.encrypted.json
 
+# copy over default helm chart and platform component configuration files from templates
+echo "Configuring default platform_config values files for dev platform components ..."
+for directory in platform_config/dev/*/ ; do
+  write_config_from_templates_for_directory "$directory"
+done
+
+echo "Configuring default platform_config values files for team dev1 ..."
+for directory in platform_config/dev/dev1/*/ ; do
+  write_config_from_templates_for_directory "$directory"
+done
 
 if [[ ! -f git_crypt_symmetric.key ]]; then
   # GIT CRYPT SETUP
