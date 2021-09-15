@@ -53,10 +53,10 @@ pushd tekton_ci/automation > /dev/null
 ./install_tekton.sh "${ENVIRONMENT}"
 ./install_logging.sh "${ENVIRONMENT}"
 ./install_monitoring.sh "${ENVIRONMENT}"
-./install_linkerd.sh "${ENVIRONMENT}"
-./install_vault.sh "${ENVIRONMENT}"
 ./setup_pipelines.sh "${ENVIRONMENT}" "${TEAM}"
 ./setup_triggers.sh "${ENVIRONMENT}" "${TEAM}"
+./install_vault.sh "${ENVIRONMENT}"
+./install_linkerd.sh "${ENVIRONMENT}"
 
 popd > /dev/null
 

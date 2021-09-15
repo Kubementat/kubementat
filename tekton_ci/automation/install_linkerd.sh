@@ -25,12 +25,23 @@ echo "ENVIRONMENT: $ENVIRONMENT"
 echo "LINKERD_NAMESPACE: $LINKERD_NAMESPACE"
 echo "#########################"
 
+# Only continue if linkerd is not installed already
+set +e
+linkerd_configmap="$(kubectl -n "$LINKERD_NAMESPACE" get configmap/linkerd-config)"
+
+if [[ "$linkerd_configmap" != "" ]]; then
+  echo "Linkerd is already installed on the cluster. Skipping install script."
+  exit 0
+fi
+set -e
+
 # install linkerd crs
 linkerd check --pre
 linkerd install | kubectl -n "$LINKERD_NAMESPACE" apply -f -
 # linkerd check
 
 # TODO: FIXME: use the existing prometheus for installing linkerd viz
+# alternatively configure platform prometheus to federate linkerd data from linkerd viz prometheus installation
 # linkerd viz install -f "../../platform_config/${ENVIRONMENT}/linkerd/viz_config.encrypted.yaml" | kubectl apply -f -
 linkerd viz install | kubectl apply -f -
 
