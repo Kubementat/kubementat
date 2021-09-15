@@ -34,8 +34,9 @@ PROMETHEUS_DEPLOYMENT_NAMESPACE="$(jq -r '.PROMETHEUS_DEPLOYMENT_NAMESPACE' plat
 GRAFANA_DEPLOYMENT_NAMESPACE="$(jq -r '.GRAFANA_DEPLOYMENT_NAMESPACE' platform_config/"${ENVIRONMENT}"/static.json)"
 PROMETHEUS_BLACKBOX_EXPORTER_DEPLOYMENT_NAMESPACE="$(jq -r '.PROMETHEUS_BLACKBOX_EXPORTER_DEPLOYMENT_NAMESPACE' platform_config/"${ENVIRONMENT}"/static.json)"
 VAULT_DEPLOYMENT_NAMESPACE="$(jq -r '.VAULT_DEPLOYMENT_NAMESPACE' platform_config/"${ENVIRONMENT}"/static.json)"
+LINKERD_VIZ_NAMESPACE="$(jq -r '.LINKERD_VIZ_NAMESPACE' platform_config/"${ENVIRONMENT}"/static.json)"
 LINKERD_NAMESPACE="$(jq -r '.LINKERD_NAMESPACE' platform_config/"${ENVIRONMENT}"/static.json)"
-LINKERD_VIZ_NAMESPACE="linkerd-viz"
+
 
 echo "ATTENTION: If you were using more teams than dev1, please remove the according remaining namespaces manually."
 DEV1_PIPELINE_NAMESPACE="$(jq -r '.PIPELINE_NAMESPACE' platform_config/"${ENVIRONMENT}"/dev1/static.json)"

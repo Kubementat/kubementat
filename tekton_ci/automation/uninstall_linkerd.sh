@@ -8,4 +8,29 @@
 
 set -e
 
-# TODO: implement me
+ENVIRONMENT="$1"
+if [[ "$ENVIRONMENT" == "" ]]; then
+  echo "Usage: uninstall_linkerd.sh <ENVIRONMENT_NAME>"
+  echo "e.g.: uninstall_linkerd.sh dev"
+  exit 1
+fi
+
+set -u
+
+echo "#########################"
+echo "Loading configuration from platform_config ..."
+LINKERD_NAMESPACE="$(jq -r '.LINKERD_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+LINKERD_VIZ_NAMESPACE="$(jq -r '.LINKERD_VIZ_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+
+echo "ENVIRONMENT: $ENVIRONMENT"
+echo ""
+echo "LINKERD_NAMESPACE: $LINKERD_NAMESPACE"
+echo "LINKERD_VIZ_NAMESPACE: $LINKERD_VIZ_NAMESPACE"
+echo ""
+echo "#########################"
+
+linkerd viz uninstall | kubectl delete -f -
+linkerd uninstall | kubectl delete -f -
+
+kubectl delete namespace "$LINKERD_VIZ_NAMESPACE" || true
+kubectl delete namespace "$LINKERD_NAMESPACE" || true
