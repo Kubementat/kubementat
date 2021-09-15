@@ -56,32 +56,6 @@ function check_dependencies(){
   echo ""
 }
 
-function check_cluster_and_access(){
-  echo "Checking cluster"
-  echo "You are going to install easy_tekton automation to the following cluster:"
-  kubectl cluster-info
-
-  while true; do
-    read -p "Do you really wish to install easy_tekton on this cluster?" yn
-    case $yn in
-        [Yy]* ) break;;
-        [Nn]* ) echo "Cancelled install script."; exit;;
-        * ) echo "Please answer yes or no.";;
-    esac
-  done
-
-  kubectl auth can-i create namespace
-  kubectl auth can-i create deployment
-  kubectl auth can-i create clusterrole
-  kubectl auth can-i create role
-  kubectl auth can-i create daemonset
-  kubectl auth can-i create replicaset
-
-  echo "Finished checking cluster access"
-  echo "################"
-  echo ""
-}
-
 function generate_password(){
   gpg --gen-random --armor 1 14
 }
@@ -113,7 +87,6 @@ function write_config_from_templates_for_directory(){
 
 # initial checks
 check_dependencies
-check_cluster_and_access
 check_is_already_initialized
 check_required_environment_variables
 
@@ -261,13 +234,6 @@ else
   echo "Found git_crypt_symmetric.key . Git crypt seems to be configured already. Skipping git-crypt configuration."
 fi
 
-# # start cluster installation
-# echo "Executing setup on cluster"
-# pushd tekton_ci/automation
-# ./00_full_setup.sh dev dev1
-# popd
-# echo "Finished executing setup on cluster"
-
 
 # Final output
 echo "##############################"
@@ -289,7 +255,7 @@ echo "##############################"
 echo ""
 echo "You can now use this configuration to roll out the platform components on the cluster via:"
 echo "cd tekton_ci/automation"
-echo "./00_full_setup.sh dev dev1"
+echo "./install_easy_tekton.sh dev dev1"
 echo ""
 echo "In case you encounter error messages you can just rerun the full setup script to continue where the error occured."
 echo "The setup script is non-destructive"

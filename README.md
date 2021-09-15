@@ -70,6 +70,5 @@ TODO: add full setup instructions
 
 ```
 ./initialize_easy_tekton.sh
-cd tekton_ci/automation/
-./00_full_setup.sh dev dev1
+./install_easy_tekton.sh dev dev1
 ```
