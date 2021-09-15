@@ -19,6 +19,7 @@ spec:
       value: nginx
     - name: docker-image-tag
       value: "latest"
+
     - name: docker-registry-base-url
       value: DOCKER_REGISTRY_BASE_URL_PLACEHOLDER
 

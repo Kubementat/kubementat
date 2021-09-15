@@ -48,7 +48,7 @@ spec:
     - name: automation-git-crypt-unlock
       description: |
         should a git-crypt unlock be executed on the checked out repo?
-      default: "true"
+      default: "false"
 
   workspaces:
     - name: pipeline-workspace

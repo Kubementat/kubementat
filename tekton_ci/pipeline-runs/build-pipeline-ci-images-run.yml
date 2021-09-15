@@ -10,6 +10,22 @@ spec:
   params:
     - name: docker-registry-base-url
       value: DOCKER_REGISTRY_BASE_URL_PLACEHOLDER
+
+    - name: automation-git-project-name
+      value: "AUTOMATION_GIT_PROJECT_NAME_PLACEHOLDER"
+    - name: automation-git-revision
+      value: "AUTOMATION_GIT_REVISION_PLACEHOLDER"
+    - name: automation-git-server-host
+      value: "AUTOMATION_GIT_SERVER_HOST_PLACEHOLDER"
+    - name: automation-git-server-port
+      value: "AUTOMATION_GIT_SERVER_PORT_PLACEHOLDER"
+    - name: automation-git-server-ssh-user
+      value: "AUTOMATION_GIT_SERVER_SSH_USER_PLACEHOLDER"
+    - name: automation-git-url
+      value: "AUTOMATION_GIT_URL_PLACEHOLDER"
+    - name: automation-git-crypt-unlock
+      value: "false"
+
   workspaces:
     - name: pipeline-workspace # this workspace name must be declared in the Pipeline
       volumeClaimTemplate:
