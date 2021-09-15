@@ -34,3 +34,5 @@ linkerd uninstall | kubectl delete -f -
 
 kubectl delete namespace "$LINKERD_VIZ_NAMESPACE" || true
 kubectl delete namespace "$LINKERD_NAMESPACE" || true
+
+echo "Uninstalled linkerd successfully"
