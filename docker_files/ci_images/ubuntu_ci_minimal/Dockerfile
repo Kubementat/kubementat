@@ -1,19 +1,25 @@
 ################################
 # Minimal Docker image for CI automation tasks using Tekton CI
 #
-# Contains basic tooling: git jq gnupg2 git-crypt kubectl helm tkn
+# Contains basic tooling: git, git-crypt, jq, gnupg2, kubectl, helm, tkn, linkerd cli
 ################################
 # build via:
-# DOCKER_REGISTRY_BASE_URL="REPLACEME_WITH_DOCKER_REGISTRY_BASE_URL"
+# export DOCKER_REGISTRY_BASE_URL="REPLACEME_WITH_DOCKER_REGISTRY_BASE_URL"
+# e.g. export DOCKER_REGISTRY_BASE_URL="docker.io/julianweberdev"
 
-# IMAGE_URL="REPLACEME"
+# IMAGE_URL="${DOCKER_REGISTRY_BASE_URL}/ubuntu-ci-minimal:latest"
 # docker build -t "$IMAGE_URL" .
 
+# MULTI ARCH BUILD VIA BUILDX
+# https://github.com/docker/buildx/#installing
+
+#
+# export PLATFORMS="linux/amd64"
+# or:
+# export PLATFORMS="linux/amd64,linux/arm64"
+#
 # build multi arch image on docker for desktop via:
-# docker buildx build \
-# --push \
-# --platform linux/arm64,linux/amd64 \
-# --tag julianweberdev/ubuntu-ci-minimal:latest .
+# docker buildx build --push --platform "$PLATFORMS" --tag "${DOCKER_REGISTRY_BASE_URL}/ubuntu-ci-minimal:latest" .
 
 
 # run bash in container via:
@@ -74,5 +80,8 @@ RUN ARCH= && dpkgArch="$(uname -m)" \
     esac \
     && curl -LO "https://github.com/tektoncd/cli/releases/download/v${TKN_CLI_VERSION}/tkn_${TKN_CLI_VERSION}_Linux_${ARCH}.tar.gz" && \
     tar xvzf tkn_${TKN_CLI_VERSION}_Linux_${ARCH}.tar.gz -C /usr/bin/ tkn && rm tkn_${TKN_CLI_VERSION}_Linux_${ARCH}.tar.gz
+
+# Install linkerd cli
+RUN curl -sL run.linkerd.io/install | sh
 
 CMD ["/bin/bash"]
