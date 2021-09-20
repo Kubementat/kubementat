@@ -5,28 +5,34 @@
 ################################
 # build via:
 # export DOCKER_REGISTRY_BASE_URL="REPLACEME_WITH_DOCKER_REGISTRY_BASE_URL"
+# export IMAGE_NAME="ubuntu-ci-minimal"
+# export IMAGE_TAG="latest-amd64"
 # e.g. export DOCKER_REGISTRY_BASE_URL="docker.io/julianweberdev"
 
-# IMAGE_URL="${DOCKER_REGISTRY_BASE_URL}/ubuntu-ci-minimal:latest"
+# CLASSIC BUILD
+# IMAGE_URL="${DOCKER_REGISTRY_BASE_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
 # docker build -t "$IMAGE_URL" .
+
+# ----------------------
 
 # MULTI ARCH BUILD VIA BUILDX
 # https://github.com/docker/buildx/#installing
-
 #
-# export PLATFORMS="linux/amd64"
-# or:
-# export PLATFORMS="linux/amd64,linux/arm64"
+# export IMAGE_NAME="ubuntu-ci-minimal"
+# export PLATFORM="amd64"
+# or for arm64:
+# export PLATFORM="arm64"
 #
-# build multi arch image on docker for desktop via:
-# docker buildx build --push --platform "$PLATFORMS" --tag "${DOCKER_REGISTRY_BASE_URL}/ubuntu-ci-minimal:latest" .
+# build and push images on docker for desktop via:
+# docker buildx build --push --platform "linux/$PLATFORM" --tag "${DOCKER_REGISTRY_BASE_URL}/${IMAGE_NAME}:latest-${PLATFORM}" .
 
+# ----------------------
 
 # run bash in container via:
-# docker run --name ci -it --rm "${DOCKER_REGISTRY_BASE_URL}/ubuntu-ci-minimal:latest"
+# docker run --name ci -it --rm "${DOCKER_REGISTRY_BASE_URL}/${IMAGE_NAME}:latest-${PLATFORM}"
 
 # run on k8s cluster:
-# kubectl run ubuntu-ci --rm -i --tty --image="${DOCKER_REGISTRY_BASE_URL}/ubuntu-ci-minimal:latest" --command /bin/bash
+# kubectl run ubuntu-ci --rm -i --tty --image="${DOCKER_REGISTRY_BASE_URL}/${IMAGE_NAME}:latest-${PLATFORM}" --command /bin/bash
 
 FROM ubuntu:20.04
 
