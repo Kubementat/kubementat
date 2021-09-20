@@ -144,7 +144,7 @@ if [[ "$(uname -a |grep -o Darwin | head -n1)" == "Darwin"  ]]; then
   GIT_DEPLOYER_PRIVATE_KEY_BASE64="$(cat deployer_ssh_key | openssl base64 -A)"
 else
   ### linux variant
-  GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64"$(cat gpg_private.key | base64 -w 0)"
+  GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64="$(cat gpg_private.key | base64 -w 0)"
   GIT_DEPLOYER_PRIVATE_KEY_BASE64="$(cat deployer_ssh_key | base64 -w 0)"
 fi
 
