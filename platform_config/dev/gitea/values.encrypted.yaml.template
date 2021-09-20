@@ -1,0 +1,115 @@
+replicaCount: 1
+
+service:
+  http:
+    type: ClusterIP
+    port: 3000
+    clusterIP: None
+    #loadBalancerIP:
+    #nodePort:
+    #externalTrafficPolicy:
+    #externalIPs:
+    loadBalancerSourceRanges: []
+    annotations:
+  ssh:
+    type: ClusterIP
+    port: 22
+    clusterIP: None
+    #loadBalancerIP:
+    #nodePort:
+    #externalTrafficPolicy:
+    #externalIPs:
+    loadBalancerSourceRanges: []
+    annotations:
+
+ingress:
+  enabled: false
+  # className: nginx
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: git.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - git.example.com
+
+persistence:
+  enabled: true
+  # existingClaim:
+  size: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  labels: {}
+  annotations: {}
+  # storageClass:
+
+gitea:
+  admin:
+    #existingSecret: gitea-admin-secret
+    username: gitea_admin
+    password: REPLACEME
+    email: "gitea@local.domain"
+
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+      #  additionalLabels:
+      #    prometheus-release: prom1
+
+  ldap:
+    enabled: false
+    #existingSecret: gitea-ldap-secret
+    #name:
+    #securityProtocol:
+    #host:
+    #port:
+    #userSearchBase:
+    #userFilter:
+    #adminFilter:
+    #emailAttribute:
+    #bindDn:
+    #bindPassword:
+    #usernameAttribute:
+    #sshPublicKeyAttribute:
+
+  oauth:
+    enabled: false
+    #name:
+    #provider:
+    #key:
+    #secret:
+    #autoDiscoverUrl:
+    #useCustomUrls:
+    #customAuthUrl:
+    #customTokenUrl:
+    #customProfileUrl:
+    #customEmailUrl:
+
+  database:
+    builtIn:
+      postgresql:
+        enabled: true
+      mysql:
+        enabled: false
+      mariadb:
+        enabled: false
+
+  cache:
+    builtIn:
+      enabled: true
+
+postgresql:
+  global:
+    postgresql:
+      postgresqlDatabase: gitea
+      postgresqlUsername: gitea
+      postgresqlPassword: REPLACEME
+      servicePort: 5432
+  persistence:
+    size: 10Gi
