@@ -1,7 +1,7 @@
 ################################
 # Minimal Docker image for CI automation tasks using Tekton CI
 #
-# Contains basic tooling: git, git-crypt, jq, gnupg2, kubectl, helm, tkn, linkerd cli
+# Contains basic tooling: git, git-crypt, jq, gnupg2, kubectl, helm, tkn, linkerd cli, mysql-client
 ################################
 # build via:
 # export DOCKER_REGISTRY_BASE_URL="REPLACEME_WITH_DOCKER_REGISTRY_BASE_URL"
@@ -16,23 +16,17 @@
 # ----------------------
 
 # MULTI ARCH BUILD VIA BUILDX
-# https://github.com/docker/buildx/#installing
-#
-# export IMAGE_NAME="ubuntu-ci-minimal"
-# export PLATFORM="amd64"
-# or for arm64:
-# export PLATFORM="arm64"
-#
-# build and push images on docker for desktop via:
-# docker buildx build --push --platform "linux/$PLATFORM" --tag "${DOCKER_REGISTRY_BASE_URL}/${IMAGE_NAME}:latest-${PLATFORM}" .
+# see build.sh script for details
 
 # ----------------------
 
 # run bash in container via:
-# docker run --name ci -it --rm "${DOCKER_REGISTRY_BASE_URL}/${IMAGE_NAME}:latest-${PLATFORM}"
+# export IMAGE_NAME="ubuntu-ci-minimal"
+# export IMAGE_TAG="latest-amd64"
+# docker run --name ci -it --rm "${DOCKER_REGISTRY_BASE_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
 
 # run on k8s cluster:
-# kubectl run ubuntu-ci --rm -i --tty --image="${DOCKER_REGISTRY_BASE_URL}/${IMAGE_NAME}:latest-${PLATFORM}" --command /bin/bash
+# kubectl run ubuntu-ci --rm -i --tty --image="${DOCKER_REGISTRY_BASE_URL}/${IMAGE_NAME}:${IMAGE_TAG}" --command /bin/bash
 
 FROM ubuntu:20.04
 
@@ -58,7 +52,7 @@ RUN curl https://baltocdn.com/helm/signing.asc | apt-key add -
 RUN echo "deb https://baltocdn.com/helm/stable/debian/ all main" | tee /etc/apt/sources.list.d/helm-stable-debian.list
 
 RUN apt-get update && apt-get install -y \
-  git jq gnupg2 git-crypt kubectl helm && \
+  git jq gnupg2 git-crypt kubectl helm mysql-client && \
 	apt-get clean && \
 	rm -rf /var/lib/apt/lists/*
 
