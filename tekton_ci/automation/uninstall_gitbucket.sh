@@ -19,11 +19,13 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-GITBUCKET_NAMESPACE="$(jq -r '.GITBUCKET_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+GITBUCKET_DEPLOYMENT_NAMESPACE="$(jq -r '.GITBUCKET_DEPLOYMENT_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+GITBUCKET_DEPLOYMENT_NAME="$(jq -r '.GITBUCKET_DEPLOYMENT_NAME' ../../platform_config/"${ENVIRONMENT}"/static.json)"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo ""
-echo "GITBUCKET_NAMESPACE: $GITBUCKET_NAMESPACE"
+echo "GITBUCKET_DEPLOYMENT_NAMESPACE: $GITBUCKET_DEPLOYMENT_NAMESPACE"
+echo "GITBUCKET_DEPLOYMENT_NAME: $GITBUCKET_DEPLOYMENT_NAME"
 echo ""
 echo "#########################"
 echo "Helm version:"

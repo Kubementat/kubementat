@@ -19,11 +19,13 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-GITEA_NAMESPACE="$(jq -r '.GITEA_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+GITEA_DEPLOYMENT_NAMESPACE="$(jq -r '.GITEA_DEPLOYMENT_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+GITEA_DEPLOYMENT_NAME="$(jq -r '.GITEA_DEPLOYMENT_NAME' ../../platform_config/"${ENVIRONMENT}"/static.json)"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo ""
-echo "GITEA_NAMESPACE: $GITEA_NAMESPACE"
+echo "GITEA_DEPLOYMENT_NAMESPACE: $GITEA_DEPLOYMENT_NAMESPACE"
+echo "GITEA_DEPLOYMENT_NAME: $GITEA_DEPLOYMENT_NAME"
 echo ""
 echo "#########################"
 echo "Helm version:"

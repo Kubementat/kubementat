@@ -19,11 +19,13 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-DOCKER_REGISTRY_NAMESPACE="$(jq -r '.DOCKER_REGISTRY_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+DOCKER_REGISTRY_DEPLOYMENT_NAMESPACE="$(jq -r '.DOCKER_REGISTRY_DEPLOYMENT_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+DOCKER_REGISTRY_DEPLOYMENT_NAME="$(jq -r '.DOCKER_REGISTRY_DEPLOYMENT_NAME' ../../platform_config/"${ENVIRONMENT}"/static.json)"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo ""
-echo "DOCKER_REGISTRY_NAMESPACE: $DOCKER_REGISTRY_NAMESPACE"
+echo "DOCKER_REGISTRY_DEPLOYMENT_NAMESPACE: $DOCKER_REGISTRY_DEPLOYMENT_NAMESPACE"
+echo "DOCKER_REGISTRY_DEPLOYMENT_NAME: $DOCKER_REGISTRY_DEPLOYMENT_NAME"
 echo ""
 echo "#########################"
 echo "Helm version:"
