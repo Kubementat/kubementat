@@ -14,6 +14,12 @@ spec:
     - name: helm-deployment-name
     - name: docker-registry-base-url
       description: The docker registry base url with path to load the CI image for tekton task execution from
+    - name: tekton-ci-image-name
+      description: The image name to use for the automation run
+      default: "ubuntu-ci-minimal"
+    - name: tekton-ci-image-tag
+      description: The image tag to use for the automation run
+      default: "latest"
   tasks:
 
     # deploy mysql via helm
@@ -27,3 +33,7 @@ spec:
           value: "$(params.helm-deployment-name)"
         - name: docker-registry-base-url
           value: "$(params.docker-registry-base-url)"
+        - name: tekton-ci-image-name
+          value: "$(params.tekton-ci-image-name)"
+        - name: tekton-ci-image-tag
+          value: "$(params.tekton-ci-image-tag)"

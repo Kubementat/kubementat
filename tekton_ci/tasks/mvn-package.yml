@@ -13,6 +13,7 @@ spec:
       description: the build sub-directory for executing mvn in
     - name: docker-registry-base-url
       description: The docker registry base url with path to load the CI image for tekton task execution from
+
     - name: additional-arguments
       description: "A list of additional arguments to add to the mvn package command"
       default: ""
@@ -28,7 +29,7 @@ spec:
         limits:
           memory: 1Gi
           cpu: 500m
-      image: "$(params.docker-registry-base-url)/ubuntu-ci:latest"
+      image: "$(params.docker-registry-base-url)/angular-ci:latest"
       env:
         - name: WORKSPACE_PATH
           value: "$(workspaces.workspace.path)"

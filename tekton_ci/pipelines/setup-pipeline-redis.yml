@@ -22,6 +22,12 @@ spec:
     # Platform configuration
     - name: docker-registry-base-url
       description: The docker registry base url with path to load the CI image for tekton task execution from
+    - name: tekton-ci-image-name
+      description: The image name to use for the automation run
+      default: "ubuntu-ci-minimal"
+    - name: tekton-ci-image-tag
+      description: The image tag to use for the automation run
+      default: "latest"
 
     # AUTOMATION REPOSITORY SECTION
     - name: automation-git-url
@@ -82,6 +88,10 @@ spec:
           value: "$(params.automation-git-crypt-unlock)"
         - name: docker-registry-base-url
           value: "$(params.docker-registry-base-url)"
+        - name: tekton-ci-image-name
+          value: "$(params.tekton-ci-image-name)"
+        - name: tekton-ci-image-tag
+          value: "$(params.tekton-ci-image-tag)"
       workspaces:
         - name: workspace
           workspace: pipeline-workspace
@@ -95,6 +105,10 @@ spec:
       params:
         - name: docker-registry-base-url
           value: "$(params.docker-registry-base-url)"
+        - name: tekton-ci-image-name
+          value: "$(params.tekton-ci-image-name)"
+        - name: tekton-ci-image-tag
+          value: "$(params.tekton-ci-image-tag)"
         - name: path-to-automation-script
           value: "/workspace/easy_tekton/tekton_ci/scripts/install_redis_helm_chart.sh"
         - name: environment

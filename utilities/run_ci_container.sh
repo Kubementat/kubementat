@@ -18,7 +18,10 @@ if [[ "$ENVIRONMENT" == "" || "$NAMESPACE" == "" ]]; then
 fi
 
 DOCKER_REGISTRY_BASE_URL="$(jq -r '.DOCKER_REGISTRY_BASE_URL' ../platform_config/"${ENVIRONMENT}"/static.json)"
-CI_IMAGE="$DOCKER_REGISTRY_BASE_URL/ubuntu-ci-minimal:latest"
+TEKTON_CI_IMAGE_NAME="$(jq -r '.TEKTON_CI_IMAGE_NAME' ../platform_config/"${ENVIRONMENT}"/static.json)"
+TEKTON_CI_IMAGE_TAG="$(jq -r '.TEKTON_CI_IMAGE_TAG' ../platform_config/"${ENVIRONMENT}"/static.json)"
+
+CI_IMAGE="$DOCKER_REGISTRY_BASE_URL/${TEKTON_CI_IMAGE_NAME}:${TEKTON_CI_IMAGE_TAG}"
 set -u
 
 kubectl run ubuntu-ci -n "$NAMESPACE" --rm -i --tty --image="$CI_IMAGE" --command /bin/bash

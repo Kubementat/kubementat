@@ -10,6 +10,10 @@ spec:
   params:
     - name: docker-registry-base-url
       value: DOCKER_REGISTRY_BASE_URL_PLACEHOLDER
+    - name: tekton-ci-image-name
+      value: "TEKTON_CI_IMAGE_NAME_PLACEHOLDER"
+    - name: tekton-ci-image-tag
+      value: "TEKTON_CI_IMAGE_TAG_PLACEHOLDER"
   workspaces:
     - name: pipeline-workspace # this workspace name must be declared in the Pipeline
       volumeClaimTemplate:
