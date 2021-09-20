@@ -23,8 +23,6 @@ It also delivers examples on how to create pipelines for building and deploying 
 Each of the given sub-directories contains additional README*.md files that document the actual component. For further details dive into the sub-directories.
 
 - __docker_files__: All custom Dockerfiles used for creating docker images and running CI tasks
-- __docker_registry__: Automation for setting up a private docker registry within a K8S cluster
-  - ATTENTION: CURRENTLY THIS IS NOT WORKING AS EXPECTED ON THE GIVEN CLUSTER.
 - __helm_charts__: All helm charts used for deploying apps for the POC
   - nginx-example: the helm chart for deploying the nginx-example helm chart to a k8s cluster
 - __platform_config__: Stores configuration as json files encrypted via git-crypt
