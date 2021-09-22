@@ -30,7 +30,7 @@ spec:
         limits:
           memory: 1Gi
           cpu: 500m
-      image: gcr.io/kaniko-project/executor:latest
+      image: gcr.io/kaniko-project/executor:multi-arch
       # specifying DOCKER_CONFIG is required to allow kaniko to detect docker credential
       env:
         - name: "DOCKER_CONFIG"
@@ -42,3 +42,5 @@ spec:
         - --destination=$(params.push-image-url):$(params.push-image-tag)
         - --context=$(params.path-to-context)
         - --build-arg=DOCKER_REGISTRY_BASE_URL=$(params.docker-registry-base-url)
+      securityContext:
+        runAsUser: 0

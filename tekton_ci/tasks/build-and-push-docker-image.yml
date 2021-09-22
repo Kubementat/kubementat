@@ -24,8 +24,10 @@ spec:
       type: array
       default: []
   steps:
+    # TODO: add docker auth json generation and placement
+    # echo -n 'username:password' | base64
     - name: build-and-push
-      image: gcr.io/kaniko-project/executor:latest
+      image: gcr.io/kaniko-project/executor:multi-arch
       resources:
         requests:
           memory: 500Mi
@@ -44,3 +46,5 @@ spec:
         - --dockerfile=$(params.path-to-dockerfile-within-context)
         - --destination=$(params.push-image-url):$(params.push-image-tag)
         - --context=$(params.path-to-context)
+      securityContext:
+        runAsUser: 0
