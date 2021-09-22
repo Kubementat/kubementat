@@ -1,0 +1,169 @@
+## NOTICE
+#
+# Due to the scope and complexity of this chart, all possible values are
+# not documented in this file. Extensive documentation is available.
+#
+# Please read the docs: https://docs.gitlab.com/charts/
+#
+# Because properties are regularly added, updated, or relocated, it is
+# _strongly suggest_ to not "copy and paste" this YAML. Please provide
+# Helm only those properties you need, and allow the defaults to be
+# provided by the version of this chart at the time of deployment.
+
+## Advanced Configuration
+## https://docs.gitlab.com/charts/advanced
+#
+# Documentation for advanced configuration, such as
+# - External PostgreSQL
+# - External Gitaly
+# - External Redis
+# - External NGINX
+# - External Object Storage providers
+# - PersistentVolume configuration
+
+## https://docs.gitlab.com/charts/charts/globals
+global:
+## https://docs.gitlab.com/charts/charts/globals#configure-ingress-settings
+  ingress:
+    configureCertmanager: false
+    enabled: false
+
+  ## https://docs.gitlab.com/charts/charts/globals#configure-postgresql-settings
+
+  ## https://docs.gitlab.com/charts/charts/globals#configure-redis-settings
+  redis:
+    enabled: true
+
+  ## https://docs.gitlab.com/charts/charts/globals#configure-gitaly-settings
+  gitaly:
+    enabled: true
+    # authToken: {}
+    #   # secret:
+    #   # key:
+    # # serviceName:
+    # internal:
+    #   names: ['default']
+    # external: []
+    # service:
+    #   name: gitaly
+    #   type: ClusterIP
+    #   externalPort: 8075
+    #   internalPort: 8075
+    #   tls:
+    #     externalPort: 8076
+    #     internalPort: 8076
+    # tls:
+    #   enabled: false
+    #   # secretName:
+
+  praefect:
+    enabled: false
+
+  ## https://docs.gitlab.com/charts/charts/globals#configure-minio-settings
+  minio:
+    enabled: true
+
+  ## https://docs.gitlab.com/charts/charts/globals#configure-grafana-integration
+  grafana:
+    enabled: false
+
+  ## https://docs.gitlab.com/charts/charts/globals#configure-appconfig-settings
+  ## Rails application secrets
+  ## Secret created according to https://docs.gitlab.com/charts/installation/secrets#gitlab-rails-secret
+
+
+  ## https://docs.gitlab.com/charts/charts/globals#configure-registry-settings
+
+  pages:
+    enabled: false
+
+  ## https://docs.gitlab.com/charts/installation/deployment#outgoing-email
+  ## Outgoing email server settings
+  smtp:
+    enabled: false
+
+  ## Timezone for containers.
+  time_zone: UTC
+
+upgradeCheck:
+  enabled: true
+
+## Settings to for the Let's Encrypt ACME Issuer
+# certmanager-issuer:
+#   # The email address to register certificates requested from Let's Encrypt.
+#   # Required if using Let's Encrypt.
+#   email: email@example.com
+
+## Installation & configuration of jetstack/cert-manager
+## See requirements.yaml for current version
+certmanager:
+  installCRDs: false
+  install: false
+
+## https://docs.gitlab.com/charts/charts/nginx/
+## https://docs.gitlab.com/charts/architecture/decisions#nginx-ingress
+## Installation & configuration of charts/ingress-nginx:
+nginx-ingress:
+  enabled: false
+
+## Installation & configuration of stable/prometheus
+## See requirements.yaml for current version
+prometheus:
+  install: false
+
+## Configuration of Redis
+## https://docs.gitlab.com/charts/architecture/decisions#redis
+## https://docs.gitlab.com/charts/installation/deployment.html#redis
+redis:
+  install: false
+
+## Installation & configuration of stable/prostgresql
+## See requirements.yaml for current version
+# postgresql:
+#   postgresqlUsername: gitlab
+#   # This just needs to be set. It will use a second entry in existingSecret for postgresql-postgres-password
+#   postgresqlPostgresPassword: bogus
+#   install: true
+#   postgresqlDatabase: gitlabhq_production
+#   usePasswordFile: true
+#   existingSecret: 'bogus'
+#   initdbScriptsConfigMap: 'bogus'
+
+## Installation & configuration charts/registry
+## https://docs.gitlab.com/charts/architecture/decisions#registry
+## https://docs.gitlab.com/charts/charts/registry/
+# registry:
+#   enabled: false
+
+
+## Automatic shared secret generation
+## https://docs.gitlab.com/charts/installation/secrets
+## https://docs.gitlab.com/charts/charts/shared-secrets.html
+
+## Installation & configuration of gitlab/gitlab-runner
+## See requirements.yaml for current version
+gitlab-runner:
+  enabled: false
+
+## Installation & configuration of stable/grafana
+## See requirements.yaml for current version
+## Controlled by `global.grafana.enabled`
+
+## Settings for individual sub-charts under GitLab
+## Note: Many of these settings are configurable via globals
+## https://docs.gitlab.com/charts/charts/gitlab/migrations
+#   migrations:
+#     enabled: false
+## https://docs.gitlab.com/charts/charts/gitlab/webservice
+#   webservice:
+#     enabled: false
+## https://docs.gitlab.com/charts/charts/gitlab/sidekiq
+#   sidekiq:
+#     enabled: false
+## https://docs.gitlab.com/charts/charts/gitlab/gitaly
+#   gitaly:
+## https://docs.gitlab.com/charts/charts/gitlab/gitlab-shell
+#  gitlab-shell:
+##  enabled: false
+## https://docs.gitlab.com/charts/charts/gitlab/gitlab-grafana
+#   gitlab-grafana:
