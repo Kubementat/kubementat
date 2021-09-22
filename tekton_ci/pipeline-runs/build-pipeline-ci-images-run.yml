@@ -5,7 +5,7 @@ metadata:
 spec:
   pipelineRef:
     name: build-pipeline-ci-images
-  serviceAccountName: default
+  serviceAccountName: helm-deployer-sa
   timeout: 15m
   params:
     - name: docker-registry-base-url
