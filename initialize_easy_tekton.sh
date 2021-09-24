@@ -180,7 +180,7 @@ jq \
 echo "Writing platform_config/dev/dev1/static.json"
 jq \
   --arg storage_class "$KUBERNETES_DEFAULT_STORAGE_CLASS" \
-  '.CASSANDRA_VOLUME_STORAGE_CLASS |= $storage_class | .KAFKA_VOLUME_STORAGE_CLASS |= $storage_class | .MONGODB_VOLUME_STORAGE_CLASS |= $storage_class | .MYSQL_VOLUME_STORAGE_CLASS |= $storage_class | .REDIS_VOLUME_STORAGE_CLASS |= $storage_class' \
+  '.POSTGRES_VOLUME_STORAGE_CLASS |= $storage_class | .CASSANDRA_VOLUME_STORAGE_CLASS |= $storage_class | .KAFKA_VOLUME_STORAGE_CLASS |= $storage_class | .MONGODB_VOLUME_STORAGE_CLASS |= $storage_class | .MYSQL_VOLUME_STORAGE_CLASS |= $storage_class | .REDIS_VOLUME_STORAGE_CLASS |= $storage_class' \
   platform_config/dev/dev1/static.json.template >platform_config/dev/dev1/static.json
 
 # Configure platform_config/dev/dev1/static.encrypted.json
@@ -191,7 +191,8 @@ jq \
   --arg mysql_database_pw "$(generate_password)" \
   --arg mysql_root_pw "$(generate_password)" \
   --arg redis_pw "$(generate_password)" \
-  '.CASSANDRA_ADMIN_PASSWORD |= $cassandra_pw | .MONGODB_ROOT_PASSWORD |= $mongodb_pw | .MYSQL_DATABASE_CONFIGURATION[0].PASSWORD |= $mysql_database_pw | .MYSQL_ROOT_PASSWORD |= $mysql_root_pw | .REDIS_PASSWORD |= $redis_pw' \
+  --arg postgres_pw "$(generate_password)" \
+  '.POSTGRES_ADMIN_PASSWORD |= $postgres_pw | .CASSANDRA_ADMIN_PASSWORD |= $cassandra_pw | .MONGODB_ROOT_PASSWORD |= $mongodb_pw | .MYSQL_DATABASE_CONFIGURATION[0].PASSWORD |= $mysql_database_pw | .MYSQL_ROOT_PASSWORD |= $mysql_root_pw | .REDIS_PASSWORD |= $redis_pw' \
   platform_config/dev/dev1/static.encrypted.json.template >platform_config/dev/dev1/static.encrypted.json
 
 # copy over default helm chart and platform component configuration files from templates
