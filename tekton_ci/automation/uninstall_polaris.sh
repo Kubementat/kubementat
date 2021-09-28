@@ -6,4 +6,6 @@
 #
 ######################################
 
+set -e
+
 ./uninstall_helm_deployment.sh "$1" "POLARIS"
