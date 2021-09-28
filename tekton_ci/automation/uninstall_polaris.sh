@@ -6,4 +6,4 @@
 #
 ######################################
 
-./uninstall_helm_deployment.sh "${ENVIRONMENT}" "POLARIS"
+./uninstall_helm_deployment.sh "$1" "POLARIS"
