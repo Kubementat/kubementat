@@ -55,9 +55,7 @@ podAnnotations:
 podSecurityContext: {}
   # fsGroup: 2000
 
-securityContext:
-  privileged: false
-  runAsNonRoot: false
+securityContext: {}
 
 service:
   type: ClusterIP
