@@ -47,6 +47,13 @@ spec:
             - name: http
               containerPort: {{ .Values.configuration.env.PORT }}
               protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
           # continuous live check of the pod
           # livenessProbe:
           #   httpGet:

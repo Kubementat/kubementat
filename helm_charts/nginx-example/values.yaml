@@ -16,19 +16,19 @@ rollingUpdate:
 # choice for the user. This also increases chances charts run on environments with little
 # resources, such as Minikube. If you do want to specify resources, uncomment the following
 # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-resources: {}
-  # requests:
-  #   memory: "64Mi"
-  #   cpu: "100m"
-  # limits:
-  #   memory: "128Mi"
-  #   cpu: "200m"
+resources:
+  requests:
+    memory: "32Mi"
+    cpu: "30m"
+  limits:
+    memory: "64Mi"
+    cpu: "200m"
 
 
 image:
   repository: nginx
   pullPolicy: Always
-  tag: "latest"
+  tag: "1.21.3"
 
 imagePullSecrets: []
 # [
@@ -55,7 +55,10 @@ podAnnotations:
 podSecurityContext: {}
   # fsGroup: 2000
 
-securityContext: {}
+securityContext:
+  readOnlyRootFilesystem: true
+  runAsRootAllowed: false
+  runAsPrivileged: false
 
 service:
   type: ClusterIP
