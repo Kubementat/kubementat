@@ -29,7 +29,7 @@ spec:
     - name: path-to-automation-script
       description: |
         The path to the automation script that should be run for the given environment and team
-        e.g.: /workspace/easy_tekton/tekton_ci/scripts/install_mysql_helm_chart.sh
+        e.g.: /workspace/$(params.automation-git-project-name)/tekton_ci/scripts/install_mysql_helm_chart.sh
 
   steps:
     - name: run-automation-script

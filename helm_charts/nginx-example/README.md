@@ -1,6 +1,6 @@
 # Smart Telematics Web UI Helm Chart
 
-This chart is used for deploying nginx as an example for implementing custom helm charts into easy_tekton automation.
+This chart is used for deploying nginx as an example for implementing custom helm charts into kubementat automation.
 
 ## Prerequisites
 

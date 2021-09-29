@@ -1,7 +1,7 @@
 # kubectl apply -n $namespace -f git-clone-with-ssh-auth.yml
 # example execution parameters:
-# git-url: ssh://git@github.com:julweber/easy_tekton.git
-# git-project-name: easy_tekton
+# git-url: ssh://git@github.com:julweber/kubementat.git
+# git-project-name: kubementat
 # git-revision: master
 # git-server-host: github.com
 # git-server-ssh-user: git

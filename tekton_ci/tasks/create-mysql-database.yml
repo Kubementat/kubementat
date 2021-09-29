@@ -18,7 +18,7 @@ spec:
       description: |
         The path to the configuration files for reading credentials.
         This should contain platform_config
-      default: "$(workspaces.workspace.path)/easy_tekton"
+      default: "$(workspaces.workspace.path)/kubementat"
     - name: database-name
       description: The name of the database to create
     - name: docker-registry-base-url

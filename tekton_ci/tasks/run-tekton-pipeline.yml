@@ -20,15 +20,16 @@ spec:
     - name: path-to-configuration
       description: |
         The path to the configuration files for reading credentials.
-        This should contain platform_config and tekton_ci
-      default: "$(workspaces.workspace.path)/easy_tekton"
+        This should contain platform_config
+        e.g. as a default: "$(workspaces.workspace.path)/kubementat"
+      default: "$(workspaces.workspace.path)/kubementat"
     - name: polling-sleep-time
       description: "How many seconds should be waited while polling the tekton pipeline-run status"
       default: "3"
     - name: path-to-pipeline-run-file
       description: |
         The path to the pipeline run file within the config repo
-        e.g.: "$(workspaces.workspace.path)/easy_tekton/tekton_ci/pipeline-runs/dev1/deploy-pipeline-nginx-example-run.yml"
+        e.g.: "$(workspaces.workspace.path)/kubementat/tekton_ci/pipeline-runs/dev1/deploy-pipeline-nginx-example-run.yml"
     - name: docker-registry-base-url
       description: The docker registry base url with path to load the CI image for tekton task execution from
     - name: tekton-ci-image-name

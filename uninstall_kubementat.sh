@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 
 ###################
-# This script removes all easy tekton components from the kubernetes cluster
+# This script removes all kubementat components from the kubernetes cluster
 ###################
 
 ENVIRONMENT="$1"
 if [[ "$ENVIRONMENT" == "" ]]; then
-  echo "Usage: uninstall_easy_tekton.sh <ENVIRONMENT_NAME>"
-  echo "e.g.: uninstall_easy_tekton.sh dev"
+  echo "Usage: uninstall_kubementat.sh <ENVIRONMENT_NAME>"
+  echo "e.g.: uninstall_kubementat.sh dev"
   exit 1
 fi
 
 set -eu
 
 while true; do
-    read -p "Do you really wish to uninstall all easy_tekton resources?" yn
+    read -p "Do you really wish to uninstall all kubementat resources?" yn
     case $yn in
         [Yy]* ) break;;
         [Nn]* ) echo "Cancelled uninstall script."; exit;;
@@ -23,7 +23,7 @@ while true; do
 done
 
 echo "#########################"
-echo "Uninstalling all easy_tekton managed platform components and team spaces"
+echo "Uninstalling all kubementat managed platform components and team spaces"
 echo ""
 
 echo "#########################"

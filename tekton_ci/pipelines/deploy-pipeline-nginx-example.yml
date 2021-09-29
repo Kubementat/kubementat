@@ -32,13 +32,13 @@ spec:
     # AUTOMATION REPOSITORY SECTION
     - name: automation-git-url
       description: |
-        The git url of the automation repository to use (your fork of the easy_tekton repos address)
-        e.g.: if you would use the easy_tekton default location: ssh://git@github.com:julweber/easy_tekton.git
+        The git url of the automation repository to use (your fork of the kubementat repos address)
+        e.g.: if you would use the kubementat default location: ssh://git@github.com:julweber/kubementat.git
     - name: automation-git-project-name
       description: |
         your local directory name for the repository
-        this should be set to "easy_tekton" despite you change a lot of code in this repo ;)
-      default: "easy_tekton"
+        In general this can be set to the default: "kubementat"
+      default: "kubementat"
     - name: automation-git-revision
       description: |
         the git revision to checkout
@@ -122,7 +122,7 @@ spec:
         - name: docker-image-tag
           value: "$(params.docker-image-tag)"
         - name: path-to-chart
-          value: "/workspace/easy_tekton/helm_charts/nginx-example"
+          value: "/workspace/$(params.automation-git-project-name)/helm_charts/nginx-example"
         - name: helm-deployment-name
           value: nginx-example
         - name: app-name

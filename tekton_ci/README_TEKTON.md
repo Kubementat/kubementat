@@ -173,8 +173,8 @@ This section describes the general directory structure for the tekton related re
 ## Making code changes
 This section describes the general processes for extending the existing automations:
 
-- In case you are adding or changing automation scripts in the "scripts" sub-directory you need to commit the changes to the master branch of the easy_tekton automation repository
-- In case you are changing configuration in platform_config you also need to  commit the changes to the master branch of the easy_tekton automation repository. Like this the pipeline runs can read the up-to-date configuration and use it accordingly
+- In case you are adding or changing automation scripts in the "scripts" sub-directory you need to commit the changes to the master branch of the kubementat automation repository
+- In case you are changing configuration in platform_config you also need to  commit the changes to the master branch of the kubementat automation repository. Like this the pipeline runs can read the up-to-date configuration and use it accordingly
 - In case you are adding or changing tasks or pipelines in the "tasks" or "pipelines" sub-directory you need to re-run the "setup_pipelines.sh" script for your environments and teams as described in the section "Automated Tekton pipeline and task setup". This ensures that the task and pipeline definitions are updated on the k8s cluster and are running the latest versions of task definitions and your pipelines.
 
 ## Adding new tekton triggers

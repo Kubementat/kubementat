@@ -31,13 +31,13 @@ spec:
     # AUTOMATION REPOSITORY SECTION
     - name: automation-git-url
       description: |
-        The git url of the automation repository to use (your fork of the easy_tekton repos address)
-        e.g.: if you would use the easy_tekton default location: ssh://git@github.com:julweber/easy_tekton.git
+        The git url of the automation repository to use (your fork of the kubementat repos address)
+        e.g.: if you would use the kubementat default location: ssh://git@github.com:julweber/kubementat.git
     - name: automation-git-project-name
       description: |
         your local directory name for the repository
-        this should be set to "easy_tekton" despite you change a lot of code in this repo ;)
-      default: "easy_tekton"
+        In general this can be set to the default: "kubementat"
+      default: "kubementat"
     - name: automation-git-revision
       description: |
         the git revision to checkout
@@ -110,7 +110,7 @@ spec:
         - name: tekton-ci-image-tag
           value: "$(params.tekton-ci-image-tag)"
         - name: path-to-automation-script
-          value: "/workspace/easy_tekton/tekton_ci/scripts/install_nginx_reverse_proxy.sh"
+          value: "/workspace/$(params.automation-git-project-name)/tekton_ci/scripts/install_nginx_reverse_proxy.sh"
         - name: environment
           value: "$(params.environment)"
         - name: team

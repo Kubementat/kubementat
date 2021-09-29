@@ -13,8 +13,8 @@ set -e
 ENVIRONMENT="$1"
 TEAM="$2"
 if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" ]]; then
-  echo "Usage: install_easy_tekton.sh <ENVIRONMENT_NAME> <TEAM>"
-  echo "e.g.: install_easy_tekton.sh dev dev1"
+  echo "Usage: install_kubementat.sh <ENVIRONMENT_NAME> <TEAM>"
+  echo "e.g.: install_kubementat.sh dev dev1"
   exit 1
 fi
 
@@ -22,11 +22,11 @@ set -u
 
 function check_cluster_and_access(){
   echo "Checking cluster"
-  echo "You are going to install easy_tekton automation to the following cluster:"
+  echo "You are going to install kubementat automation to the following cluster:"
   kubectl cluster-info
 
   while true; do
-    read -p "Do you really wish to install easy_tekton on this cluster?" yn
+    read -p "Do you really wish to install kubementat on this cluster?" yn
     case $yn in
         [Yy]* ) break;;
         [Nn]* ) echo "Cancelled install script."; exit;;
@@ -60,4 +60,4 @@ pushd tekton_ci/automation > /dev/null
 
 popd > /dev/null
 
-echo "Installed easy_tekton to cluster successfully"
+echo "Installed kubementat to cluster successfully"

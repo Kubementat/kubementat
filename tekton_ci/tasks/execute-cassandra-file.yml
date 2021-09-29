@@ -16,7 +16,8 @@ spec:
       description: |
         The path to the configuration files for reading credentials.
         This should contain platform_config
-      default: "$(workspaces.workspace.path)/easy_tekton"
+        e.g. as a default: "$(workspaces.workspace.path)/kubementat"
+      default: "$(workspaces.workspace.path)/kubementat"
     - name: team
       description: The k8s namespace to use for the deployment
     - name: cassandra-file-path

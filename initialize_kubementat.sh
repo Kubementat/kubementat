@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
 
 ####
-# This script initializes a basic configuration for getting up and running with easy tekton automations and platform setup
+# This script initializes a basic configuration for getting up and running with kubementat automations and platform setup
 ####
 set -e
 
 ################## FUNCTION DEFINITIONS ####################
 function check_is_already_initialized(){
   if [[ -f platform_config/dev/static.encrypted.json ]]; then
-    echo "Found platform_config/dev/static.encrypted.json . It seems that easy_tekton has been initialized already! Exiting"
+    echo "Found platform_config/dev/static.encrypted.json . It seems that kubementat has been initialized already! Exiting"
     exit 1
   elif [[ -f platform_config/dev/static.json ]]; then
-    echo "Found platform_config/dev/static.json . It seems that easy_tekton has been initialized already! Exiting"
+    echo "Found platform_config/dev/static.json . It seems that kubementat has been initialized already! Exiting"
     exit 1
   elif [[ -f platform_config/dev/dev1/static.json ]]; then
-    echo "Found platform_config/dev/dev1/static.json . It seems that easy_tekton has been initialized already! Exiting"
+    echo "Found platform_config/dev/dev1/static.json . It seems that kubementat has been initialized already! Exiting"
     exit 1
   elif [[ -f platform_config/dev/dev1/static.encrypted.json ]]; then
-    echo "Found platform_config/dev/dev1/static.encrypted.json . It seems that easy_tekton has been initialized already! Exiting"
+    echo "Found platform_config/dev/dev1/static.encrypted.json . It seems that kubementat has been initialized already! Exiting"
     exit 1
   else
-    echo "easy_tekton is not initialized yet! Starting basic configuration."
+    echo "kubementat is not initialized yet! Starting basic configuration."
   fi
 }
 
@@ -30,7 +30,7 @@ function check_required_environment_variables(){
     echo "Please define the required according ENVIRONMENT variables via exports:"
     echo "e.g.:"
     echo "export BASE_DOMAIN='example.com'"
-    echo "export AUTOMATION_GIT_URL='git@github.com:julweber/easy_tekton.git'"
+    echo "export AUTOMATION_GIT_URL='git@github.com:julweber/kubementat.git'"
     echo "export AUTOMATION_GIT_SERVER_HOST='github.com'"
     echo "export AUTOMATION_GIT_SERVER_PORT='22'"
     echo "export AUTOMATION_GIT_SERVER_SSH_USER='git'"
@@ -38,7 +38,7 @@ function check_required_environment_variables(){
     echo "export DOCKER_REGISTRY_BASE_URL='docker.io/julianweberdev'"
     echo ""
     echo "Then run this script via:"
-    echo "./initialize_easy_tekton.sh"
+    echo "./initialize_kubementat.sh"
     exit 1
   fi
 }
@@ -250,13 +250,13 @@ echo ""
 echo "##############################"
 echo ""
 echo "Finished initialization successfully!"
-echo "If you have any questions, feel free to create an issue via https://github.com/julweber/easy_tekton/issues"
+echo "If you have any questions, feel free to create an issue via https://github.com/julweber/kubementat/issues"
 echo ""
 echo "##############################"
 echo ""
 echo "You can now use this configuration to roll out the platform components on the cluster via:"
 echo ""
-echo "./install_easy_tekton.sh dev dev1"
+echo "./install_kubementat.sh dev dev1"
 echo ""
 echo "In case you encounter error messages you can just rerun the full setup script to continue where the error occured."
 echo "The setup script is non-destructive"
