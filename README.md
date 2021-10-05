@@ -47,12 +47,15 @@ git-crypt unlock
 
 ## Local Environment Prerequisites
 
-### Or just start a prebaked docker image
+### Or just start a prebaked docker image with everything installed
 ```
-# Docker
-docker run --name ubuntu-ci -it "docker.io/julianweberdev/ubuntu-ci-minimal:latest"
+# PREFERED WAY:
+# Run image via Docker and mount this directory
+docker run --name ubuntu-ci -it --mount type=bind,source="$(pwd)",target=/src "docker.io/julianweberdev/ubuntu-ci-minimal:latest"
+# Then on the container: cd /src
 
-# Kubernetes
+# Alternative: Kubernetes - but then you need to directly commit all changes to your fork of the kubementat repo
+# In addition you also need to transfer all generated key files manually using this approach
 kubectl run ubuntu-ci -i --tty --image="docker.io/julianweberdev/ubuntu-ci-minimal:latest" --command /bin/bash
 ```
 
