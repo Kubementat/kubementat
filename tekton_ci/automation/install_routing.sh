@@ -97,17 +97,39 @@ helm upgrade -i --wait --timeout "$CERT_MANAGER_HELM_DEPLOYMENT_TIMEOUT" "$CERT_
 --version "$CERT_MANAGER_HELM_CHART_VERSION" \
 jetstack/cert-manager
 
-########## LETSENCRYPT CLUSTER ISSUER ################
-echo "Installing Cluster Issuer for letsencrypt..."
+kubectl get all -n "${CERT_MANAGER_DEPLOYMENT_NAMESPACE}"
 
-kubectl -n "$CERT_MANAGER_DEPLOYMENT_NAMESPACE" apply  -f - <<EOF
+########## LETSENCRYPT CLUSTER ISSUER ################
+echo "Configuring Cluster Issuers for letsencrypt..."
+
+echo "Configuring letsencrypt staging cluster issuer..."
+kubectl apply  -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory # letsencrypt staging endpoint
+    email: $CLUSTER_MANAGER_EMAIL
+    # Secret resource that will be used to store the account's private key.
+    privateKeySecretRef:
+      name: letsencrypt
+    # Add a single challenge solver, HTTP01 using nginx
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+EOF
+
+echo "Configuring letsencrypt production cluster issuer..."
+kubectl apply  -f - <<EOF
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: letsencrypt
 spec:
   acme:
-    # server: https://acme-staging-v02.api.letsencrypt.org/directory # letsencrypt staging endpoint
     server: https://acme-v02.api.letsencrypt.org/directory # production
     email: $CLUSTER_MANAGER_EMAIL
     # Secret resource that will be used to store the account's private key.
@@ -120,4 +142,4 @@ spec:
           class: nginx
 EOF
 
-kubectl get all -n "${CERT_MANAGER_DEPLOYMENT_NAMESPACE}"
+kubectl get clusterissuer
