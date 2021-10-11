@@ -66,6 +66,7 @@ CERT_MANAGER_DEPLOYMENT_NAMESPACE="$(jq -r '.CERT_MANAGER_DEPLOYMENT_NAMESPACE' 
 CERT_MANAGER_DEPLOYMENT_NAME="$(jq -r '.CERT_MANAGER_DEPLOYMENT_NAME' ../../platform_config/"${ENVIRONMENT}"/static.json)"
 CERT_MANAGER_HELM_CHART_VERSION="$(jq -r '.CERT_MANAGER_HELM_CHART_VERSION' ../../platform_config/"${ENVIRONMENT}"/static.json)"
 CERT_MANAGER_HELM_DEPLOYMENT_TIMEOUT="$(jq -r '.CERT_MANAGER_HELM_DEPLOYMENT_TIMEOUT' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+CLUSTER_MANAGER_EMAIL="$(jq -r '.CLUSTER_MANAGER_EMAIL' ../../platform_config/"${ENVIRONMENT}"/static.json)"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo ""
@@ -74,6 +75,7 @@ echo "CERT_MANAGER_DEPLOYMENT_NAMESPACE: $CERT_MANAGER_DEPLOYMENT_NAMESPACE"
 echo "CERT_MANAGER_DEPLOYMENT_NAME: $CERT_MANAGER_DEPLOYMENT_NAME"
 echo "CERT_MANAGER_HELM_CHART_VERSION: $CERT_MANAGER_HELM_CHART_VERSION"
 echo "CERT_MANAGER_HELM_DEPLOYMENT_TIMEOUT: $CERT_MANAGER_HELM_DEPLOYMENT_TIMEOUT"
+echo "CLUSTER_MANAGER_EMAIL: $CLUSTER_MANAGER_EMAIL"
 echo ""
 echo "#########################"
 echo "Helm version:"
@@ -94,5 +96,28 @@ helm upgrade -i --wait --timeout "$CERT_MANAGER_HELM_DEPLOYMENT_TIMEOUT" "$CERT_
 -f "../../platform_config/${ENVIRONMENT}/routing/cert_manager.encrypted.yaml" \
 --version "$CERT_MANAGER_HELM_CHART_VERSION" \
 jetstack/cert-manager
+
+########## LETSENCRYPT CLUSTER ISSUER ################
+echo "Installing Cluster Issuer for letsencrypt..."
+
+kubectl -n "$CERT_MANAGER_DEPLOYMENT_NAMESPACE" apply  -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    # server: https://acme-staging-v02.api.letsencrypt.org/directory # letsencrypt staging endpoint
+    server: https://acme-v02.api.letsencrypt.org/directory # production
+    email: $CLUSTER_MANAGER_EMAIL
+    # Secret resource that will be used to store the account's private key.
+    privateKeySecretRef:
+      name: letsencrypt
+    # Add a single challenge solver, HTTP01 using nginx
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+EOF
 
 kubectl get all -n "${CERT_MANAGER_DEPLOYMENT_NAMESPACE}"

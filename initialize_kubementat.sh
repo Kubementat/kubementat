@@ -25,7 +25,7 @@ function check_is_already_initialized(){
 }
 
 function check_required_environment_variables(){
-  if [[ -z "$BASE_DOMAIN" || -z "$AUTOMATION_GIT_URL" || -z "$AUTOMATION_GIT_SERVER_HOST" || -z "$AUTOMATION_GIT_SERVER_PORT" || -z "$AUTOMATION_GIT_SERVER_SSH_USER" || -z "$KUBERNETES_DEFAULT_STORAGE_CLASS" || -z "$DOCKER_REGISTRY_BASE_URL" ]]; then
+  if [[ -z "$BASE_DOMAIN" || -z "$AUTOMATION_GIT_URL" || -z "$AUTOMATION_GIT_SERVER_HOST" || -z "$AUTOMATION_GIT_SERVER_PORT" || -z "$AUTOMATION_GIT_SERVER_SSH_USER" || -z "$KUBERNETES_DEFAULT_STORAGE_CLASS" || -z "$DOCKER_REGISTRY_BASE_URL" || -z "$CLUSTER_MANAGER_EMAIL" ]]; then
     echo "Unsufficient environment configuration provided! Exiting."
     echo "Please define the required according ENVIRONMENT variables via exports:"
     echo "e.g.:"
@@ -36,6 +36,7 @@ function check_required_environment_variables(){
     echo "export AUTOMATION_GIT_SERVER_SSH_USER='git'"
     echo "export KUBERNETES_DEFAULT_STORAGE_CLASS='local-path'"
     echo "export DOCKER_REGISTRY_BASE_URL='docker.io/julianweberdev'"
+    echo "export CLUSTER_MANAGER_EMAIL='yourmail@example.com'"
     echo ""
     echo "Then run this script via:"
     echo "./initialize_kubementat.sh"
@@ -158,12 +159,13 @@ jq \
   --arg automation_git_server_port "$AUTOMATION_GIT_SERVER_PORT" \
   --arg automation_git_server_ssh_user "$AUTOMATION_GIT_SERVER_SSH_USER" \
   --arg docker_registry_base_url "$DOCKER_REGISTRY_BASE_URL" \
+  --arg cluster_manager_email "$CLUSTER_MANAGER_EMAIL" \
   --arg base_domain "$BASE_DOMAIN" \
   --arg git_deployer_gpg_public_key "$GIT_DEPLOYER_GPG_PUBLIC_KEY" \
   --arg git_deployer_email "$GIT_DEPLOYER_EMAIL" \
   --arg ssh_public_key "$(cat deployer_ssh_key.pub)" \
   --arg tekton_kubernetes_storage_class "$KUBERNETES_DEFAULT_STORAGE_CLASS" \
-  '.AUTOMATION_GIT_URL |= $automation_git_url | .AUTOMATION_GIT_SERVER_HOST |= $automation_git_server_host | .AUTOMATION_GIT_SERVER_PORT |= $automation_git_server_port | .AUTOMATION_GIT_SERVER_SSH_USER |= $automation_git_server_ssh_user | .DOCKER_REGISTRY_BASE_URL |= $docker_registry_base_url | .BASE_DOMAIN |= $base_domain | .GIT_DEPLOYER_GPG_PUBLIC_KEY |= $git_deployer_gpg_public_key | .GIT_DEPLOYER_EMAIL |= $git_deployer_email | .GIT_DEPLOYER_PUBLIC_KEY |= $ssh_public_key | .TEKTON_KUBERNETES_STORAGE_CLASS |= $tekton_kubernetes_storage_class' \
+  '.AUTOMATION_GIT_URL |= $automation_git_url | .AUTOMATION_GIT_SERVER_HOST |= $automation_git_server_host | .AUTOMATION_GIT_SERVER_PORT |= $automation_git_server_port | .AUTOMATION_GIT_SERVER_SSH_USER |= $automation_git_server_ssh_user | .DOCKER_REGISTRY_BASE_URL |= $docker_registry_base_url | .BASE_DOMAIN |= $base_domain | .GIT_DEPLOYER_GPG_PUBLIC_KEY |= $git_deployer_gpg_public_key | .GIT_DEPLOYER_EMAIL |= $git_deployer_email | .GIT_DEPLOYER_PUBLIC_KEY |= $ssh_public_key | .TEKTON_KUBERNETES_STORAGE_CLASS |= $tekton_kubernetes_storage_class | .CLUSTER_MANAGER_EMAIL |= $cluster_manager_email' \
   platform_config/dev/static.json.template >platform_config/dev/static.json
 
 # Configure platform_config/dev/static.encrypted.json
