@@ -5,6 +5,7 @@
 # - tekton
 # - monitoring (prometheus, grafana)
 # - logging (promtail, loki)
+# - linkerd service mesh
 # - tekton pipeline setup
 # - tekton trigger setup
 
@@ -74,8 +75,8 @@ print_configuring_section "Tekton Pipelines for TEAM ${TEAM}"
 print_configuring_section "Tekton Pipeline Triggers for TEAM ${TEAM}"
 ./setup_triggers.sh "${ENVIRONMENT}" "${TEAM}"
 
-print_configuring_section "Vault"
-./install_vault.sh "${ENVIRONMENT}"
+# print_configuring_section "Vault"
+# ./install_vault.sh "${ENVIRONMENT}"
 
 print_configuring_section "Linkerd service mesh"
 ./install_linkerd.sh "${ENVIRONMENT}"
