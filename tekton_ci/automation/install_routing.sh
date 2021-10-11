@@ -93,6 +93,6 @@ helm upgrade -i --wait --timeout "$CERT_MANAGER_HELM_DEPLOYMENT_TIMEOUT" "$CERT_
 --namespace "${CERT_MANAGER_DEPLOYMENT_NAMESPACE}" \
 -f "../../platform_config/${ENVIRONMENT}/routing/cert_manager.encrypted.yaml" \
 --version "$CERT_MANAGER_HELM_CHART_VERSION" \
-ingress-nginx/ingress-nginx
+jetstack/cert-manager
 
 kubectl get all -n "${CERT_MANAGER_DEPLOYMENT_NAMESPACE}"

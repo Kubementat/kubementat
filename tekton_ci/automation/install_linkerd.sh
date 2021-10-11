@@ -36,6 +36,9 @@ fi
 set -e
 
 # install linkerd crs
+# TODO: ensure that this script also succeeds when a previous install is present for linkerd:
+# https://linkerd.io/2.10/tasks/upgrade/
+# maybe: install via helm instead https://linkerd.io/2.10/tasks/install-helm/
 linkerd check --pre
 linkerd install | kubectl -n "$LINKERD_NAMESPACE" apply -f -
 # linkerd check

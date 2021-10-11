@@ -1,5 +1,5 @@
 ################################
-# This pipeline builds the public ci images coming from the source easy_tekton repository (https://github.com/julweber/circle_ci_kubectl_helm_docker_image)
+# This pipeline builds the public ci images coming from the source kubementat repository (https://github.com/julweber/kubementat/blob/master/docker_files/ci_images/ubuntu_ci_minimal/Dockerfile)
 # these can be used for automating our tekton pipeline tasks
 # See push-image-tag and push-image-url for target registry location
 ################################
@@ -18,8 +18,12 @@ spec:
     - name: tekton-ci-image-tag
       description: The image tag to use for the automation run
       default: "latest"
-    - name: push-image-name
-      description: The image name for the built image
+    - name: automation-git-project-name
+      description: |
+        your local directory name for the repository
+        In general this can be set to the default: "kubementat"
+    - name: push-image-url
+      description: The image url for the built image
     - name: push-image-tag
       description: The image tag for the built image
   workspaces:
@@ -32,28 +36,11 @@ spec:
         name: git-clone
       params:
         - name: git-url
-          value: "https://github.com/julweber/easy_tekton.git"
+          value: "https://github.com/julweber/kubementat.git"
         - name: git-project-name
-          value: "easy_tekton"
+          value: "$(params.automation-git-project-name)"
         - name: git-revision
           value: "master"
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"
-      workspaces:
-        - name: workspace
-          workspace: pipeline-workspace
-
-    # list workspace contents
-    - name: list-workspace-contents
-      runAfter:
-        - git-clone
-      taskRef:
-        name: list-workspace
-      params:
         - name: docker-registry-base-url
           value: "$(params.docker-registry-base-url)"
         - name: tekton-ci-image-name
@@ -73,17 +60,19 @@ spec:
         name: build-and-push-docker-image
       params:
         - name: path-to-context
-          value: "/workspace/easy_tekton/docker_files/ci_images/ubuntu_ci_minimal"
+          value: "/workspace/$(params.automation-git-project-name)/docker_files/ci_images/ubuntu_ci_minimal"
         - name: path-to-dockerfile-within-context
           value: Dockerfile
         - name: push-image-url
-          value: "$(params.docker-registry-base-url)/$(params.push-image-name)"
+          value: "$(params.push-image-url)"
         - name: push-image-tag
           value: "$(params.push-image-tag)"
-        # TODO: uncomment for arm build environments
-        # - name: extra-build-args
-        #   value:
-        #     - --customPlatform=linux/arm64
+        - name: docker-registry-base-url
+          value: "$(params.docker-registry-base-url)"
+        - name: tekton-ci-image-name
+          value: "$(params.tekton-ci-image-name)"
+        - name: tekton-ci-image-tag
+          value: "$(params.tekton-ci-image-tag)"
       workspaces:
         - name: workspace
           workspace: pipeline-workspace

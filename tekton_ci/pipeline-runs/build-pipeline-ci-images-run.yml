@@ -30,6 +30,9 @@ spec:
     - name: automation-git-crypt-unlock
       value: "false"
 
+    - name: push-image-tag
+      value: "TEKTON_CI_IMAGE_TAG_PLACEHOLDER"
+
   workspaces:
     - name: pipeline-workspace # this workspace name must be declared in the Pipeline
       volumeClaimTemplate:

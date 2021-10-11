@@ -1,6 +1,6 @@
 ################################
 # This pipeline builds the ci images used for automating our tekton pipeline tasks
-# See push-image-tag and push-image-url for target registry location
+# See push-image-tag for target registry tag
 ################################
 
 apiVersion: tekton.dev/v1beta1
@@ -22,13 +22,13 @@ spec:
     # AUTOMATION REPOSITORY SECTION
     - name: automation-git-url
       description: |
-        The git url of the automation repository to use (your fork of the easy_tekton repos address)
-        e.g.: if you would use the easy_tekton default location: ssh://git@github.com:julweber/easy_tekton.git
+        The git url of the automation repository to use (your fork of the kubementat repos address)
+        e.g.: if you would use the kubementat default location: ssh://git@github.com:julweber/kubementat.git
     - name: automation-git-project-name
       description: |
         your local directory name for the repository
-        this should be set to "easy_tekton" despite you change a lot of code in this repo ;)
-      default: "easy_tekton"
+        In general this can be set to the default: "kubementat"
+      default: "kubementat"
     - name: automation-git-revision
       description: |
         the git revision to checkout
@@ -55,6 +55,10 @@ spec:
       description: |
         should a git-crypt unlock be executed on the checked out repo?
       default: "false"
+
+    - name: push-image-tag
+      description: The tag for the pushed images
+      default: "latest"
 
   workspaces:
     - name: pipeline-workspace
@@ -89,59 +93,28 @@ spec:
         - name: workspace
           workspace: pipeline-workspace
 
-    # list workspace contents
-    - name: list-workspace-contents
+    # build docker image ubuntu-ci-minimal
+    - name: build-docker-image-ubuntu-ci-minimal
+      retries: 2
       runAfter:
         - git-clone-automation
       taskRef:
-        name: list-workspace
+        name: build-and-push-docker-image
       params:
+        - name: path-to-context
+          value: "/workspace/$(params.automation-git-project-name)/docker_files/ci_images/ubuntu_ci_minimal"
+        - name: path-to-dockerfile-within-context
+          value: Dockerfile
+        - name: push-image-url
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name)"
+        - name: push-image-tag
+          value: "$(params.push-image-tag)"
         - name: docker-registry-base-url
           value: "$(params.docker-registry-base-url)"
         - name: tekton-ci-image-name
           value: "$(params.tekton-ci-image-name)"
         - name: tekton-ci-image-tag
           value: "$(params.tekton-ci-image-tag)"
-      workspaces:
-        - name: workspace
-          workspace: pipeline-workspace
-
-    # build docker image ubuntu-ci-minimal
-    - name: build-docker-image-ubuntu-minimal
-      retries: 2
-      runAfter:
-        - git-clone-automation
-      taskRef:
-        name: build-and-push-docker-image
-      params:
-        - name: path-to-context
-          value: "/workspace/easy_tekton/docker_files/ci_images/ubuntu_ci_minimal"
-        - name: path-to-dockerfile-within-context
-          value: Dockerfile
-        - name: push-image-url
-          value: "$(params.docker-registry-base-url)/ubuntu-ci-minimal"
-        - name: push-image-tag
-          value: latest
-      workspaces:
-        - name: workspace
-          workspace: pipeline-workspace
-
-    # build docker base image ubuntu-ci
-    - name: build-docker-image-ubuntu-ci
-      retries: 2
-      runAfter:
-        - build-docker-image-ubuntu-minimal
-      taskRef:
-        name: build-and-push-docker-image
-      params:
-        - name: path-to-context
-          value: "/workspace/easy_tekton/docker_files/ci_images/ubuntu_ci"
-        - name: path-to-dockerfile-within-context
-          value: Dockerfile
-        - name: push-image-url
-          value: "$(params.docker-registry-base-url)/ubuntu-ci"
-        - name: push-image-tag
-          value: latest
       workspaces:
         - name: workspace
           workspace: pipeline-workspace
