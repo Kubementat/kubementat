@@ -28,7 +28,7 @@ APP_DEPLOYMENT_NAMESPACE="$(jq -r '.APP_DEPLOYMENT_NAMESPACE' ../../platform_con
 HELM_DEPLOYER_SERVICE_ACCOUNT_NAME="$(jq -r '.HELM_DEPLOYER_SERVICE_ACCOUNT_NAME' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
 
 # e.g. https://index.docker.io/v1/ for dockerhub
-DOCKER_REGISTRY_AUTH_URL="$(jq -r '.DOCKER_REGISTRY_AUTH_URL' "../../platform_config/${ENVIRONMENT}/static.json")"
+DOCKER_REGISTRY_AUTH_URL="$(jq -r '.DOCKER_REGISTRY_AUTH_URL' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
 DOCKER_REGISTRY_EMAIL="$(jq -r '.DOCKER_REGISTRY_EMAIL' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
 DOCKER_REGISTRY_USERNAME="$(jq -r '.DOCKER_REGISTRY_USERNAME' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
 DOCKER_REGISTRY_PASSWORD="$(jq -r '.DOCKER_REGISTRY_PASSWORD' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
