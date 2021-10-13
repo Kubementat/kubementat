@@ -48,7 +48,7 @@ export AUTOMATION_GIT_SERVER_HOST="$(jq -r '.AUTOMATION_GIT_SERVER_HOST' ../../p
 export AUTOMATION_GIT_SERVER_PORT="$(jq -r '.AUTOMATION_GIT_SERVER_PORT' ../../platform_config/"${ENVIRONMENT}"/static.json)"
 export AUTOMATION_GIT_SERVER_SSH_USER="$(jq -r '.AUTOMATION_GIT_SERVER_SSH_USER' ../../platform_config/"${ENVIRONMENT}"/static.json)"
 
-export HELM_DEPLOYER_SERVICE_ACCOUNT_NAME="$(jq -r '.AUTOMATION_GIT_URL' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.json")"
+export HELM_DEPLOYER_SERVICE_ACCOUNT_NAME="$(jq -r '.HELM_DEPLOYER_SERVICE_ACCOUNT_NAME' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.json")"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "TEAM: $TEAM"
