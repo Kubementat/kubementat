@@ -18,7 +18,7 @@ spec:
       spec:
         pipelineRef:
           name: PIPELINE_NAME_PLACEHOLDER
-        serviceAccountName: helm-deployer-sa
+        serviceAccountName: HELM_DEPLOYER_SERVICE_ACCOUNT_NAME_PLACEHOLDER
         timeout: 15m
         params:
           # ATTENTION: PLEASE REVIEW THOSE PARAMETERS AND COMPARE THEM WITH AN ACCORDING PIPELINERUN

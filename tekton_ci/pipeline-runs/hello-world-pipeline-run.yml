@@ -3,7 +3,7 @@ kind: PipelineRun
 metadata:
   name: hello-world-pipeline-run
 spec:
-  serviceAccountName: helm-deployer-sa
+  serviceAccountName: "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME_PLACEHOLDER"
   pipelineRef:
     name: hello-world-pipeline
   timeout: 10m

@@ -6,7 +6,7 @@ spec:
   # here we need to use our previously created service account (see setup_pipelines.sh)
   # as we are deploying to another namespace than the tekton pipeline
   # and want to grant according permissions for the helm deploy task
-  serviceAccountName: helm-deployer-sa
+  serviceAccountName: "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME_PLACEHOLDER"
   workspaces:
     - name: pipeline-workspace
       volumeClaimTemplate:

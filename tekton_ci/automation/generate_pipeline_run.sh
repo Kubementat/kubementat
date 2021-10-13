@@ -48,11 +48,9 @@ set -u
 echo "#########################"
 echo "Loading configuration from platform_config ..."
 PIPELINE_NAMESPACE="$(jq -r '.PIPELINE_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-HELM_DEPLOYER_SERVICE_ACCOUNT_NAME="$(jq -r '.HELM_DEPLOYER_SERVICE_ACCOUNT_NAME' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "TEAM: $TEAM"
 echo "PIPELINE_NAMESPACE: $PIPELINE_NAMESPACE"
-echo "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME: $HELM_DEPLOYER_SERVICE_ACCOUNT_NAME"
 echo "#########################"
 
 # pipeline_contents="$(cat "$PIPELINE_FILE" | yq e -j |jq '.'--arg run_name "$run_name" '.metadata.name = $run_name' | yq e -P)"
@@ -80,7 +78,7 @@ spec:
   # here we need to use our previously created service account (see setup_pipelines.sh)
   # as we are deploying to another namespace than the tekton pipeline
   # and want to grant according permissions for the helm deploy task
-  serviceAccountName: $HELM_DEPLOYER_SERVICE_ACCOUNT_NAME
+  serviceAccountName: "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME_PLACEHOLDER"
   workspaces:
     - name: pipeline-workspace
       volumeClaimTemplate:
