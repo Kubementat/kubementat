@@ -18,8 +18,6 @@ FROM ubuntu:20.04
 
 ENV DEBIAN_FRONTEND noninteractive
 
-# TODO: download tkn and yq based on architecture (linux_amd64, aarch64)
-
 ARG MAVEN_VERSION=3.6.3
 ARG TKN_CLI_VERSION="0.17.0"
 ARG YQ_VERSION=4.7.0
