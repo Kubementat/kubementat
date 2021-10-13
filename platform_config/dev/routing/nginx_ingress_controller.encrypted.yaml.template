@@ -5,6 +5,15 @@
 controller:
   replicaCount: 2
   minAvailable: 1
+
+  metrics:
+    port: 10254
+    enabled: true
+    service:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "10254"
+
   ## Affinity and anti-affinity
   ## Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
   ##
