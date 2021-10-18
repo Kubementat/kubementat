@@ -29,6 +29,7 @@ function check_dependencies(){
   command -v git >/dev/null 2>&1 || { echo "git is not installed. Aborting." >&2; exit 1; }
   command -v git-crypt >/dev/null 2>&1 || { echo "git-crypt is not installed. Aborting." >&2; exit 1; }
   command -v gpg >/dev/null 2>&1 || { echo "gpg is not installed. Aborting." >&2; exit 1; }
+  command -v linkerd >/dev/null 2>&1 || { echo "linkerd is not installed. Aborting." >&2; exit 1; }
   echo "Finished checking local dependencies"
   echo "################"
   echo ""
