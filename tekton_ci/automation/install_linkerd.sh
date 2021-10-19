@@ -9,9 +9,15 @@
 set -e
 
 ENVIRONMENT="$1"
+
+UPDATE_ENABLED="false"
+if [[ "$2" == "true" ]]; then
+  UPDATE_ENABLED="true"
+fi
+
 if [[ "$ENVIRONMENT" == "" ]]; then
-  echo "Usage: install_linkerd.sh <ENVIRONMENT_NAME>"
-  echo "e.g.: install_linkerd.sh dev"
+  echo "Usage: install_linkerd.sh <ENVIRONMENT_NAME> <Optional: UPDATE_ENABLED>"
+  echo "e.g.: install_linkerd.sh dev true"
   exit 1
 fi
 
@@ -26,35 +32,37 @@ echo "LINKERD_NAMESPACE: $LINKERD_NAMESPACE"
 echo "#########################"
 
 # Only continue if linkerd is not installed already
-set +e
-linkerd_configmap="$(kubectl -n "$LINKERD_NAMESPACE" get configmap/linkerd-config)"
-
-if [[ "$linkerd_configmap" != "" ]]; then
-  echo "Linkerd is already installed on the cluster. Skipping install script."
-  exit 0
-fi
 set -e
 
-# install linkerd crs
-# TODO: ensure that this script also succeeds when a previous install is present for linkerd:
-# https://linkerd.io/2.10/tasks/upgrade/
-# maybe: install via helm instead https://linkerd.io/2.10/tasks/install-helm/
-linkerd check --pre
-linkerd install | kubectl -n "$LINKERD_NAMESPACE" apply -f -
-# linkerd check
+linkerd_namespace_present="$(kubectl get ns | grep linkerd)"
+if [[ "$linkerd_namespace_present" == "" ]]; then
+  echo "Linkerd namespace not present. Installing freshly"
+  # install linkerd crs
+  # TODO: ensure that this script also succeeds when a previous install is present for linkerd:
+  # https://linkerd.io/2.10/tasks/upgrade/
+  # maybe: install via helm instead https://linkerd.io/2.10/tasks/install-helm/
+  linkerd check --pre
+  linkerd install | kubectl -n "$LINKERD_NAMESPACE" apply -f -
+  linkerd check
 
-# TODO: FIXME: use the existing prometheus for installing linkerd viz
-# alternatively configure platform prometheus to federate linkerd data from linkerd viz prometheus installation
-# linkerd viz install -f "../../platform_config/${ENVIRONMENT}/linkerd/viz_config.encrypted.yaml" | kubectl apply -f -
-linkerd viz install | kubectl apply -f -
+  # TODO: FIXME: use the existing prometheus for installing linkerd viz
+  # alternatively configure platform prometheus to federate linkerd data from linkerd viz prometheus installation
+  # linkerd viz install -f "../../platform_config/${ENVIRONMENT}/linkerd/viz_config.encrypted.yaml" | kubectl apply -f -
+  linkerd viz install | kubectl apply -f -
+else
+  if [[ "$UPDATE_ENABLED" == "true" ]]; then
+    echo "Linkerd Namespace present: Performing update..."
+    curl -sL https://run.linkerd.io/install | sh
 
-# linkerd example apps
-# curl -sL run.linkerd.io/emojivoto.yml | kubectl apply -f -
-# kubectl -n emojivoto port-forward svc/web-svc 8080:80
-# visit: http://localhost:8080
-# inject linkerd proxy
-# kubectl get -n emojivoto deploy -o yaml | linkerd inject - | kubectl apply -f -
-# linkerd -n emojivoto check --proxy
+    linkerd upgrade | kubectl apply --prune -l linkerd.io/control-plane-ns="$LINKERD_NAMESPACE" -f -
+    linkerd check
+    linkerd version
 
-# open dashboard
-# linkerd viz dashboard
+    kubectl -n "$LINKERD_NAMESPACE" rollout restart deploy
+    linkerd check --proxy
+
+    linkerd viz install | kubectl apply -f -
+  else
+    echo "Update disabled. Skipping script execution."
+  fi
+fi
