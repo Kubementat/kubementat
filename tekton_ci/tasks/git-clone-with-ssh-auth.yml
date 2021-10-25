@@ -6,6 +6,7 @@
 # git-server-host: github.com
 # git-server-ssh-user: git
 
+# DEFAULT KEY ACCESS BEHAVIOR:
 # GIT_DEPLOYER_PRIVATE_KEY is read from a previously generated k8s secret within the same namespace with name git-deployer-ssh-key
 # GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64 is read from a previously generated k8s secret within the same namespace with name git-deployer-gpg-key
 
@@ -53,19 +54,40 @@ spec:
   - name: tekton-ci-image-tag
     description: The image tag to use for the automation run
     default: "latest"
+  - name: git-private-ssh-key-secret-name
+    description: |
+      The name of the secret to load the used private ssh key from.
+      This is required to allow different deploy keys for different git repositories (e.g. for github deploy keys)
+    type: string
+    default: "git-deployer-ssh-key"
+  - name: git-private-ssh-key-secret-key-name
+    description: The name of the key within the secret defined in git-private-ssh-key-secret-name to use
+    type: string
+    default: "ssh-privatekey"
+  - name: git-private-gpg-key-secret-name
+    description: |
+      The name of the secret to load the used private gpg key from.
+      This can be used to use different gpg keys for different git repositories
+      when using git-crypt for file encryption.
+    type: string
+    default: "git-deployer-gpg-key"
+  - name: git-private-gpg-key-secret-key-name
+    description: The name of the key within the secret defined in git-private-gpg-key-secret-name to use
+    type: string
+    default: "private-key"
   stepTemplate:
     env:
       # ATTENTION: load keys from previously created k8s secret (see setup_pipelines.sh)
       - name: GIT_DEPLOYER_PRIVATE_KEY
         valueFrom:
           secretKeyRef:
-            name: git-deployer-ssh-key
-            key: ssh-privatekey
+            name: "$(params.git-private-ssh-key-secret-name)"
+            key: "$(params.git-private-ssh-key-secret-key-name)"
       - name: GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64
         valueFrom:
           secretKeyRef:
-            name: git-deployer-gpg-key
-            key: private-key
+            name: "$(params.git-private-gpg-key-secret-name)"
+            key: "$(params.git-private-gpg-key-secret-key-name)"
 
   steps:
     - name: git-clone
@@ -96,6 +118,14 @@ spec:
           value: /root
         - name: WORKSPACE_PATH
           value: "$(workspaces.workspace.path)"
+        - name: GIT_DEPLOYER_PRIVATE_KEY_SECRET_NAME
+          value: "$(params.git-private-ssh-key-secret-name)"
+        - name: GIT_DEPLOYER_PRIVATE_KEY_SECRET_KEY_NAME
+          value: "$(params.git-private-ssh-key-secret-key-name)"
+        - name: GIT_DEPLOYER_GPG_PRIVATE_KEY_SECRET_NAME
+          value: "$(params.git-private-gpg-key-secret-name)"
+        - name: GIT_DEPLOYER_GPG_PRIVATE_KEY_SECRET_KEY_NAME
+          value: "$(params.git-private-gpg-key-secret-key-name)"
       script: |
         #!/usr/bin/env bash
         set -ue
@@ -115,6 +145,10 @@ spec:
         echo "GIT_SERVER_PORT: $GIT_SERVER_PORT"
         echo "GIT_SERVER_SSH_USER: $GIT_SERVER_SSH_USER"
         echo "GIT_CRYPT_UNLOCK: $GIT_CRYPT_UNLOCK"
+        echo "GIT_DEPLOYER_PRIVATE_KEY_SECRET_NAME: $GIT_DEPLOYER_PRIVATE_KEY_SECRET_NAME"
+        echo "GIT_DEPLOYER_PRIVATE_KEY_SECRET_KEY_NAME: $GIT_DEPLOYER_PRIVATE_KEY_SECRET_KEY_NAME"
+        echo "GIT_DEPLOYER_GPG_PRIVATE_KEY_SECRET_NAME: $GIT_DEPLOYER_GPG_PRIVATE_KEY_SECRET_NAME"
+        echo "GIT_DEPLOYER_GPG_PRIVATE_KEY_SECRET_KEY_NAME: $GIT_DEPLOYER_GPG_PRIVATE_KEY_SECRET_KEY_NAME"
         echo "#################################"
 
         # create deploy token
