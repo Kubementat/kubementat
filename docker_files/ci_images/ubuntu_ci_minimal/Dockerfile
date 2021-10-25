@@ -6,7 +6,7 @@
 # build via:
 # export DOCKER_REGISTRY_BASE_URL="REPLACEME_WITH_DOCKER_REGISTRY_BASE_URL"
 # export IMAGE_NAME="ubuntu-ci-minimal"
-# export IMAGE_TAG="latest-amd64"
+# export IMAGE_TAG="latest"
 # e.g. export DOCKER_REGISTRY_BASE_URL="docker.io/julianweberdev"
 
 # CLASSIC BUILD
