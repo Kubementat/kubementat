@@ -31,10 +31,8 @@ echo "ENVIRONMENT: $ENVIRONMENT"
 echo "LINKERD_NAMESPACE: $LINKERD_NAMESPACE"
 echo "#########################"
 
-# Only continue if linkerd is not installed already
-set -e
-
 linkerd_namespace_present="$(kubectl get ns | grep linkerd)"
+set -e
 if [[ "$linkerd_namespace_present" == "" ]]; then
   echo "Linkerd namespace not present. Installing freshly"
   # install linkerd crs
