@@ -12,7 +12,7 @@ set -e
 
 ENVIRONMENT="$1"
 TEAM="$2"
-if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" ]]; then
+if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" ]]; then
   echo "Usage: uninstall_pipelines.sh <ENVIRONMENT_NAME> <TEAM>"
   echo "e.g.: uninstall_pipelines.sh dev dev1"
   exit 1

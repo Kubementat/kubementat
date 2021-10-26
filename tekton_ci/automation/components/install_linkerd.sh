@@ -25,7 +25,7 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-LINKERD_NAMESPACE="$(jq -r '.LINKERD_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+LINKERD_NAMESPACE="$(jq -r '.LINKERD_NAMESPACE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "LINKERD_NAMESPACE: $LINKERD_NAMESPACE"
@@ -47,7 +47,7 @@ if [[ "$linkerd_namespace_present" == "" ]]; then
 
   # TODO: FIXME: use the existing prometheus for installing linkerd viz
   # alternatively configure platform prometheus to federate linkerd data from linkerd viz prometheus installation
-  # linkerd viz install -f "../../platform_config/${ENVIRONMENT}/linkerd/viz_config.encrypted.yaml" | kubectl apply -f -
+  # linkerd viz install -f "../../../platform_config/${ENVIRONMENT}/linkerd/viz_config.encrypted.yaml" | kubectl apply -f -
   linkerd viz install | kubectl apply -f -
 else
   if [[ "$UPDATE_ENABLED" == "true" ]]; then

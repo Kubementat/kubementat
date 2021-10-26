@@ -22,10 +22,11 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-GITLAB_DEPLOYMENT_NAMESPACE="$(jq -r '.GITLAB_DEPLOYMENT_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-GITLAB_DEPLOYMENT_NAME="$(jq -r '.GITLAB_DEPLOYMENT_NAME' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-GITLAB_HELM_CHART_VERSION="$(jq -r '.GITLAB_HELM_CHART_VERSION' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-GITLAB_HELM_DEPLOYMENT_TIMEOUT="$(jq -r '.GITLAB_HELM_DEPLOYMENT_TIMEOUT' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+GITLAB_DEPLOYMENT_NAMESPACE="$(jq -r '.GITLAB_DEPLOYMENT_NAMESPACE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+GITLAB_DEPLOYMENT_NAME="$(jq -r '.GITLAB_DEPLOYMENT_NAME' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+GITLAB_HELM_CHART_VERSION="$(jq -r '.GITLAB_HELM_CHART_VERSION' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+GITLAB_HELM_DEPLOYMENT_TIMEOUT="$(jq -r '.GITLAB_HELM_DEPLOYMENT_TIMEOUT' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+HELM_VALUES_FILE_LOCATION="../../../platform_config/${ENVIRONMENT}/gitlab/values.encrypted.yaml"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo ""
@@ -34,6 +35,7 @@ echo "GITLAB_DEPLOYMENT_NAMESPACE: $GITLAB_DEPLOYMENT_NAMESPACE"
 echo "GITLAB_DEPLOYMENT_NAME: $GITLAB_DEPLOYMENT_NAME"
 echo "GITLAB_HELM_CHART_VERSION: $GITLAB_HELM_CHART_VERSION"
 echo "GITLAB_HELM_DEPLOYMENT_TIMEOUT: $GITLAB_HELM_DEPLOYMENT_TIMEOUT"
+echo "HELM_VALUES_FILE_LOCATION: $HELM_VALUES_FILE_LOCATION"
 echo ""
 echo "#########################"
 echo "Helm version:"
@@ -51,7 +53,7 @@ echo "Installing gitlab..."
 helm upgrade -i --wait --timeout "$GITLAB_HELM_DEPLOYMENT_TIMEOUT" "$GITLAB_DEPLOYMENT_NAME" \
 --create-namespace \
 --namespace "${GITLAB_DEPLOYMENT_NAMESPACE}" \
--f "../../platform_config/${ENVIRONMENT}/gitlab/values.encrypted.yaml" \
+-f "$HELM_VALUES_FILE_LOCATION" \
 --version "$GITLAB_HELM_CHART_VERSION" \
 gitlab/gitlab
 

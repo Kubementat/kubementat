@@ -19,10 +19,11 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-GITEA_DEPLOYMENT_NAMESPACE="$(jq -r '.GITEA_DEPLOYMENT_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-GITEA_DEPLOYMENT_NAME="$(jq -r '.GITEA_DEPLOYMENT_NAME' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-GITEA_HELM_CHART_VERSION="$(jq -r '.GITEA_HELM_CHART_VERSION' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-GITEA_HELM_DEPLOYMENT_TIMEOUT="$(jq -r '.GITEA_HELM_DEPLOYMENT_TIMEOUT' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+GITEA_DEPLOYMENT_NAMESPACE="$(jq -r '.GITEA_DEPLOYMENT_NAMESPACE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+GITEA_DEPLOYMENT_NAME="$(jq -r '.GITEA_DEPLOYMENT_NAME' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+GITEA_HELM_CHART_VERSION="$(jq -r '.GITEA_HELM_CHART_VERSION' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+GITEA_HELM_DEPLOYMENT_TIMEOUT="$(jq -r '.GITEA_HELM_DEPLOYMENT_TIMEOUT' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+HELM_VALUES_FILE_LOCATION="../../../platform_config/${ENVIRONMENT}/gitea/values.encrypted.yaml"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo ""
@@ -31,6 +32,7 @@ echo "GITEA_DEPLOYMENT_NAMESPACE: $GITEA_DEPLOYMENT_NAMESPACE"
 echo "GITEA_DEPLOYMENT_NAME: $GITEA_DEPLOYMENT_NAME"
 echo "GITEA_HELM_CHART_VERSION: $GITEA_HELM_CHART_VERSION"
 echo "GITEA_HELM_DEPLOYMENT_TIMEOUT: $GITEA_HELM_DEPLOYMENT_TIMEOUT"
+echo "HELM_VALUES_FILE_LOCATION: $HELM_VALUES_FILE_LOCATION"
 echo ""
 echo "#########################"
 echo "Helm version:"
@@ -48,7 +50,7 @@ echo "Installing gitea..."
 helm upgrade -i --wait --timeout "$GITEA_HELM_DEPLOYMENT_TIMEOUT" "$GITEA_DEPLOYMENT_NAME" \
 --create-namespace \
 --namespace "${GITEA_DEPLOYMENT_NAMESPACE}" \
--f "../../platform_config/${ENVIRONMENT}/gitea/values.encrypted.yaml" \
+-f "$HELM_VALUES_FILE_LOCATION" \
 --version "$GITEA_HELM_CHART_VERSION" \
 gitea-charts/gitea
 

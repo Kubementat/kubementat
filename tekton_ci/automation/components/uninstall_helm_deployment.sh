@@ -26,8 +26,8 @@ echo "DEPLOYMENT_NAME_VARIABLE_NAME: $DEPLOYMENT_NAME_VARIABLE_NAME"
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-DEPLOYMENT_NAMESPACE="$(jq -r ".${DEPLOYMENT_NAMESPACE_VARIABLE_NAME}" ../../platform_config/"${ENVIRONMENT}"/static.json)"
-DEPLOYMENT_NAME="$(jq -r ".${DEPLOYMENT_NAME_VARIABLE_NAME}" ../../platform_config/"${ENVIRONMENT}"/static.json)"
+DEPLOYMENT_NAMESPACE="$(jq -r ".${DEPLOYMENT_NAMESPACE_VARIABLE_NAME}" ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+DEPLOYMENT_NAME="$(jq -r ".${DEPLOYMENT_NAME_VARIABLE_NAME}" ../../../platform_config/"${ENVIRONMENT}"/static.json)"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo ""

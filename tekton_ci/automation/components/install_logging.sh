@@ -19,10 +19,11 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-LOKI_DEPLOYMENT_NAMESPACE="$(jq -r '.LOKI_DEPLOYMENT_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-LOKI_DEPLOYMENT_NAME="$(jq -r '.LOKI_DEPLOYMENT_NAME' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-LOKI_HELM_CHART_VERSION="$(jq -r '.LOKI_HELM_CHART_VERSION' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-LOKI_HELM_DEPLOYMENT_TIMEOUT="$(jq -r '.LOKI_HELM_DEPLOYMENT_TIMEOUT' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+LOKI_DEPLOYMENT_NAMESPACE="$(jq -r '.LOKI_DEPLOYMENT_NAMESPACE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+LOKI_DEPLOYMENT_NAME="$(jq -r '.LOKI_DEPLOYMENT_NAME' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+LOKI_HELM_CHART_VERSION="$(jq -r '.LOKI_HELM_CHART_VERSION' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+LOKI_HELM_DEPLOYMENT_TIMEOUT="$(jq -r '.LOKI_HELM_DEPLOYMENT_TIMEOUT' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+HELM_VALUES_FILE_LOCATION="../../../platform_config/${ENVIRONMENT}/logging/loki_stack_values.encrypted.yaml"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo ""
@@ -31,6 +32,7 @@ echo "LOKI_DEPLOYMENT_NAMESPACE: $LOKI_DEPLOYMENT_NAMESPACE"
 echo "LOKI_DEPLOYMENT_NAME: $LOKI_DEPLOYMENT_NAME"
 echo "LOKI_HELM_CHART_VERSION: $LOKI_HELM_CHART_VERSION"
 echo "LOKI_HELM_DEPLOYMENT_TIMEOUT: $LOKI_HELM_DEPLOYMENT_TIMEOUT"
+echo "HELM_VALUES_FILE_LOCATION: $HELM_VALUES_FILE_LOCATION"
 echo ""
 echo "#########################"
 echo "Helm version:"
@@ -48,7 +50,7 @@ echo "Installing loki-stack..."
 helm upgrade -i --wait --timeout "$LOKI_HELM_DEPLOYMENT_TIMEOUT" "$LOKI_DEPLOYMENT_NAME" \
 --create-namespace \
 --namespace "${LOKI_DEPLOYMENT_NAMESPACE}" \
--f "../../platform_config/${ENVIRONMENT}/logging/loki_stack_values.encrypted.yaml" \
+-f "$HELM_VALUES_FILE_LOCATION" \
 --version "$LOKI_HELM_CHART_VERSION" \
 grafana/loki-stack
 

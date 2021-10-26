@@ -19,10 +19,11 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-POLARIS_DEPLOYMENT_NAMESPACE="$(jq -r '.POLARIS_DEPLOYMENT_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-POLARIS_DEPLOYMENT_NAME="$(jq -r '.POLARIS_DEPLOYMENT_NAME' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-POLARIS_HELM_CHART_VERSION="$(jq -r '.POLARIS_HELM_CHART_VERSION' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-POLARIS_HELM_DEPLOYMENT_TIMEOUT="$(jq -r '.POLARIS_HELM_DEPLOYMENT_TIMEOUT' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+POLARIS_DEPLOYMENT_NAMESPACE="$(jq -r '.POLARIS_DEPLOYMENT_NAMESPACE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+POLARIS_DEPLOYMENT_NAME="$(jq -r '.POLARIS_DEPLOYMENT_NAME' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+POLARIS_HELM_CHART_VERSION="$(jq -r '.POLARIS_HELM_CHART_VERSION' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+POLARIS_HELM_DEPLOYMENT_TIMEOUT="$(jq -r '.POLARIS_HELM_DEPLOYMENT_TIMEOUT' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+HELM_VALUES_FILE_LOCATION="../../../platform_config/${ENVIRONMENT}/polaris/values.encrypted.yaml"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo ""
@@ -31,6 +32,7 @@ echo "POLARIS_DEPLOYMENT_NAMESPACE: $POLARIS_DEPLOYMENT_NAMESPACE"
 echo "POLARIS_DEPLOYMENT_NAME: $POLARIS_DEPLOYMENT_NAME"
 echo "POLARIS_HELM_CHART_VERSION: $POLARIS_HELM_CHART_VERSION"
 echo "POLARIS_HELM_DEPLOYMENT_TIMEOUT: $POLARIS_HELM_DEPLOYMENT_TIMEOUT"
+echo "HELM_VALUES_FILE_LOCATION: $HELM_VALUES_FILE_LOCATION"
 echo ""
 echo "#########################"
 echo "Helm version:"
@@ -48,7 +50,7 @@ echo "Installing polaris dashboard..."
 helm upgrade -i --wait --timeout "$POLARIS_HELM_DEPLOYMENT_TIMEOUT" "$POLARIS_DEPLOYMENT_NAME" \
 --create-namespace \
 --namespace "${POLARIS_DEPLOYMENT_NAMESPACE}" \
--f "../../platform_config/${ENVIRONMENT}/polaris/values.encrypted.yaml" \
+-f "$HELM_VALUES_FILE_LOCATION" \
 --version "$POLARIS_HELM_CHART_VERSION" \
 fairwinds-stable/polaris
 

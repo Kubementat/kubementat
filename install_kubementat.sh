@@ -73,7 +73,8 @@ function print_configuring_section() {
 check_dependencies
 check_cluster_and_access
 
-pushd tekton_ci/automation > /dev/null
+echo "Installing Kubementat components..."
+pushd tekton_ci/automation/components > /dev/null
 
 print_configuring_section "Tekton CI"
 ./install_tekton.sh "${ENVIRONMENT}"
@@ -84,17 +85,21 @@ print_configuring_section "Loki (Log Aggregator)"
 print_configuring_section "Monitoring (Prometheus, Grafana)"
 ./install_monitoring.sh "${ENVIRONMENT}"
 
+print_configuring_section "Linkerd service mesh"
+./install_linkerd.sh "${ENVIRONMENT}"
+
+# print_configuring_section "Vault"
+# ./install_vault.sh "${ENVIRONMENT}"
+
+echo "Setting up pipelines and triggers in tekton for team ${TEAM} ..."
+popd > /dev/null
+pushd tekton_ci/automation > /dev/null
+
 print_configuring_section "Tekton Pipelines for TEAM ${TEAM}"
 ./setup_pipelines.sh "${ENVIRONMENT}" "${TEAM}"
 
 print_configuring_section "Tekton Pipeline Triggers for TEAM ${TEAM}"
 ./setup_triggers.sh "${ENVIRONMENT}" "${TEAM}"
-
-# print_configuring_section "Vault"
-# ./install_vault.sh "${ENVIRONMENT}"
-
-print_configuring_section "Linkerd service mesh"
-./install_linkerd.sh "${ENVIRONMENT}"
 
 popd > /dev/null
 

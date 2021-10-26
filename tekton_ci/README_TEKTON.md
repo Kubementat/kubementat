@@ -42,7 +42,7 @@ see README_GIT_CRYPT.md
 # Initial setup and installation instructions
 ## Automated Tekton Installation
 ```
-cd automation
+cd automation/components
 # ./install_tekton.sh <ENVIRONMENT>
 ./install_tekton.sh dev
 ```
