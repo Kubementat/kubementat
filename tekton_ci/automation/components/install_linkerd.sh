@@ -6,8 +6,6 @@
 #
 #################################
 
-set -e
-
 ENVIRONMENT="$1"
 
 UPDATE_ENABLED="false"
@@ -21,7 +19,7 @@ if [[ "$ENVIRONMENT" == "" ]]; then
   exit 1
 fi
 
-set -u
+set -eu
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
@@ -31,8 +29,10 @@ echo "ENVIRONMENT: $ENVIRONMENT"
 echo "LINKERD_NAMESPACE: $LINKERD_NAMESPACE"
 echo "#########################"
 
+set +e
 linkerd_namespace_present="$(kubectl get ns | grep linkerd)"
 set -e
+
 if [[ "$linkerd_namespace_present" == "" ]]; then
   echo "Linkerd namespace not present. Installing freshly"
   # install linkerd crs
