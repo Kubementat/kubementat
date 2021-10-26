@@ -139,5 +139,5 @@ popd
 
 # view progress via tekton dashboard
 pushd utilities
-./open_dashboard_tunnel.sh dev
+./open_tekton_dashboard_tunnel.sh dev
 ```

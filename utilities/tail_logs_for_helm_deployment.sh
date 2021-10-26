@@ -15,7 +15,7 @@ CONTAINER_NAME="$3"
 
 if [[ "$NAMESPACE" == "" || "$HELM_DEPLOYMENT_NAME" == "" ]]; then
   echo "Usage: tail_logs_for_helm_deployment.sh <NAMESPACE> <HELM_DEPLOYMENT_NAME> <Optional: CONTAINER_NAME>"
-  echo "e.g.: tail_logs_for_helm_deployment.sh dev1 sso-login-service"
+  echo "e.g.: tail_logs_for_helm_deployment.sh dev1 nginx-example"
   exit 1
 fi
 

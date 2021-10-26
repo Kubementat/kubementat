@@ -98,8 +98,8 @@ As the tekton dashboard is not accessible via ingress per default we need to ope
 For opening the tunnel you can use the helper script as follows:
 ```
 cd utilities
-# general: ./open_dashboard_tunnel.sh <ENVIRONMENT>
-./open_dashboard_tunnel.sh dev
+# general: ./open_tekton_dashboard_tunnel.sh <ENVIRONMENT>
+./open_tekton_dashboard_tunnel.sh dev
 # leave the console open
 
 # in another console or the preferably the browser open:

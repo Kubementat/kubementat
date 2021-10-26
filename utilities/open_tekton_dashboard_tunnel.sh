@@ -10,8 +10,8 @@ set -e
 
 ENVIRONMENT="$1"
 if [[ "$ENVIRONMENT" == "" ]]; then
-  echo "Usage: open_dashboard_tunnel.sh <ENVIRONMENT_NAME>"
-  echo "e.g.: open_dashboard_tunnel.sh dev"
+  echo "Usage: open_tekton_dashboard_tunnel.sh <ENVIRONMENT_NAME>"
+  echo "e.g.: open_tekton_dashboard_tunnel.sh dev"
   exit 1
 fi
 
