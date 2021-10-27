@@ -22,5 +22,14 @@
   "POSTGRES_HOST": "postgres.dev1.svc.cluster.local",
   "POSTGRES_ROOT_PASSWORD": "REPLACEME_POSTGRES_ROOT_PASSWORD",
   "REDIS_MASTER_HOST": "redis-master.dev1.svc.cluster.local",
-  "REDIS_PASSWORD": "REPLACEME_REDIS_PASSWORD"
+  "REDIS_PASSWORD": "REPLACEME_REDIS_PASSWORD",
+  "SSH_DEPLOY_KEYS": [
+    {
+      "NAME": "example-deploy-key",
+      "PRIVATE_KEY_BASE64": "REPLACEME_WITH_BASE64_ENCODED_PRIVATE_KEY",
+      "PUBLIC_KEY": "REPLACEME",
+      "TARGET_NAMESPACE": "dev1-pipelines",
+      "TARGET_SECRET_NAME": "example-ssh-secret"
+    }
+  ]
 }
