@@ -93,11 +93,11 @@ spec:
     - name: git-clone
       resources:
         requests:
-          memory: 500Mi
-          cpu: 250m
+          memory: 100Mi
+          cpu: 100m
         limits:
-          memory: 1Gi
-          cpu: 500m
+          memory: 256Mi
+          cpu: 300m
       image: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
       env:
         - name: GIT_URL
