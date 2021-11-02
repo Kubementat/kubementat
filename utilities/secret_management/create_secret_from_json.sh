@@ -14,7 +14,7 @@ SECRET_NAME="$2"
 JSON_STRING="$3"
 if [[ "$NAMESPACE" == "" || "$SECRET_NAME" == "" || "$JSON_STRING" == "" ]]; then
   echo "Usage: create_secret_from_json.sh <NAMESPACE> <SECRET_NAME> <JSON_STRING>"
-  echo "e.g.: create_secret_from_json.sh dev1-pipelines terraform-main-automation-secret '{\"TF_my_variable\":\"my_value\",\"TF_my_var2\":123}'"
+  echo "e.g.: create_secret_from_json.sh dev1-pipelines terraform-main-automation-secret '{\"TF_VAR_my_variable\":\"my_value\",\"TF_VAR_my_var2\":123}'"
   exit 1
 fi
 
