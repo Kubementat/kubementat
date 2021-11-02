@@ -1,0 +1,91 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: terraform-cli
+spec:
+  description: |
+    This tasks allows to execute terraform cli command executions.
+    It requires a preconfigured kubernetes secret
+    (see: terraform-secret-name parameter) to allow TF_ variable injection
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder with the dockerfile and context.
+    mountPath: /workspace
+  params:
+  - name: terraform-working-dir
+    description: |
+      The working dir to execute terraform in.
+      This should contain the .tf files to use for execution.
+      e.g.: /workspace/terraform-automation
+    type: string
+  - name: ARGS
+    description: The terraform cli commands to tun
+    type: array
+    default:
+    - "--help"
+  - name: terraform-secret-name
+    description: The terraform secret with credentials
+    type: string
+    default: "terraform-creds"
+  - name: image
+    description: the terraform image to use
+    type: string
+    default: docker.io/hashicorp/terraform:light
+  - name: httpProxy
+    description: HTTP proxy server for non-SSL requests
+    type: string
+    default: ""
+  - name: httpsProxy
+    description: HTTPS proxy server for SSL requests
+    type: string
+    default: ""
+  - name: noProxy
+    description: no proxy - opt out of proxying HTTP/HTTPS requests
+    type: string
+    default: ""
+  steps:
+    - name: init
+      resources:
+          requests:
+            memory: 100Mi
+            cpu: 150m
+          limits:
+            memory: 256Mi
+            cpu: 300m
+      image: $(params.image)
+      workingDir: $(params.terraform-working-dir)
+      command: ["terraform"]
+      env:
+        - name: "HTTP_PROXY"
+          value: $(params.httpProxy)
+        - name: "HTTPS_PROXY"
+          value: $(params.httpsProxy)
+        - name: "HTTP_PROXY"
+          value: $(params.httpProxy)
+      args:
+        - "init"
+    - name: terraform-cli
+      resources:
+          requests:
+            memory: 100Mi
+            cpu: 150m
+          limits:
+            memory: 256Mi
+            cpu: 300m
+      image: $(params.image)
+      workingDir: $(params.terraform-working-dir)
+      command: ["terraform"]
+      args:
+        - "$(params.ARGS)"
+      env:
+        - name: "HTTP_PROXY"
+          value: $(params.httpProxy)
+        - name: "HTTPS_PROXY"
+          value: $(params.httpsProxy)
+        - name: "HTTP_PROXY"
+          value: $(params.httpProxy)
+      envFrom:
+        - secretRef:
+            name: $(params.terraform-secret-name)
