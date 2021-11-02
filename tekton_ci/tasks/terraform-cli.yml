@@ -64,6 +64,9 @@ spec:
           value: $(params.httpsProxy)
         - name: "HTTP_PROXY"
           value: $(params.httpProxy)
+      envFrom:
+        - secretRef:
+            name: $(params.terraform-secret-name)
       args:
         - "init"
     - name: terraform-cli
