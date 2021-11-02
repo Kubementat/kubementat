@@ -7,7 +7,7 @@ spec:
   description: |
     This tasks allows to execute terraform cli command executions.
     It requires a preconfigured kubernetes secret
-    (see: terraform-secret-name parameter) to allow TF_ variable injection
+    (see: terraform-secret-name parameter) to allow TF_VAR_ variable injection
   workspaces:
   - name: workspace
     description: |
