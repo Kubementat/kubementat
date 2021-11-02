@@ -216,10 +216,16 @@ echo "Finished setting up roles for tekton triggers."
 
 
 echo "#########################"
-echo "Configuring gitlab webhook secret in namespace $TEKTON_NAMESPACE ..."
+echo "Configuring webhook secrets in namespace $TEKTON_NAMESPACE ..."
+
+echo "Configuring GITLAB_WEBHOOK_SECRET ..."
+set +e
 GITLAB_WEBHOOK_SECRET="$(jq -r '.GITLAB_WEBHOOK_SECRET' ../../platform_config/"${ENVIRONMENT}"/static.encrypted.json)"
-GITLAB_WEBHOOK_SECRET_BASE64=$(echo -n "${GITLAB_WEBHOOK_SECRET}" | base64)
-kubectl apply -n "$TEKTON_NAMESPACE" -f - <<EOF
+set -e
+if [[ "$GITLAB_WEBHOOK_SECRET" != "" ]]; then
+  echo "Found GITLAB_WEBHOOK_SECRET configuration. Configuring gitlab-trigger-webhook-secret on cluster"
+  GITLAB_WEBHOOK_SECRET_BASE64=$(echo -n "${GITLAB_WEBHOOK_SECRET}" | base64)
+  kubectl apply -n "$TEKTON_NAMESPACE" -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
@@ -229,6 +235,26 @@ data:
   secret: |
     $GITLAB_WEBHOOK_SECRET_BASE64
 EOF
+fi
+
+echo "Configuring GITHUB_WEBHOOK_SECRET ..."
+set +e
+GITHUB_WEBHOOK_SECRET="$(jq -r '.GITHUB_WEBHOOK_SECRET' ../../platform_config/"${ENVIRONMENT}"/static.encrypted.json)"
+set -e
+if [[ "$GITHUB_WEBHOOK_SECRET" != "" ]]; then
+  echo "Found GITHUB_WEBHOOK_SECRET configuration. Configuring github-trigger-webhook-secret on cluster"
+  GITHUB_WEBHOOK_SECRET_BASE64=$(echo -n "${GITHUB_WEBHOOK_SECRET}" | base64)
+  kubectl apply -n "$TEKTON_NAMESPACE" -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-trigger-webhook-secret
+type: Opaque
+data:
+  secret: |
+    $GITHUB_WEBHOOK_SECRET_BASE64
+EOF
+fi
 
 
 # echo "#########################"

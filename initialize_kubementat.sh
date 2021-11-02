@@ -175,7 +175,8 @@ jq \
   --arg ssh_private_key "$GIT_DEPLOYER_PRIVATE_KEY_BASE64" \
   --arg grafana_password "$(generate_password)" \
   --arg gitlab_webhook_secret "$(generate_password)" \
-  '.GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64 |= $gpg_private_key | .GIT_DEPLOYER_PRIVATE_KEY_BASE64 |= $ssh_private_key | .GRAFANA_ADMIN_PASSWORD |= $grafana_password | .GITLAB_WEBHOOK_SECRET |= $gitlab_webhook_secret' \
+  --arg github_webhook_secret "$(generate_password)" \
+  '.GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64 |= $gpg_private_key | .GIT_DEPLOYER_PRIVATE_KEY_BASE64 |= $ssh_private_key | .GRAFANA_ADMIN_PASSWORD |= $grafana_password | .GITLAB_WEBHOOK_SECRET |= $gitlab_webhook_secret | .GITHUB_WEBHOOK_SECRET |= $github_webhook_secret' \
   platform_config/dev/static.encrypted.json.template >platform_config/dev/static.encrypted.json
 
 # Configure platform_config/dev/dev1/static.json

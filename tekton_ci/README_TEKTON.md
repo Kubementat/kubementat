@@ -86,6 +86,7 @@ export TEAM='dev1'
 export DOCKER_REGISTRY_BASE_URL='your.dockerregistry.com/your-namespace'
 export APP_NAME='nginx-example'
 export PIPELINE_NAME='build-pipeline-nginx-example'
+export TRIGGER_TYPE='github'
 ./generate_trigger_config_from_templates.sh
 
 ```

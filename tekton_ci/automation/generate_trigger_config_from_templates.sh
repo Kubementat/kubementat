@@ -8,13 +8,14 @@
 
 set -e
 
-if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" || "$APP_NAME" == "" || "$PIPELINE_NAME" == "" ]]; then
+if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" || "$APP_NAME" == "" || "$PIPELINE_NAME" == "" || "$TRIGGER_TYPE" == "" ]]; then
   echo "Set all according environment variables first."
   echo "E.g.:"
   echo "export ENVIRONMENT='dev'"
   echo "export TEAM='dev1'"
   echo "export APP_NAME='nginx-example'"
   echo "export PIPELINE_NAME='build-nginx-example'"
+  echo "export TRIGGER_TYPE='github'"
   exit 1
 fi
 
@@ -46,6 +47,7 @@ echo "ENVIRONMENT: $ENVIRONMENT"
 echo "TEAM: $TEAM"
 echo "APP_NAME: $APP_NAME"
 echo "PIPELINE_NAME: $PIPELINE_NAME"
+echo "TRIGGER_TYPE: $TRIGGER_TYPE"
 echo "BASE_DOMAIN: $BASE_DOMAIN"
 echo "DOCKER_REGISTRY_BASE_URL: $DOCKER_REGISTRY_BASE_URL"
 echo "TEKTON_CI_IMAGE_NAME: $TEKTON_CI_IMAGE_NAME"
@@ -53,36 +55,36 @@ echo "TEKTON_CI_IMAGE_TAG: $TEKTON_CI_IMAGE_TAG"
 echo "TEKTON_KUBERNETES_STORAGE_CLASS: $TEKTON_KUBERNETES_STORAGE_CLASS"
 echo "TARGET_DIRECTORY: $TARGET_DIRECTORY"
 
-INGRESS_FILE_TEMPLATE="../triggers/templates/template-event-listener-ingress.yml"
-EVENT_LISTENER_TEMPLATE="../triggers/templates/template-event-listener.yml"
-TRIGGER_BINDING_TEMPLATE="../triggers/templates/template-trigger-binding.yml"
-TRIGGER_TEMPLATE_TEMPLATE="../triggers/templates/template-trigger-template.yml"
+INGRESS_FILE_TEMPLATE="../triggers/templates/${TRIGGER_TYPE}/template-event-listener-ingress.yml"
+EVENT_LISTENER_TEMPLATE="../triggers/templates/${TRIGGER_TYPE}/template-event-listener.yml"
+TRIGGER_BINDING_TEMPLATE="../triggers/templates/${TRIGGER_TYPE}/template-trigger-binding.yml"
+TRIGGER_TEMPLATE_TEMPLATE="../triggers/templates/${TRIGGER_TYPE}/template-trigger-template.yml"
 
 check_dir_exists "$TARGET_DIRECTORY"
 echo "Generating directory: $TARGET_DIRECTORY"
 mkdir -p "$TARGET_DIRECTORY"
 
 echo "Generating ingress resource ..."
-contents="$(cat "$INGRESS_FILE_TEMPLATE" | sed "s|TEAM_PLACEHOLDER|${TEAM}|g;s|APP_NAME_PLACEHOLDER|${APP_NAME}|g;s|TEAM_PLACEHOLDER|${TEAM}|g;s|BASE_DOMAIN_PLACEHOLDER|${BASE_DOMAIN}|g;" )"
-target_file_name="${TARGET_DIRECTORY}/${APP_NAME}-event-listener-ingress.yml"
+contents="$(cat "$INGRESS_FILE_TEMPLATE" | sed "s|TEAM_PLACEHOLDER|${TEAM}|g;s|APP_NAME_PLACEHOLDER|${APP_NAME}-${TRIGGER_TYPE}|g;s|TEAM_PLACEHOLDER|${TEAM}|g;s|BASE_DOMAIN_PLACEHOLDER|${BASE_DOMAIN}|g;" )"
+target_file_name="${TARGET_DIRECTORY}/${APP_NAME}-${TRIGGER_TYPE}-event-listener-ingress.yml"
 echo "$contents" > "$target_file_name"
 echo "Finished generating ingress resource."
 
 echo "Generating event listener resource ..."
-contents="$(cat "$EVENT_LISTENER_TEMPLATE" | sed "s|APP_NAME_PLACEHOLDER|${APP_NAME}|g;s|TEAM_PLACEHOLDER|${TEAM}|g")"
-target_file_name="${TARGET_DIRECTORY}/${APP_NAME}-event-listener.yml"
+contents="$(cat "$EVENT_LISTENER_TEMPLATE" | sed "s|APP_NAME_PLACEHOLDER|${APP_NAME}-${TRIGGER_TYPE}|g;s|TEAM_PLACEHOLDER|${TEAM}|g")"
+target_file_name="${TARGET_DIRECTORY}/${APP_NAME}-${TRIGGER_TYPE}-event-listener.yml"
 echo "$contents" > "$target_file_name"
 echo "Finished generating event listener resource."
 
 echo "Generating trigger binding resource ..."
-contents="$(cat "$TRIGGER_BINDING_TEMPLATE" | sed "s|APP_NAME_PLACEHOLDER|${APP_NAME}|g;s|TEAM_PLACEHOLDER|${TEAM}|g")"
-target_file_name="${TARGET_DIRECTORY}/${APP_NAME}-trigger-binding.yml"
+contents="$(cat "$TRIGGER_BINDING_TEMPLATE" | sed "s|APP_NAME_PLACEHOLDER|${APP_NAME}-${TRIGGER_TYPE}|g;s|TEAM_PLACEHOLDER|${TEAM}|g")"
+target_file_name="${TARGET_DIRECTORY}/${APP_NAME}-${TRIGGER_TYPE}-trigger-binding.yml"
 echo "$contents" > "$target_file_name"
 echo "Finished generating trigger binding resource."
 
 echo "Generating trigger template resource ..."
 seds="s|TEAM_PLACEHOLDER|${TEAM}|g;"
-seds+="s|APP_NAME_PLACEHOLDER|${APP_NAME}|g;"
+seds+="s|APP_NAME_PLACEHOLDER|${APP_NAME}-${TRIGGER_TYPE}|g;"
 seds+="s|PIPELINE_NAME_PLACEHOLDER|${PIPELINE_NAME}|g;"
 seds+="s|ENVIRONMENT_PLACEHOLDER|${ENVIRONMENT}|g;"
 seds+="s|DOCKER_REGISTRY_BASE_URL_PLACEHOLDER|${DOCKER_REGISTRY_BASE_URL}|g;"
@@ -93,7 +95,7 @@ seds+="s|HELM_DEPLOYER_SERVICE_ACCOUNT_NAME_PLACEHOLDER|${HELM_DEPLOYER_SERVICE_
 
 
 contents="$(cat "$TRIGGER_TEMPLATE_TEMPLATE" | sed "${seds}" )"
-target_file_name="${TARGET_DIRECTORY}/${APP_NAME}-trigger-template.yml"
+target_file_name="${TARGET_DIRECTORY}/${APP_NAME}-${TRIGGER_TYPE}-trigger-template.yml"
 echo "$contents" > "$target_file_name"
 echo "Finished generating trigger template resource."
 
@@ -110,5 +112,5 @@ echo
 echo "###################################"
 echo
 echo "Please configure the git webhook url within the according repo:"
-echo "Hook URL: https://${APP_NAME}.trigger-hooks.${TEAM}.${BASE_DOMAIN}"
-echo "You can find the secret to configure in: platform_config/$ENVIRONMENT/static.encrypted.json -> GITLAB_WEBHOOK_SECRET"
+echo "Hook URL: https://${APP_NAME}-${TRIGGER_TYPE}.trigger-hooks.${TEAM}.${BASE_DOMAIN}"
+echo "You can find the secret to configure in: platform_config/$ENVIRONMENT/static.encrypted.json -> GITLAB_WEBHOOK_SECRET / GITHUB_WEBHOOK_SECRET"
