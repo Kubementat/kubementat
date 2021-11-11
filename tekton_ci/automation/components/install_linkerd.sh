@@ -24,9 +24,11 @@ set -eu
 echo "#########################"
 echo "Loading configuration from platform_config ..."
 LINKERD_NAMESPACE="$(jq -r '.LINKERD_NAMESPACE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+LINKERD_VIZ_NAMESPACE="$(jq -r '.LINKERD_VIZ_NAMESPACE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "LINKERD_NAMESPACE: $LINKERD_NAMESPACE"
+echo "LINKERD_VIZ_NAMESPACE: $LINKERD_VIZ_NAMESPACE"
 echo "#########################"
 
 set +e
@@ -57,6 +59,7 @@ else
     linkerd version
 
     kubectl -n "$LINKERD_NAMESPACE" rollout restart deploy
+    kubectl -n "$LINKERD_VIZ_NAMESPACE" rollout restart deploy
     linkerd check --proxy
 
     linkerd viz install | kubectl apply -f -
