@@ -11,9 +11,16 @@ spec:
   params:
     - name: build-subdirectory
       description: the build sub-directory for executing mvn in
-    - name: docker-registry-base-url
-      description: The docker registry base url with path to load the CI image for tekton task execution from
-
+    - name: docker-image-url
+      description: |
+        The image url without tag to use as image for the mvn package execution
+        e.g.: maven
+        or: "myimagereg.example.com/angular-ci"
+    - name: docker-image-tag
+      description: |
+        The tag to use for the task execution
+        e.g.: 3.8.4-openjdk-17-slim
+        or: latest
     - name: additional-arguments
       description: "A list of additional arguments to add to the mvn package command"
       default: ""
@@ -24,12 +31,12 @@ spec:
     - name: mvn-package
       resources:
         requests:
-          memory: 500Mi
+          memory: 256Mi
           cpu: 200m
         limits:
-          memory: 1Gi
-          cpu: 500m
-      image: "$(params.docker-registry-base-url)/angular-ci:latest"
+          memory: 512Mi
+          cpu: 400m
+      image: "$(docker-image-url):$(docker-image-tag)"
       env:
         - name: WORKSPACE_PATH
           value: "$(workspaces.workspace.path)"
