@@ -67,5 +67,5 @@ spec:
           additional_arguments="${additional_arguments} -DskipTests"
         fi
 
-        echo "Executing mvn command: mvn package $additional_arguments"
-        mvn package $additional_arguments
+        echo "Executing mvn command: mvn $additional_arguments package"
+        mvn $additional_arguments package
