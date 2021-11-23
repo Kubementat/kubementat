@@ -27,6 +27,9 @@ spec:
     - name: skip-tests
       description: Should the tests be skipped (true/false)
       default: "false"
+    - name: maven-opts
+      description: MAVEN_OPTS configuration string
+      default: ""
   steps:
     - name: mvn-package
       resources:
@@ -46,6 +49,8 @@ spec:
           value: "$(params.additional-arguments)"
         - name: SKIP_TESTS
           value: "$(params.skip-tests)"
+        - name: MAVEN_OPTS
+          value: "$(params.maven-opts)"
       script: |
         #!/usr/bin/env bash
         set -ue
@@ -58,6 +63,7 @@ spec:
         echo "BUILD_SUBDIRECTORY: $BUILD_SUBDIRECTORY"
         echo "ADDITIONAL_ARGUMENTS: $ADDITIONAL_ARGUMENTS"
         echo "SKIP_TESTS: $SKIP_TESTS"
+        echo "MAVEN_OPTS: $MAVEN_OPTS"
 
         cd $WORKSPACE_PATH/$BUILD_SUBDIRECTORY
         echo "CURRENT PATH: $(pwd)"
