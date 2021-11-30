@@ -7,3 +7,4 @@ This section list useful tools when working with a kubernetes cluster as install
 - VSCode Tekton pipelines extension - https://marketplace.visualstudio.com/items?itemName=redhat.vscode-tekton-pipelines
 - VSCode LiveShare extension - pair programming via VSCode - https://marketplace.visualstudio.com/items?itemName=MS-vsliveshare.vsliveshare-pack
 - Lens - Kubernetes IDE - https://k8slens.dev/
+- K9S - Manage kubernetes objects via Console UI - https://github.com/derailed/k9s
