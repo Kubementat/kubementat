@@ -1,0 +1,53 @@
+# TRIGGER TEMPLATE RESOURCE FOR GITHUB TRIGGER
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerTemplate
+metadata:
+  name: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-trigger-template
+spec:
+  params:
+    - name: gitrevision
+      description: The git revision
+      default: main
+    - name: gitrepositoryurl
+      description: The git repository url
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        generateName: PIPELINE_NAME_PLACEHOLDER-run-TEAM_PLACEHOLDER-trigger-
+        namespace: TEAM_PLACEHOLDER-pipelines
+      spec:
+        pipelineRef:
+          name: PIPELINE_NAME_PLACEHOLDER
+        serviceAccountName: HELM_DEPLOYER_SERVICE_ACCOUNT_NAME_PLACEHOLDER
+        timeout: 15m
+        params:
+          # ATTENTION: PLEASE REVIEW THOSE PARAMETERS AND COMPARE THEM WITH AN ACCORDING PIPELINERUN
+          # You can find the pipeline-runs in the according sub-directories:
+          # pipeline-runs/${TEAM}/${PIPELINE_NAME}-run.yml
+          - name: environment
+            value: "ENVIRONMENT_PLACEHOLDER"
+          - name: team
+            value: "TEAM_PLACEHOLDER"
+          - name: app-git-revision
+            value: $(tt.params.gitrevision)
+          - name: push-image-url
+            value: "DOCKER_REGISTRY_BASE_URL_PLACEHOLDER/APP_NAME_PLACEHOLDER"
+          - name: push-image-tag
+            value: "k8s-TEAM_PLACEHOLDER"
+          - name: docker-registry-base-url
+            value: "DOCKER_REGISTRY_BASE_URL_PLACEHOLDER"
+          - name: tekton-ci-image-name
+            value: "TEKTON_CI_IMAGE_NAME_PLACEHOLDER"
+          - name: tekton-ci-image-tag
+            value: "TEKTON_CI_IMAGE_TAG_PLACEHOLDER"
+        workspaces:
+          - name: pipeline-workspace # this workspace name must be declared in the Pipeline
+            volumeClaimTemplate:
+              spec:
+                storageClassName: STORAGE_CLASS_PLACEHOLDER
+                accessModes:
+                  - ReadWriteOnce # access mode may affect how you can use this volume in parallel tasks
+                resources:
+                  requests:
+                    storage: 1Gi
