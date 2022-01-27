@@ -255,8 +255,3 @@ data:
     $GITHUB_WEBHOOK_SECRET_BASE64
 EOF
 fi
-
-
-# echo "#########################"
-# echo "Configuring tekton triggers for example-service ..."
-# kubectl apply -n "$TEKTON_NAMESPACE" -f "../triggers/${TEAM}/example-service/"
