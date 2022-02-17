@@ -96,6 +96,6 @@ spec:
 
         mkdir -p /kaniko/.docker
         cp "$DOCKER_CONFIG_FILE" /kaniko/.docker/config.json
-        /kaniko/executor "$EXTRA_BUILD_ARGS" --dockerfile="$DOCKERFILE" --context="$CONTEXT" --destination="$DESTINATION"
+        /kaniko/executor $EXTRA_BUILD_ARGS --dockerfile="$DOCKERFILE" --context="$CONTEXT" --destination="$DESTINATION"
       securityContext:
         runAsUser: 0
