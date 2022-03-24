@@ -64,7 +64,10 @@ spec:
         echo "########################"
 
         echo "Checking existence of deployment: ${HELM_DEPLOYMENT_NAME} ..."
+        set +e
         check="$(helm -n "$K8S_NAMESPACE" ls --all |grep ${HELM_DEPLOYMENT_NAME})"
+        set -e
+
         if [[ "$check" == "" ]]; then
           echo "The deployment does not exist!"
           if [[ "${IGNORE_NON_EXISTING}" == "false" ]]; then
