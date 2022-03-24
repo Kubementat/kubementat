@@ -26,6 +26,9 @@ spec:
     - name: polling-sleep-time
       description: "How many seconds should be waited while polling the tekton pipeline-run status"
       default: "3"
+    - name: allow-parallel-run
+      description: "Should the pipeline run be allowed to run in parallel to other runs"
+      default: "false"
     - name: path-to-pipeline-run-file
       description: |
         The path to the pipeline run file within the config repo
@@ -59,6 +62,8 @@ spec:
           value: "$(params.path-to-pipeline-run-file)"
         - name: POLLING_SLEEP_TIME
           value: "$(params.polling-sleep-time)"
+        - name: ALLOW_PARALLEL_RUN
+          value: "$(params.allow-parallel-run)"
       script: |
         #!/usr/bin/env bash
         set -ue
@@ -75,7 +80,7 @@ spec:
         echo "for ENV: $ENVIRONMENT and team: $TEAM"
         echo ""
 
-        source run_pipeline.sh "$ENVIRONMENT" "$TEAM" "$PATH_TO_PIPELINE_RUN_FILE" false
+        source run_pipeline.sh "$ENVIRONMENT" "$TEAM" "$PATH_TO_PIPELINE_RUN_FILE" "$ALLOW_PARALLEL_RUN"
 
         echo "PIPELINE_RUN_NAME: $PIPELINE_RUN_NAME"
         while true; do
