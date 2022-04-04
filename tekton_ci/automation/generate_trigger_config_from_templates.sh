@@ -22,10 +22,10 @@ fi
 set -u
 
 ## HELPER FUNCTIONS
-check_dir_exists() {
-  dir_path="$1"
-  if [ -d "$dir_path" ]; then
-    echo "Directory $dir_path already exists: aborting script"
+check_file_exists() {
+  f_path="$1"
+  if [ -f "$f_path" ]; then
+    echo "File $f_path already exists: aborting script"
     return 1
   fi
   return 0
@@ -60,27 +60,29 @@ EVENT_LISTENER_TEMPLATE="../triggers/templates/${TRIGGER_TYPE}/template-event-li
 TRIGGER_BINDING_TEMPLATE="../triggers/templates/${TRIGGER_TYPE}/template-trigger-binding.yml"
 TRIGGER_TEMPLATE_TEMPLATE="../triggers/templates/${TRIGGER_TYPE}/template-trigger-template.yml"
 
-check_dir_exists "$TARGET_DIRECTORY"
 echo "Generating directory: $TARGET_DIRECTORY"
 mkdir -p "$TARGET_DIRECTORY"
 
 echo "Generating ingress resource ..."
 contents="$(cat "$INGRESS_FILE_TEMPLATE" | sed "s|TEAM_PLACEHOLDER|${TEAM}|g;s|APP_NAME_PLACEHOLDER|${APP_NAME}-${TRIGGER_TYPE}|g;s|TEAM_PLACEHOLDER|${TEAM}|g;s|BASE_DOMAIN_PLACEHOLDER|${BASE_DOMAIN}|g;" )"
 target_file_name="${TARGET_DIRECTORY}/${APP_NAME}-${TRIGGER_TYPE}-event-listener-ingress.yml"
+check_file_exists "$target_file_name"
 echo "$contents" > "$target_file_name"
-echo "Finished generating ingress resource."
+echo "Finished generating ingress resource at $target_file_name ."
 
 echo "Generating event listener resource ..."
 contents="$(cat "$EVENT_LISTENER_TEMPLATE" | sed "s|APP_NAME_PLACEHOLDER|${APP_NAME}-${TRIGGER_TYPE}|g;s|TEAM_PLACEHOLDER|${TEAM}|g")"
 target_file_name="${TARGET_DIRECTORY}/${APP_NAME}-${TRIGGER_TYPE}-event-listener.yml"
+check_file_exists "$target_file_name"
 echo "$contents" > "$target_file_name"
-echo "Finished generating event listener resource."
+echo "Finished generating event listener resource at $target_file_name ."
 
 echo "Generating trigger binding resource ..."
 contents="$(cat "$TRIGGER_BINDING_TEMPLATE" | sed "s|APP_NAME_PLACEHOLDER|${APP_NAME}-${TRIGGER_TYPE}|g;s|TEAM_PLACEHOLDER|${TEAM}|g")"
 target_file_name="${TARGET_DIRECTORY}/${APP_NAME}-${TRIGGER_TYPE}-trigger-binding.yml"
+check_file_exists "$target_file_name"
 echo "$contents" > "$target_file_name"
-echo "Finished generating trigger binding resource."
+echo "Finished generating trigger binding resource at $target_file_name ."
 
 echo "Generating trigger template resource ..."
 seds="s|TEAM_PLACEHOLDER|${TEAM}|g;"
@@ -96,8 +98,9 @@ seds+="s|HELM_DEPLOYER_SERVICE_ACCOUNT_NAME_PLACEHOLDER|${HELM_DEPLOYER_SERVICE_
 
 contents="$(cat "$TRIGGER_TEMPLATE_TEMPLATE" | sed "${seds}" )"
 target_file_name="${TARGET_DIRECTORY}/${APP_NAME}-${TRIGGER_TYPE}-trigger-template.yml"
+check_file_exists "$target_file_name"
 echo "$contents" > "$target_file_name"
-echo "Finished generating trigger template resource."
+echo "Finished generating trigger template resource at at $target_file_name ."
 
 echo "###################################"
 echo

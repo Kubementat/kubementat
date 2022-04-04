@@ -255,3 +255,9 @@ data:
     $GITHUB_WEBHOOK_SECRET_BASE64
 EOF
 fi
+
+echo "Setting up configured triggers for team: ${TEAM} ..."
+for dir in ../triggers/$TEAM/*/ ; do
+  echo "Setting up triggers from: $dir ..."
+  kubectl apply -n "${PIPELINE_NAMESPACE}" -f $dir
+done
