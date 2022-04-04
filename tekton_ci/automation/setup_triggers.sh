@@ -257,7 +257,12 @@ EOF
 fi
 
 echo "Setting up configured triggers for team: ${TEAM} ..."
-for dir in ../triggers/$TEAM/*/ ; do
-  echo "Setting up triggers from: $dir ..."
-  kubectl apply -n "${PIPELINE_NAMESPACE}" -f $dir
-done
+res="$(ls "../triggers/${TEAM}")"
+if [[ "$res" == ""  ]]; then
+  echo "No triggers configured for team: ${TEAM}"
+else
+  for dir in ../triggers/$TEAM/*/ ; do
+    echo "Setting up triggers from: $dir ..."
+    kubectl apply -n "${PIPELINE_NAMESPACE}" -f $dir
+  done
+fi
