@@ -263,6 +263,6 @@ if [[ "$res" == ""  ]]; then
 else
   for dir in ../triggers/$TEAM/*/ ; do
     echo "Setting up triggers from: $dir ..."
-    kubectl apply -n "${PIPELINE_NAMESPACE}" -f $dir
+    kubectl apply -n "${TEKTON_NAMESPACE}" -f $dir
   done
 fi
