@@ -37,8 +37,8 @@ spec:
           memory: 256Mi
           cpu: 200m
         limits:
-          memory: 512Mi
-          cpu: 400m
+          memory: 2Gi
+          cpu: 1500m
       image: "$(params.docker-image-url):$(params.docker-image-tag)"
       env:
         - name: WORKSPACE_PATH
