@@ -46,7 +46,7 @@ spec:
     type: string
     default: ""
   steps:
-    - name: init
+    - name: initialize
       resources:
           requests:
             memory: 100Mi
