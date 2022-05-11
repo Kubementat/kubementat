@@ -19,6 +19,12 @@ spec:
     - name: push-image-tag
       description: Tag to apply to the built image
       default: "latest"
+    - name: set-tag-from-version-file
+      description: Should the docker image tag be set from a version file (see path-to-version-file variable)
+      default: "false"
+    - name: path-to-version-file
+      description: A path to the file containing the app version number (used with set-tag-from-version-file)
+      default: ""
     - name: extra-build-args
       description: You can provide a list of additional build args here
       default: ""
@@ -83,12 +89,33 @@ spec:
         CONTEXT="$(params.path-to-context)"
         DOCKERFILE="$(params.path-to-dockerfile-within-context)"
         EXTRA_BUILD_ARGS="$(params.extra-build-args)"
-        DESTINATION="$(params.push-image-url):$(params.push-image-tag)"
+        SET_TAG_FROM_VERSION_FILE="$(params.set-tag-from-version-file)"
+        PATH_TO_VERSION_FILE="$(params.path-to-version-file)"
 
         echo "DOCKER_CONFIG_FILE: $DOCKER_CONFIG_FILE"
         echo "CONTEXT: $CONTEXT"
         echo "DOCKERFILE: $DOCKERFILE"
-        echo "EXTRA_BUILD_ARGS: $EXTRA_BUILD_ARGS"
+        echo "SET_TAG_FROM_VERSION_FILE: $SET_TAG_FROM_VERSION_FILE"
+        echo "PATH_TO_VERSION_FILE: $PATH_TO_VERSION_FILE"
+        echo "###############"
+
+        TAG="$(params.push-image-tag)"
+
+        if [[ "$SET_TAG_FROM_VERSION_FILE" == "true" ]]; then
+          echo "Setting tag from version file ..."
+          if [[ "$PATH_TO_VERSION_FILE" == "" ]]; then
+            echo "Configuration ERROR: No path-to-version-file parameter is configured - Aborting build"
+            exit 1
+          fi
+          TAG="$(cat $PATH_TO_VERSION_FILE)"
+          if [[ "$TAG" == "" ]]; then
+            echo "ERROR: Version file at $PATH_TO_VERSION_FILE did not contain data - Aborting build"
+            exit 1
+          fi
+        fi
+
+        echo "Pushing tag: $TAG"
+        DESTINATION="$(params.push-image-url):$TAG"
         echo "DESTINATION: $DESTINATION"
         echo "###############"
 

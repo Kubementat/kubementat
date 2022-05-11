@@ -27,6 +27,12 @@ spec:
     - name: docker-image-tag
       description: Tag to use for the deployment
       default: "latest"
+    - name: set-tag-from-version-file
+      description: Should the docker image tag be set from a version file (see path-to-version-file variable)
+      default: "false"
+    - name: path-to-version-file
+      description: A path to the file containing the app version number (used with set-tag-from-version-file)
+      default: ""
     - name: path-to-chart
       description: The path to the helm chart that should be deployed
     - name: helm-deployment-name
@@ -66,7 +72,10 @@ spec:
         HELM_DEPLOYMENT_NAME="$(params.helm-deployment-name)"
         DOCKER_IMAGE_URL="$(params.docker-image-url)"
         DOCKER_IMAGE_TAG="$(params.docker-image-tag)"
+        SET_TAG_FROM_VERSION_FILE="$(params.set-tag-from-version-file)"
+        PATH_TO_VERSION_FILE="$(params.path-to-version-file)"
         HELM_TIMEOUT="$(params.helm-timeout)"
+
 
         echo "########################"
         echo "Parameters:"
@@ -75,6 +84,8 @@ spec:
         echo "app-name: $APP_NAME"
         echo "docker-image-url: $DOCKER_IMAGE_URL"
         echo "docker-image-tag: $DOCKER_IMAGE_TAG"
+        echo "set-tag-from-version-file: $SET_TAG_FROM_VERSION_FILE"
+        echo "path-to-version-file: $PATH_TO_VERSION_FILE"
         echo "path-to-configuration: $PATH_TO_CONFIGURATION"
         echo "path-to-chart: $PATH_TO_CHART"
         echo "helm-deployment-name: $HELM_DEPLOYMENT_NAME"
@@ -83,8 +94,24 @@ spec:
         echo "Helm version:"
         helm version
         echo "########################"
-        echo ""
 
+
+        if [[ "$SET_TAG_FROM_VERSION_FILE" == "true" ]]; then
+          echo "Setting tag from version file ..."
+          if [[ "$PATH_TO_VERSION_FILE" == "" ]]; then
+            echo "Configuration ERROR: No path-to-version-file parameter is defined - Aborting build"
+            exit 1
+          fi
+          DOCKER_IMAGE_TAG="$(cat $PATH_TO_VERSION_FILE)"
+          if [[ "$DOCKER_IMAGE_TAG" == "" ]]; then
+            echo "ERROR: Version file at $PATH_TO_VERSION_FILE did not contain data - Aborting build"
+            exit 1
+          fi
+        fi
+        echo "Using Docker image tag: $DOCKER_IMAGE_TAG"
+
+        echo "########################"
+        echo ""
         cd "$PATH_TO_CHART"
         echo "CURRENT PATH: $(pwd)"
 
