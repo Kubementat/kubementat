@@ -4,7 +4,6 @@ kind: EventListener
 metadata:
   name: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-event-listener
 spec:
-  serviceAccountName: tekton-triggers-sa
   triggers:
     - name: github-listener
       interceptors:
@@ -26,3 +25,18 @@ spec:
         - ref: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-trigger-binding
       template:
         ref: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-trigger-template
+
+  resources:
+    kubernetesResource:
+      spec:
+        template:
+          spec:
+            serviceAccountName: tekton-triggers-sa
+            containers:
+              - resources:
+                  requests:
+                    memory: "64Mi"
+                    cpu: "250m"
+                  limits:
+                    memory: "128Mi"
+                    cpu: "500m"

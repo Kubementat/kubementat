@@ -5,8 +5,12 @@ metadata:
   name: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-event-listener-ingress
   annotations:
     kubernetes.io/tls-acme: 'true'
+    cert-manager.io/cluster-issuer: letsencrypt
+    ingress.kubernetes.io/rewrite-target: /
     nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
 spec:
+  ingressClassName: nginx
   rules:
     - host: APP_NAME_PLACEHOLDER.trigger-hooks.TEAM_PLACEHOLDER.BASE_DOMAIN_PLACEHOLDER
       http:
