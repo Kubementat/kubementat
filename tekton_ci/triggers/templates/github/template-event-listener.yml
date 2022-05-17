@@ -1,5 +1,5 @@
 # EVENT LISTENER RESOURCE FOR GITHUB TRIGGER
-apiVersion: triggers.tekton.dev/v1alpha1
+apiVersion: triggers.tekton.dev/v1beta1
 kind: EventListener
 metadata:
   name: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-event-listener

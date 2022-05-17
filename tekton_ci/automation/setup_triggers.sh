@@ -232,7 +232,7 @@ metadata:
   name: gitlab-trigger-webhook-secret
 type: Opaque
 data:
-  secret: |
+  secretToken: |
     $GITLAB_WEBHOOK_SECRET_BASE64
 EOF
 fi
@@ -251,7 +251,7 @@ metadata:
   name: github-trigger-webhook-secret
 type: Opaque
 data:
-  secret: |
+  secretToken: |
     $GITHUB_WEBHOOK_SECRET_BASE64
 EOF
 fi
