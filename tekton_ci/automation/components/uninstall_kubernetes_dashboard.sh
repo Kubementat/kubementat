@@ -6,6 +6,13 @@
 #
 ######################################
 
+ENVIRONMENT="$1"
+if [[ "$ENVIRONMENT" == "" ]]; then
+  echo "Usage: uninstall_kubernetes_dashboard.sh <ENVIRONMENT_NAME>"
+  echo "e.g.: uninstall_kubernetes_dashboard.sh dev"
+  exit 1
+fi
+
 set -e
 
 echo "#########################"
