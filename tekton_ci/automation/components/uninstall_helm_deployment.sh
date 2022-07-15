@@ -42,6 +42,7 @@ echo "#########################"
 echo "Uninstalling $COMPONENT_NAME ..."
 helm -n "${DEPLOYMENT_NAMESPACE}" delete "${DEPLOYMENT_NAME}" ||true
 
+set +e
 kubectl get all -n "${DEPLOYMENT_NAMESPACE}"
 
 echo "If you also want to remove collected data ensure to also delete the pv and pvc"
