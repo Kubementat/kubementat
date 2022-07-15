@@ -51,3 +51,6 @@ echo "PVC:"
 kubectl get pvc -n "${DEPLOYMENT_NAMESPACE}" | grep "${DEPLOYMENT_NAME}"
 echo "PV:"
 kubectl get pv | grep "${DEPLOYMENT_NAME}"
+
+echo "Finished uninstalling helm deployment $DEPLOYMENT_NAME"
+exit 0
