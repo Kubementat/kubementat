@@ -97,6 +97,12 @@ dashboards:
     log-overview:
       gnetId: 12611
       datasource: Loki
+    nginx-ingress:
+      gnetId: 9614
+      datasource: Prometheus
+    helm-exporter:
+      gnetId: 9367
+      datasource: Prometheus
     deployment-overview-custom:
       json: |
         {
