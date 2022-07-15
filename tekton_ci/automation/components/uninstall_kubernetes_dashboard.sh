@@ -31,6 +31,7 @@ echo "Removing service account and binding for kubernetes dashboard read only ac
 # currently static configuration
 SERVICE_ACCOUNT_NAME="kubernetes-dashboard-read-only-cluster-user"
 
+set +e
 kubectl delete clusterrolebinding "${SERVICE_ACCOUNT_NAME}-cluster-read-only-binding"
 kubectl -n "$KUBERNETES_DASHBOARD_DEPLOYMENT_NAMESPACE" delete serviceaccount "$SERVICE_ACCOUNT_NAME"
 
