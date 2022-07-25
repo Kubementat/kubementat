@@ -1,0 +1,2 @@
+# https://github.com/sstarcher/helm-exporter/blob/master/helm/values.yaml
+replicaCount: 1
