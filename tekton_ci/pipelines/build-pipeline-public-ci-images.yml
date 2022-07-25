@@ -1,5 +1,5 @@
 ################################
-# This pipeline builds the public ci images coming from the source kubementat repository (https://github.com/julweber/kubementat/blob/master/docker_files/ci_images/ubuntu_ci_minimal/Dockerfile)
+# This pipeline builds the public ci images coming from the source kubementat repository (https://github.com/Kubementat/kubementat/blob/master/docker_files/ci_images/ubuntu_ci_minimal/Dockerfile)
 # these can be used for automating our tekton pipeline tasks
 # See push-image-tag and push-image-url for target registry location
 ################################
@@ -36,7 +36,7 @@ spec:
         name: git-clone
       params:
         - name: git-url
-          value: "https://github.com/julweber/kubementat.git"
+          value: "https://github.com/Kubementat/kubementat.git"
         - name: git-project-name
           value: "$(params.automation-git-project-name)"
         - name: git-revision

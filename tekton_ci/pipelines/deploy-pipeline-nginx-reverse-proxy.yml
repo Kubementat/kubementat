@@ -32,7 +32,7 @@ spec:
     - name: automation-git-url
       description: |
         The git url of the automation repository to use (your fork of the kubementat repos address)
-        e.g.: if you would use the kubementat default location: ssh://git@github.com:julweber/kubementat.git
+        e.g.: if you would use the kubementat default location: ssh://git@github.com:Kubementat/kubementat.git
     - name: automation-git-project-name
       description: |
         your local directory name for the repository

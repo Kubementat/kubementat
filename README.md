@@ -79,7 +79,7 @@ we need to take some initial configuration steps.
 
 ### Clone the repository
 ```
-git clone https://github.com/julweber/kubementat
+git clone https://github.com/Kubementat/kubementat
 cd kubementat
 
 # if you have not set your git configuration yet:
@@ -91,7 +91,7 @@ git config --global user.name "Agent Smith"
 - This project is intended as a template to build your own customizations on top.
 - You need to either fork this repository to your own public github account or clone and push to your own private git repository.
   - The according location should be configured via the environment variables:
-    - AUTOMATION_GIT_URL - e.g. 'git@github.com:julweber/kubementat.git'
+    - AUTOMATION_GIT_URL - e.g. 'git@github.com:Kubementat/kubementat.git'
       - for your own registry: 'git@github.com:YOUR_USERNAME/kubementat_YOUR_ENVIRONMENT.git'
     - AUTOMATION_GIT_SERVER_HOST - e.g. 'github.com'
     - AUTOMATION_GIT_SERVER_PORT - e.g. '22'
