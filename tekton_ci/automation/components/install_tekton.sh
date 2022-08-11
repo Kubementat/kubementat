@@ -40,7 +40,7 @@ metadata:
   name: helm-deployer-cluster-role
 rules:
 # TODO: implement more fine grained access
-- apiGroups: ["", "rbac.authorization.k8s.io", "networking.k8s.io", "batch", "extensions", "apps", "autoscaling", "tekton.dev"]
+- apiGroups: ["", "rbac.authorization.k8s.io", "networking.k8s.io", "batch", "extensions", "apps", "autoscaling", "tekton.dev", "resolution.tekton.dev"]
   resources: ["*"]
   verbs: ["*"]
 EOF
