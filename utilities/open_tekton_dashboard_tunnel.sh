@@ -28,4 +28,4 @@ pod_name="$(kubectl -n "$TEKTON_NAMESPACE" get pod -l app=tekton-dashboard -o js
 echo "Pod Name: $pod_name"
 echo "Visit: http://127.0.0.1:${LOCAL_PORT}"
 
-source open_pod_tunnel.sh "$TEKTON_NAMESPACE" "$pod_name" "$LOCAL_PORT" "9097"
+source open_pod_tunnel.sh "$TEKTON_NAMESPACE" "$pod_name" "$LOCAL_PORT" "9097" "0.0.0.0"

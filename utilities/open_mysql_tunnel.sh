@@ -32,4 +32,4 @@ echo "Open another shell and connect via:"
 echo  "mysql -h 127.0.0.1 -P $PORT -u <DATABASE_USERNAME> -p <DATABASE_NAME>"
 echo "######"
 
-source open_pod_tunnel.sh "$NAMESPACE" "$POD_NAME" "$PORT" "$PORT"
+source open_pod_tunnel.sh "$NAMESPACE" "$POD_NAME" "$PORT" "$PORT" "0.0.0.0"

@@ -33,4 +33,4 @@ echo "Pod Name: $pod_name"
 echo "Connect via http://localhost:${LOCAL_PORT}/ui"
 echo "######"
 
-source open_pod_tunnel.sh "$APP_DEPLOYMENT_NAMESPACE" "$pod_name" "$LOCAL_PORT" "$POD_PORT"
+source open_pod_tunnel.sh "$APP_DEPLOYMENT_NAMESPACE" "$pod_name" "$LOCAL_PORT" "$POD_PORT" "0.0.0.0"

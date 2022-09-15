@@ -28,4 +28,4 @@ pod_name="$(kubectl -n "$POLARIS_DEPLOYMENT_NAMESPACE" get pod -l "app.kubernete
 echo "Pod Name: $pod_name"
 echo "Visit: http://localhost:$LOCAL_PORT"
 
-source open_pod_tunnel.sh "$POLARIS_DEPLOYMENT_NAMESPACE" "$pod_name" "$LOCAL_PORT" "8080"
+source open_pod_tunnel.sh "$POLARIS_DEPLOYMENT_NAMESPACE" "$pod_name" "$LOCAL_PORT" "8080" "0.0.0.0"

@@ -28,4 +28,4 @@ pod_name="$(kubectl -n "$VAULT_DEPLOYMENT_NAMESPACE" get pod -l "app.kubernetes.
 echo "Pod Name: $pod_name"
 echo "Visit: http://localhost:$LOCAL_PORT"
 
-source open_pod_tunnel.sh "$VAULT_DEPLOYMENT_NAMESPACE" "$pod_name" "$LOCAL_PORT" "8200"
+source open_pod_tunnel.sh "$VAULT_DEPLOYMENT_NAMESPACE" "$pod_name" "$LOCAL_PORT" "8200" "0.0.0.0"

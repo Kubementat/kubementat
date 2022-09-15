@@ -30,4 +30,4 @@ echo "See GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD environment variables wi
 echo "Visit: http://localhost:3000"
 echo "###########"
 
-source open_pod_tunnel.sh "$GRAFANA_DEPLOYMENT_NAMESPACE" "$pod_name" "$LOCAL_PORT" "3000"
+source open_pod_tunnel.sh "$GRAFANA_DEPLOYMENT_NAMESPACE" "$pod_name" "$LOCAL_PORT" "3000" "0.0.0.0"
