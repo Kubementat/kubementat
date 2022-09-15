@@ -4,9 +4,7 @@
 #
 # Opens a tunnel connection to the tekton dashboard for the given environment
 #
-#################################
-
-set -e
+################################
 
 ENVIRONMENT="$1"
 if [[ "$ENVIRONMENT" == "" ]]; then
@@ -15,7 +13,7 @@ if [[ "$ENVIRONMENT" == "" ]]; then
   exit 1
 fi
 
-set -u
+set -eu
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."

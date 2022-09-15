@@ -7,8 +7,6 @@
 #
 #################################
 
-set -e
-
 NAMESPACE="$1"
 POD_NAME="$2"
 PORT="3306"
@@ -22,7 +20,7 @@ if [[ "$NAMESPACE" == "" || "$POD_NAME" == "" ]]; then
   exit 1
 fi
 
-set -u
+set -eu
 
 echo "#########################"
 echo "NAMESPACE: $NAMESPACE"

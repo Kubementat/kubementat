@@ -6,8 +6,6 @@
 #
 #################################
 
-set -e
-
 ENVIRONMENT="$1"
 TEAM="$2"
 
@@ -17,7 +15,7 @@ if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" ]]; then
   exit 1
 fi
 
-set -u
+set -eu
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."

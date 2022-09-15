@@ -7,8 +7,6 @@
 #
 #################################
 
-set -e
-
 NAMESPACE="$1"
 POD_NAME="$2"
 LOCAL_PORT="$3"
@@ -24,7 +22,7 @@ if [[ "$NAMESPACE" == "" || "$POD_NAME" == "" || "$LOCAL_PORT" == "" || "$REMOTE
   exit 1
 fi
 
-set -u
+set -eu
 
 echo "Opening tunnel connection in namespace: $NAMESPACE to pod: $POD_NAME with local port: $LOCAL_PORT to remote port: $REMOTE_PORT on address: $ADDRESS ..."
 kubectl -n "$NAMESPACE" port-forward --address "$ADDRESS" "pod/${POD_NAME}" "$LOCAL_PORT:$REMOTE_PORT"

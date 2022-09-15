@@ -6,8 +6,6 @@
 #
 #################################
 
-set -e
-
 ENVIRONMENT="$1"
 if [[ "$ENVIRONMENT" == "" ]]; then
   echo "Usage: open_vault_tunnel.sh <ENVIRONMENT_NAME>"
@@ -15,7 +13,7 @@ if [[ "$ENVIRONMENT" == "" ]]; then
   exit 1
 fi
 
-set -u
+set -eu
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
