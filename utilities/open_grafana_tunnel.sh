@@ -26,9 +26,10 @@ echo "GRAFANA_DEPLOYMENT_NAMESPACE: $GRAFANA_DEPLOYMENT_NAMESPACE"
 echo "#########################"
 
 LOCAL_PORT="3000"
-ADDRESS="0.0.0.0"
 pod_name="$(kubectl -n "$GRAFANA_DEPLOYMENT_NAMESPACE" get pod -l "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=grafana" -o json | jq -r '.items[0].metadata.name')"
-echo "Pod Name: $pod_name"
+
 echo "See GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD environment variables within ../platform_config/${ENVIRONMENT}/static.encrypted.json"
 echo "Visit: http://localhost:3000"
-kubectl -n "$GRAFANA_DEPLOYMENT_NAMESPACE" port-forward --address $ADDRESS "$pod_name" $LOCAL_PORT:3000
+echo "###########"
+
+source open_pod_tunnel.sh "$GRAFANA_DEPLOYMENT_NAMESPACE" "$pod_name" "$LOCAL_PORT" "3000"

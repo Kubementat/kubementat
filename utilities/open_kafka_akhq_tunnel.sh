@@ -34,5 +34,5 @@ pod_name=$(kubectl get pods --namespace "$APP_DEPLOYMENT_NAMESPACE" -l "app.kube
 echo "Pod Name: $pod_name"
 echo "Connect via http://localhost:${LOCAL_PORT}/ui"
 echo "######"
-echo "Opening connection ..."
-kubectl -n "$APP_DEPLOYMENT_NAMESPACE" port-forward "$pod_name" $LOCAL_PORT:$POD_PORT
+
+source open_pod_tunnel.sh "$APP_DEPLOYMENT_NAMESPACE" "$pod_name" "$LOCAL_PORT" "$POD_PORT"

@@ -26,8 +26,8 @@ echo "TEKTON_NAMESPACE: $TEKTON_NAMESPACE"
 echo "#########################"
 
 LOCAL_PORT="9097"
-ADDRESS="0.0.0.0"
 pod_name="$(kubectl -n "$TEKTON_NAMESPACE" get pod -l app=tekton-dashboard -o json | jq -r '.items[0].metadata.name')"
 echo "Pod Name: $pod_name"
 echo "Visit: http://127.0.0.1:${LOCAL_PORT}"
-kubectl -n "$TEKTON_NAMESPACE" port-forward --address $ADDRESS "$pod_name" $LOCAL_PORT:9097
+
+source open_pod_tunnel.sh "$TEKTON_NAMESPACE" "$pod_name" "$LOCAL_PORT" "9097"

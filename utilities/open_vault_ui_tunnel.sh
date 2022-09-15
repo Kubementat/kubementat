@@ -26,8 +26,8 @@ echo "VAULT_DEPLOYMENT_NAMESPACE: $VAULT_DEPLOYMENT_NAMESPACE"
 echo "#########################"
 
 LOCAL_PORT="8200"
-ADDRESS="0.0.0.0"
 pod_name="$(kubectl -n "$VAULT_DEPLOYMENT_NAMESPACE" get pod -l "app.kubernetes.io/name=vault,app.kubernetes.io/instance=vault" -o json | jq -r '.items[0].metadata.name')"
 echo "Pod Name: $pod_name"
 echo "Visit: http://localhost:$LOCAL_PORT"
-kubectl -n "$VAULT_DEPLOYMENT_NAMESPACE" port-forward --address $ADDRESS "$pod_name" $LOCAL_PORT:8200
+
+source open_pod_tunnel.sh "$VAULT_DEPLOYMENT_NAMESPACE" "$pod_name" "$LOCAL_PORT" "8200"
