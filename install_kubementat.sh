@@ -6,14 +6,48 @@
 # - monitoring (prometheus, grafana)
 # - logging (promtail, loki)
 # - linkerd service mesh
+# - vault keystore
 # - tekton pipeline setup
 # - tekton trigger setup
 
 set -e
 
+# ---------------- DEFAULT ENVIRONMENT VARIABLES -----------------
+# This is highly recommended, as a lot of the benefits resulting from kubementat relies on tekton automation currently
+if [ -z ${COMPONENT_ENABLED_TEKTON+x} ]; then
+  COMPONENT_ENABLED_TEKTON="true"
+fi
+
+if [ -z ${COMPONENT_ENABLED_LOGGING+x} ]; then
+  COMPONENT_ENABLED_LOGGING="true"
+fi
+
+if [ -z ${COMPONENT_ENABLED_MONITORING+x} ]; then
+  COMPONENT_ENABLED_MONITORING="true"
+fi
+
+if [ -z ${COMPONENT_ENABLED_LINKERD+x} ]; then
+  COMPONENT_ENABLED_LINKERD="true"
+fi
+
+if [ -z ${COMPONENT_ENABLED_VAULT+x} ]; then
+  COMPONENT_ENABLED_VAULT="false"
+fi
+
+# ---------------- DEFAULT ENVIRONMENT VARIABLES END -----------------
+
 ENVIRONMENT="$1"
 TEAM="$2"
 if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" ]]; then
+  echo "#################"
+  echo "Available environment variables:"
+  echo "COMPONENT_ENABLED_TEKTON - enable tekton installation - default: true"
+  echo "COMPONENT_ENABLED_LOGGING - enable loki installation - default: true"
+  echo "COMPONENT_ENABLED_MONITORING - enable prometheus and grafana installation - default: true"
+  echo "COMPONENT_ENABLED_LINKERD - enable linkerd installation - default: true"
+  echo "COMPONENT_ENABLED_VAULT - enable vault installation - default: false"
+  echo "#################"
+  echo ""
   echo "Usage: install_kubementat.sh <ENVIRONMENT_NAME> <TEAM>"
   echo "e.g.: install_kubementat.sh dev dev1"
   exit 1
@@ -36,10 +70,14 @@ function check_dependencies(){
 }
 
 function check_cluster_and_access(){
-  echo "Checking cluster"
+  echo "###################################"
+  echo "Checking cluster..."
   echo "You are going to install kubementat automation to the following cluster:"
   kubectl cluster-info
-
+  echo ""
+  echo "###################################"
+  echo "###################################"
+  echo ""
   while true; do
     read -p "Do you really wish to install kubementat on this cluster?" yn
     case $yn in
@@ -49,6 +87,7 @@ function check_cluster_and_access(){
     esac
   done
 
+  echo "Checking permissions on cluster for installation ..."
   kubectl auth can-i create namespace
   kubectl auth can-i create deployment
   kubectl auth can-i create clusterrole
@@ -56,7 +95,7 @@ function check_cluster_and_access(){
   kubectl auth can-i create daemonset
   kubectl auth can-i create replicaset
 
-  echo "Finished checking cluster access"
+  echo "Finished checking cluster permissions."
   echo "################"
   echo ""
 }
@@ -65,8 +104,19 @@ function print_configuring_section() {
   component="$1"
   echo ""
   echo "######################################################"
+  date
   echo "CONFIGURING: $component"
   echo "######################################################"
+  echo ""
+}
+
+function print_skip_section() {
+  env_variable_name="$1"
+  echo ""
+  echo "------------------------------------------------------"
+  date
+  echo "${env_variable_name}: false - Skipping installation"
+  echo "------------------------------------------------------"
   echo ""
 }
 
@@ -76,32 +126,61 @@ check_cluster_and_access
 echo "Installing Kubementat components..."
 pushd tekton_ci/automation/components > /dev/null
 
-print_configuring_section "Tekton CI"
-./install_tekton.sh "${ENVIRONMENT}"
+if [[ "$COMPONENT_ENABLED_TEKTON" == "true" ]]; then
+  print_configuring_section "Tekton CI"
+  ./install_tekton.sh "${ENVIRONMENT}"
+else
+  print_skip_section "COMPONENT_ENABLED_TEKTON"
+fi
 
-print_configuring_section "Loki (Log Aggregator)"
-./install_logging.sh "${ENVIRONMENT}"
+if [[ "$COMPONENT_ENABLED_LOGGING" == "true" ]]; then
+  print_configuring_section "Logging (loki, promtail)"
+  ./install_logging.sh "${ENVIRONMENT}"
+else
+  print_skip_section "COMPONENT_ENABLED_LOGGING"
+fi
 
-print_configuring_section "Monitoring (Prometheus, Grafana)"
-./install_monitoring.sh "${ENVIRONMENT}"
+if [[ "$COMPONENT_ENABLED_MONITORING" == "true" ]]; then
+  print_configuring_section "Monitoring (Prometheus, Grafana)"
+  ./install_monitoring.sh "${ENVIRONMENT}"
+else
+  print_skip_section "COMPONENT_ENABLED_MONITORING"
+fi
 
-print_configuring_section "Linkerd service mesh"
-./install_linkerd.sh "${ENVIRONMENT}"
+if [[ "$COMPONENT_ENABLED_LINKERD" == "true" ]]; then
+  print_configuring_section "Linkerd service mesh"
+  ./install_linkerd.sh "${ENVIRONMENT}"
+else
+  print_skip_section "COMPONENT_ENABLED_LINKERD"
+fi
 
-# print_configuring_section "Vault"
-# ./install_vault.sh "${ENVIRONMENT}"
+if [[ "$COMPONENT_ENABLED_VAULT" == "true" ]]; then
+  print_configuring_section "Vault"
+  ./install_vault.sh "${ENVIRONMENT}"
+else
+  print_skip_section "COMPONENT_ENABLED_VAULT"
+fi
 
-echo "Setting up pipelines and triggers in tekton for team ${TEAM} ..."
-popd > /dev/null
-pushd tekton_ci/automation > /dev/null
+if [[ "$COMPONENT_ENABLED_TEKTON" == "true" ]]; then
+  echo "######################################################"
+  date
+  echo "Setting up pipelines and triggers in tekton for team ${TEAM} ..."
+  echo "######################################################"
+  echo ""
+  popd > /dev/null
+  pushd tekton_ci/automation > /dev/null
 
-print_configuring_section "Tekton Pipelines for TEAM ${TEAM}"
-./setup_pipelines.sh "${ENVIRONMENT}" "${TEAM}"
+  print_configuring_section "Tekton Pipelines for TEAM ${TEAM}"
+  ./setup_pipelines.sh "${ENVIRONMENT}" "${TEAM}"
 
-print_configuring_section "Tekton Pipeline Triggers for TEAM ${TEAM}"
-./setup_triggers.sh "${ENVIRONMENT}" "${TEAM}"
+  print_configuring_section "Tekton Pipeline Triggers for TEAM ${TEAM}"
+  ./setup_triggers.sh "${ENVIRONMENT}" "${TEAM}"
 
-popd > /dev/null
+  popd > /dev/null
+else
+  print_skip_section "COMPONENT_ENABLED_TEKTON"
+  echo "Skipped tekton pipeline and trigger setup."
+fi
 
 echo "Installed kubementat to cluster successfully :D"
 echo ""
