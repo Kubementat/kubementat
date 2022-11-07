@@ -28,6 +28,9 @@ spec:
     - name: extra-build-args
       description: You can provide a list of additional build args here
       default: ""
+    - name: push-retries
+      description: The number of retries when pushes fail
+      default: "0"
 
     - name: docker-registry-base-url
       description: The docker registry base url with path to load the CI image for tekton task execution from
@@ -91,12 +94,14 @@ spec:
         EXTRA_BUILD_ARGS="$(params.extra-build-args)"
         SET_TAG_FROM_VERSION_FILE="$(params.set-tag-from-version-file)"
         PATH_TO_VERSION_FILE="$(params.path-to-version-file)"
+        PUSH_RETRIES="$(params.push-retries)"
 
         echo "DOCKER_CONFIG_FILE: $DOCKER_CONFIG_FILE"
         echo "CONTEXT: $CONTEXT"
         echo "DOCKERFILE: $DOCKERFILE"
         echo "SET_TAG_FROM_VERSION_FILE: $SET_TAG_FROM_VERSION_FILE"
         echo "PATH_TO_VERSION_FILE: $PATH_TO_VERSION_FILE"
+        echo "PUSH_RETRIES: $PUSH_RETRIES"
         echo "###############"
 
         TAG="$(params.push-image-tag)"
@@ -123,6 +128,6 @@ spec:
 
         mkdir -p /kaniko/.docker
         cp "$DOCKER_CONFIG_FILE" /kaniko/.docker/config.json
-        /kaniko/executor $EXTRA_BUILD_ARGS --dockerfile="$DOCKERFILE" --context="$CONTEXT" --destination="$DESTINATION"
+        /kaniko/executor $EXTRA_BUILD_ARGS --dockerfile="$DOCKERFILE" --context="$CONTEXT" --destination="$DESTINATION" --push-retry="$PUSH_RETRIES"
       securityContext:
         runAsUser: 0
