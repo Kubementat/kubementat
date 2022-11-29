@@ -1,7 +1,7 @@
 ################################
 # Minimal Docker image for CI automation tasks using Tekton CI
 #
-# Contains basic tooling: git, git-crypt, jq, gnupg2, kubectl, helm, tkn, linkerd cli, mysql-client
+# Contains basic tooling: git, git-crypt, jq, gnupg2, kubectl, helm, helmfile, tkn, linkerd cli, mysql-client
 ################################
 # build via:
 # export DOCKER_REGISTRY_BASE_URL="REPLACEME_WITH_DOCKER_REGISTRY_BASE_URL"
@@ -35,6 +35,7 @@ ENV DEBIAN_FRONTEND noninteractive
 
 ARG TKN_CLI_VERSION="0.21.0"
 ARG YQ_VERSION="4.7.0"
+ARG HELMFILE_VERSION="0.144.0"
 
 RUN echo "ARCHITECTURE: $(uname -m)"
 
@@ -55,6 +56,21 @@ RUN apt-get update && apt-get install -y \
   git jq gnupg2 git-crypt kubectl helm mysql-client && \
 	apt-get clean && \
 	rm -rf /var/lib/apt/lists/*
+
+### helm diff (prerequisite for helmfile)
+RUN helm plugin install https://github.com/databus23/helm-diff
+
+## helmfile
+RUN ARCH= && dpkgArch="$(uname -m)" \
+  && case "${dpkgArch}" in \
+  aarch64) ARCH='arm64';; \
+  arm64) ARCH='arm64';; \
+  armhf) ARCH='arm64';; \
+  x86_64) ARCH='amd64';; \
+  *) echo "unsupported architecture: $dpkgArch"; exit 1 ;; \
+  esac \
+  && wget -O /usr/bin/helmfile "https://github.com/roboll/helmfile/releases/download/v${HELMFILE_VERSION}/helmfile_linux_${ARCH}" \
+  && chmod 755 /usr/bin/helmfile
 
 # install
 # install yq for yaml parsing
