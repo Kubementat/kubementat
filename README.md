@@ -66,12 +66,14 @@ kubectl run ubuntu-ci -i --tty --image="docker.io/julianweberdev/ubuntu-ci-minim
 # install yq
 # install gnugpg
 # install kubectl
+# install helm
+# install helmfile
 # install tkn cli
 # install linkerd cli
 ```
 
 ## Installation / Getting Started
-For installing kubementat on your kubernetes cluster (either running in the Cloud or on a raspberry pi)
+For installing kubementat on your kubernetes cluster (either running in the Cloud, a raspberry pi, on-prem...)
 we need to take some initial configuration steps.
 - Initialize and configure the git repository you will use for running and developing with kubementat
 - Configure the docker registry you will use
