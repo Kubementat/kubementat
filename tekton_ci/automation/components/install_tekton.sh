@@ -28,7 +28,7 @@ echo "TEKTON_NAMESPACE: $TEKTON_NAMESPACE"
 echo "#########################"
 
 # install tekton crs
-kubectl apply -n "$TEKTON_NAMESPACE" -f https://storage.googleapis.com/tekton-releases/pipeline/latest/release.yaml
+kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/latest/release.yaml
 
 # this will allow access to the needed resources for helm deployments
 # and allow to request tekton resources

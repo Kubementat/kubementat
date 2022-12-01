@@ -6,6 +6,10 @@
 #
 ######################################
 
+# currently static configuration
+SERVICE_ACCOUNT_NAME="kubernetes-dashboard-read-only-cluster-user"
+KUBERNETES_DASHBOARD_DEPLOYMENT_NAMESPACE="kubernetes-dashboard"
+
 ENVIRONMENT="$1"
 if [[ "$ENVIRONMENT" == "" ]]; then
   echo "Usage: uninstall_kubernetes_dashboard.sh <ENVIRONMENT_NAME>"
@@ -15,21 +19,11 @@ fi
 
 set -e
 
-echo "#########################"
-echo "Loading configuration from platform_config ..."
-KUBERNETES_DASHBOARD_DEPLOYMENT_NAMESPACE="$(jq -r '.KUBERNETES_DASHBOARD_DEPLOYMENT_NAMESPACE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
-
-echo "#########################"
-
-
 echo "Removing helm deployment for kubernetes dashboard ..."
 ./uninstall_helm_deployment.sh "$1" "KUBERNETES_DASHBOARD"
 
 echo ""
 echo "Removing service account and binding for kubernetes dashboard read only access ..."
-
-# currently static configuration
-SERVICE_ACCOUNT_NAME="kubernetes-dashboard-read-only-cluster-user"
 
 set +e
 kubectl delete clusterrolebinding "${SERVICE_ACCOUNT_NAME}-cluster-read-only-binding"
