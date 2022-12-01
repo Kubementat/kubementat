@@ -26,7 +26,7 @@
 #   pullSecrets: []
 #
 # ## Number of replicas
-# replicaCount: 2
+replicaCount: 1
 
 # ## @param commonLabels Labels to add to all deployed objects
 # ##
@@ -129,13 +129,13 @@
 # # priorityClassName: ""
 
 # ## Pod resource requests & limits
-# resources:
-#   requests:
-#     cpu: 100m
-#     memory: 200Mi
-#   limits:
-#     cpu: 2
-#     memory: 200Mi
+resources:
+  requests:
+    cpu: 100m
+    memory: 200Mi
+  limits:
+    cpu: 500m
+    memory: 300Mi
 
 # ## Serve application over HTTP without TLS
 # ##

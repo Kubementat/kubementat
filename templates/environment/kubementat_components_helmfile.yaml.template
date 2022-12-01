@@ -1,0 +1,275 @@
+# Full Component Helm configuration for the environment
+# apply via:
+# helm plugin install https://github.com/databus23/helm-diff
+# set env vars:
+# export ENVIRONMENT="dev"
+# export GRAFANA_ADMIN_USER="$(jq -r '.GRAFANA_ADMIN_USER' ../../platform_config/"${ENVIRONMENT}"/static.encrypted.json)"
+# export GRAFANA_ADMIN_PASSWORD="$(jq -r '.GRAFANA_ADMIN_PASSWORD' ../../platform_config/"${ENVIRONMENT}"/static.encrypted.json)"
+# helmfile apply --interactive -f kubementat_components_helmfile.yaml
+
+# for filtering by labels
+# helmfile apply --interactive -f kubementat_components_helmfile.yaml -l component=monitoring
+# or
+# helmfile apply --interactive -f kubementat_components_helmfile.yaml -l group=standard
+# or
+# helmfile sync --interactive -f kubementat_components_helmfile.yaml -l group=standard
+
+
+#
+# For full file format documentation see: https://helmfile.readthedocs.io/en/latest/#getting-started
+
+# Helm default configuration
+helmDefaults:
+  # verify the chart before upgrading (only works with packaged charts not directories) (default false)
+  verify: false
+  # wait for k8s resources via --wait. (default false)
+  wait: true
+  # if set and --wait enabled, will wait until all Jobs have been completed before marking the release as successful. It will wait for as long as --timeout (default false, Implemented in Helm3.5)
+  waitForJobs: true
+  # time in seconds to wait for any individual Kubernetes operation (like Jobs for hooks, and waits on pod/pvc/svc/deployment readiness) (default 300)
+  timeout: 600
+  # limit the maximum number of revisions saved per release. Use 0 for no limit. (default 10)
+  historyMax: 10
+  # when using helm 3.2+, automatically create release namespaces if they do not exist (default true)
+  createNamespace: true
+  # if used with charts museum allows to pull unstable charts for deployment, for example: if 1.2.3 and 1.2.4-dev versions exist and set to true, 1.2.4-dev will be pulled (default false)
+  devel: false
+
+# REPOs
+repositories:
+- name: polaris
+  url: https://charts.fairwinds.com/stable
+- name: grafana
+  url: https://grafana.github.io/helm-charts
+- name: prometheus-community
+  url: https://prometheus-community.github.io/helm-charts
+- name: kube-state-metrics
+  url: https://kubernetes.github.io/kube-state-metrics
+- name: sstarcher
+  url: https://shanestarcher.com/helm-charts/
+- name: ingress-nginx
+  url: https://kubernetes.github.io/ingress-nginx
+- name: jetstack
+  url: https://charts.jetstack.io
+- name: linkerd
+  url: https://helm.linkerd.io/stable
+- name: hashicorp
+  url: https://helm.releases.hashicorp.com
+- name: gitlab
+  url: https://charts.gitlab.io/
+- name: int128.github.io
+  url: https://int128.github.io/helm-charts
+- name: twuni
+  url: https://helm.twun.io
+- name: gitea-charts
+  url: https://dl.gitea.io/charts/
+- name: mailu
+  url: https://mailu.github.io/helm-charts/
+- name: coredns
+  url: https://coredns.github.io/helm
+- name: wekan
+  url: https://wekan.github.io/charts
+- name: kubernetes-dashboard
+  url: https://kubernetes.github.io/dashboard/
+
+# Releases configuration for deployments
+releases:
+# Monitoring
+- name: prometheus
+  chart: prometheus-community/prometheus
+  # version: "18.1.0"
+  namespace: prometheus
+  labels:
+    component: monitoring
+    group: standard
+  # as the prometheus-server pod will fail while starting up when not configured for ha mode (see https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus/values.yaml#L1044)
+  recreatePods: true
+  force: true
+  values:
+    - kubementat_components/monitoring/prometheus_values.encrypted.yaml
+
+- name: prometheus-blackbox-exporter
+  chart: prometheus-community/prometheus-blackbox-exporter
+  # version: "7.1.3"
+  namespace: prometheus
+  labels:
+    component: monitoring
+    group: standard
+  values:
+    - kubementat_components/monitoring/prometheus_blackbox_exporter_values.encrypted.yaml
+
+- name: prometheus-helm-exporter
+  chart: sstarcher/helm-exporter
+  # version: "1.2.3+4dc0dfc"
+  namespace: prometheus
+  labels:
+    component: monitoring
+    group: standard
+  values:
+    - kubementat_components/monitoring/prometheus_helm_exporter_values.encrypted.yaml
+
+- name: grafana
+  chart: grafana/grafana
+  # version: "6.44.9"
+  namespace: grafana
+  labels:
+    component: monitoring
+    group: standard
+  values:
+    - kubementat_components/monitoring/grafana_values.encrypted.yaml
+    - adminUser: {{ requiredEnv "GRAFANA_ADMIN_USER" | quote }}
+    - adminPassword: {{ requiredEnv "GRAFANA_ADMIN_PASSWORD" | quote }}
+
+# Log aggregation
+- name: loki
+  chart: grafana/loki-stack
+  # version: "2.8.7"
+  namespace: loki
+  labels:
+    component: logging
+    group: standard
+  values:
+    - kubementat_components/logging/loki_stack_values.encrypted.yaml
+
+# Cluster Analysis
+- name: polaris
+  chart: fairwinds-stable/polaris
+  # version: "5.6.1"
+  namespace: polaris
+  labels:
+    component: analytics
+    group: standard
+  values:
+    - kubementat_components/polaris/values.encrypted.yaml
+
+# Routing & certificates
+- name: cert-manager
+  chart: jetstack/cert-manager
+  # version: "v1.10.1"
+  namespace: cert-manager
+  labels:
+    component: routing
+    group: routing
+  values:
+    - kubementat_components/routing/cert_manager.encrypted.yaml
+
+- name: nginx-ingress
+  chart: ingress-nginx/ingress-nginx
+  # version: "4.4.0"
+  namespace: nginx-ingress
+  labels:
+    component: routing
+    group: routing
+  values:
+    - kubementat_components/routing/nginx_ingress_controller.encrypted.yaml
+
+# TODO: Install linkerd via helm chart instead of linkerd cli ???
+# # Linkerd service mesh
+# - name: linkerd-crds
+#   chart: linkerd/linkerd-crds
+#   version: "1.4.0"
+#   namespace: linkerd
+#   labels:
+#     component: service_mesh
+#     group: additional
+#   values:
+#     - kubementat_components/linkerd/linkerd_crds_values.encrypted.yaml
+
+# - name: linkerd-control-plane
+#   chart: linkerd/linkerd-control-plane
+#   version: "1.4.0"
+#   namespace: linkerd
+#   labels:
+#     component: service_mesh
+#     group: additional
+#   values:
+#     - kubementat_components/linkerd/linkerd_crds_values.encrypted.yaml
+
+- name: kubernetes-dashboard
+  chart: kubernetes-dashboard/kubernetes-dashboard
+  namespace: kubernetes-dashboard
+  labels:
+    component: dashboard
+    group: dashboard
+  values:
+    - kubementat_components/kubernetes_dashboard/values.encrypted.yaml
+
+# On cluster secret management
+- name: vault
+  chart: hashicorp/vault
+  namespace: vault
+  labels:
+    component: secret_management
+    group: extra
+  values:
+    - kubementat_components/vault/vault_values.encrypted.yaml
+
+# gitlab
+- name: gitlab
+  chart: gitlab/gitlab
+  namespace: gitlab
+  labels:
+    component: git
+    group: extra
+  values:
+    - kubementat_components/gitlab/values.encrypted.yaml
+
+# gitbucket
+- name: gitbucket
+  chart: int128.github.io/gitbucket
+  namespace: gitbucket
+  labels:
+    component: git
+    group: extra
+  values:
+    - kubementat_components/gitbucket/values.encrypted.yaml
+
+# gitea
+- name: gitea
+  chart: gitea-charts/gitea
+  namespace: gitea
+  labels:
+    component: git
+    group: extra
+  values:
+    - kubementat_components/gitea/values.encrypted.yaml
+
+# docker registry
+- name: registry
+  chart: twuni/docker-registry
+  namespace: registry
+  labels:
+    component: docker
+    group: extra
+  values:
+    - kubementat_components/docker_registry/values.encrypted.yaml
+
+# # mailu
+# - name: mailu
+#   chart: mailu/mailu
+#   namespace: mailu
+#   labels:
+#     component: mail
+#     group: extra
+#   values:
+#     - kubementat_components/mailu/values.encrypted.yaml
+
+# # coredns
+# - name: registry
+#   chart: coredns/coredns
+#   namespace: kube-system
+#   labels:
+#     component: dns
+#     group: extra
+#   values:
+#     - kubementat_components/coredns/values.encrypted.yaml
+
+# wekan kanban board
+# - name: wekan
+#   chart: wekan/wekan
+#   namespace: wekan
+#   labels:
+#     component: kanban
+#     group: extra
+#   values:
+#     - kubementat_components/wekan/values.encrypted.yaml
