@@ -1,3 +1,5 @@
+# TODO: FIXME: migrate essential config from ubuntu_ci
+
 # build via:
 # DOCKER_REGISTRY_BASE_URL="REPLACEME_WITH_DOCKER_REGISTRY_URL"
 # docker build -t "${DOCKER_REGISTRY_BASE_URL}/angular-ci:latest" . --build-arg DOCKER_REGISTRY_BASE_URL="${DOCKER_REGISTRY_BASE_URL}"

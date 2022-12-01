@@ -1,3 +1,5 @@
+# TODO: FIXME: Delete this and migrate essential config to angular_ci image
+
 ################################
 # Docker image for CI automation tasks using Tekton CI
 #
