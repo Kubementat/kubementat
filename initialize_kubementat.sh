@@ -5,19 +5,22 @@
 ####
 set -e
 
+TARGET_ENVIRONMENT="dev"
+TARGET_TEAM="dev1"
+
 ################## FUNCTION DEFINITIONS ####################
 function check_is_already_initialized(){
-  if [[ -f platform_config/dev/static.encrypted.json ]]; then
-    echo "Found platform_config/dev/static.encrypted.json . It seems that kubementat has been initialized already! Exiting"
+  if [[ -f platform_config/$TARGET_ENVIRONMENT/static.encrypted.json ]]; then
+    echo "Found platform_config/$TARGET_ENVIRONMENT/static.encrypted.json . It seems that kubementat has been initialized already! Exiting"
     exit 1
-  elif [[ -f platform_config/dev/static.json ]]; then
-    echo "Found platform_config/dev/static.json . It seems that kubementat has been initialized already! Exiting"
+  elif [[ -f platform_config/$TARGET_ENVIRONMENT/static.json ]]; then
+    echo "Found platform_config/$TARGET_ENVIRONMENT/static.json . It seems that kubementat has been initialized already! Exiting"
     exit 1
-  elif [[ -f platform_config/dev/dev1/static.json ]]; then
-    echo "Found platform_config/dev/dev1/static.json . It seems that kubementat has been initialized already! Exiting"
+  elif [[ -f platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.json ]]; then
+    echo "Found platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.json . It seems that kubementat has been initialized already! Exiting"
     exit 1
-  elif [[ -f platform_config/dev/dev1/static.encrypted.json ]]; then
-    echo "Found platform_config/dev/dev1/static.encrypted.json . It seems that kubementat has been initialized already! Exiting"
+  elif [[ -f platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.encrypted.json ]]; then
+    echo "Found platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.encrypted.json . It seems that kubementat has been initialized already! Exiting"
     exit 1
   else
     echo "kubementat is not initialized yet! Starting basic configuration."
@@ -47,12 +50,30 @@ function check_required_environment_variables(){
 function check_dependencies(){
   echo "Checking local dependencies"
   command -v kubectl >/dev/null 2>&1 || { echo "kubectl is not installed. Aborting." >&2; exit 1; }
+  command -v helm >/dev/null 2>&1 || { echo "helm is not installed. Aborting." >&2; exit 1; }
+  command -v helmfile >/dev/null 2>&1 || { echo "helmfile is not installed. Aborting." >&2; exit 1; }
   command -v jq >/dev/null 2>&1 || { echo "jq is not installed. Aborting." >&2; exit 1; }
   command -v yq >/dev/null 2>&1 || { echo "yq is not installed. Aborting." >&2; exit 1; }
   command -v git >/dev/null 2>&1 || { echo "git is not installed. Aborting." >&2; exit 1; }
   command -v git-crypt >/dev/null 2>&1 || { echo "git-crypt is not installed. Aborting." >&2; exit 1; }
   command -v gpg >/dev/null 2>&1 || { echo "gpg is not installed. Aborting." >&2; exit 1; }
   echo "Finished checking local dependencies"
+  echo "################"
+  echo ""
+}
+
+function print_cli_versions(){
+  echo ""
+  echo "CLI VERSIONS:"
+  echo ""
+  echo "kubectl: $(kubectl version)"
+  echo "helm: $(helm version)"
+  echo "helmfile: $(helmfile version)"
+  echo "jq: $(jq --version)"
+  echo "yq: $(yq --version)"
+  echo "git: $(git --version)"
+  echo "git-crypt: $(git-crypt --version)"
+  echo "gpg: $(gpg --version)"
   echo "################"
   echo ""
 }
@@ -67,32 +88,44 @@ function does_file_with_pattern_exist {
    [ ${#files[@]} -gt 1 ] || [ ${#files[@]} -eq 1 ] && [ -e "${files[0]}" ]
 }
 
+# writes directories and config files from .template files for given directory
 function write_config_from_templates_for_directory(){
-  local directory="$1"
-  echo "Generating default configuration for directory: $directory"
-  pushd "$directory" > /dev/null
-  if does_file_with_pattern_exist "*.template"; then
-    for template_file in *.template ; do
-      # skip static.* files
-      if [[ ! "$template_file" =~ static.* ]]; then
-        new_filename="${template_file//.template/}"
-        echo "  Creating file: $new_filename"
-        cp "$template_file" "$new_filename"
-      fi
-    done
-  fi
-  popd > /dev/null
+  local source_directory="$1"
+  local target_directory="$2"
+
+  echo ""
+  echo "template source directory: $source_directory"
+  echo "target directory: $target_directory"
+  echo ""
+  for directory in "$source_directory"/* ; do
+    # for each directory
+    if [[ -d "$directory" ]]; then
+      dir_name="$(basename "$directory")"
+      echo "Creating directory: $target_directory/$dir_name"
+      mkdir -p "$target_directory/$dir_name"
+      echo ""
+
+      # for each *.template file within the directory
+      for template_file in "$source_directory/$dir_name"/*.template ; do
+        template_file_name="$(basename "$template_file")"
+        new_filename="${template_file_name//.template/}"
+        new_path="$target_directory/$dir_name/$new_filename"
+        echo "  Copy template: $template_file --> $new_path"
+        cp "$template_file" "$new_path"
+        echo ""
+      done
+    fi
+  done
+  echo ""
 }
 
 ################## FUNCTION DEFINITION END ####################
 
 # initial checks
-check_dependencies
-check_is_already_initialized
 check_required_environment_variables
-
-
-# static.json configs (dev dev1)
+check_is_already_initialized
+check_dependencies
+print_cli_versions
 
 # DEPLOYER SSH KEY SETUP
 if [[ ! -f deployer_ssh_key ]]; then
@@ -151,8 +184,11 @@ fi
 
 GIT_DEPLOYER_GPG_PUBLIC_KEY="$(cat gpg_public_key.gpg)"
 
-# Configure platform_config/dev/static.json
-echo "Writing platform_config/dev/static.json"
+# Configure platform_config/$TARGET_ENVIRONMENT/static.json
+echo "Creating config sub-directory: platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM"
+mkdir -p "platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM"
+
+echo "Writing platform_config/$TARGET_ENVIRONMENT/static.json"
 jq \
   --arg automation_git_url "$AUTOMATION_GIT_URL" \
   --arg automation_git_server_host "$AUTOMATION_GIT_SERVER_HOST" \
@@ -166,10 +202,10 @@ jq \
   --arg ssh_public_key "$(cat deployer_ssh_key.pub)" \
   --arg tekton_kubernetes_storage_class "$KUBERNETES_DEFAULT_STORAGE_CLASS" \
   '.AUTOMATION_GIT_URL |= $automation_git_url | .AUTOMATION_GIT_SERVER_HOST |= $automation_git_server_host | .AUTOMATION_GIT_SERVER_PORT |= $automation_git_server_port | .AUTOMATION_GIT_SERVER_SSH_USER |= $automation_git_server_ssh_user | .DOCKER_REGISTRY_BASE_URL |= $docker_registry_base_url | .BASE_DOMAIN |= $base_domain | .GIT_DEPLOYER_GPG_PUBLIC_KEY |= $git_deployer_gpg_public_key | .GIT_DEPLOYER_EMAIL |= $git_deployer_email | .GIT_DEPLOYER_PUBLIC_KEY |= $ssh_public_key | .TEKTON_KUBERNETES_STORAGE_CLASS |= $tekton_kubernetes_storage_class | .CLUSTER_MANAGER_EMAIL |= $cluster_manager_email' \
-  platform_config/dev/static.json.template >platform_config/dev/static.json
+  templates/environment/static.json.template > "platform_config/$TARGET_ENVIRONMENT/static.json"
 
-# Configure platform_config/dev/static.encrypted.json
-echo "Writing platform_config/dev/static.encrypted.json"
+# Configure platform_config/$TARGET_ENVIRONMENT/static.encrypted.json
+echo "Writing platform_config/$TARGET_ENVIRONMENT/static.encrypted.json"
 jq \
   --arg gpg_private_key "$GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64" \
   --arg ssh_private_key "$GIT_DEPLOYER_PRIVATE_KEY_BASE64" \
@@ -177,17 +213,17 @@ jq \
   --arg gitlab_webhook_secret "$(generate_password)" \
   --arg github_webhook_secret "$(generate_password)" \
   '.GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64 |= $gpg_private_key | .GIT_DEPLOYER_PRIVATE_KEY_BASE64 |= $ssh_private_key | .GRAFANA_ADMIN_PASSWORD |= $grafana_password | .GITLAB_WEBHOOK_SECRET |= $gitlab_webhook_secret | .GITHUB_WEBHOOK_SECRET |= $github_webhook_secret' \
-  platform_config/dev/static.encrypted.json.template >platform_config/dev/static.encrypted.json
+  templates/environment/static.encrypted.json.template >platform_config/$TARGET_ENVIRONMENT/static.encrypted.json
 
-# Configure platform_config/dev/dev1/static.json
-echo "Writing platform_config/dev/dev1/static.json"
+# Configure platform_config/$TARGET_ENVIRONMENT/dev1/static.json
+echo "Writing platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.json"
 jq \
   --arg storage_class "$KUBERNETES_DEFAULT_STORAGE_CLASS" \
   '.POSTGRES_VOLUME_STORAGE_CLASS |= $storage_class | .CASSANDRA_VOLUME_STORAGE_CLASS |= $storage_class | .KAFKA_VOLUME_STORAGE_CLASS |= $storage_class | .MONGODB_VOLUME_STORAGE_CLASS |= $storage_class | .MYSQL_VOLUME_STORAGE_CLASS |= $storage_class | .REDIS_VOLUME_STORAGE_CLASS |= $storage_class' \
-  platform_config/dev/dev1/static.json.template >platform_config/dev/dev1/static.json
+  templates/environment/team/static.json.template >platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.json
 
-# Configure platform_config/dev/dev1/static.encrypted.json
-echo "Writing platform_config/dev/dev1/static.encrypted.json"
+# Configure platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.encrypted.json
+echo "Writing platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.encrypted.json"
 jq \
   --arg cassandra_pw "$(generate_password)" \
   --arg mongodb_pw "$(generate_password)" \
@@ -196,18 +232,25 @@ jq \
   --arg redis_pw "$(generate_password)" \
   --arg postgres_pw "$(generate_password)" \
   '.POSTGRES_ADMIN_PASSWORD |= $postgres_pw | .CASSANDRA_ADMIN_PASSWORD |= $cassandra_pw | .MONGODB_ROOT_PASSWORD |= $mongodb_pw | .MYSQL_DATABASE_CONFIGURATION[0].PASSWORD |= $mysql_database_pw | .MYSQL_ROOT_PASSWORD |= $mysql_root_pw | .REDIS_PASSWORD |= $redis_pw' \
-  platform_config/dev/dev1/static.encrypted.json.template >platform_config/dev/dev1/static.encrypted.json
+  templates/environment/team/static.encrypted.json.template >platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.encrypted.json
+echo ""
+echo "#####################"
 
 # copy over default helm chart and platform component configuration files from templates
 echo "Configuring default platform_config values files for dev platform components ..."
-for directory in platform_config/dev/*/ ; do
-  write_config_from_templates_for_directory "$directory"
-done
+
+echo "Creating kubementat_components sub-directory: platform_config/$TARGET_ENVIRONMENT/kubementat_components"
+mkdir -p "platform_config/$TARGET_ENVIRONMENT/kubementat_components"
+# copy over kubementat_components helmfile.yaml
+cp templates/environment/kubementat_components/helmfile.yaml.template platform_config/$TARGET_ENVIRONMENT/kubementat_components/helmfile.yaml
+
+write_config_from_templates_for_directory "templates/environment/kubementat_components" "platform_config/${TARGET_ENVIRONMENT}/kubementat_components"
+echo "#####################"
+echo ""
 
 echo "Configuring default platform_config values files for team dev1 ..."
-for directory in platform_config/dev/dev1/*/ ; do
-  write_config_from_templates_for_directory "$directory"
-done
+write_config_from_templates_for_directory "templates/environment/team" "platform_config/${TARGET_ENVIRONMENT}/${TARGET_TEAM}"
+echo "#####################"
 
 if [[ ! -f git_crypt_symmetric.key ]]; then
   # GIT CRYPT SETUP
@@ -259,7 +302,7 @@ echo "##############################"
 echo ""
 echo "You can now use this configuration to roll out the platform components on the cluster via:"
 echo ""
-echo "./install_kubementat.sh dev dev1"
+echo "./install_kubementat.sh $TARGET_ENVIRONMENT $TARGET_TEAM"
 echo ""
 echo "In case you encounter error messages you can just rerun the full setup script to continue where the error occured."
 echo "The setup script is non-destructive"

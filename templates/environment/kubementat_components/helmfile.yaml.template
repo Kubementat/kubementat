@@ -5,14 +5,14 @@
 # export ENVIRONMENT="dev"
 # export GRAFANA_ADMIN_USER="$(jq -r '.GRAFANA_ADMIN_USER' ../../platform_config/"${ENVIRONMENT}"/static.encrypted.json)"
 # export GRAFANA_ADMIN_PASSWORD="$(jq -r '.GRAFANA_ADMIN_PASSWORD' ../../platform_config/"${ENVIRONMENT}"/static.encrypted.json)"
-# helmfile apply --interactive -f kubementat_components_helmfile.yaml
+# helmfile apply --interactive -f helmfile.yaml
 
 # for filtering by labels
-# helmfile apply --interactive -f kubementat_components_helmfile.yaml -l component=monitoring
+# helmfile apply --interactive -f helmfile.yaml -l component=monitoring
 # or
-# helmfile apply --interactive -f kubementat_components_helmfile.yaml -l group=standard
+# helmfile apply --interactive -f helmfile.yaml -l group=standard
 # or
-# helmfile sync --interactive -f kubementat_components_helmfile.yaml -l group=standard
+# helmfile sync --interactive -f helmfile.yaml -l group=standard
 
 
 #
@@ -86,7 +86,7 @@ releases:
   recreatePods: true
   force: true
   values:
-    - kubementat_components/monitoring/prometheus_values.encrypted.yaml
+    - monitoring/prometheus_values.encrypted.yaml
 
 - name: prometheus-blackbox-exporter
   chart: prometheus-community/prometheus-blackbox-exporter
@@ -96,7 +96,7 @@ releases:
     component: monitoring
     group: standard
   values:
-    - kubementat_components/monitoring/prometheus_blackbox_exporter_values.encrypted.yaml
+    - monitoring/prometheus_blackbox_exporter_values.encrypted.yaml
 
 - name: prometheus-helm-exporter
   chart: sstarcher/helm-exporter
@@ -106,7 +106,7 @@ releases:
     component: monitoring
     group: standard
   values:
-    - kubementat_components/monitoring/prometheus_helm_exporter_values.encrypted.yaml
+    - monitoring/prometheus_helm_exporter_values.encrypted.yaml
 
 - name: grafana
   chart: grafana/grafana
@@ -116,7 +116,7 @@ releases:
     component: monitoring
     group: standard
   values:
-    - kubementat_components/monitoring/grafana_values.encrypted.yaml
+    - monitoring/grafana_values.encrypted.yaml
     - adminUser: {{ requiredEnv "GRAFANA_ADMIN_USER" | quote }}
     - adminPassword: {{ requiredEnv "GRAFANA_ADMIN_PASSWORD" | quote }}
 
@@ -129,7 +129,7 @@ releases:
     component: logging
     group: standard
   values:
-    - kubementat_components/logging/loki_stack_values.encrypted.yaml
+    - logging/loki_stack_values.encrypted.yaml
 
 # Cluster Analysis
 - name: polaris
@@ -140,7 +140,7 @@ releases:
     component: analytics
     group: standard
   values:
-    - kubementat_components/polaris/values.encrypted.yaml
+    - polaris/values.encrypted.yaml
 
 # Routing & certificates
 - name: cert-manager
@@ -151,7 +151,7 @@ releases:
     component: routing
     group: routing
   values:
-    - kubementat_components/routing/cert_manager.encrypted.yaml
+    - routing/cert_manager.encrypted.yaml
 
 - name: nginx-ingress
   chart: ingress-nginx/ingress-nginx
@@ -161,7 +161,7 @@ releases:
     component: routing
     group: routing
   values:
-    - kubementat_components/routing/nginx_ingress_controller.encrypted.yaml
+    - routing/nginx_ingress_controller.encrypted.yaml
 
 # TODO: Install linkerd via helm chart instead of linkerd cli ???
 # # Linkerd service mesh
@@ -173,7 +173,7 @@ releases:
 #     component: service_mesh
 #     group: additional
 #   values:
-#     - kubementat_components/linkerd/linkerd_crds_values.encrypted.yaml
+#     - linkerd/linkerd_crds_values.encrypted.yaml
 
 # - name: linkerd-control-plane
 #   chart: linkerd/linkerd-control-plane
@@ -183,7 +183,7 @@ releases:
 #     component: service_mesh
 #     group: additional
 #   values:
-#     - kubementat_components/linkerd/linkerd_crds_values.encrypted.yaml
+#     - linkerd/linkerd_crds_values.encrypted.yaml
 
 - name: kubernetes-dashboard
   chart: kubernetes-dashboard/kubernetes-dashboard
@@ -192,7 +192,7 @@ releases:
     component: dashboard
     group: dashboard
   values:
-    - kubementat_components/kubernetes_dashboard/values.encrypted.yaml
+    - kubernetes_dashboard/values.encrypted.yaml
 
 # On cluster secret management
 - name: vault
@@ -202,7 +202,7 @@ releases:
     component: secret_management
     group: extra
   values:
-    - kubementat_components/vault/vault_values.encrypted.yaml
+    - vault/vault_values.encrypted.yaml
 
 # gitlab
 - name: gitlab
@@ -212,7 +212,7 @@ releases:
     component: git
     group: extra
   values:
-    - kubementat_components/gitlab/values.encrypted.yaml
+    - gitlab/values.encrypted.yaml
 
 # gitbucket
 - name: gitbucket
@@ -222,7 +222,7 @@ releases:
     component: git
     group: extra
   values:
-    - kubementat_components/gitbucket/values.encrypted.yaml
+    - gitbucket/values.encrypted.yaml
 
 # gitea
 - name: gitea
@@ -232,7 +232,7 @@ releases:
     component: git
     group: extra
   values:
-    - kubementat_components/gitea/values.encrypted.yaml
+    - gitea/values.encrypted.yaml
 
 # docker registry
 - name: registry
@@ -242,7 +242,7 @@ releases:
     component: docker
     group: extra
   values:
-    - kubementat_components/docker_registry/values.encrypted.yaml
+    - docker_registry/values.encrypted.yaml
 
 # # mailu
 # - name: mailu
@@ -252,7 +252,7 @@ releases:
 #     component: mail
 #     group: extra
 #   values:
-#     - kubementat_components/mailu/values.encrypted.yaml
+#     - mailu/values.encrypted.yaml
 
 # # coredns
 # - name: registry
@@ -262,7 +262,7 @@ releases:
 #     component: dns
 #     group: extra
 #   values:
-#     - kubementat_components/coredns/values.encrypted.yaml
+#     - coredns/values.encrypted.yaml
 
 # wekan kanban board
 # - name: wekan
@@ -272,4 +272,4 @@ releases:
 #     component: kanban
 #     group: extra
 #   values:
-#     - kubementat_components/wekan/values.encrypted.yaml
+#     - wekan/values.encrypted.yaml

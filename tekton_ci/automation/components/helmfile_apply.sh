@@ -28,8 +28,8 @@ echo "Executing helmfile apply for environment ${ENVIRONMENT} with group: ${HELM
 echo "######################################################"
 echo ""
 
-HELMFILE_WORKING_DIRECTORY="../../../platform_config/${ENVIRONMENT}"
-HELMFILE_FILENAME="kubementat_components_helmfile.yaml"
+HELMFILE_WORKING_DIRECTORY="../../../platform_config/${ENVIRONMENT}/kubementat_components"
+HELMFILE_FILENAME="helmfile.yaml"
 
 echo ""
 echo "helmfile version: "
