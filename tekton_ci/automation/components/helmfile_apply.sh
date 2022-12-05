@@ -48,9 +48,9 @@ echo "Applying helmfile: $HELMFILE_FILENAME"
 echo ""
 
 # read GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD from platform_config
-GRAFANA_ADMIN_USER="$(jq -r '.GRAFANA_ADMIN_USER' static.encrypted.json)"
+GRAFANA_ADMIN_USER="$(jq -r '.GRAFANA_ADMIN_USER' "../../../platform_config/$ENVIRONMENT/static.encrypted.json")"
 export GRAFANA_ADMIN_USER
-GRAFANA_ADMIN_PASSWORD="$(jq -r '.GRAFANA_ADMIN_PASSWORD' static.encrypted.json)"
+GRAFANA_ADMIN_PASSWORD="$(jq -r '.GRAFANA_ADMIN_PASSWORD' "../../../platform_config/$ENVIRONMENT/static.encrypted.json")"
 export GRAFANA_ADMIN_PASSWORD
 
 helmfile apply --color $INTERACTIVE_FLAG -f "$HELMFILE_FILENAME" -l "group=$HELMFILE_INSTALLATION_GROUP"
