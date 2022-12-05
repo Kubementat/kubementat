@@ -17,7 +17,7 @@ set -eu
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-GRAFANA_DEPLOYMENT_NAMESPACE="$(jq -r '.GRAFANA_DEPLOYMENT_NAMESPACE' ../platform_config/"${ENVIRONMENT}"/static.json)"
+GRAFANA_DEPLOYMENT_NAMESPACE="grafana"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "GRAFANA_DEPLOYMENT_NAMESPACE: $GRAFANA_DEPLOYMENT_NAMESPACE"
