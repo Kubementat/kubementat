@@ -17,7 +17,7 @@ set -eu
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-VAULT_DEPLOYMENT_NAMESPACE="$(jq -r '.VAULT_DEPLOYMENT_NAMESPACE' ../platform_config/"${ENVIRONMENT}"/static.json)"
+VAULT_DEPLOYMENT_NAMESPACE="vault"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "VAULT_DEPLOYMENT_NAMESPACE: $VAULT_DEPLOYMENT_NAMESPACE"

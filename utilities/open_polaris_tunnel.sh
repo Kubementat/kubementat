@@ -17,7 +17,7 @@ set -eu
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-POLARIS_DEPLOYMENT_NAMESPACE="$(jq -r '.POLARIS_DEPLOYMENT_NAMESPACE' ../platform_config/"${ENVIRONMENT}"/static.json)"
+POLARIS_DEPLOYMENT_NAMESPACE="polaris"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "POLARIS_DEPLOYMENT_NAMESPACE: $POLARIS_DEPLOYMENT_NAMESPACE"
