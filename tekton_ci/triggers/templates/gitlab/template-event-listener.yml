@@ -3,6 +3,8 @@ apiVersion: triggers.tekton.dev/v1beta1
 kind: EventListener
 metadata:
   name: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-event-listener
+  labels:
+    managed-by: kubementat
 spec:
   triggers:
     - name: push-trigger

@@ -3,6 +3,8 @@ apiVersion: triggers.tekton.dev/v1beta1
 kind: TriggerBinding
 metadata:
   name: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-trigger-binding
+  labels:
+    managed-by: kubementat
 spec:
   params:
     - name: gitrevision

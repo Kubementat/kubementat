@@ -3,6 +3,8 @@ apiVersion: triggers.tekton.dev/v1beta1
 kind: TriggerTemplate
 metadata:
   name: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-trigger-template
+  labels:
+    managed-by: kubementat
 spec:
   params:
     - name: gitrevision

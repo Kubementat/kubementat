@@ -3,6 +3,8 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-event-listener-ingress
+  labels:
+    managed-by: kubementat
   annotations:
     kubernetes.io/tls-acme: 'true'
     cert-manager.io/cluster-issuer: letsencrypt
