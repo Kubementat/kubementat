@@ -29,6 +29,21 @@ echo
 
 echo "Setting up roles for tekton triggers ..."
 
+# this is used by all teams tekton-triggers-sa service-account via clusterrolebinding, see below
+echo "Setting up general tekton-triggers-bindings-and-interceptors-clusterrole ..."
+kubectl apply -f - <<EOF
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: tekton-triggers-bindings-and-interceptors-clusterrole
+  labels:
+    managed-by: kubementat
+rules:
+  # EventListeners need to be able to fetch any clustertriggerbindings
+- apiGroups: ["triggers.tekton.dev"]
+  resources: ["clustertriggerbindings", "clusterinterceptors", "interceptors"]
+  verbs: ["get", "list", "watch"]
+EOF
 
 # service account for controlling tekton triggers
 echo "Setting tekton-triggers-sa in namespace: $PIPELINE_NAMESPACE ..."
@@ -39,6 +54,7 @@ metadata:
   name: tekton-triggers-sa
   labels:
     managed-by: kubementat
+    team: $TEAM
 EOF
 
 # role granting access to all resources needed to process triggers
@@ -50,6 +66,7 @@ metadata:
   name: tekton-triggers-role
   labels:
     managed-by: kubementat
+    team: $TEAM
 rules:
 # EventListeners need to be able to fetch all namespaced resources
 - apiGroups: ["triggers.tekton.dev"]
@@ -86,6 +103,7 @@ metadata:
   name: tekton-triggers-sa-to-role-binding
   labels:
     managed-by: kubementat
+    team: $TEAM
 subjects:
 - kind: ServiceAccount
   name: tekton-triggers-sa
@@ -95,29 +113,15 @@ roleRef:
   name: tekton-triggers-role
 EOF
 
-echo "Setting up tekton-triggers-bindings-and-interceptors-clusterrole ..."
+echo "Binding tekton-triggers-sa to tekton-triggers-bindings-and-interceptors-clusterrole for team: $TEAM ..."
 kubectl apply -f - <<EOF
-kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: tekton-triggers-bindings-and-interceptors-clusterrole
-  labels:
-    managed-by: kubementat
-rules:
-  # EventListeners need to be able to fetch any clustertriggerbindings
-- apiGroups: ["triggers.tekton.dev"]
-  resources: ["clustertriggerbindings", "clusterinterceptors", "interceptors"]
-  verbs: ["get", "list", "watch"]
-EOF
-
-echo "Binding tekton-triggers-sa to tekton-triggers-bindings-and-interceptors-clusterrole in namespace $PIPELINE_NAMESPACE ..."
-kubectl apply -n "$PIPELINE_NAMESPACE" -f - <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: tekton-triggers-sa-to-tekton-triggers-bindings-and-interceptors-clusterrole-binding
+  name: tekton-triggers-sa-to-tekton-triggers-bindings-and-interceptors-clusterrole-binding-$TEAM
   labels:
     managed-by: kubementat
+    team: $TEAM
 subjects:
 - kind: ServiceAccount
   name: tekton-triggers-sa
@@ -137,6 +141,7 @@ metadata:
   name: tekton-triggers-createwebhook-role
   labels:
     managed-by: kubementat
+    team: $TEAM
 rules:
 - apiGroups:
   - ""
@@ -178,6 +183,7 @@ metadata:
   name: tekton-triggers-createwebhook-sa
   labels:
     managed-by: kubementat
+    team: $TEAM
 EOF
 
 echo "Binding tekton-triggers-createwebhook-sa to tekton-triggers-createwebhook-role in namespace $PIPELINE_NAMESPACE ..."
@@ -188,6 +194,7 @@ metadata:
   name: tekton-triggers-createwebhook-rolebinding
   labels:
     managed-by: kubementat
+    team: $TEAM
 subjects:
   - kind: ServiceAccount
     name: tekton-triggers-createwebhook-sa
@@ -217,6 +224,7 @@ metadata:
   name: gitlab-trigger-webhook-secret
   labels:
     managed-by: kubementat
+    team: $TEAM
 type: Opaque
 data:
   secretToken: |
@@ -238,6 +246,7 @@ metadata:
   name: github-trigger-webhook-secret
   labels:
     managed-by: kubementat
+    team: $TEAM
 type: Opaque
 data:
   secretToken: |
