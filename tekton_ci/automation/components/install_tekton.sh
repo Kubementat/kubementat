@@ -44,6 +44,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: helm-deployer-cluster-role
+  labels:
+    managed-by: kubementat
 rules:
 # TODO: implement more fine grained access
 - apiGroups: ["", "rbac.authorization.k8s.io", "networking.k8s.io", "batch", "extensions", "apps", "autoscaling", "tekton.dev", "resolution.tekton.dev"]
