@@ -116,4 +116,4 @@ echo "###################################"
 echo
 echo "Please configure the git webhook url within the according repo:"
 echo "Hook URL: https://${APP_NAME}-${TRIGGER_TYPE}.trigger-hooks.${TEAM}.${BASE_DOMAIN}"
-echo "You can find the secret to configure in: platform_config/$ENVIRONMENT/static.encrypted.json -> GITLAB_WEBHOOK_SECRET / GITHUB_WEBHOOK_SECRET"
+echo "You can find the secret to configure in: platform_config/$ENVIRONMENT/$TEAM/static.encrypted.json -> GITLAB_WEBHOOK_SECRET / GITHUB_WEBHOOK_SECRET"
