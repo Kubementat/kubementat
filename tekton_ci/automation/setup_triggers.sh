@@ -20,7 +20,7 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-TEKTON_NAMESPACE="$(jq -r '.TEKTON_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+TEKTON_NAMESPACE="tekton-pipelines"
 PIPELINE_NAMESPACE="$(jq -r '.PIPELINE_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
 
 echo "ENVIRONMENT: $ENVIRONMENT"

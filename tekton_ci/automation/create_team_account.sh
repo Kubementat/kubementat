@@ -59,7 +59,7 @@ echo "#########################"
 echo "Loading configuration from platform_config ..."
 APP_DEPLOYMENT_NAMESPACE="$(jq -r '.APP_DEPLOYMENT_NAMESPACE' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.json")"
 PIPELINE_NAMESPACE="$(jq -r '.PIPELINE_NAMESPACE' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.json")"
-TEKTON_NAMESPACE="$(jq -r '.TEKTON_NAMESPACE' "../../platform_config/${ENVIRONMENT}/static.json")"
+TEKTON_NAMESPACE="tekton-pipelines"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "APP_DEPLOYMENT_NAMESPACE: $APP_DEPLOYMENT_NAMESPACE"

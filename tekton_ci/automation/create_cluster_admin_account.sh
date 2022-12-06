@@ -110,7 +110,7 @@ ROLE_NAME="cluster-admin"
 # EOF
 # done
 
-# kubectl apply -n "$TEKTON_NAMESPACE" -f - <<EOF
+# kubectl apply -n "tekton-pipelines" -f - <<EOF
 # apiVersion: rbac.authorization.k8s.io/v1
 # kind: RoleBinding
 # metadata:

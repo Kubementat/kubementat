@@ -21,14 +21,20 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-TEKTON_NAMESPACE="$(jq -r '.TEKTON_NAMESPACE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+TEKTON_NAMESPACE="tekton-pipelines"
+TEKTON_VERSION_PIPELINE="$(jq -r '.TEKTON_VERSION_PIPELINE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+TEKTON_VERSION_TRIGGERS="$(jq -r '.TEKTON_VERSION_TRIGGERS' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+TEKTON_VERSION_DASHBOARD="$(jq -r '.TEKTON_VERSION_DASHBOARD' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "TEKTON_NAMESPACE: $TEKTON_NAMESPACE"
+echo "TEKTON_VERSION_PIPELINE: $TEKTON_VERSION_PIPELINE"
+echo "TEKTON_VERSION_TRIGGERS: $TEKTON_VERSION_TRIGGERS"
+echo "TEKTON_VERSION_DASHBOARD: $TEKTON_VERSION_DASHBOARD"
 echo "#########################"
 
-# install tekton crs
-kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/latest/release.yaml
+# install tekton pipeline resources
+kubectl apply -f "https://storage.googleapis.com/tekton-releases/pipeline/previous/v${TEKTON_VERSION_PIPELINE}/release.yaml"
 
 # this will allow access to the needed resources for helm deployments
 # and allow to request tekton resources
@@ -55,7 +61,7 @@ kubectl get sc
 echo "########################"
 echo "Configuring tekton-dashboard..."
 # install tekton dashboard
-kubectl apply -n "$TEKTON_NAMESPACE" -f https://storage.googleapis.com/tekton-releases/dashboard/latest/tekton-dashboard-release.yaml
+kubectl apply -n "$TEKTON_NAMESPACE" -f "https://storage.googleapis.com/tekton-releases/dashboard/previous/v${TEKTON_VERSION_DASHBOARD}/tekton-dashboard-release.yaml"
 
 # OPTIONAL: configure tekton dashboard
 # TEKTON_DASHBOARD_URL="dashboard.domain.tld"
@@ -86,5 +92,5 @@ kubectl apply -n "$TEKTON_NAMESPACE" -f https://storage.googleapis.com/tekton-re
 # EOF
 
 # install tekton triggers
-kubectl apply -n "$TEKTON_NAMESPACE" -f https://storage.googleapis.com/tekton-releases/triggers/latest/release.yaml
-kubectl apply -n "$TEKTON_NAMESPACE" -f https://storage.googleapis.com/tekton-releases/triggers/latest/interceptors.yaml
+kubectl apply -n "$TEKTON_NAMESPACE" -f "https://storage.googleapis.com/tekton-releases/triggers/previous/v${TEKTON_VERSION_TRIGGERS}/release.yaml"
+kubectl apply -n "$TEKTON_NAMESPACE" -f "https://storage.googleapis.com/tekton-releases/triggers/previous/v${TEKTON_VERSION_TRIGGERS}/interceptors.yaml"

@@ -28,7 +28,7 @@ echo ""
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-TEKTON_NAMESPACE="$(jq -r '.TEKTON_NAMESPACE' platform_config/"${ENVIRONMENT}"/static.json)"
+TEKTON_NAMESPACE="tekton-pipelines"
 LOKI_DEPLOYMENT_NAMESPACE="loki"
 PROMETHEUS_DEPLOYMENT_NAMESPACE="prometheus"
 GRAFANA_DEPLOYMENT_NAMESPACE="grafana"
