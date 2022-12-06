@@ -45,11 +45,13 @@ kubectl create namespace $APP_DEPLOYMENT_NAMESPACE || true
 echo "#########################"
 echo "Configuring deployer ssh key secret..."
 GIT_DEPLOYER_PRIVATE_KEY_BASE64="$(jq -r '.GIT_DEPLOYER_PRIVATE_KEY_BASE64' ../../platform_config/"${ENVIRONMENT}"/static.encrypted.json)"
-kubectl apply -n $PIPELINE_NAMESPACE -f - <<EOF
+kubectl apply -n "$PIPELINE_NAMESPACE" -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
   name: git-deployer-ssh-key
+  labels:
+    managed-by: kubementat
 type: kubernetes.io/ssh-auth
 data:
   ssh-privatekey: >-
@@ -62,11 +64,13 @@ EOF
 echo "#########################"
 echo "Configuring deployer gpg key secret..."
 GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64_DOUBLE_ENCODED="$(jq -r '.GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64 | @base64' ../../platform_config/"${ENVIRONMENT}"/static.encrypted.json)"
-kubectl apply -n $PIPELINE_NAMESPACE -f - <<EOF
+kubectl apply -n "$PIPELINE_NAMESPACE" -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
   name: git-deployer-gpg-key
+  labels:
+    managed-by: kubementat
 type: Opaque
 data:
   private-key: >-
@@ -75,19 +79,23 @@ EOF
 
 echo "#########################"
 echo "Configuring $HELM_DEPLOYER_SERVICE_ACCOUNT_NAME service account in namespace $PIPELINE_NAMESPACE ..."
-kubectl apply -n $PIPELINE_NAMESPACE -f - <<EOF
+kubectl apply -n "$PIPELINE_NAMESPACE" -f - <<EOF
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: $HELM_DEPLOYER_SERVICE_ACCOUNT_NAME
+  labels:
+    managed-by: kubementat
 EOF
 
 echo "Configuring helm-deployer-role-binding-app-deployment for $HELM_DEPLOYER_SERVICE_ACCOUNT_NAME and helm-deployer-cluster-role for target namespace $APP_DEPLOYMENT_NAMESPACE ..."
-kubectl apply -n $APP_DEPLOYMENT_NAMESPACE -f - <<EOF
+kubectl apply -n "$APP_DEPLOYMENT_NAMESPACE" -f - <<EOF
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: helm-deployer-role-binding-app-deployment
+  labels:
+    managed-by: kubementat
 subjects:
 - kind: ServiceAccount
   name: $HELM_DEPLOYER_SERVICE_ACCOUNT_NAME
@@ -104,6 +112,8 @@ kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: helm-deployer-role-binding-pipeline-namespace-access
+  labels:
+    managed-by: kubementat
 subjects:
 - kind: ServiceAccount
   name: $HELM_DEPLOYER_SERVICE_ACCOUNT_NAME
@@ -116,19 +126,19 @@ EOF
 
 echo "#########################"
 echo "Configuring tasks..."
-kubectl apply -n $PIPELINE_NAMESPACE -f ../tasks/
+kubectl apply -n "$PIPELINE_NAMESPACE" -f ../tasks/
 
 echo "#########################"
 echo "Configuring pipelines..."
-kubectl apply -n $PIPELINE_NAMESPACE -f ../pipelines/
+kubectl apply -n "$PIPELINE_NAMESPACE" -f ../pipelines/
 
 echo "########################"
 echo "Tasks:"
-kubectl get tasks -n $PIPELINE_NAMESPACE
+kubectl get tasks -n "$PIPELINE_NAMESPACE"
 
 echo "########################"
 echo "Pipelines:"
-kubectl get pipelines -n $PIPELINE_NAMESPACE
+kubectl get pipelines -n "$PIPELINE_NAMESPACE"
 
 # list namespaces
 echo "########################"
@@ -138,10 +148,10 @@ kubectl get ns
 # list role config
 echo "########################"
 echo "Role Configuration:"
-kubectl -n $PIPELINE_NAMESPACE get serviceaccounts
-kubectl -n $APP_DEPLOYMENT_NAMESPACE describe rolebinding helm-deployer-role-binding-app-deployment
+kubectl -n "$PIPELINE_NAMESPACE" get serviceaccounts
+kubectl -n "$APP_DEPLOYMENT_NAMESPACE" describe rolebinding helm-deployer-role-binding-app-deployment
 
 # list secrets
 echo "########################"
 echo "Secrets:"
-kubectl get secrets -n $PIPELINE_NAMESPACE
+kubectl get secrets -n "$PIPELINE_NAMESPACE"
