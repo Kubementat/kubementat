@@ -23,38 +23,54 @@ set -eu
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-LINKERD_NAMESPACE="$(jq -r '.LINKERD_NAMESPACE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
-LINKERD_VIZ_NAMESPACE="$(jq -r '.LINKERD_VIZ_NAMESPACE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+LINKERD_NAMESPACE="linkerd"
+LINKERD_VIZ_NAMESPACE="linkerd-viz"
+LINKERD_HA_ENABLED="$(jq -r '.LINKERD_HA_ENABLED' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "LINKERD_NAMESPACE: $LINKERD_NAMESPACE"
 echo "LINKERD_VIZ_NAMESPACE: $LINKERD_VIZ_NAMESPACE"
+echo "LINKERD_HA_ENABLED: $LINKERD_HA_ENABLED"
 echo "#########################"
 
+linkerd_ha_option=""
+if [[ "$LINKERD_HA_ENABLED" == "true" ]]; then
+  linkerd_ha_option="--ha"
+fi
+
 set +e
+echo "Checking linkerd namespace presence ..."
 linkerd_namespace_present="$(kubectl get ns | grep linkerd)"
 set -e
 
+echo "###################"
+echo "linkerd version:"
+linkerd version
+echo "###################"
+
 if [[ "$linkerd_namespace_present" == "" ]]; then
-  echo "Linkerd namespace not present. Installing freshly"
-  # install linkerd crs
-  # TODO: ensure that this script also succeeds when a previous install is present for linkerd:
-  # https://linkerd.io/2.10/tasks/upgrade/
-  # maybe: install via helm instead https://linkerd.io/2.10/tasks/install-helm/
+  echo "Linkerd namespace not present. Installing freshly ..."
   linkerd check --pre
-  linkerd install | kubectl -n "$LINKERD_NAMESPACE" apply -f -
+  linkerd install --crds | kubectl -n "$LINKERD_NAMESPACE" apply -f -
+  linkerd install $linkerd_ha_option | kubectl -n "$LINKERD_NAMESPACE" apply -f -
   linkerd check
 
   # TODO: FIXME: use the existing prometheus for installing linkerd viz
   # alternatively configure platform prometheus to federate linkerd data from linkerd viz prometheus installation
   # linkerd viz install -f "../../../platform_config/${ENVIRONMENT}/linkerd/viz_config.encrypted.yaml" | kubectl apply -f -
+
+  # TODO: FEATURE: Install grafana???
+  # Docs: https://linkerd.io/2.12/tasks/grafana/
+  # helm values for grafanna: https://raw.githubusercontent.com/linkerd/linkerd2/main/grafana/values.yaml
   linkerd viz install | kubectl apply -f -
 else
   if [[ "$UPDATE_ENABLED" == "true" ]]; then
-    echo "Linkerd Namespace present: Performing update..."
+    # Upgrade Docs: https://linkerd.io/2.12/tasks/upgrade/
+    echo "Linkerd Namespace present: Performing update ..."
     curl -sL https://run.linkerd.io/install | sh
 
-    linkerd upgrade | kubectl apply --prune -l linkerd.io/control-plane-ns="$LINKERD_NAMESPACE" -f -
+    # linkerd install --crds | kubectl -n "$LINKERD_NAMESPACE" apply -f -
+    linkerd upgrade $linkerd_ha_option | kubectl apply --prune -l linkerd.io/control-plane-ns="$LINKERD_NAMESPACE" -f -
     linkerd check
     linkerd version
 
@@ -64,6 +80,8 @@ else
 
     linkerd viz install | kubectl apply -f -
   else
+    echo "###################"
     echo "Update disabled. Skipping script execution."
+    echo "###################"
   fi
 fi

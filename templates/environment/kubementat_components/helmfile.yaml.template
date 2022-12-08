@@ -183,7 +183,7 @@ releases:
 #     component: service_mesh
 #     group: additional
 #   values:
-#     - linkerd/linkerd_crds_values.encrypted.yaml
+#     - linkerd/linkerd_control_plane_values.encrypted.yaml
 
 - name: kubernetes-dashboard
   chart: kubernetes-dashboard/kubernetes-dashboard

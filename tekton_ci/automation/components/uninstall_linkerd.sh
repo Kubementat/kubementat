@@ -19,8 +19,8 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-LINKERD_NAMESPACE="$(jq -r '.LINKERD_NAMESPACE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
-LINKERD_VIZ_NAMESPACE="$(jq -r '.LINKERD_VIZ_NAMESPACE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+LINKERD_NAMESPACE="linkerd"
+LINKERD_VIZ_NAMESPACE="linkerd-viz"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo ""

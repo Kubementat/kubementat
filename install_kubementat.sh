@@ -129,7 +129,7 @@ print_configuring_section "Tekton CI"
 # linkerd
 if [[ "$COMPONENT_ENABLED_LINKERD" == "true" ]]; then
   print_configuring_section "Linkerd service mesh"
-  ./install_linkerd.sh "${ENVIRONMENT}"
+  ./install_linkerd.sh "${ENVIRONMENT}" "false"
 else
   print_skip_section "COMPONENT_ENABLED_LINKERD"
 fi
