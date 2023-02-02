@@ -68,6 +68,7 @@ kubectl run ubuntu-ci -i --tty --image="docker.io/julianweberdev/ubuntu-ci-minim
 # install kubectl
 # install helm
 # install helmfile
+# install helm diff plugin -> helm plugin install https://github.com/databus23/helm-diff
 # install tkn cli
 # install linkerd cli
 ```
