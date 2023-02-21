@@ -1,0 +1,72 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: skopeo-inspect
+spec:
+  description: |
+    Skopeo is a command line tool for working with remote image registries.
+    This task inspect a given docker image
+
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder with the dockerfile and context.
+    mountPath: /workspace
+
+  params:
+    - name: image-url
+      description: |
+         URL of the image to be inspected
+         e.g.: docker://registry.fedoraproject.org/fedora:latest
+      type: string
+    - name: docker-registry-username
+      description: The docker registry username
+      default: ""
+      type: string
+    - name: docker-registry-secret-key-filepath
+      description: The docker registry secret filepath within the platform_ config for logging into the source docker registry
+      default: ""
+      type: string
+
+    # standard CI image config
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+    - name: docker-registry-secret-name
+      description: The docker registry secret name for logging into the docker registry
+      default: "docker-registry-secret"
+    - name: tekton-ci-image-name
+      description: The image name to use for the automation run
+      default: "ubuntu-ci-minimal"
+    - name: tekton-ci-image-tag
+      description: The image tag to use for the automation run
+      default: "latest"
+  steps:
+    - name: skopeo-inspect
+      env:
+      - name: HOME
+        value: /tekton/home
+      - name: IMAGE_URL
+        value: "$(params.image-url)"
+      - name: DOCKER_REGISTRY_SECRET_KEY_FILEPATH
+        value: "$(params.docker-registry-secret-key-filepath)"
+      - name: USERNAME
+        value: "$(params.docker-registry-username)"
+
+      image: quay.io/skopeo/stable
+      script: |
+        echo "Image URL:"
+        echo "$IMAGE_URL"
+
+        echo ""
+        if [[ "$DOCKER_REGISTRY_SECRET_KEY_FILEPATH" != "" ]]; then
+          echo "Using key filepath: $DOCKER_REGISTRY_SECRET_KEY_FILEPATH"
+          echo ""
+          skopeo inspect "$IMAGE_URL" --creds "${USERNAME}:$(cat $DOCKER_REGISTRY_SECRET_KEY_FILEPATH)"
+        else
+          echo "Using no authentication for the inspect."
+          skopeo inspect "$IMAGE_URL"
+        fi
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
