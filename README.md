@@ -135,6 +135,18 @@ Now you need to push your repository to your upstream git repo and configure the
 # Install the tekton tooling on your cluster
 ./install_kubementat.sh dev dev1
 
+# If you are using a private docker registry ensure to run
+pushd tekton_ci/automation/
+./configure_docker_registry_access.sh dev dev1
+popd
+
+# Optional (but recommmended)
+# Configure cluster wide auto cleanup of finished tekton pipeline runs
+# This is implemented via Kubernetes cronjob
+pushd tekton_ci/automation/
+./setup_tekton_pipelinerun_cleanup_job.sh dev
+popd
+
 # Test run a pipeline via tekton
 pushd tekton_ci/automation/
 ./run_pipeline.sh dev dev1 ../pipeline-runs/hello-world-pipeline-run.yml
@@ -144,3 +156,7 @@ popd
 pushd utilities
 ./open_tekton_dashboard_tunnel.sh dev
 ```
+
+## Additional Features
+- Routing: Kubementat provides templated configuration for configuring nginx ingress controller and cert-manager for ingress routing (see install_routing.sh)
+- Helmfile based component installation: See templates/environment/kubementat_components/helmfile.yaml.template for already preconfigured/templated components
