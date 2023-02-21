@@ -1,0 +1,70 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: helmfile-cli
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder to list files.
+    mountPath: /workspace
+  params:
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+    - name: tekton-ci-image-name
+      description: The image name to use for the automation run
+      default: "ubuntu-ci-minimal"
+    - name: tekton-ci-image-tag
+      description: The image tag to use for the automation run
+      default: "latest"
+    - name: helmfile-configuration-file-path
+      description: The path to the helmfile configuration yaml to apply
+    - name: helmfile-working-dir
+      description: The directory to use as working dir for helmfile execution
+    - name: helmfile-subcommand
+      description: The subcommand of helmfile to execute
+      default: "status"
+    - name: helmfile-extra-args
+      description: You can provide a list of additional args here "e.g. '--color --selector group=standard'"
+      default: ""
+  steps:
+    - name: helmfile
+      resources:
+        requests:
+          memory: 64Mi
+          cpu: 100m
+        limits:
+          memory: 512Gi
+          cpu: 5000m
+      image: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+      workingDir: $(params.helmfile-working-dir)
+      env:
+        - name: WORKSPACE_PATH
+          value: "$(workspaces.workspace.path)"
+        - name: HELMFILE_CONFIGURATION_FILE_PATH
+          value: "$(params.helmfile-configuration-file-path)"
+        - name: HELMFILE_WORKING_DIR
+          value: "$(params.helmfile-working-dir)"
+        - name: HELMFILE_EXTRA_ARGS
+          value: "$(params.helmfile-extra-args)"
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+        echo "#####################"
+        echo "HELM VERSION:"
+        helm version
+        echo "HELMFILE VERSION:"
+        helmfile version
+        echo "#####################"
+
+        echo "WORKSPACE_PATH: $WORKSPACE_PATH"
+        echo "HELMFILE_WORKING_DIR: $HELMFILE_WORKING_DIR"
+        echo "HELMFILE_CONFIGURATION_FILE_PATH: $HELMFILE_CONFIGURATION_FILE_PATH"
+        echo ""
+        echo "Subcommand: $(params.helmfile-subcommand)"
+        echo "Extra arguments: $HELMFILE_EXTRA_ARGS"
+        echo ""
+
+        pushd $HELMFILE_WORKING_DIR
+
+        helmfile $(params.helmfile-subcommand) $HELMFILE_EXTRA_ARGS -f $HELMFILE_CONFIGURATION_FILE_PATH
