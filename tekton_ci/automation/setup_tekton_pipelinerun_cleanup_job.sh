@@ -67,7 +67,6 @@ metadata:
     managed-by: kubementat
 EOF
 
-# HINT: Please ensure to run the configure_docker_registry_access.sh script for settign up the docker secret before
 full_patch_json="{\"imagePullSecrets\":[{\"name\":\"docker-registry-secret\"}]}"
 echo "Patching tekton-cleaner Service Account with:"
 echo "$full_patch_json"
