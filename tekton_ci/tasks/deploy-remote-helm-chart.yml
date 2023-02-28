@@ -83,6 +83,8 @@ spec:
         echo "HELM_OVERWRITE_VALUES: $HELM_OVERWRITE_VALUES"
         echo "HELM_TIMEOUT: $HELM_TIMEOUT"
         echo "########################"
+        echo "kubectl version:"
+        kubectl version
         echo "Helm version:"
         helm version
         echo "########################"

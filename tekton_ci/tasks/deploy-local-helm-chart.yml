@@ -91,7 +91,9 @@ spec:
         echo "helm-deployment-name: $HELM_DEPLOYMENT_NAME"
         echo "helm-timeout: $HELM_TIMEOUT"
         echo "########################"
-        echo "Helm version:"
+        echo "kubectl version:"
+        kubectl version
+        echo "helm version:"
         helm version
         echo "########################"
 

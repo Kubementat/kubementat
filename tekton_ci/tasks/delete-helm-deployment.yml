@@ -51,6 +51,8 @@ spec:
         echo "K8S_NAMESPACE: $K8S_NAMESPACE"
         echo "HELM_DEPLOYMENT_NAME: $HELM_DEPLOYMENT_NAME"
         echo "########################"
+        echo "kubectl version:"
+        kubectl version
         echo "Helm version:"
         helm version
         echo "########################"

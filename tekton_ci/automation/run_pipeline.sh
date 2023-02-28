@@ -67,6 +67,11 @@ echo "AUTOMATION_GIT_SERVER_PORT: $AUTOMATION_GIT_SERVER_PORT"
 echo "AUTOMATION_GIT_SERVER_SSH_USER: $AUTOMATION_GIT_SERVER_SSH_USER"
 echo ""
 echo "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME: $HELM_DEPLOYER_SERVICE_ACCOUNT_NAME"
+echo ""
+echo "KUBECTL version:"
+kubectl version
+echo "TKN version:"
+tkn version
 echo "#########################"
 
 echo "Running pipeline run file $PIPELINE_RUN_FILE in $PIPELINE_NAMESPACE namespace ..."
