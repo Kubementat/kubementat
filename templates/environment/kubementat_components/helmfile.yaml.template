@@ -81,6 +81,7 @@ releases:
   namespace: prometheus
   labels:
     component: monitoring
+    component_name: prometheus
     group: standard
   # as the prometheus-server pod will fail while starting up when not configured for ha mode (see https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus/values.yaml#L1044)
   recreatePods: true
@@ -94,6 +95,7 @@ releases:
   namespace: prometheus
   labels:
     component: monitoring
+    component_name: prometheus-blackbox-exporter
     group: standard
   values:
     - monitoring/prometheus_blackbox_exporter_values.encrypted.yaml
@@ -104,6 +106,7 @@ releases:
   namespace: prometheus
   labels:
     component: monitoring
+    component_name: prometheus-helm-exporter
     group: standard
   values:
     - monitoring/prometheus_helm_exporter_values.encrypted.yaml
@@ -114,6 +117,7 @@ releases:
   namespace: grafana
   labels:
     component: monitoring
+    component_name: grafana
     group: standard
   values:
     - monitoring/grafana_values.encrypted.yaml
@@ -127,6 +131,7 @@ releases:
   namespace: loki
   labels:
     component: logging
+    component_name: loki
     group: standard
   values:
     - logging/loki_stack_values.encrypted.yaml
@@ -138,6 +143,7 @@ releases:
   namespace: polaris
   labels:
     component: analytics
+    component_name: polaris
     group: standard
   values:
     - polaris/values.encrypted.yaml
@@ -149,6 +155,7 @@ releases:
   namespace: cert-manager
   labels:
     component: routing
+    component_name: cert-manager
     group: routing
   values:
     - routing/cert_manager.encrypted.yaml
@@ -159,6 +166,7 @@ releases:
   namespace: nginx-ingress
   labels:
     component: routing
+    component_name: nginx-ingress
     group: routing
   values:
     - routing/nginx_ingress_controller.encrypted.yaml
@@ -171,6 +179,7 @@ releases:
 #   namespace: linkerd
 #   labels:
 #     component: service_mesh
+#     component_name: linkerd-crds
 #     group: additional
 #   values:
 #     - linkerd/linkerd_crds_values.encrypted.yaml
@@ -181,6 +190,7 @@ releases:
 #   namespace: linkerd
 #   labels:
 #     component: service_mesh
+#     component_name: linkerd-control-plane
 #     group: additional
 #   values:
 #     - linkerd/linkerd_control_plane_values.encrypted.yaml
@@ -190,6 +200,7 @@ releases:
   namespace: kubernetes-dashboard
   labels:
     component: dashboard
+    component_name: kubernetes-dashboard
     group: dashboard
   values:
     - kubernetes_dashboard/values.encrypted.yaml
@@ -200,6 +211,7 @@ releases:
   namespace: vault
   labels:
     component: secret_management
+    component_name: vault
     group: extra
   values:
     - vault/vault_values.encrypted.yaml
@@ -210,6 +222,7 @@ releases:
   namespace: gitlab
   labels:
     component: git
+    component_name: gitlab
     group: extra
   values:
     - gitlab/values.encrypted.yaml
@@ -220,6 +233,7 @@ releases:
   namespace: gitbucket
   labels:
     component: git
+    component_name: gitbucket
     group: extra
   values:
     - gitbucket/values.encrypted.yaml
@@ -230,6 +244,7 @@ releases:
   namespace: gitea
   labels:
     component: git
+    component_name: gitea
     group: extra
   values:
     - gitea/values.encrypted.yaml
@@ -240,6 +255,7 @@ releases:
   namespace: registry
   labels:
     component: docker
+    component_name: registry
     group: extra
   values:
     - docker_registry/values.encrypted.yaml
@@ -250,6 +266,7 @@ releases:
 #   namespace: mailu
 #   labels:
 #     component: mail
+#     component_name: mailu
 #     group: extra
 #   values:
 #     - mailu/values.encrypted.yaml
@@ -260,6 +277,7 @@ releases:
 #   namespace: kube-system
 #   labels:
 #     component: dns
+#     component_name: coredns
 #     group: extra
 #   values:
 #     - coredns/values.encrypted.yaml
@@ -270,6 +288,7 @@ releases:
 #   namespace: wekan
 #   labels:
 #     component: kanban
+#     component_name: wekan
 #     group: extra
 #   values:
 #     - wekan/values.encrypted.yaml

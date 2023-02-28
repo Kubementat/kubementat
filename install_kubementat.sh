@@ -136,7 +136,7 @@ fi
 
 date
 # helmfile apply
-./helmfile_apply.sh "${ENVIRONMENT}" "${HELMFILE_INSTALLATION_GROUP}" "true"
+./helmfile_apply.sh "${ENVIRONMENT}" "group=${HELMFILE_INSTALLATION_GROUP}" "true"
 
 popd > /dev/null
 

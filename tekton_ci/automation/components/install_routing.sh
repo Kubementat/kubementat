@@ -27,7 +27,7 @@ CLUSTER_MANAGER_EMAIL="$(jq -r '.CLUSTER_MANAGER_EMAIL' ../../../platform_config
 #### helmfile apply
 date
 # helmfile apply
-./helmfile_apply.sh "${ENVIRONMENT}" "routing" "true"
+./helmfile_apply.sh "${ENVIRONMENT}" 'group=routing' "true"
 
 ########## LETSENCRYPT CLUSTER ISSUER ################
 echo "Configuring Cluster Issuers for letsencrypt..."

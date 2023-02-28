@@ -34,7 +34,7 @@ echo ""
 echo "#########################"
 
 #### helmfile apply
-./helmfile_apply.sh "${ENVIRONMENT}" "dashboard" "false"
+./helmfile_apply.sh "${ENVIRONMENT}" 'group=dashboard' "false"
 
 echo "Configuring service account for dashboard access ..."
 
