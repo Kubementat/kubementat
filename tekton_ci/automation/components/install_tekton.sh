@@ -63,7 +63,7 @@ kubectl get sc
 echo "########################"
 echo "Configuring tekton-dashboard..."
 # install tekton dashboard
-kubectl apply -n "$TEKTON_NAMESPACE" -f "https://storage.googleapis.com/tekton-releases/dashboard/previous/v${TEKTON_VERSION_DASHBOARD}/tekton-dashboard-release.yaml"
+kubectl apply -n "$TEKTON_NAMESPACE" -f "https://storage.googleapis.com/tekton-releases/dashboard/previous/v${TEKTON_VERSION_DASHBOARD}/release-full.yaml"
 
 # OPTIONAL: configure tekton dashboard
 # TEKTON_DASHBOARD_URL="dashboard.domain.tld"
