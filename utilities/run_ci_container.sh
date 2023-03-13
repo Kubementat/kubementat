@@ -17,6 +17,12 @@ if [[ "$ENVIRONMENT" == "" || "$NAMESPACE" == "" ]]; then
   exit 1
 fi
 
+echo "#########################"
+echo "Current kubectl context:"
+kubectl config current-context
+echo "#########################"
+echo ""
+
 DOCKER_REGISTRY_BASE_URL="$(jq -r '.DOCKER_REGISTRY_BASE_URL' ../platform_config/"${ENVIRONMENT}"/static.json)"
 TEKTON_CI_IMAGE_NAME="$(jq -r '.TEKTON_CI_IMAGE_NAME' ../platform_config/"${ENVIRONMENT}"/static.json)"
 TEKTON_CI_IMAGE_TAG="$(jq -r '.TEKTON_CI_IMAGE_TAG' ../platform_config/"${ENVIRONMENT}"/static.json)"

@@ -2,24 +2,14 @@
 
 #################################
 #
-# Opens a tunnel connection to the tekton dashboard for the given environment
+# Opens a tunnel connection to the tekton dashboard for the currently selected kubectl context
 #
 ################################
-
-ENVIRONMENT="$1"
-if [[ "$ENVIRONMENT" == "" ]]; then
-  echo "Usage: open_tekton_dashboard_tunnel.sh <ENVIRONMENT_NAME>"
-  echo "e.g.: open_tekton_dashboard_tunnel.sh dev"
-  exit 1
-fi
-
 set -eu
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
 TEKTON_NAMESPACE="tekton-pipelines"
-
-echo "ENVIRONMENT: $ENVIRONMENT"
 echo "TEKTON_NAMESPACE: $TEKTON_NAMESPACE"
 echo "#########################"
 

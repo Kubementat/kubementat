@@ -16,6 +16,12 @@ if [[ "$5" != "" ]]; then
   ADDRESS="$5"
 fi
 
+echo "#########################"
+echo "Current kubectl context:"
+kubectl config current-context
+echo "#########################"
+echo ""
+
 if [[ "$NAMESPACE" == "" || "$POD_NAME" == "" || "$LOCAL_PORT" == "" || "$REMOTE_PORT" == "" ]]; then
   echo "Usage: open_pod_tunnel.sh <NAMESPACE> <POD_NAME> <LOCAL_PORT> <REMOTE_PORT> <optional: ADDRESS (default 0.0.0.0)>"
   echo "e.g.: open_pod_tunnel.sh dev1 mysql-0 3306 3306"

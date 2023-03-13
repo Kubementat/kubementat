@@ -26,6 +26,10 @@ echo "KUBERNETES_DASHBOARD_DEPLOYMENT_NAMESPACE: $KUBERNETES_DASHBOARD_DEPLOYMEN
 echo "KUBERNETES_DASHBOARD_DEPLOYMENT_NAME: $KUBERNETES_DASHBOARD_DEPLOYMENT_NAME"
 echo "#########################"
 echo ""
+echo "Current kubectl context:"
+kubectl config current-context
+echo "#########################"
+echo ""
 
 echo "Helm information:"
 helm -n "$KUBERNETES_DASHBOARD_DEPLOYMENT_NAMESPACE" status "$KUBERNETES_DASHBOARD_DEPLOYMENT_NAME"
