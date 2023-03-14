@@ -95,7 +95,7 @@ spec:
         # add the helm repo if specfied
         if [[ "$CHART_REPOSITORY_NAME" != ""  && "$CHART_REPOSITORY_URL" != "" ]]; then
           echo "Adding repository: $CHART_REPOSITORY_NAME $CHART_REPOSITORY_URL"
-          helm repo add "$CHART_REPOSITORY_NAME" "$$CHART_REPOSITORY_URL"
+          helm repo add "$CHART_REPOSITORY_NAME" "$CHART_REPOSITORY_URL"
         else
           echo "No repository information specified. Skipping repository addition."
         fi

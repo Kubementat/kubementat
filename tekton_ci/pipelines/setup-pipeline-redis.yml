@@ -101,20 +101,37 @@ spec:
       runAfter:
         - git-clone-automation
       taskRef:
-        name: run-automation-script-for-environment
+        name: deploy-remote-helm-chart
       params:
+        - name: environment
+          value: "$(params.environment)"
+        - name: team
+          value: "$(params.team)"
+
         - name: docker-registry-base-url
           value: "$(params.docker-registry-base-url)"
         - name: tekton-ci-image-name
           value: "$(params.tekton-ci-image-name)"
         - name: tekton-ci-image-tag
           value: "$(params.tekton-ci-image-tag)"
-        - name: path-to-automation-script
-          value: "/workspace/$(params.automation-git-project-name)/tekton_ci/scripts/install_redis_helm_chart.sh"
-        - name: environment
-          value: "$(params.environment)"
-        - name: team
+
+        # helm configuration
+        - name: helm-timeout
+          value: "15m"
+        - name: path-to-values-file
+          value: "$(workspaces.workspace.path)/$(params.automation-git-project-name)/platform_config/$(params.environment)/$(params.team)/redis/values.encrypted.yaml"
+        - name: chart-repository-name
+          value: "bitnami"
+        - name: chart-repository-url
+          value: "https://charts.bitnami.com/bitnami"
+        - name: chart-name
+          value: "bitnami/redis"
+        - name: chart-version
+          value: "17.2.0"
+        - name: k8s-namespace
           value: "$(params.team)"
+        - name: helm-deployment-name
+          value: "redis"
       workspaces:
         - name: workspace
           workspace: pipeline-workspace
