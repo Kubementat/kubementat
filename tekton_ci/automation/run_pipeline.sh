@@ -25,9 +25,9 @@ if [[ "$ENVIRONMENT" == "" || "$PIPELINE_RUN_FILE" == "" || "$TEAM" == "" ]]; th
   ls ../pipeline-runs/${TEAM}/*.yml
   echo "##############"
   echo "General pipeline runs:"
-  ls ../pipeline-runs/*.yml
+  ls ../pipeline-runs/*.yml ||true
   echo "##############"
-  exit 1
+  exit 0
 fi
 
 set -u
