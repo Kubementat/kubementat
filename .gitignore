@@ -3,3 +3,4 @@ deployer_ssh_key
 deployer_ssh_key.pub
 gpg_private.key
 gpg_public_key.gpg
+cli/commands/__pycache__

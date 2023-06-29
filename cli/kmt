@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+
+import os
+import click
+
+class Config(object):
+    def __init__(self):
+        self.home = os.path.abspath(os.path.dirname(__file__))
+        self.kubementat_main_dir = os.path.normpath(os.path.join(self.home, '../'))
+
+from commands import tunnels
+from commands import tekton
+from commands import utilities
+
+@click.group(help='Kubementat CLI')
+@click.pass_context
+def main(ctx):
+    ctx.obj = Config()
+
+if __name__ == '__main__':
+    # tunnels
+    main.add_command(tunnels.tunnel_grafana)
+    main.add_command(tunnels.tunnel_tekton)
+    main.add_command(tunnels.tunnel_polaris)
+
+    # tekton
+    main.add_command(tekton.tekton_run_pipeline)
+    main.add_command(tekton.tekton_cleanup_pipeline_runs)
+    main.add_command(tekton.tekton_configure_secrets)
+    main.add_command(tekton.tekton_configure_docker_registry_access)
+    main.add_command(tekton.tekton_setup_pipelines)
+    main.add_command(tekton.tekton_setup_triggers)
+    main.add_command(tekton.list)
+
+    # utilities
+    main.add_command(utilities.run_ci_container)
+
+    main()

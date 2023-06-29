@@ -1,0 +1,5 @@
+# to install:
+# pip install -r requirements.txt
+
+# CLI API
+click
