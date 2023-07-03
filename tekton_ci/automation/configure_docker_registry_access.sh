@@ -4,7 +4,7 @@
 #
 # This script adds an according secret for a docker registry within the provided environment and namespace
 # It creates the secrets in the pipeline and app namespaces for the given team
-# In addition it assigns the created secret to the service account with name from variable HELM_DEPLOYER_SERVICE_ACCOUNT_NAME
+# In addition it assigns the created secrets to the service account with name from variable HELM_DEPLOYER_SERVICE_ACCOUNT_NAME
 #
 #################################
 
@@ -49,38 +49,24 @@ PIPELINE_NAMESPACE="$(jq -r '.PIPELINE_NAMESPACE' ../../platform_config/"${ENVIR
 APP_DEPLOYMENT_NAMESPACE="$(jq -r '.APP_DEPLOYMENT_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
 HELM_DEPLOYER_SERVICE_ACCOUNT_NAME="$(jq -r '.HELM_DEPLOYER_SERVICE_ACCOUNT_NAME' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
 
-# e.g. https://index.docker.io/v1/ for dockerhub
-DOCKER_REGISTRY_AUTH_URL="$(jq -r '.DOCKER_REGISTRY_AUTH_URL' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
-DOCKER_REGISTRY_EMAIL="$(jq -r '.DOCKER_REGISTRY_EMAIL' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
-DOCKER_REGISTRY_USERNAME="$(jq -r '.DOCKER_REGISTRY_USERNAME' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
-DOCKER_REGISTRY_PASSWORD="$(jq -r '.DOCKER_REGISTRY_PASSWORD' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
-DOCKER_REGISTRY_SECRET_NAME="docker-registry-secret"
-
-ADDITIONAL_DOCKER_REGISTRY_CREDENTIALS="$(jq -r '.ADDITIONAL_DOCKER_REGISTRY_CREDENTIALS' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
+DOCKER_REGISTRY_CREDENTIALS="$(jq -r '.DOCKER_REGISTRY_CREDENTIALS' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "PIPELINE_NAMESPACE: $PIPELINE_NAMESPACE"
 echo "APP_DEPLOYMENT_NAMESPACE: $APP_DEPLOYMENT_NAMESPACE"
 echo "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME: $HELM_DEPLOYER_SERVICE_ACCOUNT_NAME"
-echo ""
-echo "DOCKER_REGISTRY_AUTH_URL: $DOCKER_REGISTRY_AUTH_URL"
-echo "DOCKER_REGISTRY_USERNAME: $DOCKER_REGISTRY_USERNAME"
-echo "DOCKER_REGISTRY_EMAIL: $DOCKER_REGISTRY_EMAIL"
-echo "DOCKER_REGISTRY_SECRET_NAME: $DOCKER_REGISTRY_SECRET_NAME"
 echo "#########################"
 
 # start constructing json array for service account patch calls
-image_pull_secrets_array="[{\"name\":\"$DOCKER_REGISTRY_SECRET_NAME\"}"
+image_pull_secrets_array=""
 
 # create default docker registry secrets in team namespace (e.g. dev1) and pipeline namespace (e.g. dev1-pipelines)
 for namespace in $APP_DEPLOYMENT_NAMESPACE $PIPELINE_NAMESPACE; do
   echo "#####################"
   echo "Configuring namespace: $namespace ..."
 
-  create_docker_secret "$namespace" "$DOCKER_REGISTRY_SECRET_NAME" "$DOCKER_REGISTRY_AUTH_URL" "$DOCKER_REGISTRY_USERNAME" "$DOCKER_REGISTRY_PASSWORD" "$DOCKER_REGISTRY_EMAIL"
-
-  echo "Configuring ADDITIONAL_DOCKER_REGISTRY_CREDENTIALS ..."
-  for row in $(echo "${ADDITIONAL_DOCKER_REGISTRY_CREDENTIALS}" | jq -r '.[] | @base64'); do
+  echo "Configuring DOCKER_REGISTRY_CREDENTIALS ..."
+  for row in $(echo "${DOCKER_REGISTRY_CREDENTIALS}" | jq -r '.[] | @base64'); do
     _jq() {
       echo ${row} | base64 --decode | jq -r ${1}
     }
@@ -90,12 +76,16 @@ for namespace in $APP_DEPLOYMENT_NAMESPACE $PIPELINE_NAMESPACE; do
     email="$(_jq '.DOCKER_REGISTRY_EMAIL')"
     password="$(_jq '.DOCKER_REGISTRY_PASSWORD')"
     username="$(_jq '.DOCKER_REGISTRY_USERNAME')"
-    echo "Configuring docker registry secret: $name ..."
 
     create_docker_secret "$namespace" "$name" "$auth_url" "$username" "$password" "$email"
 
+    # ensure not to double add the secrets to the array as the same image_pull_secrets_array is used for both service accounts later
     if [[ "$namespace" == "$APP_DEPLOYMENT_NAMESPACE" ]]; then
-      image_pull_secrets_array="${image_pull_secrets_array},{\"name\":\"$name\"}"
+      if [[ "$image_pull_secrets_array" == "" ]];then
+        image_pull_secrets_array="{\"name\":\"$name\"}"
+      else
+        image_pull_secrets_array="${image_pull_secrets_array},{\"name\":\"$name\"}"
+      fi
     fi
 
     echo ""
@@ -106,7 +96,7 @@ for namespace in $APP_DEPLOYMENT_NAMESPACE $PIPELINE_NAMESPACE; do
 done
 echo ""
 
-full_patch_json="{\"imagePullSecrets\":${image_pull_secrets_array}]}"
+full_patch_json="{\"imagePullSecrets\":[${image_pull_secrets_array}]}"
 echo "Patching Service Accounts with:"
 echo "$full_patch_json"
 echo ""

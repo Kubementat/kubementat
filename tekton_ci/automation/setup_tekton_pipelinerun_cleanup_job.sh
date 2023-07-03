@@ -3,15 +3,19 @@
 ######################################
 #
 # This script sets up the kubernetes cronjob for periodically cleaning up tekton pipeline_runs
+# ATTENTION:
+# This script assumes that there's a credential block in static.encrypted.json in the given environment's team directory
+# This credential block should contain a definition for a secret named docker-registry-secret
 #
 ######################################
 
 set -e
 
 ENVIRONMENT="$1"
-if [[ "$ENVIRONMENT" == "" ]]; then
-  echo "Usage: setup_tekton_pipelinerun_cleanup_job.sh <ENVIRONMENT_NAME>"
-  echo "e.g.: setup_tekton_pipelinerun_cleanup_job.sh dev"
+TEAM="$2"
+if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" ]]; then
+  echo "Usage: setup_tekton_pipelinerun_cleanup_job.sh <ENVIRONMENT_NAME> <TEAM>"
+  echo "e.g.: setup_tekton_pipelinerun_cleanup_job.sh dev dev1"
   exit 1
 fi
 
@@ -19,6 +23,8 @@ fi
 CRONJOB_NAMESPACE="cluster-cronjobs"
 # e.g. this means keep 2 jobs
 NUMBER_OF_JOBS_TO_KEEP_PLUS_1="3"
+# This script assumes to use the default docker registry is used (default name: docker-registry-secret)
+DOCKER_REGISTRY_SECRET_NAME="docker-registry-secret"
 
 
 echo "#########################"
@@ -28,11 +34,10 @@ TEKTON_CI_IMAGE_NAME="$(jq -r '.TEKTON_CI_IMAGE_NAME' ../../platform_config/"${E
 TEKTON_CI_IMAGE_TAG="$(jq -r '.TEKTON_CI_IMAGE_TAG' ../../platform_config/"${ENVIRONMENT}"/static.json)"
 CI_IMAGE="$DOCKER_REGISTRY_BASE_URL/${TEKTON_CI_IMAGE_NAME}:${TEKTON_CI_IMAGE_TAG}"
 
-DOCKER_REGISTRY_AUTH_URL="$(jq -r '.DOCKER_REGISTRY_AUTH_URL' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
-DOCKER_REGISTRY_EMAIL="$(jq -r '.DOCKER_REGISTRY_EMAIL' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
-DOCKER_REGISTRY_USERNAME="$(jq -r '.DOCKER_REGISTRY_USERNAME' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
-DOCKER_REGISTRY_PASSWORD="$(jq -r '.DOCKER_REGISTRY_PASSWORD' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
-DOCKER_REGISTRY_SECRET_NAME="docker-registry-secret"
+DOCKER_REGISTRY_AUTH_URL="$(jq -r '.DOCKER_REGISTRY_CREDENTIALS[] | select(.NAME=="docker-registry-secret").DOCKER_REGISTRY_AUTH_URL' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
+DOCKER_REGISTRY_EMAIL="$(jq -r '.DOCKER_REGISTRY_CREDENTIALS[] | select(.NAME=="docker-registry-secret").DOCKER_REGISTRY_EMAIL' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
+DOCKER_REGISTRY_USERNAME="$(jq -r '.DOCKER_REGISTRY_CREDENTIALS[] | select(.NAME=="docker-registry-secret").DOCKER_REGISTRY_USERNAME' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
+DOCKER_REGISTRY_PASSWORD="$(jq -r '.DOCKER_REGISTRY_CREDENTIALS[] | select(.NAME=="docker-registry-secret").DOCKER_REGISTRY_PASSWORD' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "CRONJOB_NAMESPACE: $CRONJOB_NAMESPACE"
@@ -48,9 +53,9 @@ echo "#########################"
 echo "Creating $CRONJOB_NAMESPACE namespace for cronjobs..."
 kubectl create namespace "$CRONJOB_NAMESPACE" || true
 
-echo "Configuring secret docker-registry-secret for cronjob pods in namespace $CRONJOB_NAMESPACE ..."
+echo "Configuring secret $DOCKER_REGISTRY_SECRET_NAME for cronjob pods in namespace $CRONJOB_NAMESPACE ..."
 
-kubectl -n "$CRONJOB_NAMESPACE" create secret docker-registry docker-registry-secret \
+kubectl -n "$CRONJOB_NAMESPACE" create secret docker-registry "$DOCKER_REGISTRY_SECRET_NAME" \
   --docker-server="$DOCKER_REGISTRY_AUTH_URL" \
   --docker-username="$DOCKER_REGISTRY_USERNAME" \
   --docker-password="$DOCKER_REGISTRY_PASSWORD" \
@@ -67,7 +72,7 @@ metadata:
     managed-by: kubementat
 EOF
 
-full_patch_json="{\"imagePullSecrets\":[{\"name\":\"docker-registry-secret\"}]}"
+full_patch_json="{\"imagePullSecrets\":[{\"name\":\"${DOCKER_REGISTRY_SECRET_NAME}\"}]}"
 echo "Patching tekton-cleaner Service Account with:"
 echo "$full_patch_json"
 echo ""

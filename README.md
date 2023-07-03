@@ -144,7 +144,7 @@ popd
 # Configure cluster wide auto cleanup of finished tekton pipeline runs
 # This is implemented via Kubernetes cronjob
 pushd tekton_ci/automation/
-./setup_tekton_pipelinerun_cleanup_job.sh dev
+./setup_tekton_pipelinerun_cleanup_job.sh dev dev1
 popd
 
 # Test run a pipeline via tekton
