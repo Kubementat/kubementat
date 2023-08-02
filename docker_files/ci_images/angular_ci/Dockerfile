@@ -6,7 +6,7 @@
 
 # this allows us to use a variable for the location of the docker base image
 ARG DOCKER_REGISTRY_BASE_URL=REPLACEME
-FROM ${DOCKER_REGISTRY_BASE_URL}/ubuntu-ci:latest
+FROM ${DOCKER_REGISTRY_BASE_URL}/ubuntu-ci-minimal:latest
 
 ENV NODE_VERSION 14.16.1
 
