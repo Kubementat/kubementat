@@ -38,6 +38,12 @@ Each of the given sub-directories contains additional README*.md files that docu
   - this contains all needed scripts and pipeline descriptions for spinning up the build and deployment pipelines on a k8s cluster
 - __utilities__: Useful scripts for working with K8S
   - e.g. for starting containers, debugging, viewing logs, viewing cluster status and usage ...
+  - this also contains scripts for the following use cases:
+    - user management
+    - secret management
+    - tunneling
+    - kubernetes helpers
+    - helm helpers
 
 ## Git-Crypt
 You need to unlock the repository to be able to use \*.encrypted.\* files in the repository (for more details see: README_GIT_CRYPT.md).
