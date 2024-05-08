@@ -2,5 +2,14 @@
   "GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64": "REPLACEME_GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64",
   "GIT_DEPLOYER_PRIVATE_KEY_BASE64": "REPLACEME_GIT_DEPLOYER_PRIVATE_KEY_BASE64",
   "GRAFANA_ADMIN_PASSWORD": "REPLACEME_GRAFANA_ADMIN_PASSWORD",
-  "GRAFANA_ADMIN_USER": "grafadmin"
+  "GRAFANA_ADMIN_USER": "grafadmin",
+  "GRAFANA_SERVICE_ACCOUNT_TOKEN": "REPLACEME_GRAFANA_SEVICE_ACCOUNT_TOKEN",
+  "GRAFANA_USERS": [
+    {
+      "email": "replaceme@example.com",
+      "name": "replaceme",
+      "password": "replaceme",
+      "type": "read-only"
+    }
+  ]
 }
