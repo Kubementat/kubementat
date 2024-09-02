@@ -17,6 +17,17 @@ def open_tunnel(kubementat_main_dir, environment, service_name):
 #### TUNNEL SCRIPTS ######
 ##########################
 
+# Tunnel kubernetes dashboard
+@click.command(name='login-kubernetes-dashboard', help='display a token and connection information for accessing the kubernetes dashboard')
+@click.argument('environment',envvar='ENVIRONMENT',default='dev')
+@click.pass_obj
+def login_kubernetes_dashboard(config, environment):
+    click.echo(f"ENVIRONMENT: {environment}")
+    execution_path=os.path.join(config.kubementat_main_dir, UTILITIES_SUB_DIRECTORY)
+    script_path=os.path.join(config.kubementat_main_dir, UTILITIES_SUB_DIRECTORY, f"login_kubernetes_dashboard.sh")
+    os.chdir(execution_path)
+    subprocess.check_call(f"{script_path} {str(environment)}", shell=True)
+
 # Tunnel grafana
 @click.command(name='tunnel-grafana', help='open a network tunnel to the grafana UI')
 @click.argument('environment',envvar='ENVIRONMENT',default='dev')

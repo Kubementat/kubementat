@@ -23,6 +23,9 @@ if __name__ == '__main__':
     main.add_command(tunnels.tunnel_tekton)
     main.add_command(tunnels.tunnel_polaris)
 
+    # k dashboard
+    main.add_command(tunnels.login_kubernetes_dashboard)
+
     # tekton
     main.add_command(tekton.tekton_run_pipeline)
     main.add_command(tekton.tekton_cleanup_pipeline_runs)
