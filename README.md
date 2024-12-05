@@ -68,6 +68,7 @@ kubectl run ubuntu-ci -i --tty --image="docker.io/julianweberdev/ubuntu-ci-minim
 ### Or: The hard manual way
 ```
 # install git-crypt
+# install python & pip
 # install jq
 # install yq
 # install gnugpg

@@ -35,18 +35,19 @@ ENV DEBIAN_FRONTEND noninteractive
 
 ARG TKN_CLI_VERSION="0.21.0"
 ARG YQ_VERSION="4.7.0"
-ARG HELMFILE_VERSION="0.144.0"
+ARG HELMFILE_VERSION="0.169.1"
 
 RUN echo "ARCHITECTURE: $(uname -m)"
 
 # packages
-RUN apt-get update && apt-get install -y curl wget gnupg && \
+RUN apt-get update && apt-get install -y ca-certificates curl wget gnupg python3 python3-pip && \
   rm -rf /var/lib/apt/lists/*
 
 # add repos
 ## kubectl
-RUN curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
-RUN echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | tee -a /etc/apt/sources.list.d/kubernetes.list
+RUN mkdir -p -m 755 /etc/apt/keyrings
+RUN curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg && chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+RUN echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list && chmod 644 /etc/apt/sources.list.d/kubernetes.list
 
 ## helm
 RUN curl https://baltocdn.com/helm/signing.asc | apt-key add -
@@ -69,7 +70,10 @@ RUN ARCH= && dpkgArch="$(uname -m)" \
   x86_64) ARCH='amd64';; \
   *) echo "unsupported architecture: $dpkgArch"; exit 1 ;; \
   esac \
-  && wget -O /usr/bin/helmfile "https://github.com/roboll/helmfile/releases/download/v${HELMFILE_VERSION}/helmfile_linux_${ARCH}" \
+  && wget -O helmfile.tar.gz "https://github.com/helmfile/helmfile/releases/download/v${HELMFILE_VERSION}/helmfile_${HELMFILE_VERSION}_linux_${ARCH}.tar.gz" \
+  && tar xfz helmfile.tar.gz \
+  && rm helmfile.tar.gz \
+  && mv helmfile /usr/bin/helmfile \
   && chmod 755 /usr/bin/helmfile
 
 # install
