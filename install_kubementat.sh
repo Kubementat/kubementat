@@ -59,6 +59,8 @@ function check_dependencies(){
   command -v git-crypt >/dev/null 2>&1 || { echo "git-crypt is not installed. Aborting." >&2; exit 1; }
   command -v gpg >/dev/null 2>&1 || { echo "gpg is not installed. Aborting." >&2; exit 1; }
   command -v linkerd >/dev/null 2>&1 || { echo "linkerd is not installed. Aborting." >&2; exit 1; }
+  command -v python >/dev/null 2>&1 || { echo "python is not installed. Aborting." >&2; exit 1; }
+  command -v pip >/dev/null 2>&1 || { echo "python pip is not installed. Aborting." >&2; exit 1; }
   echo "Finished checking local dependencies"
   echo "################"
   echo ""
@@ -115,6 +117,16 @@ function print_skip_section() {
   echo ""
 }
 
+function install_cli() {
+  echo "######################################################"
+  echo "Installing kmt cli dependencies ..."
+  pushd cli
+  pip install -r requirements.txt
+  popd
+  echo "Installed kmt cli dependencies successfully."
+  echo "######################################################"
+}
+
 check_dependencies
 check_cluster_and_access
 
@@ -164,12 +176,14 @@ echo "Installed kubementat to cluster successfully :D"
 echo ""
 echo "Now you are ready to start making it your own."
 echo ""
-echo "You can run your first hello world pipeline right now:"
-echo "pushd tekton_ci/automation"
-echo "./run_pipeline.sh dev dev1 ../pipeline-runs/hello-world-pipeline-run.yml"
+echo "You can run your first hello world pipeline right now by using the kmt cli tool:"
+echo "pushd cli"
+echo "# View kmt help section: "
+echo "./kmt --help"
 echo ""
-echo "And view the results via the tekton dashboard:"
-echo "popd"
-echo "pushd utilities"
+echo "# execute pipeline run via kmt"
+echo "./kmt tekton-run-pipeline dev dev1 ../pipeline-runs/hello-world-pipeline-run.yml"
+echo ""
+echo "# View the results via the tekton dashboard by tunneling via the kmt cli:"
 echo "Once this command is executed you can visit http://127.0.0.1:9097 in your browser"
-echo "./open_tekton_dashboard_tunnel.sh"
+echo "./kmt tunnel-tekton"
