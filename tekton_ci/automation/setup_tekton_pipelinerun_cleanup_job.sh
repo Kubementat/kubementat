@@ -21,8 +21,8 @@ fi
 
 # constants
 CRONJOB_NAMESPACE="cluster-cronjobs"
-# e.g. this means keep 2 jobs
-NUMBER_OF_JOBS_TO_KEEP_PLUS_1="3"
+# e.g. this means keep 6 jobs
+NUMBER_OF_JOBS_TO_KEEP_PLUS_1="7"
 # This script assumes to use the default docker registry is used (default name: docker-registry-secret)
 DOCKER_REGISTRY_SECRET_NAME="docker-registry-secret"
 
