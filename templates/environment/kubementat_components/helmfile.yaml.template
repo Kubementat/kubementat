@@ -37,8 +37,8 @@ helmDefaults:
 
 # REPOs
 repositories:
-- name: polaris
-  url: https://charts.fairwinds.com/stable
+# - name: polaris
+#   url: https://charts.fairwinds.com/stable
 - name: grafana
   url: https://grafana.github.io/helm-charts
 - name: prometheus-community
@@ -84,8 +84,8 @@ releases:
     component_name: prometheus
     group: standard
   # as the prometheus-server pod will fail while starting up when not configured for ha mode (see https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus/values.yaml#L1044)
-  recreatePods: true
-  force: true
+  # recreatePods: true
+  # force: true
   values:
     - monitoring/prometheus_values.encrypted.yaml
 
@@ -137,16 +137,16 @@ releases:
     - logging/loki_stack_values.encrypted.yaml
 
 # Cluster Analysis
-- name: polaris
-  chart: fairwinds-stable/polaris
-  # version: "5.6.1"
-  namespace: polaris
-  labels:
-    component: analytics
-    component_name: polaris
-    group: standard
-  values:
-    - polaris/values.encrypted.yaml
+# - name: polaris
+#   chart: fairwinds-stable/polaris
+#   # version: "5.6.1"
+#   namespace: polaris
+#   labels:
+#     component: analytics
+#     component_name: polaris
+#     group: standard
+#   values:
+#     - polaris/values.encrypted.yaml
 
 # Routing & certificates
 - name: cert-manager
