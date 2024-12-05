@@ -37,5 +37,6 @@ if __name__ == '__main__':
 
     # utilities
     main.add_command(utilities.run_ci_container)
+    main.add_command(utilities.run_script)
 
     main()
