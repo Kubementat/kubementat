@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-
-DOCKER_REPO=julianweberdev
-IMAGE=ubuntu-ci-minimal
-TAG=latest
-docker run -i -t "$DOCKER_REPO/$IMAGE:$TAG" /bin/bash
+export DOCKER_REGISTRY_BASE_URL="docker.io/julianweberdev"
+export IMAGE_NAME="ubuntu-ci-minimal"
+export IMAGE_TAG="${IMAGE_TAG:-test}"
+docker run -it "$DOCKER_REGISTRY_BASE_URL/$IMAGE_NAME:$IMAGE_TAG" /bin/bash
