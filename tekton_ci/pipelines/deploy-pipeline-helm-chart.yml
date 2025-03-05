@@ -33,6 +33,9 @@ spec:
       taskRef:
         name: deploy-remote-helm-chart
       params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+
         - name: chart-repository-name
           value: "$(params.chart-repository-name)"
         - name: chart-repository-url
@@ -47,9 +50,3 @@ spec:
           value: "$(params.helm-deployment-name)"
         - name: overwrite-values
           value: "$(params.overwrite-values)"
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"

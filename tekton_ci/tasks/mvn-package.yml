@@ -9,18 +9,13 @@ spec:
       The workspace folder to list files.
     mountPath: /workspace
   params:
+    - name: image
+      default: "maven:3.8.4-openjdk-17-slim"
+      description: |
+        The image url with tag to use as image for the mvn package execution
+
     - name: build-subdirectory
       description: the build sub-directory for executing mvn in
-    - name: docker-image-url
-      description: |
-        The image url without tag to use as image for the mvn package execution
-        e.g.: maven
-        or: "myimagereg.example.com/angular-ci"
-    - name: docker-image-tag
-      description: |
-        The tag to use for the task execution
-        e.g.: 3.8.4-openjdk-17-slim
-        or: latest
     - name: additional-arguments
       description: "A list of additional arguments to add to the mvn package command"
       default: ""
@@ -39,7 +34,7 @@ spec:
         limits:
           memory: 2Gi
           cpu: 1500m
-      image: "$(params.docker-image-url):$(params.docker-image-tag)"
+      image: "$(params.image)"
       env:
         - name: WORKSPACE_PATH
           value: "$(workspaces.workspace.path)"

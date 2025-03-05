@@ -14,6 +14,11 @@ spec:
       The workspace folder with the dockerfile and context.
     mountPath: /workspace
   params:
+  - name: image
+    description: the terraform image to use
+    type: string
+    default: docker.io/hashicorp/terraform:light
+
   - name: terraform-working-dir
     description: |
       The working dir to execute terraform in.
@@ -29,10 +34,6 @@ spec:
     description: The terraform secret with credentials
     type: string
     default: "terraform-creds"
-  - name: image
-    description: the terraform image to use
-    type: string
-    default: docker.io/hashicorp/terraform:light
   - name: httpProxy
     description: HTTP proxy server for non-SSL requests
     type: string

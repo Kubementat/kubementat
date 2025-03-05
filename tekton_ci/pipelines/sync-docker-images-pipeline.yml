@@ -1,22 +1,18 @@
 ################################
-# This pipeline inspects a docker image within a registry via skopeo
+# This pipeline copies a docker image from one registry to another via skopeo
 ################################
 
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
-  name: inspect-docker-image-pipeline
+  name: sync-docker-images-pipeline
 spec:
   params:
     # env and team
     - name: environment
       type: string
       description: The name of the environment to run the pipeline for. (e.g. dev, prod)
-      # default: dev
-    - name: team
-      type: string
-      description: The name of the team to run the pipeline for. Results in app deployment namespace (e.g. dev1, dev2)
-
+      default: dev
 
     # Platform config
     - name: docker-registry-base-url
@@ -67,14 +63,20 @@ spec:
       default: "true"
 
     # task config
-    - name: image-url
-      type: string
-    - name: docker-registry-username
+    - name: path-to-configuration-file
+      description: |
+        The path to the configuration file providing images to copy.
+        This should contain platform_config
+      default: "$(workspaces.workspace.path)/$(params.automation-git-project-name)/platform_config/$(params.environment)/mirrored_docker_images.json"
+    - name: target-docker-registry-username
+      description: The target docker registry username
       default: ""
       type: string
-    - name: docker-registry-secret-key-filepath
-      default: ""
+    - name: target-docker-registry-secret-key-filepath
+      description: The docker registry secret filepath within the platform_config for logging into the target docker registry
+      default: "$(workspaces.workspace.path)/$(params.automation-git-project-name)/platform_config/$(params.environment)/gcloud/docker-registry-internal-admin-gcloud-key.encrypted.json"
       type: string
+
   workspaces:
     - name: pipeline-workspace
   tasks:
@@ -105,21 +107,24 @@ spec:
           workspace: pipeline-workspace
 
     # view docker image details
-    - name: skopeo-inspect
+    - name: skopeo-sync-images
       taskRef:
-        name: skopeo-inspect
+        name: skopeo-sync-images
       runAfter:
         - git-clone-automation
       params:
-        - name: image-url
-          value: "$(params.image-url)"
-        - name: docker-registry-username
-          value: "$(params.docker-registry-username)"
-        - name: docker-registry-secret-key-filepath
-          value: "$(params.docker-registry-secret-key-filepath)"
-
         - name: image
           value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+
+        - name: path-to-configuration-file
+          value: "$(params.path-to-configuration-file)"
+
+        - name: target-docker-registry-username
+          value: "$(params.target-docker-registry-username)"
+        - name: target-docker-registry-secret-key-filepath
+          value: "$(params.target-docker-registry-secret-key-filepath)"
+
+        
       workspaces:
         - name: workspace
           workspace: pipeline-workspace

@@ -11,6 +11,10 @@ spec:
       optional: true
 
   params:
+    - name: image
+      description: The docker image used for executing the script (the ci base image)
+      default: "julianweberdev/ubuntu-ci-minimal:latest"
+
     - name: k8s-namespace
       description: The k8s namespace to use for the deployment
     - name: helm-deployment-name
@@ -18,18 +22,10 @@ spec:
     - name: ignore-non-existing
       description: Ignore non existing helm deployments for the task and return 0
       default: "true"
-    - name: docker-registry-base-url
-      description: The docker registry base url with path to load the CI image for tekton task execution from
-    - name: tekton-ci-image-name
-      description: The image name to use for the automation run
-      default: "ubuntu-ci-minimal"
-    - name: tekton-ci-image-tag
-      description: The image tag to use for the automation run
-      default: "latest"
 
   steps:
     - name: delete-deployment-via-helm
-      image: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+      image: "$(params.image)"
       resources:
         requests:
           memory: 100Mi

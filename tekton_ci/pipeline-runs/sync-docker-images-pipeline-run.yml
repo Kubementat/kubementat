@@ -1,0 +1,56 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: sync-docker-images-pipeline-run
+spec:
+  # here we need to use our previously created service account (see setup_pipelines.sh)
+  # as we are deploying to another namespace than the tekton pipeline
+  # and want to grant according permissions for the helm deploy task
+  serviceAccountName: "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME_PLACEHOLDER"
+  workspaces:
+    - name: pipeline-workspace
+      volumeClaimTemplate:
+        spec:
+          storageClassName: STORAGE_CLASS_PLACEHOLDER
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              # HINT: TODO: ADJUST ME IF MORE SPACE IS NEEDED FOR THE PIPELINE TO RUN
+              storage: 100Mi
+  pipelineRef:
+    name: sync-docker-images-pipeline
+  timeout: 30m
+  params:
+    - name: environment
+      value: dev
+
+    - name: docker-registry-base-url
+      value: "DOCKER_REGISTRY_BASE_URL_PLACEHOLDER"
+    - name: tekton-ci-image-name
+      value: "TEKTON_CI_IMAGE_NAME_PLACEHOLDER"
+    - name: tekton-ci-image-tag
+      value: "TEKTON_CI_IMAGE_TAG_PLACEHOLDER"
+
+    - name: automation-git-project-name
+      value: "AUTOMATION_GIT_PROJECT_NAME_PLACEHOLDER"
+    - name: automation-git-revision
+      value: "test"
+    - name: automation-git-server-host
+      value: "AUTOMATION_GIT_SERVER_HOST_PLACEHOLDER"
+    - name: automation-git-server-port
+      value: "AUTOMATION_GIT_SERVER_PORT_PLACEHOLDER"
+    - name: automation-git-server-ssh-user
+      value: "AUTOMATION_GIT_SERVER_SSH_USER_PLACEHOLDER"
+    - name: automation-git-url
+      value: "AUTOMATION_GIT_URL_PLACEHOLDER"
+    - name: automation-git-crypt-unlock
+      value: "true"
+
+    # config for dev cluster
+    - name: path-to-configuration-file
+      value: "$(workspaces.workspace.path)/$(params.automation-git-project-name)/platform_config/$(params.environment)/mirrored_docker_images.json"
+    - name: target-docker-registry-username
+      value: "_json_key"
+    - name: target-docker-registry-secret-key-filepath
+      value: "$(workspaces.workspace.path)/$(params.automation-git-project-name)/platform_config/$(params.environment)/gcloud/docker-registry-internal-admin-gcloud-key.encrypted.json"

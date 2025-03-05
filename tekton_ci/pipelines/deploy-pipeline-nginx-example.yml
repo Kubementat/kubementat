@@ -96,12 +96,8 @@ spec:
           value: "$(params.automation-git-server-ssh-user)"
         - name: git-crypt-unlock
           value: "$(params.automation-git-crypt-unlock)"
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
       workspaces:
         - name: workspace
           workspace: pipeline-workspace
@@ -113,6 +109,8 @@ spec:
       taskRef:
         name: deploy-local-helm-chart
       params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
         - name: environment
           value: "$(params.environment)"
         - name: team
@@ -127,12 +125,6 @@ spec:
           value: nginx-example
         - name: app-name
           value: "nginx-example"
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"
       workspaces:
         - name: workspace
           workspace: pipeline-workspace

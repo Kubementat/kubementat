@@ -27,13 +27,9 @@ spec:
       taskRef:
         name: delete-helm-deployment
       params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
         - name: k8s-namespace
           value: "$(params.k8s-namespace)"
         - name: helm-deployment-name
           value: "$(params.helm-deployment-name)"
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"

@@ -60,6 +60,14 @@ spec:
       description: The tag for the pushed images
       default: "latest"
 
+    - name: builder-image
+      description: The image that should be used for the docker build command
+      default: "gcr.io/kaniko-project/executor:debug"
+
+    - name: extra-build-args
+      description: You can provide a list of additional docker build args here
+      default: ""
+
   workspaces:
     - name: pipeline-workspace
   tasks:
@@ -83,12 +91,8 @@ spec:
           value: "$(params.automation-git-server-ssh-user)"
         - name: git-crypt-unlock
           value: "$(params.automation-git-crypt-unlock)"
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
       workspaces:
         - name: workspace
           workspace: pipeline-workspace
@@ -101,6 +105,12 @@ spec:
       taskRef:
         name: build-and-push-docker-image
       params:
+        - name: builder-image
+          value: "$(params.builder-image)"
+        - name: ci-image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+        - name: extra-build-args
+          value: "$(params.extra-build-args)"
         - name: path-to-context
           value: "/workspace/$(params.automation-git-project-name)/docker_files/ci_images/ubuntu_ci_minimal"
         - name: path-to-dockerfile-within-context
@@ -109,12 +119,6 @@ spec:
           value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name)"
         - name: push-image-tag
           value: "$(params.push-image-tag)"
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"
       workspaces:
         - name: workspace
           workspace: pipeline-workspace

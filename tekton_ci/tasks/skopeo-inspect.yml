@@ -14,6 +14,10 @@ spec:
     mountPath: /workspace
 
   params:
+    - name: image
+      description: The docker image used for executing the script (e.g. the ci base image or the official skopeo image)
+      default: "julianweberdev/ubuntu-ci-minimal:latest"
+
     - name: image-url
       description: |
          URL of the image to be inspected
@@ -28,18 +32,9 @@ spec:
       default: ""
       type: string
 
-    # standard CI image config
-    - name: docker-registry-base-url
-      description: The docker registry base url with path to load the CI image for tekton task execution from
     - name: docker-registry-secret-name
       description: The docker registry secret name for logging into the docker registry
       default: "docker-registry-secret"
-    - name: tekton-ci-image-name
-      description: The image name to use for the automation run
-      default: "ubuntu-ci-minimal"
-    - name: tekton-ci-image-tag
-      description: The image tag to use for the automation run
-      default: "latest"
   steps:
     - name: skopeo-inspect
       env:
@@ -52,8 +47,11 @@ spec:
       - name: USERNAME
         value: "$(params.docker-registry-username)"
 
-      image: quay.io/skopeo/stable
+      image: "$(params.image)"
       script: |
+        #!/usr/bin/env bash
+        set -e
+        
         echo "Image URL:"
         echo "$IMAGE_URL"
 

@@ -9,6 +9,10 @@ spec:
       The workspace folder with the platform_config repository and previously generated db-schema.sql
     mountPath: /workspace
   params:
+    - name: image
+      description: The docker image used for executing the script (the ci base image)
+      default: "julianweberdev/ubuntu-ci-minimal:latest"
+
     - name: environment
       description: The application environment to use for loading configuration. E.g. dev, prod
       # default: dev
@@ -21,18 +25,10 @@ spec:
       default: "$(workspaces.workspace.path)/kubementat"
     - name: database-name
       description: The name of the database to create
-    - name: docker-registry-base-url
-      description: The docker registry base url with path to load the CI image for tekton task execution from
-    - name: tekton-ci-image-name
-      description: The image name to use for the automation run
-      default: "ubuntu-ci-minimal"
-    - name: tekton-ci-image-tag
-      description: The image tag to use for the automation run
-      default: "latest"
 
   steps:
     - name: create-mysql-database
-      image: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+      image: "$(params.image)"
       resources:
         requests:
           memory: 50Mi

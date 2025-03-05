@@ -14,6 +14,10 @@ spec:
     mountPath: /workspace
 
   params:
+    - name: image
+      description: The docker image used for executing the script (e.g. the ci base image or the official skopeo image)
+      default: "julianweberdev/ubuntu-ci-minimal:latest"
+
     - name: source-image-url
       description: |
          URL of the image to be inspected
@@ -24,7 +28,7 @@ spec:
       default: ""
       type: string
     - name: source-docker-registry-secret-key-filepath
-      description: The docker registry secret filepath within the platform_ config for logging into the source docker registry
+      description: The docker registry secret filepath within the platform_config for logging into the source docker registry
       default: ""
       type: string
 
@@ -38,22 +42,10 @@ spec:
       default: ""
       type: string
     - name: target-docker-registry-secret-key-filepath
-      description: The docker registry secret filepath within the platform_ config for logging into the source docker registry
+      description: The docker registry secret filepath within the platform_config for logging into the target docker registry
       default: ""
       type: string
 
-    # standard CI image config
-    - name: docker-registry-base-url
-      description: The docker registry base url with path to load the CI image for tekton task execution from
-    - name: docker-registry-secret-name
-      description: The docker registry secret name for logging into the docker registry
-      default: "docker-registry-secret"
-    - name: tekton-ci-image-name
-      description: The image name to use for the automation run
-      default: "ubuntu-ci-minimal"
-    - name: tekton-ci-image-tag
-      description: The image tag to use for the automation run
-      default: "latest"
   steps:
     - name: skopeo-copy
       env:
@@ -72,32 +64,44 @@ spec:
         value: "$(params.target-docker-registry-secret-key-filepath)"
       - name: TARGET_USERNAME
         value: "$(params.target-docker-registry-username)"
-      image: quay.io/skopeo/stable
+      image: "$(params.image)"
       script: |
+        #!/usr/bin/env bash
+        set -e
+
+        echo "Starting skopeo copy..."
+        echo ""
         echo "Copy Source:"
         echo "$SOURCE_IMAGE_URL"
         echo ""
         echo "Copy Target:"
         echo "$TARGET_IMAGE_URL"
-
-        # TODO: find a better solution to this cumbersome if statement
         echo ""
-        if [[ "$SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH" != "" && "$TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH" != "" ]]; then
-          echo "Using source key filepath: $SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH"
-          echo "Using target key filepath: $TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH"
-          echo ""
-          skopeo copy "$SOURCE_IMAGE_URL" "$TARGET_IMAGE_URL" --src-creds "${SOURCE_USERNAME}:$(cat $SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH)" --dest-creds "${TARGET_USERNAME}:$(cat $TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH)"
-        elif [[ "$SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH" != "" && "$TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH" == "" ]]; then
-          echo "Using source key filepath: $SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH"
-          skopeo copy "$SOURCE_IMAGE_URL" "$TARGET_IMAGE_URL" --src-creds "${SOURCE_USERNAME}:$(cat $SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH)"
-          echo ""
-        elif [[ "$SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH" == "" && "$TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH" != "" ]]; then
-          echo "Using target key filepath: $TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH"
-          skopeo copy "$SOURCE_IMAGE_URL" "$TARGET_IMAGE_URL" --dest-creds "${TARGET_USERNAME}:$(cat $TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH)"
-        else
-          echo "Using no authentication for the copy."
-          skopeo copy "$SOURCE_IMAGE_URL" "$TARGET_IMAGE_URL"
-        fi
+
+        function skopeo_copy(){
+          source_image_url="$1"
+          target_image_url="$2"
+
+          # TODO: find a better solution to this cumbersome if statement
+          if [[ "$SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH" != "" && "$TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH" != "" ]]; then
+            echo "Using source key filepath: $SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH"
+            echo "Using target key filepath: $TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH"
+            echo ""
+            skopeo copy "$source_image_url" "$target_image_url" --src-creds "${SOURCE_USERNAME}:$(cat $SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH)" --dest-creds "${TARGET_USERNAME}:$(cat $TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH)"
+          elif [[ "$SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH" != "" && "$TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH" == "" ]]; then
+            echo "Using source key filepath: $SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH"
+            skopeo copy "$source_image_url" "$target_image_url" --src-creds "${SOURCE_USERNAME}:$(cat $SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH)"
+            echo ""
+          elif [[ "$SOURCE_DOCKER_REGISTRY_SECRET_KEY_FILEPATH" == "" && "$TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH" != "" ]]; then
+            echo "Using target key filepath: $TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH"
+            skopeo copy "$source_image_url" "$target_image_url" --dest-creds "${TARGET_USERNAME}:$(cat $TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH)"
+          else
+            echo "Using no authentication for the copy."
+            skopeo copy "$source_image_url" "$target_image_url"
+          fi
+        }
+        
+        skopeo_copy "$SOURCE_IMAGE_URL" "$TARGET_IMAGE_URL"
 
       securityContext:
         runAsNonRoot: true

@@ -1,0 +1,106 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: skopeo-sync-images
+spec:
+  description: |
+    This script syncs images provided in a json configuration file to the provided destinations
+
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder with the dockerfile and context.
+    mountPath: /workspace
+
+  params:
+    - name: image
+      description: The docker image used for executing the script (e.g. the ci base image or the official skopeo image)
+      default: "julianweberdev/ubuntu-ci-minimal:latest"
+
+    - name: path-to-configuration-file
+      description: |
+        The path to the configuration file providing images to copy.
+        This should contain platform_config
+      default: "$(workspaces.workspace.path)/kubementat/platform_config/dev/mirrored_docker_images.json"
+    
+    - name: target-docker-registry-username
+      description: The target docker registry username
+      default: ""
+      type: string
+    - name: target-docker-registry-secret-key-filepath
+      description: The docker registry secret filepath within the platform_config for logging into the target docker registry
+      default: ""
+      type: string
+
+  steps:
+    - name: skopeo-sync-images
+      env:
+      - name: HOME
+        value: /tekton/home
+      - name: PATH_TO_CONFIGURATION_FILE
+        value: "$(params.path-to-configuration-file)"
+      - name: TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH
+        value: "$(params.target-docker-registry-secret-key-filepath)"
+      - name: TARGET_USERNAME
+        value: "$(params.target-docker-registry-username)"
+      image: "$(params.image)"
+      script: |
+        #!/usr/bin/env bash
+        set -e
+
+        echo "Starting skopeo sync..."
+        echo ""
+        echo "Image Sync configuration file:"
+        echo "$PATH_TO_CONFIGURATION_FILE"
+        echo ""
+        echo "Target docker registry secret key filepath:"
+        echo "$TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH"
+        echo ""
+        echo "Target docker registry username:"
+        echo "$TARGET_USERNAME"
+        echo ""
+
+        function skopeo_copy(){
+          source_image_url="$1"
+          target_image_url="$2"
+
+          if [[ "$TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH" != "" ]]; then
+            echo "Using authentication to the destination registry for the copy."
+            skopeo copy "$source_image_url" "$target_image_url" --dest-creds "${TARGET_USERNAME}:$(cat $TARGET_DOCKER_REGISTRY_SECRET_KEY_FILEPATH)"
+          else
+            echo "Using no authentication for the copy."
+            skopeo copy "$source_image_url" "$target_image_url"
+          fi
+        }
+
+        images="$(jq -r '.images' "$PATH_TO_CONFIGURATION_FILE")"
+
+        for row in $(echo "${images}" | jq -r '.[] | @base64'); do
+          _jq() {
+          echo ${row} | base64 --decode | jq -r ${1}
+          }
+          image_name="$(_jq '.name')"
+          image_description="$(_jq '.description')"
+          image_source="$(_jq '.source')"
+          image_destination="$(_jq '.destination')"
+
+          # add "docker://" to beginning of the image source and target if not present
+          if [[ ! "$image_source" =~ ^docker.* ]]; then
+            image_source="docker://$image_source"
+          fi
+          if [[ ! "$image_destination" =~ ^docker.*  ]]; then
+            image_destination="docker://$image_destination"
+          fi
+          
+          echo "Mirroring image: $image_name"
+          echo "  - description: $image_description"
+          echo "  - source: $image_source"
+          echo "  - destination : $image_destination"
+          skopeo_copy "$image_source" "$image_destination"
+        done
+
+        echo "Finished syncing images successfully"
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532

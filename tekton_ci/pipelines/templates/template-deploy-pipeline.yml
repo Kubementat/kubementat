@@ -125,12 +125,8 @@ spec:
           value: "$(params.automation-git-server-ssh-user)"
         - name: git-crypt-unlock
           value: "$(params.automation-git-crypt-unlock)"
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
       workspaces:
         - name: workspace
           workspace: pipeline-workspace
@@ -140,12 +136,8 @@ spec:
       taskRef:
         name: git-clone-with-ssh-auth
       params:
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
         - name: git-url
           value: "$(params.app-git-url)"
         - name: git-project-name
@@ -165,12 +157,8 @@ spec:
     # list workspace contents
     - name: list-workspace-contents
       params:
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
       runAfter:
         - git-clone-automation
         - git-clone-app
@@ -188,14 +176,10 @@ spec:
       taskRef:
         name: echo
       params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
         - name: echo-message
           value: "PLEASE IMPLEMENT DATABASE SCHEMA GENERATION HERE"
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"
       # workspaces:
       #   - name: workspace
       #     workspace: pipeline-workspace
@@ -207,14 +191,10 @@ spec:
       taskRef:
         name: echo
       params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
         - name: echo-message
           value: "PLEASE IMPLEMENT DATABASE SETUP HERE"
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"
       # workspaces:
       #   - name: workspace
       #     workspace: pipeline-workspace
@@ -226,14 +206,10 @@ spec:
       taskRef:
         name: echo
       params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
         - name: echo-message
           value: "PLEASE IMPLEMENT DATABASE SEEDING HERE"
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"
       # workspaces:
       #   - name: workspace
       #     workspace: pipeline-workspace
@@ -245,6 +221,8 @@ spec:
       taskRef:
         name: deploy-local-helm-chart
       params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
         - name: docker-image-url
           value: "$(params.docker-image-url)"
         - name: docker-image-tag
@@ -259,12 +237,6 @@ spec:
           value: "$(params.environment)"
         - name: app-name
           value: "$(params.app-name)"
-        - name: docker-registry-base-url
-          value: "$(params.docker-registry-base-url)"
-        - name: tekton-ci-image-name
-          value: "$(params.tekton-ci-image-name)"
-        - name: tekton-ci-image-tag
-          value: "$(params.tekton-ci-image-tag)"
       workspaces:
         - name: workspace
           workspace: pipeline-workspace
