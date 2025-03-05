@@ -16,7 +16,7 @@ spec:
       # default: dev
     - name: team
       type: string
-      description: The name of the team to run the pipeline for. Results in cassandra deployment namespace
+      description: The name of the team to run the pipeline for.
 
     # Platform configuration
     - name: docker-registry-base-url

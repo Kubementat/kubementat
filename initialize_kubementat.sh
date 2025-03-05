@@ -217,13 +217,12 @@ jq \
 echo "Writing platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.json"
 jq \
   --arg storage_class "$KUBERNETES_DEFAULT_STORAGE_CLASS" \
-  '.POSTGRES_VOLUME_STORAGE_CLASS |= $storage_class | .CASSANDRA_VOLUME_STORAGE_CLASS |= $storage_class | .KAFKA_VOLUME_STORAGE_CLASS |= $storage_class | .MONGODB_VOLUME_STORAGE_CLASS |= $storage_class | .MYSQL_VOLUME_STORAGE_CLASS |= $storage_class | .REDIS_VOLUME_STORAGE_CLASS |= $storage_class' \
+  '.POSTGRES_VOLUME_STORAGE_CLASS |= $storage_class | .MONGODB_VOLUME_STORAGE_CLASS |= $storage_class | .MYSQL_VOLUME_STORAGE_CLASS |= $storage_class | .REDIS_VOLUME_STORAGE_CLASS |= $storage_class' \
   templates/environment/team/static.json.template >platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.json
 
 # Configure platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.encrypted.json
 echo "Writing platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.encrypted.json"
 jq \
-  --arg cassandra_pw "$(generate_password)" \
   --arg mongodb_pw "$(generate_password)" \
   --arg mysql_database_pw "$(generate_password)" \
   --arg mysql_root_pw "$(generate_password)" \
@@ -231,7 +230,7 @@ jq \
   --arg postgres_pw "$(generate_password)" \
   --arg gitlab_webhook_secret "$(generate_password)" \
   --arg github_webhook_secret "$(generate_password)" \
-  '.POSTGRES_ADMIN_PASSWORD |= $postgres_pw | .CASSANDRA_ADMIN_PASSWORD |= $cassandra_pw | .MONGODB_ROOT_PASSWORD |= $mongodb_pw | .MYSQL_DATABASE_CONFIGURATION[0].PASSWORD |= $mysql_database_pw | .MYSQL_ROOT_PASSWORD |= $mysql_root_pw | .REDIS_PASSWORD |= $redis_pw | .GITLAB_WEBHOOK_SECRET |= $gitlab_webhook_secret | .GITHUB_WEBHOOK_SECRET |= $github_webhook_secret' \
+  '.POSTGRES_ADMIN_PASSWORD |= $postgres_pw | .MONGODB_ROOT_PASSWORD |= $mongodb_pw | .MYSQL_DATABASE_CONFIGURATION[0].PASSWORD |= $mysql_database_pw | .MYSQL_ROOT_PASSWORD |= $mysql_root_pw | .REDIS_PASSWORD |= $redis_pw | .GITLAB_WEBHOOK_SECRET |= $gitlab_webhook_secret | .GITHUB_WEBHOOK_SECRET |= $github_webhook_secret' \
   templates/environment/team/static.encrypted.json.template >platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.encrypted.json
 echo ""
 echo "#####################"

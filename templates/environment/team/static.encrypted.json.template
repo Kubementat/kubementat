@@ -17,12 +17,8 @@
       "NAME": "docker-registry-additional-secret"
     }
   ],
-  "CASSANDRA_ADMIN_PASSWORD": "REPLACEME_CASSANDRA_ADMIN_PASSWORD",
-  "CASSANDRA_ADMIN_USER": "cassandradev1",
-  "CASSANDRA_HOST": "cassandra.dev1.svc.cluster.local",
   "GITHUB_WEBHOOK_SECRET": "REPLACEME_GITHUB_WEBHOOK_SECRET",
   "GITLAB_WEBHOOK_SECRET": "REPLACEME_GITLAB_WEBHOOK_SECRET",
-  "KAFKA_HOST": "kafka.dev1.svc.cluster.local",
   "MONGODB_HOST": "mongodb-0.mongodb-headless.dev1.svc.cluster.local",
   "MONGODB_ROOT_PASSWORD": "REPLACEME_MONGODB_ROOT_PASSWORD",
   "MYSQL_DATABASE_CONFIGURATION": [

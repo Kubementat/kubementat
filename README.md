@@ -22,8 +22,6 @@ If you are interested in the naming of this project, you can have a look [here](
 - MySQL
 - MongoDB
 - Redis
-- Cassandra
-- Kafka
 
 ## Sub-directories
 
