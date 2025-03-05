@@ -21,8 +21,8 @@ fi
 
 # constants
 CRONJOB_NAMESPACE="cluster-cronjobs"
-# e.g. this means keep 6 jobs
-NUMBER_OF_JOBS_TO_KEEP_PLUS_1="7"
+# e.g. this means keep 20 jobs
+NUMBER_OF_JOBS_TO_KEEP_PLUS_1="21"
 # This script assumes to use the default docker registry is used (default name: docker-registry-secret)
 DOCKER_REGISTRY_SECRET_NAME="docker-registry-secret"
 
@@ -123,7 +123,12 @@ metadata:
   labels:
     managed-by: kubementat
 spec:
-  schedule: "*/15 * * * *"
+  # cleanup every day at 23:00
+  schedule: "0 23 * * *"
+  
+  # cleanup all 15 minutes
+  # schedule: "*/15 * * * *"
+
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 2
   concurrencyPolicy: Forbid
@@ -145,9 +150,19 @@ spec:
                 - /bin/bash
                 - -c
                 - |
-                  TO_DELETE="\$(kubectl get pipelinerun --all-namespaces -o jsonpath='{range .items[?(@.status.completionTime)]}{.status.completionTime}{" "}{.metadata.name}{" -n"}{.metadata.namespace}{"\n"}{end}' | sort -s -k 2M -k 3n -k 4,4 | tail -n +$NUMBER_OF_JOBS_TO_KEEP_PLUS_1 | awk '{ print \$2 " " \$3 }')"
-                  echo "Full deletion list: \$TO_DELETE"
+                  ALL_COMPLETED_JOBS="\$(kubectl get pipelinerun --all-namespaces -o jsonpath='{range .items[?(@.status.completionTime)]}{.status.completionTime}{" "}{.metadata.name}{" -n"}{.metadata.namespace}{"\n"}{end}' | sort -s)"
+                  echo "All completed jobs in all namespaces:"
+                  echo "\$ALL_COMPLETED_JOBS"
+                  echo "All completed job count: $(echo "\$ALL_COMPLETED_JOBS" | wc -l)"
+
+                  echo ""
+                  TO_DELETE="\$(echo "\$ALL_COMPLETED_JOBS" | tail -n +$NUMBER_OF_JOBS_TO_KEEP_PLUS_1 | awk '{ print \$2 " " \$3 }')"
+                  echo "Full deletion list:"
+                  echo "\$TO_DELETE"
+                  echo "To delete job count: $(echo "\$TO_DELETE" | wc -l)"
+
                   echo "\$TO_DELETE" | while read -r delete_item
+                  echo ""
                   do
                     echo "Deleting pipelinerun: \${delete_item}"
                     kubectl delete pipelinerun \${delete_item} || true
