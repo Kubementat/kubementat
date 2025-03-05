@@ -213,6 +213,10 @@ jq \
   '.GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64 |= $gpg_private_key | .GIT_DEPLOYER_PRIVATE_KEY_BASE64 |= $ssh_private_key | .GRAFANA_ADMIN_PASSWORD |= $grafana_password' \
   templates/environment/static.encrypted.json.template >platform_config/$TARGET_ENVIRONMENT/static.encrypted.json
 
+# configure template for docker image mirroring
+echo "Writing platform_config/$TARGET_ENVIRONMENT/mirrored_docker_images.json"
+cp templates/environment/mirrored_docker_images.json.template platform_config/$TARGET_ENVIRONMENT/mirrored_docker_images.json
+
 # Configure platform_config/$TARGET_ENVIRONMENT/dev1/static.json
 echo "Writing platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.json"
 jq \

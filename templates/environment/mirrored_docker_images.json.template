@@ -1,0 +1,22 @@
+{
+  "images": [
+    {
+      "name": "ubuntu",
+      "description": "ubuntu base Image for the cli automation image",
+      "source": "ubuntu:24.04",
+      "destination": "REPLACEME_DOCKER_REGISTRY_BASE_URL/ubuntu:24.04"
+    },
+    {
+      "name": "terraform",
+      "description": "Image used for terraform tasks",
+      "source": "hashicorp/terraform:latest",
+      "destination": "REPLACEME_DOCKER_REGISTRY_BASE_URL/terraform:latest"
+    },
+    {
+      "name": "kaniko",
+      "description": "Image used for building docker images",
+      "source": "gcr.io/kaniko-project/executor:debug",
+      "destination": "REPLACEME_DOCKER_REGISTRY_BASE_URL/kaniko:debug"
+    }
+  ]
+}
