@@ -22,7 +22,11 @@ fi
 # constants
 CRONJOB_NAMESPACE="cluster-cronjobs"
 # e.g. this means keep 20 jobs
-NUMBER_OF_JOBS_TO_KEEP_PLUS_1="21"
+NUMBER_OF_JOBS_TO_KEEP="20"
+
+# schedule - each day at 23:00
+SCHEDULE="0 23 * * *"
+
 # This script assumes to use the default docker registry is used (default name: docker-registry-secret)
 DOCKER_REGISTRY_SECRET_NAME="docker-registry-secret"
 
@@ -124,7 +128,7 @@ metadata:
     managed-by: kubementat
 spec:
   # cleanup every day at 23:00
-  schedule: "0 23 * * *"
+  schedule: "$SCHEDULE"
   
   # cleanup all 15 minutes
   # schedule: "*/15 * * * *"
@@ -150,20 +154,30 @@ spec:
                 - /bin/bash
                 - -c
                 - |
+                  set -e
+
+                  NUMBER_OF_JOBS_TO_KEEP="$NUMBER_OF_JOBS_TO_KEEP"
+                  let NUMBER_OF_JOBS_TO_KEEP_PLUS_1=\$NUMBER_OF_JOBS_TO_KEEP+1
+                  echo "NUMBER_OF_JOBS_TO_KEEP_PLUS_1: \$NUMBER_OF_JOBS_TO_KEEP_PLUS_1"
+
                   ALL_COMPLETED_JOBS="\$(kubectl get pipelinerun --all-namespaces -o jsonpath='{range .items[?(@.status.completionTime)]}{.status.completionTime}{" "}{.metadata.name}{" -n"}{.metadata.namespace}{"\n"}{end}' | sort -s)"
                   echo "All completed jobs in all namespaces:"
                   echo "\$ALL_COMPLETED_JOBS"
-                  echo "All completed job count: $(echo "\$ALL_COMPLETED_JOBS" | wc -l)"
+                  all_count="\$(echo "\$ALL_COMPLETED_JOBS" | wc -l | tr -d ' ')"
+                  echo "All completed job count: \$all_count"
+
+                  if [[ "\$all_count" -lt "\$NUMBER_OF_JOBS_TO_KEEP" ]]; then
+                    echo "Found less than \$NUMBER_OF_JOBS_TO_KEEP pipelineruns. Skipping execution."
+                    exit 0
+                  fi
 
                   echo ""
-                  TO_DELETE="\$(echo "\$ALL_COMPLETED_JOBS" | tail -n +$NUMBER_OF_JOBS_TO_KEEP_PLUS_1 | awk '{ print \$2 " " \$3 }')"
+                  TO_DELETE="\$(echo "\$ALL_COMPLETED_JOBS" | tail -n +\$NUMBER_OF_JOBS_TO_KEEP_PLUS_1 | awk '{ print \$2 " " \$3 }')"
                   echo "Full deletion list:"
                   echo "\$TO_DELETE"
-                  echo "To delete job count: $(echo "\$TO_DELETE" | wc -l)"
+                  echo "To delete job count: \$(echo "\$TO_DELETE" | wc -l | tr -d ' ')"
 
-                  echo "\$TO_DELETE" | while read -r delete_item
-                  echo ""
-                  do
+                  echo "\$TO_DELETE" | while IFS= read -r delete_item ; do 
                     echo "Deleting pipelinerun: \${delete_item}"
                     kubectl delete pipelinerun \${delete_item} || true
                   done
