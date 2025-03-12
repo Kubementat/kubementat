@@ -39,7 +39,7 @@ ARG HELMFILE_VERSION="0.169.1"
 RUN echo "ARCHITECTURE: $(uname -m)"
 
 # packages
-RUN apt-get update && apt-get install --no-install-recommends -y ca-certificates curl wget gnupg gnupg2 python3 python3-pip && \
+RUN apt-get update && apt-get install --no-install-recommends -y openssh-client ca-certificates curl wget gnupg gnupg2 python3 python3-pip && \
   rm -rf /var/lib/apt/lists/*
 
 # add repos
