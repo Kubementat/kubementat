@@ -1,0 +1,152 @@
+################################
+# This pipeline builds a container via a provided Dockerfile and pushes it to the registry
+# See push-image-tag for target registry tag
+################################
+
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: docker-build-pipeline
+spec:
+  params:
+    # Platform config
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+    - name: tekton-ci-image-name
+      description: The image name to use for the automation run
+      default: "ubuntu-ci-minimal"
+    - name: tekton-ci-image-tag
+      description: The image tag to use for the automation run
+      default: "latest"
+
+    # GIT REPOSITORY SECTION
+    - name: app-git-url
+      description: |
+        The git url of the app repository to use
+        e.g.: git@github.com:yourrepo/yourapp.git
+    - name: app-git-project-name
+      description: |
+        your local directory name for the repository
+    - name: app-git-revision
+      description: |
+        the git revision to checkout
+        for the app repository we are using master most of the time
+      default: "master"
+    - name: app-git-server-host
+      description: |
+        this should match the hostname provided in app-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+        e.g.: github.com
+      default: github.com
+    - name: app-git-server-port
+      description: |
+        the git server ssh port
+        this should match the port provided (or 22 if no port is provided) in app-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+      default: "22"
+    - name: app-git-server-ssh-user
+      description: |
+        the git server ssh user
+        this should match the username provided in app-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+      default: "git"
+    - name: app-git-crypt-unlock
+      description: |
+        should a git-crypt unlock be executed on the checked out repo?
+      default: "false"
+    - name: app-git-ssh-key-secret-name
+      description: |
+        The name of the secret storing the base64 encoded ssh private key
+        for accessing the app github repository (see tekton_ci/automation/setup_pipelines.sh)
+
+    # IMAGE PUSH CONFIG
+    - name: builder-image
+      description: The image that should be used for the docker build command
+      default: gcr.io/kaniko-project/executor:debug
+    - name: docker-registry-secret-name
+      description: The kubernetes secret to use to connect to the image destination registry
+      default: "docker-registry-secret"
+    - name: push-image-name
+      description: The name of the image
+    - name: push-image-tag
+      description: The tag for the pushed images
+      default: "latest"
+    - name: set-tag-from-version-file
+      description: Should the docker image tag be set from a version file (see path-to-version-file variable)
+      default: "false"
+    - name: path-to-version-file
+      default: ""
+      description: A path to the file containing the app version number (used with set-tag-from-version-file)
+    - name: docker-build-context-subpath
+      description: Subpath of the project repo where docker should be executed
+    - name: extra-build-args
+      description: Additional arguments to the docker build process
+      default: ""
+    - name: push-retries
+      description: The number of retries when pushes fail
+      default: "1"
+
+  workspaces:
+    - name: pipeline-workspace
+  tasks:
+
+    # clone the-app repo for the keycloak setup automation
+    - name: git-clone-app
+      taskRef:
+        name: git-clone-with-ssh-auth
+      params:
+        - name: git-url
+          value: "$(params.app-git-url)"
+        - name: git-project-name
+          value: "$(params.app-git-project-name)"
+        - name: git-revision
+          value: "$(params.app-git-revision)"
+        - name: git-server-host
+          value: "$(params.app-git-server-host)"
+        - name: git-server-port
+          value: "$(params.app-git-server-port)"
+        - name: git-server-ssh-user
+          value: "$(params.app-git-server-ssh-user)"
+        - name: git-crypt-unlock
+          value: "$(params.app-git-crypt-unlock)"
+        - name: git-private-ssh-key-secret-name
+          value: "$(params.app-git-ssh-key-secret-name)"
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
+
+    # build docker image
+    - name: build-docker-image
+      retries: 1
+      runAfter:
+        - git-clone-app
+      taskRef:
+        name: build-and-push-docker-image
+      params:
+        - name: builder-image
+          value: "$(params.builder-image)"
+        - name: ci-image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+        - name: path-to-context
+          value: "/workspace/$(params.app-git-project-name)/$(params.docker-build-context-subpath)"
+        - name: path-to-dockerfile-within-context
+          value: Dockerfile
+        - name: extra-build-args
+          value: "$(params.extra-build-args)"
+        - name: docker-registry-secret-name
+          value: "$(params.docker-registry-secret-name)"
+        - name: push-image-url
+          value: "$(params.docker-registry-base-url)/$(params.push-image-name)"
+        - name: push-image-tag
+          value: "$(params.push-image-tag)"
+        - name: push-retries
+          value: "$(params.push-retries)"
+        - name: set-tag-from-version-file
+          value: "$(params.set-tag-from-version-file)"
+        - name: path-to-version-file
+          value: "$(params.path-to-version-file)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
