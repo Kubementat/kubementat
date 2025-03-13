@@ -49,6 +49,7 @@ function check_required_environment_variables(){
 
 function check_dependencies(){
   echo "Checking local dependencies"
+  command -v python >/dev/null 2>&1 || { echo "python is not installed. Aborting." >&2; exit 1; }
   command -v kubectl >/dev/null 2>&1 || { echo "kubectl is not installed. Aborting." >&2; exit 1; }
   command -v helm >/dev/null 2>&1 || { echo "helm is not installed. Aborting." >&2; exit 1; }
   command -v helmfile >/dev/null 2>&1 || { echo "helmfile is not installed. Aborting." >&2; exit 1; }
@@ -119,12 +120,23 @@ function write_config_from_templates_for_directory(){
   echo ""
 }
 
+function install_cli() {
+  echo "######################################################"
+  echo "Installing kmt cli dependencies ..."
+  pushd cli
+  pip install -r requirements.txt
+  popd
+  echo "Installed kmt cli dependencies successfully."
+  echo "######################################################"
+}
+
 ################## FUNCTION DEFINITION END ####################
 
 # initial checks
+check_dependencies
+install_cli
 check_required_environment_variables
 check_is_already_initialized
-check_dependencies
 print_cli_versions
 
 # DEPLOYER SSH KEY SETUP
@@ -305,7 +317,8 @@ echo "##############################"
 echo ""
 echo "You can now use this configuration to roll out the platform components on the cluster via:"
 echo ""
-echo "./install_kubementat.sh $TARGET_ENVIRONMENT $TARGET_TEAM"
+echo "pushd cli"
+echo "./kmt install $TARGET_ENVIRONMENT $TARGET_TEAM"
 echo ""
 echo "In case you encounter error messages you can just rerun the full setup script to continue where the error occured."
 echo "The setup script is non-destructive"

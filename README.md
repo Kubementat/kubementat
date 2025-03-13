@@ -95,6 +95,17 @@ git config --global user.email "smith@matrix.com"
 git config --global user.name "Agent Smith"
 ```
 
+### Install the kmt cli requirements via pip
+The kmt cli serves as a central tool for managing your kubementat processes.
+
+```
+pip install -r cli/requirements.txt
+
+# view kmt cli help
+cd cli
+./kmt --help
+```
+
 ### Git Repository
 - This project is intended as a template to build your own customizations on top.
 - You need to either fork this repository to your own public github account or clone and push to your own private git repository.
@@ -138,11 +149,13 @@ Now you need to push your repository to your upstream git repo and configure the
 ### Install kubementat tooling to the cluster
 ```
 # Install the tekton tooling on your cluster
-./install_kubementat.sh dev dev1
+pushd cli
+./kmt install dev dev1
+popd
 
 # If you are using a private docker registry ensure to run
-pushd tekton_ci/automation/
-./configure_docker_registry_access.sh dev dev1
+pushd cli
+./kmt tekton-configure-docker-registry-access dev dev1
 popd
 
 # Optional (but recommmended)
@@ -153,13 +166,11 @@ pushd tekton_ci/automation/
 popd
 
 # Test run a pipeline via tekton
-pushd tekton_ci/automation/
-./run_pipeline.sh dev dev1 ../pipeline-runs/hello-world-pipeline-run.yml
-popd
+pushd cli
+./kmt tekton-run-pipeline dev dev1 ../../examples/tekton_ci/pipeline-runs/hello-world-pipeline-run.yml
 
 # view progress via tekton dashboard
-pushd utilities
-./open_tekton_dashboard_tunnel.sh
+./kmt tunnel-tekton
 ```
 
 ## Additional Features

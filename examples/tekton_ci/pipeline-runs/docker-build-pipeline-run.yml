@@ -1,0 +1,48 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: docker-build-pipeline-run
+spec:
+  # here we need to use our previously created service account (see setup_pipelines.sh)
+  # as we are deploying to another namespace than the tekton pipeline
+  # and want to grant according permissions for the helm deploy task
+  serviceAccountName: "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME_PLACEHOLDER"
+  workspaces:
+    - name: pipeline-workspace
+      volumeClaimTemplate:
+        spec:
+          storageClassName: STORAGE_CLASS_PLACEHOLDER
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 200Mi
+  pipelineRef:
+    name: docker-build-pipeline
+  timeout: 30m
+  params:
+    - name: environment
+      value: dev
+    - name: team
+      value: "dev1"
+
+    - name: docker-registry-base-url
+      value: "DOCKER_REGISTRY_BASE_URL_PLACEHOLDER"
+    - name: tekton-ci-image-name
+      value: "TEKTON_CI_IMAGE_NAME_PLACEHOLDER"
+    - name: tekton-ci-image-tag
+      value: "TEKTON_CI_IMAGE_TAG_PLACEHOLDER"
+
+    - name: push-image-name
+      value: "alpine"
+    - name: push-image-tag
+      value: "example"
+
+    - name: app-git-url
+      value: "git@github.com/alpinelinux/docker-alpine.git"
+    - name: app-git-project-name
+      value: "docker-alpine"
+    - name: app-git-revision
+      value: "master"
+    - name: app-git-ssh-key-secret-name
+      value: "git-deployer-ssh-key"

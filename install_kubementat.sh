@@ -117,16 +117,6 @@ function print_skip_section() {
   echo ""
 }
 
-function install_cli() {
-  echo "######################################################"
-  echo "Installing kmt cli dependencies ..."
-  pushd cli
-  pip install -r requirements.txt
-  popd
-  echo "Installed kmt cli dependencies successfully."
-  echo "######################################################"
-}
-
 check_dependencies
 check_cluster_and_access
 
@@ -182,7 +172,7 @@ echo "# View kmt help section: "
 echo "./kmt --help"
 echo ""
 echo "# execute pipeline run via kmt"
-echo "./kmt tekton-run-pipeline dev dev1 ../pipeline-runs/hello-world-pipeline-run.yml"
+echo "./kmt tekton-run-pipeline dev dev1 ../../examples/tekton_ci/pipeline-runs/hello-world-pipeline-run.yml"
 echo ""
 echo "# View the results via the tekton dashboard by tunneling via the kmt cli:"
 echo "Once this command is executed you can visit http://127.0.0.1:9097 in your browser"

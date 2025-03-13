@@ -72,7 +72,7 @@ def tekton_cleanup_pipeline_runs(config, environment, team, all):
 
 # --------------------------------------------
 # CONFIGURE SECRETS
-@click.command(name='tekton-configure-secrets', help='Configure tekton related secrets in the k8s cluster')
+@click.command(name='tekton-configure-secrets', help='Configure tekton secrets in the k8s cluster')
 @click.argument('environment',envvar='ENVIRONMENT')
 @click.argument('team',envvar='TEAM')
 @click.pass_obj
@@ -81,7 +81,7 @@ def tekton_configure_secrets(config, environment, team):
 
 # --------------------------------------------
 # CONFIGURE DOCKER REGISTRY ACCESS
-@click.command(name='tekton-configure-docker-registry-access', help='Configure tekton related secrets for accessing docker registries')
+@click.command(name='tekton-configure-docker-registry-access', help='Configure tekton secrets for accessing docker registries')
 @click.argument('environment',envvar='ENVIRONMENT')
 @click.argument('team',envvar='TEAM')
 @click.pass_obj

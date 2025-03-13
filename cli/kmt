@@ -10,6 +10,7 @@ class Config(object):
 
 from commands import tunnels
 from commands import tekton
+from commands import kubementat
 from commands import utilities
 
 @click.group(help='Kubementat CLI')
@@ -18,6 +19,8 @@ def main(ctx):
     ctx.obj = Config()
 
 if __name__ == '__main__':
+    main.add_command(kubementat.install)
+
     # tunnels
     main.add_command(tunnels.tunnel_grafana)
     main.add_command(tunnels.tunnel_tekton)

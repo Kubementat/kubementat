@@ -1,9 +1,0 @@
-# kubectl apply -f hello_world_pipeline_run.yml
-
-apiVersion: tekton.dev/v1beta1
-kind: PipelineRun
-metadata:
-  name: hello-world-pipeline-run
-spec:
-  pipelineRef:
-    name: hello-world-pipeline
