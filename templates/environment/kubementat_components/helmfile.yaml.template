@@ -113,7 +113,7 @@ releases:
 
 - name: grafana
   chart: grafana/grafana
-  # version: "6.44.9"
+  version: "9.0.0"
   namespace: grafana
   labels:
     component: monitoring

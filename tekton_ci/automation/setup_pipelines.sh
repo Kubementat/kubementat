@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# TODO: remove once migrating to kmt fully
+
 ######################################
 #
 # This script sets up all prepared tekton tasks and pipelines for the given environment (e.g. dev, prod)

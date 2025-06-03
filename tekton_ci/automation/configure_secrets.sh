@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# TODO: remove once migrating to kmt fully
+
 #################################
 #
 # This script will take the configured ssh keys in platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json

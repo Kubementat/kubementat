@@ -28,7 +28,7 @@ fi
 
 ENVIRONMENT="$1"
 TEAM="$2"
-if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" ]]; then
+if [[ -z ${ENVIRONMENT} || -z ${TEAM} ]]; then
   echo "#################"
   echo "Available environment variables:"
   echo "HELMFILE_INSTALLATION_GROUP - the group within the kubementat_components helmfile to apply to the cluster - default: standard"
@@ -48,22 +48,26 @@ fi
 
 set -u
 
-function check_dependencies(){
-  echo "Checking local dependencies"
-  command -v kubectl >/dev/null 2>&1 || { echo "kubectl is not installed. Aborting." >&2; exit 1; }
-  command -v helm >/dev/null 2>&1 || { echo "helm is not installed. Aborting." >&2; exit 1; }
-  command -v helmfile >/dev/null 2>&1 || { echo "helmfile is not installed. Aborting." >&2; exit 1; }
-  command -v jq >/dev/null 2>&1 || { echo "jq is not installed. Aborting." >&2; exit 1; }
-  command -v yq >/dev/null 2>&1 || { echo "yq is not installed. Aborting." >&2; exit 1; }
-  command -v git >/dev/null 2>&1 || { echo "git is not installed. Aborting." >&2; exit 1; }
-  command -v git-crypt >/dev/null 2>&1 || { echo "git-crypt is not installed. Aborting." >&2; exit 1; }
-  command -v gpg >/dev/null 2>&1 || { echo "gpg is not installed. Aborting." >&2; exit 1; }
-  command -v linkerd >/dev/null 2>&1 || { echo "linkerd is not installed. Aborting." >&2; exit 1; }
-  command -v python >/dev/null 2>&1 || { echo "python is not installed. Aborting." >&2; exit 1; }
-  command -v pip >/dev/null 2>&1 || { echo "python pip is not installed. Aborting." >&2; exit 1; }
-  echo "Finished checking local dependencies"
-  echo "################"
-  echo ""
+check_dependencies() {
+    local dependencies=(\
+    "kubectl"\
+    "helm"\
+    "helmfile"\
+    "jq"\
+    "yq"\
+    "git"\
+    "git"\
+    "gpg"\
+    "linkerd"\
+    "python"\
+    "pip"
+    )
+    for dep in "${dependencies[@]}"; do
+        if ! command -v "$dep" &> /dev/null; then
+            echo "Error: $dep is not installed." >&2
+            exit 1
+        fi
+    done
 }
 
 function check_cluster_and_access(){
@@ -172,7 +176,7 @@ echo "# View kmt help section: "
 echo "./kmt --help"
 echo ""
 echo "# execute pipeline run via kmt"
-echo "./kmt tekton-run-pipeline dev dev1 ../../examples/tekton_ci/pipeline-runs/hello-world-pipeline-run.yml"
+echo "./kmt tekton-run-pipeline $ENVIRONMENT $TEAM global/hello-world-pipeline-run.yml"
 echo ""
 echo "# View the results via the tekton dashboard by tunneling via the kmt cli:"
 echo "Once this command is executed you can visit http://127.0.0.1:9097 in your browser"

@@ -1,3 +1,11 @@
+# 0.3.0
+- Begins refactoring BASH utilities to python
+  - adds the first iteration of the __kubementat lib__
+  - refactors some base kubementat scripts to allow better portability
+  - moves python requirements from cli to central requirements
+- integrates __more functionality accesible via the kmt cli__
+  - integrates already ported functionality to the kmt cli via the kubementat lib
+
 # 0.2.0
 - Goals for this release: 
   - Cleanup and removal of obsolete and umaintained parts

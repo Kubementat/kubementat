@@ -5,8 +5,11 @@
 ####
 set -e
 
-TARGET_ENVIRONMENT="dev"
-TARGET_TEAM="dev1"
+ENVIRONMENT="$1"
+TEAM="$2"
+
+TARGET_ENVIRONMENT="${ENVIRONMENT:-dev}"
+TARGET_TEAM="${TEAM:-dev1}"
 
 ################## FUNCTION DEFINITIONS ####################
 function check_is_already_initialized(){
@@ -89,6 +92,7 @@ function does_file_with_pattern_exist {
    [ ${#files[@]} -gt 1 ] || [ ${#files[@]} -eq 1 ] && [ -e "${files[0]}" ]
 }
 
+# TODO: ensure that the contents of e.g. platform_config/dev/${TEAM}/static.json are filled with according vaules, e.g. APP_DEPLOYMENT_NAMESPACE, PIPELINE_NAMESPACE,  etc.
 # writes directories and config files from .template files for given directory
 function write_config_from_templates_for_directory(){
   local source_directory="$1"
@@ -120,22 +124,146 @@ function write_config_from_templates_for_directory(){
   echo ""
 }
 
-function install_cli() {
+function install_python_dependencies() {
   echo "######################################################"
-  echo "Installing kmt cli dependencies ..."
-  pushd cli
+  echo "Installing python dependencies ..."
   pip install -r requirements.txt
-  popd
-  echo "Installed kmt cli dependencies successfully."
+  echo "Installed python dependencies successfully."
   echo "######################################################"
+}
+
+function show_summary() {
+  echo "##############################"
+  echo "Please ensure to push this repo to a git server:"
+  echo "git remote add upstream $AUTOMATION_GIT_URL"
+  echo "git add ."
+  echo "git commit -m '00 - initial configuration'"
+  echo "git push upstream master"
+  echo ""
+  echo "And configure the git server to allow at minimum read access to the generated deployer_ssh_key.pub :"
+  cat deployer_ssh_key.pub
+  echo ""
+  echo "##############################"
+  echo ""
+  echo "Finished initialization successfully!"
+  echo ""
+  echo "##############################"
+  echo ""
+  echo "You can now use this configuration to roll out the platform components on the cluster via:"
+  echo ""
+  echo "./kmt install $TARGET_ENVIRONMENT $TARGET_TEAM"
+  echo ""
+  echo "In case you encounter error messages you can just rerun the full setup script to continue where the error occured."
+  echo "The setup script is non-destructive"
+  echo "##############################"
+  echo ""
+  echo "HAVE FUN WITH YOUR AUTOMATED KUBERNETES CLUSTER :D"
+  echo "If you have any questions, feel free to create an issue via https://github.com/Kubementat/kubementat/issues"
+  echo "P.S.: Also feel free to contact me (https://www.linkedin.com/in/julianweberdev/) for help regarding Kubementat or DevOps automation in general"
+}
+
+function configure_git_crypt() {
+  local git_deployer_email="$1"
+  if [[ ! -f git_crypt_symmetric.key ]]; then
+    # GIT CRYPT SETUP
+    echo "Initializing git-crypt ..."
+    # initialize (only executed when initializing a new repo with git crypt)
+    git-crypt init
+
+    # add previously generated deployer user to git-crypt keystore
+    git-crypt add-gpg-user "$git_deployer_email"
+
+    # optional: add another key
+    # git-crypt add-gpg-user "your@email.com"
+
+    # show git-crypt encryption status
+    # git-crypt status
+
+    # optional: export a symmetric key for git crypt
+    git-crypt export-key git_crypt_symmetric.key
+
+    # if you have a private key registered
+    # git-crypt unlock
+
+    # for the symmetric key
+    # git-crypt unlock git_crypt_symmetric.key
+
+    echo "Finished initializing git-crypt."
+  else
+    echo "Found git_crypt_symmetric.key . Git crypt seems to be configured already. Skipping git-crypt configuration."
+  fi
+}
+
+function generate_deployer_email() {
+  random_number="$((1 + $RANDOM % 1000))"
+  GIT_DEPLOYER_EMAIL="deployer${random_number}@${BASE_DOMAIN}"
+  echo "$GIT_DEPLOYER_EMAIL"
+}
+
+function configure_gpg_key() {
+  local git_deployer_email="$1"
+
+  # Generate a new GPG key pair
+  if [[ ! -f gpg_private.key ]]; then
+    echo "Generating deployer gpg key ..."
+    # list all local gpg keys
+    # gpg -k
+
+    echo "GPG GIT_DEPLOYER_EMAIL: $git_deployer_email"
+    gpg --batch --passphrase '' --quick-gen-key "$git_deployer_email" default default
+
+    # gpg --list-secret-keys "$git_deployer_email"
+
+    # export private key
+    gpg --export-secret-keys "$git_deployer_email" > gpg_private.key
+
+    # export public key
+    gpg --export -a "$git_deployer_email" > gpg_public_key.gpg
+
+    # for importing:
+
+    # private key
+    # gpg --import gpg_private.key
+
+    # public key
+    # gpg --import gpg_public_key.gpg
+    echo "Finished generating deployer gpg key."
+  else
+    echo "git deployer gpg key is already present on machine. Skipping generation."
+  fi
+}
+
+function base64_encode_key() {
+  local key_file="$1"
+
+  if [[ "$(uname -a |grep -o Darwin | head -n1)" == "Darwin"  ]]; then
+    # OS X variant
+    encoded_key="$(cat $key_file | openssl base64 -A)"
+  else
+    ### linux variant
+    encoded_key="$(cat $key_file | base64 -w 0)"
+  fi
+  echo "$encoded_key"
+}
+
+function replace_template_team_values_in_config_files() {
+  static_file="platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.json"
+  static_encrypted_file="platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.encrypted.json"
+
+  new_static_file_contents=$(cat "$static_file" | sed "s|dev1|${TARGET_TEAM}|g")
+  new_encrypted_file_contents=$(cat "$static_encrypted_file" | sed "s|dev1|${TARGET_TEAM}|g")
+
+  echo "$new_static_file_contents" > $static_file
+  echo "$new_encrypted_file_contents" > $static_encrypted_file
 }
 
 ################## FUNCTION DEFINITION END ####################
 
 # initial checks
 check_dependencies
-install_cli
+install_python_dependencies
 check_required_environment_variables
+set -u
 check_is_already_initialized
 print_cli_versions
 
@@ -149,52 +277,18 @@ else
 fi
 
 # GPG setup
-if [[ ! -f gpg_private.key ]]; then
-  echo "Generating deployer gpg key ..."
-  # list all local gpg keys
-  # gpg -k
+## generate a gpg key for the deployer user
+GIT_DEPLOYER_EMAIL=$(generate_deployer_email)
 
-  # generate a gpg key for the deployer user
-  random_number="$((1 + $RANDOM % 1000))"
-  GIT_DEPLOYER_EMAIL="deployer${random_number}@${BASE_DOMAIN}"
-  echo "GPG GIT_DEPLOYER_EMAIL: $GIT_DEPLOYER_EMAIL"
-  gpg --batch --passphrase '' --quick-gen-key "$GIT_DEPLOYER_EMAIL" default default
+configure_gpg_key "$GIT_DEPLOYER_EMAIL"
 
-  # gpg --list-secret-keys "$GIT_DEPLOYER_EMAIL"
-
-  # export private key
-  gpg --export-secret-keys "$GIT_DEPLOYER_EMAIL" > gpg_private.key
-
-  # export public key
-  gpg --export -a "$GIT_DEPLOYER_EMAIL" > gpg_public_key.gpg
-
-  # for importing:
-
-  # private key
-  # gpg --import gpg_private.key
-
-  # public key
-  # gpg --import gpg_public_key.gpg
-  echo "Finished generating deployer gpg key."
-else
-  echo "git deployer gpg key is already present on machine. Skipping generation."
-fi
-
-# for transforming to base64
-## ATTENTION: base64 behaves differently on some Operating system
-GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64=""
-GIT_DEPLOYER_PRIVATE_KEY_BASE64=""
-if [[ "$(uname -a |grep -o Darwin | head -n1)" == "Darwin"  ]]; then
-  ### OS X Variant
-  GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64="$(cat gpg_private.key | openssl base64 -A)"
-  GIT_DEPLOYER_PRIVATE_KEY_BASE64="$(cat deployer_ssh_key | openssl base64 -A)"
-else
-  ### linux variant
-  GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64="$(cat gpg_private.key | base64 -w 0)"
-  GIT_DEPLOYER_PRIVATE_KEY_BASE64="$(cat deployer_ssh_key | base64 -w 0)"
-fi
-
+###################
+# base64 encode keys for usage within json templates
+GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64=$(base64_encode_key gpg_private.key)
+GIT_DEPLOYER_PRIVATE_KEY_BASE64=$(base64_encode_key deployer_ssh_key)
 GIT_DEPLOYER_GPG_PUBLIC_KEY="$(cat gpg_public_key.gpg)"
+
+###################
 
 # Configure platform_config/$TARGET_ENVIRONMENT/static.json
 echo "Creating config sub-directory: platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM"
@@ -229,7 +323,7 @@ jq \
 echo "Writing platform_config/$TARGET_ENVIRONMENT/mirrored_docker_images.json"
 cp templates/environment/mirrored_docker_images.json.template platform_config/$TARGET_ENVIRONMENT/mirrored_docker_images.json
 
-# Configure platform_config/$TARGET_ENVIRONMENT/dev1/static.json
+# Configure platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.json
 echo "Writing platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.json"
 jq \
   --arg storage_class "$KUBERNETES_DEFAULT_STORAGE_CLASS" \
@@ -263,65 +357,16 @@ write_config_from_templates_for_directory "templates/environment/kubementat_comp
 echo "#####################"
 echo ""
 
-echo "Configuring default platform_config values files for team dev1 ..."
+echo "Configuring default platform_config values files for team $TARGET_TEAM ..."
 write_config_from_templates_for_directory "templates/environment/team" "platform_config/${TARGET_ENVIRONMENT}/${TARGET_TEAM}"
 echo "#####################"
 
-if [[ ! -f git_crypt_symmetric.key ]]; then
-  # GIT CRYPT SETUP
-  echo "Initializing git-crypt ..."
-  # initialize (only executed when initializing a new repo with git crypt)
-  git-crypt init
+replace_template_team_values_in_config_files
 
-  # add previously generated deployer user to git-crypt keystore
-  git-crypt add-gpg-user "$GIT_DEPLOYER_EMAIL"
+echo "Preparing tekton trigger configuration directory for team $TARGET_TEAM ..."
+mkdir -p tekton_ci/triggers/${TARGET_TEAM}
+echo "#####################"
 
-  # optional: add another key
-  # git-crypt add-gpg-user "your@email.com"
+configure_git_crypt "$GIT_DEPLOYER_EMAIL"
 
-  # show git-crypt encryption status
-  # git-crypt status
-
-  # optional: export a symmetric key for git crypt
-  git-crypt export-key git_crypt_symmetric.key
-
-  # if you have a private key registered
-  # git-crypt unlock
-
-  # for the symmetric key
-  git-crypt unlock git_crypt_symmetric.key
-
-  echo "Finished initializing git-crypt."
-else
-  echo "Found git_crypt_symmetric.key . Git crypt seems to be configured already. Skipping git-crypt configuration."
-fi
-
-
-# Final output
-echo "##############################"
-echo "Please ensure to push this repo to a git server:"
-echo "git remote add upstream $AUTOMATION_GIT_URL"
-echo "git add ."
-echo "git commit -m '00 - initial configuration'"
-echo "git push upstream master"
-echo ""
-echo "And configure the git server to allow at minimum read access to the generated deployer_ssh_key.pub :"
-cat deployer_ssh_key.pub
-echo ""
-echo "##############################"
-echo ""
-echo "Finished initialization successfully!"
-echo "If you have any questions, feel free to create an issue via https://github.com/Kubementat/kubementat/issues"
-echo ""
-echo "##############################"
-echo ""
-echo "You can now use this configuration to roll out the platform components on the cluster via:"
-echo ""
-echo "pushd cli"
-echo "./kmt install $TARGET_ENVIRONMENT $TARGET_TEAM"
-echo ""
-echo "In case you encounter error messages you can just rerun the full setup script to continue where the error occured."
-echo "The setup script is non-destructive"
-echo "##############################"
-echo ""
-echo "HAVE FUN WITH YOUR AUTOMATED KUBERNETES CLUSTER :D"
+show_summary

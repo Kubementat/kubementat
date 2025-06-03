@@ -52,11 +52,17 @@ git-crypt unlock
 ## Local Environment Prerequisites
 
 ### Or just start a prebaked docker image with everything installed
+From the kubementat root you can run:
 ```
 # PREFERED WAY:
 # Run image via Docker and mount this directory
-docker run --name ubuntu-ci -it --mount type=bind,source="$(pwd)",target=/src "docker.io/julianweberdev/ubuntu-ci-minimal:latest"
-# Then on the container: cd /src
+docker run --name ubuntu-ci -it --rm \
+--mount type=bind,source="$(pwd)",target=/src \
+--mount type=bind,source="$HOME/.kube",target=/root/.kube \
+'docker.io/julianweberdev/ubuntu-ci-minimal:latest'
+
+docker run --name ubuntu-ci -it  "docker.io/julianweberdev/ubuntu-ci-minimal:latest"
+# Then on the container: cd /src - the sources are mounted into the container in /src
 
 # Alternative: Kubernetes - but then you need to directly commit all changes to your fork of the kubementat repo
 # In addition you also need to transfer all generated key files manually using this approach
@@ -95,11 +101,14 @@ git config --global user.email "smith@matrix.com"
 git config --global user.name "Agent Smith"
 ```
 
-### Install the kmt cli requirements via pip
+### Install the python requirements via pip
 The kmt cli serves as a central tool for managing your kubementat processes.
 
 ```
-pip install -r cli/requirements.txt
+pip install -r requirements.txt
+
+# or if you are using uv (which is much better)
+uv pip install -r requirements.txt
 
 # view kmt cli help
 cd cli
@@ -139,6 +148,9 @@ export KUBERNETES_DEFAULT_STORAGE_CLASS='YOUR_KUBERNETES_DEFAULT_STORAGE_CLASS'
 export DOCKER_REGISTRY_BASE_URL='YOUR_DOCKER_REGISTRY_BASE_URL'
 export CLUSTER_MANAGER_EMAIL='YOUR_EMAIL_ADDRESS'
 
+pushd cli
+./kmt initialize dev dev1
+popd
 ./initialize_kubementat.sh
 
 ```
@@ -155,8 +167,14 @@ popd
 
 # If you are using a private docker registry ensure to run
 pushd cli
-./kmt tekton-configure-docker-registry-access dev dev1
+./kmt setup-docker-registry-access dev dev1
 popd
+
+# If you have configured further secrets for your team in platform_config/dev/TEAM/static.encrypted.json (SSH_DEPLOY_KEYS)
+pushd cli
+./kmt setup-secrets dev dev1
+popd
+
 
 # Optional (but recommmended)
 # Configure cluster wide auto cleanup of finished tekton pipeline runs
@@ -173,6 +191,37 @@ pushd cli
 ./kmt tunnel-tekton
 ```
 
+## Kubernetes Dashboard
+# TODO: Fix accessing the kubernetes dashboard
+You can install the kubernetes dashboard via the helmfile apply feature:
+```
+pushd tekton_ci/automation/components
+./install_kubernetes_dashboard.sh dev
+popd
+```
+
+Afterwards you can access the vault ui via:
+```
+pushd cli
+./kmt login-kubernetes-dashboard
+popd
+```
+
+## Vault
+You can install vault via the helmfile apply feature:
+```
+pushd tekton_ci/automation/components
+./helmfile_apply.sh dev 'component_name=vault' true
+popd
+```
+
+Afterwards you can access the vault ui via:
+```
+pushd cli
+./kmt tunnel-vault-ui
+popd
+```
+
 ## Additional Features
 - Routing: Kubementat provides templated configuration for configuring nginx ingress controller and cert-manager for ingress routing (see install_routing.sh)
-- Helmfile based component installation: See templates/environment/kubementat_components/helmfile.yaml.template for already preconfigured/templated components
+- Helmfile based component installation: See tekton_ci/automation/components/helmfile.yaml templates/environment/kubementat_components/helmfile.yaml.template for already preconfigured/templated components.

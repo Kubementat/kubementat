@@ -57,6 +57,19 @@ EOF
 
 kubectl -n "$KUBERNETES_DASHBOARD_DEPLOYMENT_NAMESPACE" get serviceaccount "$SERVICE_ACCOUNT_NAME"
 
+echo "Creating token: $SERVICE_ACCOUNT_NAME-ro-token for service account: $SERVICE_ACCOUNT_NAME in namespace: $KUBERNETES_DASHBOARD_DEPLOYMENT_NAMESPACE"
+echo ""
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: $SERVICE_ACCOUNT_NAME-token
+  namespace: $KUBERNETES_DASHBOARD_DEPLOYMENT_NAMESPACE
+  annotations:
+    kubernetes.io/service-account.name: $SERVICE_ACCOUNT_NAME
+type: kubernetes.io/service-account-token
+EOF
+
 ###
 echo ""
 echo "Binding $CLUSTER_ROLE_NAME cluster role to $SERVICE_ACCOUNT_NAME ..."

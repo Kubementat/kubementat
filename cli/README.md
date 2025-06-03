@@ -1,12 +1,12 @@
 # kmt cli
-The kmt cli simplifies using the kubementat features by providing a 
+The kmt cli simplifies using the kubementat features by providing a central access point for all kubementat automations and features.
 
 # Requirements
 - python needs to be installed on the machine
 
 # Installation
 
-Within the cli sub-directory execute the following line to install required python packages.
+Within the projects root directory execute the following line to install required python packages.
 
 ```
 pip install -r requirements.txt

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# TODO: remove once migrating to kmt fully
+
 #################################
 #
 # This script adds an according secret for a docker registry within the provided environment and namespace

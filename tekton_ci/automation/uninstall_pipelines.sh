@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# TODO: remove once migrating to kmt fully
+
 ######################################
 #
 # This script removes the pipelines and tasks setup completely

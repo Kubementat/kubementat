@@ -19,3 +19,7 @@ extraScrapeConfigs: |
        target_label: instance
      - target_label: __address__
        replacement: prometheus-blackbox-exporter.prometheus.svc.cluster.local:9115
+
+# disable node exporter for local installation
+prometheus-node-exporter:
+  enabled: false

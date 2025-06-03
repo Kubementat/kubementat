@@ -19,9 +19,15 @@ def main(ctx):
     ctx.obj = Config()
 
 if __name__ == '__main__':
+    main.add_command(kubementat.initialize)
     main.add_command(kubementat.install)
+    main.add_command(kubementat.uninstall)
+    main.add_command(kubementat.setup_secrets)
+    main.add_command(kubementat.setup_docker_registry_access)
+
 
     # tunnels
+    main.add_command(tunnels.tunnel_pod)
     main.add_command(tunnels.tunnel_grafana)
     main.add_command(tunnels.tunnel_tekton)
     main.add_command(tunnels.tunnel_polaris)
@@ -30,13 +36,12 @@ if __name__ == '__main__':
     main.add_command(tunnels.login_kubernetes_dashboard)
 
     # tekton
-    main.add_command(tekton.tekton_run_pipeline)
-    main.add_command(tekton.tekton_cleanup_pipeline_runs)
-    main.add_command(tekton.tekton_configure_secrets)
-    main.add_command(tekton.tekton_configure_docker_registry_access)
-    main.add_command(tekton.tekton_setup_pipelines)
-    main.add_command(tekton.tekton_setup_triggers)
+    main.add_command(tekton.run_pipeline)
+    main.add_command(tekton.cleanup_pipeline_runs)
+    main.add_command(tekton.setup_pipelines)
+    main.add_command(tekton.setup_triggers)
     main.add_command(tekton.list)
+    main.add_command(tekton.uninstall_pipelines)
 
     # utilities
     main.add_command(utilities.run_ci_container)

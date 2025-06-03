@@ -1,6 +1,16 @@
+.vscode/
+.conda/
+.continue/
+.venv/
+pyvenv.cfg
 *.key
 deployer_ssh_key
 deployer_ssh_key.pub
 gpg_private.key
 gpg_public_key.gpg
 cli/commands/__pycache__
+tekton_ci/triggers/smoke/
+platform_config/dev/smoke/
+lib/kubementat/__pycache__/
+tekton_ci/pipeline-runs/smoke/
+.aider*

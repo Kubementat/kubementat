@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# TODO: remove once migrating to kmt fully
+
 #################################
 #
 # This script runs the pipeline with the given name

@@ -8,9 +8,14 @@
 
 ENVIRONMENT="$1"
 if [[ "$ENVIRONMENT" == "" ]]; then
-  echo "Usage: open_grafana_tunnel.sh <ENVIRONMENT_NAME>"
-  echo "e.g.: open_grafana_tunnel.sh dev"
+  echo "Usage: open_grafana_tunnel.sh <ENVIRONMENT_NAME> <LOCAL_PORT (optional)>"
+  echo "e.g.: open_grafana_tunnel.sh dev 3001"
   exit 1
+fi
+
+LOCAL_PORT="$2"
+if [ -z "$LOCAL_PORT" ]; then
+  LOCAL_PORT="3001"
 fi
 
 set -eu
@@ -23,11 +28,10 @@ echo "ENVIRONMENT: $ENVIRONMENT"
 echo "GRAFANA_DEPLOYMENT_NAMESPACE: $GRAFANA_DEPLOYMENT_NAMESPACE"
 echo "#########################"
 
-LOCAL_PORT="3000"
 pod_name="$(kubectl -n "$GRAFANA_DEPLOYMENT_NAMESPACE" get pod -l "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=grafana" -o json | jq -r '.items[0].metadata.name')"
 
 echo "See GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD environment variables within ../platform_config/${ENVIRONMENT}/static.encrypted.json"
-echo "Visit: http://localhost:3000"
+echo "Visit: http://localhost:$LOCAL_PORT"
 echo "###########"
 
 source open_pod_tunnel.sh "$GRAFANA_DEPLOYMENT_NAMESPACE" "$pod_name" "$LOCAL_PORT" "3000" "0.0.0.0"
