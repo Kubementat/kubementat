@@ -67,7 +67,7 @@ spec:
         echo "###########################"
         echo "ENV:"
         env
-        cd $PATH_TO_CONFIGURATION/tekton_ci/automation/
+        cd $PATH_TO_CONFIGURATION/scripts/automation/tekton
         echo "CURRENT_PATH: $(pwd)"
         echo "###########################"
 
@@ -76,6 +76,7 @@ spec:
         echo "for ENV: $ENVIRONMENT and team: $TEAM"
         echo ""
 
+        # TODO: refactor this to use the kmt cli
         source run_pipeline.sh "$ENVIRONMENT" "$TEAM" "$PATH_TO_PIPELINE_RUN_FILE" "$ALLOW_PARALLEL_RUN"
 
         echo "PIPELINE_RUN_NAME: $PIPELINE_RUN_NAME"

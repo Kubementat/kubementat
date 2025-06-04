@@ -11,6 +11,8 @@
 
 set -e
 
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
+
 ENVIRONMENT="$1"
 TEAM="$2"
 
@@ -22,7 +24,7 @@ fi
 
 set -u
 
-CONFIG_FILE="../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json"
+CONFIG_FILE="${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.encrypted.json"
 SECRET_TYPE="kubernetes.io/ssh-auth"
 DATA_KEY_PRIVATE_KEY="ssh-privatekey"
 

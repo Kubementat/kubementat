@@ -11,6 +11,9 @@
 
 set -e
 
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
+PIPELINERUNS_DIRECTORY="../../../tekton_ci/tekton/pipeline-runs"
+
 ENVIRONMENT="$1"
 TEAM="$2"
 PIPELINE_RUN_FILE="$3"
@@ -21,13 +24,13 @@ fi
 
 if [[ "$ENVIRONMENT" == "" || "$PIPELINE_RUN_FILE" == "" || "$TEAM" == "" ]]; then
   echo "Usage: run_pipeline.sh <ENVIRONMENT_NAME> <TEAM> <PIPELINE_RUN_FILE> <OPTIONAL: ALLOW_PARALLEL_RUN>"
-  echo "e.g.: run_pipeline.sh dev dev1 ../pipeline-runs/deploy-pipeline-nginx-example-run.yml false"
+  echo "e.g.: run_pipeline.sh dev dev1 $PIPELINERUNS_DIRECTORY/deploy-pipeline-nginx-example-run.yml false"
   echo "##############"
   echo "Available pipeline runs for team ${TEAM}:"
-  ls ../pipeline-runs/${TEAM}/*.yml
+  ls ${PIPELINERUNS_DIRECTORY}/${TEAM}/*.yml ||true
   echo "##############"
   echo "General pipeline runs:"
-  ls ../pipeline-runs/*.yml ||true
+  ls ${PIPELINERUNS_DIRECTORY}/*.yml ||true
   echo "##############"
   exit 0
 fi
@@ -36,21 +39,21 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-export PIPELINE_NAMESPACE="$(jq -r '.PIPELINE_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-export TEKTON_KUBERNETES_STORAGE_CLASS="$(jq -r '.TEKTON_KUBERNETES_STORAGE_CLASS' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+export PIPELINE_NAMESPACE=$(jq -r '.PIPELINE_NAMESPACE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+export TEKTON_KUBERNETES_STORAGE_CLASS=$(jq -r '.TEKTON_KUBERNETES_STORAGE_CLASS' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
 
-export DOCKER_REGISTRY_BASE_URL="$(jq -r '.DOCKER_REGISTRY_BASE_URL' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-export TEKTON_CI_IMAGE_NAME="$(jq -r '.TEKTON_CI_IMAGE_NAME' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-export TEKTON_CI_IMAGE_TAG="$(jq -r '.TEKTON_CI_IMAGE_TAG' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+export DOCKER_REGISTRY_BASE_URL=$(jq -r '.DOCKER_REGISTRY_BASE_URL' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
+export TEKTON_CI_IMAGE_NAME=$(jq -r '.TEKTON_CI_IMAGE_NAME' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
+export TEKTON_CI_IMAGE_TAG=$(jq -r '.TEKTON_CI_IMAGE_TAG' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
 
-export AUTOMATION_GIT_URL="$(jq -r '.AUTOMATION_GIT_URL' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-export AUTOMATION_GIT_PROJECT_NAME="$(jq -r '.AUTOMATION_GIT_PROJECT_NAME' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-export AUTOMATION_GIT_REVISION="$(jq -r '.AUTOMATION_GIT_REVISION' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-export AUTOMATION_GIT_SERVER_HOST="$(jq -r '.AUTOMATION_GIT_SERVER_HOST' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-export AUTOMATION_GIT_SERVER_PORT="$(jq -r '.AUTOMATION_GIT_SERVER_PORT' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-export AUTOMATION_GIT_SERVER_SSH_USER="$(jq -r '.AUTOMATION_GIT_SERVER_SSH_USER' ../../platform_config/"${ENVIRONMENT}"/static.json)"
+export AUTOMATION_GIT_URL=$(jq -r '.AUTOMATION_GIT_URL' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
+export AUTOMATION_GIT_PROJECT_NAME=$(jq -r '.AUTOMATION_GIT_PROJECT_NAME' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
+export AUTOMATION_GIT_REVISION=$(jq -r '.AUTOMATION_GIT_REVISION' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
+export AUTOMATION_GIT_SERVER_HOST=$(jq -r '.AUTOMATION_GIT_SERVER_HOST' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
+export AUTOMATION_GIT_SERVER_PORT=$(jq -r '.AUTOMATION_GIT_SERVER_PORT' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
+export AUTOMATION_GIT_SERVER_SSH_USER=$(jq -r '.AUTOMATION_GIT_SERVER_SSH_USER' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
 
-export HELM_DEPLOYER_SERVICE_ACCOUNT_NAME="$(jq -r '.HELM_DEPLOYER_SERVICE_ACCOUNT_NAME' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.json")"
+export HELM_DEPLOYER_SERVICE_ACCOUNT_NAME=$(jq -r '.HELM_DEPLOYER_SERVICE_ACCOUNT_NAME' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "TEAM: $TEAM"

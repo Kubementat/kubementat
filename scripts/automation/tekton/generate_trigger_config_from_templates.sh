@@ -2,11 +2,14 @@
 
 #################################
 #
-# This script creates a tekton trigger configuration set of yml files in ../triggers/ENVIRONMENT/TEAM
+# This script creates a tekton trigger configuration set of yml files in tekton_ci/triggers/ENVIRONMENT/TEAM
 #
 #################################
 
 set -e
+
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
+TRIGGERS_DIRECTORY="../../../tekton_ci/tekton/triggers"
 
 if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" || "$APP_NAME" == "" || "$PIPELINE_NAME" == "" || "$TRIGGER_TYPE" == "" ]]; then
   echo "Set all according environment variables first."
@@ -34,13 +37,13 @@ check_file_exists() {
 
 # read config
 echo "Reading config for env: $ENVIRONMENT ..."
-DOCKER_REGISTRY_BASE_URL="$(jq -r '.DOCKER_REGISTRY_BASE_URL' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-TEKTON_CI_IMAGE_NAME="$(jq -r '.TEKTON_CI_IMAGE_NAME' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-TEKTON_CI_IMAGE_TAG="$(jq -r '.TEKTON_CI_IMAGE_TAG' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-BASE_DOMAIN="$(jq -r '.BASE_DOMAIN' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-TEKTON_KUBERNETES_STORAGE_CLASS="$(jq -r '.TEKTON_KUBERNETES_STORAGE_CLASS' ../../platform_config/"${ENVIRONMENT}"/static.json)"
-HELM_DEPLOYER_SERVICE_ACCOUNT_NAME="$(jq -r '.HELM_DEPLOYER_SERVICE_ACCOUNT_NAME' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.json")"
-TARGET_DIRECTORY="../triggers/${TEAM}/${APP_NAME}"
+DOCKER_REGISTRY_BASE_URL=$(jq -r '.DOCKER_REGISTRY_BASE_URL' ${PLATFORM_CONFIG_DIRECTORY}/"${ENVIRONMENT}"/static.json)
+TEKTON_CI_IMAGE_NAME=$(jq -r '.TEKTON_CI_IMAGE_NAME' ${PLATFORM_CONFIG_DIRECTORY}/"${ENVIRONMENT}"/static.json)
+TEKTON_CI_IMAGE_TAG=$(jq -r '.TEKTON_CI_IMAGE_TAG' ${PLATFORM_CONFIG_DIRECTORY}/"${ENVIRONMENT}"/static.json)
+BASE_DOMAIN=$(jq -r '.BASE_DOMAIN' ${PLATFORM_CONFIG_DIRECTORY}/"${ENVIRONMENT}"/static.json)
+TEKTON_KUBERNETES_STORAGE_CLASS=$(jq -r '.TEKTON_KUBERNETES_STORAGE_CLASS' ${PLATFORM_CONFIG_DIRECTORY}/"${ENVIRONMENT}"/static.json)
+HELM_DEPLOYER_SERVICE_ACCOUNT_NAME=$(jq -r '.HELM_DEPLOYER_SERVICE_ACCOUNT_NAME' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+TARGET_DIRECTORY="${TRIGGERS_DIRECTORY}/${TEAM}/${APP_NAME}"
 
 echo "Settings: "
 echo "ENVIRONMENT: $ENVIRONMENT"
@@ -55,10 +58,10 @@ echo "TEKTON_CI_IMAGE_TAG: $TEKTON_CI_IMAGE_TAG"
 echo "TEKTON_KUBERNETES_STORAGE_CLASS: $TEKTON_KUBERNETES_STORAGE_CLASS"
 echo "TARGET_DIRECTORY: $TARGET_DIRECTORY"
 
-INGRESS_FILE_TEMPLATE="../triggers/templates/${TRIGGER_TYPE}/template-event-listener-ingress.yml"
-EVENT_LISTENER_TEMPLATE="../triggers/templates/${TRIGGER_TYPE}/template-event-listener.yml"
-TRIGGER_BINDING_TEMPLATE="../triggers/templates/${TRIGGER_TYPE}/template-trigger-binding.yml"
-TRIGGER_TEMPLATE_TEMPLATE="../triggers/templates/${TRIGGER_TYPE}/template-trigger-template.yml"
+INGRESS_FILE_TEMPLATE="${TRIGGERS_DIRECTORY}/templates/${TRIGGER_TYPE}/template-event-listener-ingress.yml"
+EVENT_LISTENER_TEMPLATE="${TRIGGERS_DIRECTORY}/templates/${TRIGGER_TYPE}/template-event-listener.yml"
+TRIGGER_BINDING_TEMPLATE="${TRIGGERS_DIRECTORY}/templates/${TRIGGER_TYPE}/template-trigger-binding.yml"
+TRIGGER_TEMPLATE_TEMPLATE="${TRIGGERS_DIRECTORY}/templates/${TRIGGER_TYPE}/template-trigger-template.yml"
 
 echo "Generating directory: $TARGET_DIRECTORY"
 mkdir -p "$TARGET_DIRECTORY"

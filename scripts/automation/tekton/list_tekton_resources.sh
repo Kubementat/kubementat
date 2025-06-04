@@ -8,6 +8,8 @@
 
 set -e
 
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
+
 ENVIRONMENT="$1"
 TEAM="$2"
 if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" ]]; then
@@ -20,7 +22,7 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-PIPELINE_NAMESPACE="$(jq -r '.PIPELINE_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
+PIPELINE_NAMESPACE=$(jq -r '.PIPELINE_NAMESPACE' ${PLATFORM_CONFIG_DIRECTORY}/"${ENVIRONMENT}"/"${TEAM}"/static.json)
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "TEAM: $TEAM"

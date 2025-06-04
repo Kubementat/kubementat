@@ -67,7 +67,7 @@ Tekton triggers are a feature of tekton that can be used to spin up endpoints fo
 
 To setup the configured triggers for an environment run:
 ```
-cd automation
+cd scripts/automation/tekton
 # ./setup_triggers.sh <ENVIRONMENT> <TEAM>
 
 # e.g. for ENVIRONMENT=dev and TEAM=dev1

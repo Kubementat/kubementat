@@ -9,7 +9,7 @@ sys.path.append(import_path)
 from kubementat.automation import Automation
 from kubementat.tekton_utils import TektonUtils
 
-TEKTON_AUTOMATION_SUB_DIRECTORY='tekton_ci/automation'
+TEKTON_AUTOMATION_SUB_DIRECTORY='scripts/automation/tekton'
 
 ###########################
 # HELPERS 

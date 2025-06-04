@@ -8,6 +8,9 @@
 
 set -e
 
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
+TRIGGERS_DIRECTORY="../../../tekton_ci/tekton/triggers"
+
 ENVIRONMENT="$1"
 TEAM="$2"
 if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" ]]; then
@@ -20,7 +23,7 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-PIPELINE_NAMESPACE="$(jq -r '.PIPELINE_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
+PIPELINE_NAMESPACE=$(jq -r '.PIPELINE_NAMESPACE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "PIPELINE_NAMESPACE: $PIPELINE_NAMESPACE"
@@ -212,7 +215,7 @@ echo "Configuring webhook secrets in namespace $PIPELINE_NAMESPACE ..."
 
 echo "Configuring gitlab-trigger-webhook-secret from GITLAB_WEBHOOK_SECRET variable in namespace: $PIPELINE_NAMESPACE ..."
 set +e
-GITLAB_WEBHOOK_SECRET="$(jq -r '.GITLAB_WEBHOOK_SECRET' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
+GITLAB_WEBHOOK_SECRET=$(jq -r '.GITLAB_WEBHOOK_SECRET' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.encrypted.json")
 set -e
 if [[ "$GITLAB_WEBHOOK_SECRET" != "" ]]; then
   echo "Found GITLAB_WEBHOOK_SECRET configuration. Configuring gitlab-trigger-webhook-secret on cluster"
@@ -234,7 +237,7 @@ fi
 
 echo "Configuring github-trigger-webhook-secret from GITHUB_WEBHOOK_SECRET variable in namespace: $PIPELINE_NAMESPACE ..."
 set +e
-GITHUB_WEBHOOK_SECRET="$(jq -r '.GITHUB_WEBHOOK_SECRET' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
+GITHUB_WEBHOOK_SECRET=$(jq -r '.GITHUB_WEBHOOK_SECRET' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.encrypted.json")
 set -e
 if [[ "$GITHUB_WEBHOOK_SECRET" != "" ]]; then
   echo "Found GITHUB_WEBHOOK_SECRET configuration. Configuring github-trigger-webhook-secret on cluster"
@@ -255,11 +258,11 @@ EOF
 fi
 
 echo "Setting up configured triggers for team: ${TEAM} ..."
-res="$(ls "../triggers/${TEAM}")"
+res="$(ls "${TRIGGERS_DIRECTORY}/${TEAM}")"
 if [[ "$res" == ""  ]]; then
   echo "No triggers configured for team: ${TEAM}"
 else
-  for dir in ../triggers/"$TEAM"/*/ ; do
+  for dir in ${TRIGGERS_DIRECTORY}/$TEAM/*/ ; do
     echo "Setting up triggers from: $dir in namespace: $PIPELINE_NAMESPACE ..."
     kubectl apply -n "${PIPELINE_NAMESPACE}" -f $dir
   done

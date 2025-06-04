@@ -7,7 +7,7 @@
 # platform_config/${ENVIRONMENT}/kubementat_components/helmfile.yaml
 # e.g. platform_config/dev/kubementat_components/helmfile.yaml
 
-# Also sets up tekton pipelines and triggers (see: tekton_ci/automation/setup_pipelines.sh and tekton_ci/automation/setup_triggers.sh)
+# Also sets up tekton pipelines and triggers (see: setup_pipelines.sh and setup_triggers.sh)
 
 set -e
 
@@ -148,7 +148,7 @@ popd > /dev/null
 
 
 if [[ "$CONFIGURE_TEKTON_PIPELINES" == "true" ]]; then
-  pushd tekton_ci/automation > /dev/null
+  pushd scripts/automation/tekton > /dev/null
   echo "######################################################"
   date
   echo "Setting up pipelines and triggers in tekton for team ${TEAM} ..."

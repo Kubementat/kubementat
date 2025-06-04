@@ -37,7 +37,7 @@ spec:
     default: "false"
   stepTemplate:
     env:
-      # ATTENTION: load keys from previously created k8s secret (see setup_pipelines.sh)
+      # ATTENTION: load keys from previously created k8s secret 
       - name: GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64
         valueFrom:
           secretKeyRef:

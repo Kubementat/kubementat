@@ -6,6 +6,10 @@
 #
 #################################
 
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
+PIPELINES_DIRECTORY="../../../tekton_ci/tekton/pipelines"
+PIPELINERUNS_DIRECTORY="../../../tekton_ci/tekton/pipeline-runs"
+
 ## HELPER FUNCTIONS
 check_target_file_exists() {
   file_path="$1"
@@ -33,10 +37,10 @@ PIPELINE_FILE="$3"
 
 if [[ "$ENVIRONMENT" == "" || "$PIPELINE_FILE" == "" || "$TEAM" == "" ]]; then
   echo "Usage: generate_pipeline_run.sh <ENVIRONMENT_NAME> <TEAM> <PIPELINE_FILE>"
-  echo "e.g.: generate_pipeline_run.sh dev dev1 ../pipelines/build-pipeline-ci-images.yml"
+  echo "e.g.: generate_pipeline_run.sh dev dev1 $PIPELINES_DIRECTORY/build-pipeline-ci-images.yml"
   echo "##############"
   echo "Available pipelines:"
-  ls ../pipelines/*.yml
+  ls $PIPELINES_DIRECTORY/*.yml
   echo "##############"
   exit 1
 fi
@@ -47,7 +51,7 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-PIPELINE_NAMESPACE="$(jq -r '.PIPELINE_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
+PIPELINE_NAMESPACE=$(jq -r '.PIPELINE_NAMESPACE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "TEAM: $TEAM"
 echo "PIPELINE_NAMESPACE: $PIPELINE_NAMESPACE"
@@ -65,7 +69,7 @@ echo "Pipeline Parameters:"
 echo "$pipeline_params"
 echo "#########################"
 pipeline_run_name="${pipeline_name}-run"
-TARGET_FILE="../pipeline-runs/${TEAM}/${pipeline_run_name}.yml"
+TARGET_FILE="${PIPELINERUNS_DIRECTORY}/${TEAM}/${pipeline_run_name}.yml"
 check_target_file_exists "$TARGET_FILE"
 echo "#########################"
 
@@ -75,7 +79,7 @@ kind: PipelineRun
 metadata:
   name: $pipeline_run_name
 spec:
-  # here we need to use our previously created service account (see setup_pipelines.sh)
+  # here we need to use our previously created service account 
   # as we are deploying to another namespace than the tekton pipeline
   # and want to grant according permissions for the helm deploy task
   serviceAccountName: "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME_PLACEHOLDER"

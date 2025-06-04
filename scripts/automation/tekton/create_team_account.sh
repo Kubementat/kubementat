@@ -8,6 +8,8 @@
 
 set -e
 
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
+
 ENVIRONMENT="$1"
 TEAM="$2"
 SERVICE_ACCOUNT_NAME="$3"
@@ -57,8 +59,8 @@ check_cluster_and_access
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-APP_DEPLOYMENT_NAMESPACE="$(jq -r '.APP_DEPLOYMENT_NAMESPACE' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.json")"
-PIPELINE_NAMESPACE="$(jq -r '.PIPELINE_NAMESPACE' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.json")"
+APP_DEPLOYMENT_NAMESPACE=$(jq -r '.APP_DEPLOYMENT_NAMESPACE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+PIPELINE_NAMESPACE=$(jq -r '.PIPELINE_NAMESPACE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
 TEKTON_NAMESPACE="tekton-pipelines"
 
 echo "ENVIRONMENT: $ENVIRONMENT"

@@ -39,8 +39,7 @@ class Automation:
         self.check_cluster_permissions()
 
         # Get default variables from the environment if not set
-        project_root_dir = self.config.kubementat_main_dir
-        components_dir = os.path.join(project_root_dir, 'tekton_ci', 'automation', 'components')
+        components_dir = os.path.join(self.config.kubementat_main_dir, 'tekton_ci', 'automation', 'components')
 
         logging.info("######################################################")
         logging.info(f"CONFIGURING: Kubementat for environment {self.environment} and team {self.team}")
@@ -64,7 +63,7 @@ class Automation:
             self.setup_pipelines()
 
             # TODO: #REFACTOR replace with python function call from this class once implemented
-            automation_dir = os.path.join(self.config.kubementat_main_dir, "tekton_ci", "automation")
+            automation_dir = os.path.join(self.config.kubementat_main_dir, "scripts", "automation", "tekton")
             run_file = os.path.join(automation_dir, "setup_triggers.sh")
             self._run_install_script("Tekton Setup Triggers", automation_dir, run_file)
         else:

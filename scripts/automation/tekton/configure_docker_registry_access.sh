@@ -12,6 +12,8 @@
 
 set -e
 
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
+
 ENVIRONMENT="$1"
 TEAM="$2"
 
@@ -47,11 +49,11 @@ function create_docker_secret(){
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-PIPELINE_NAMESPACE="$(jq -r '.PIPELINE_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-APP_DEPLOYMENT_NAMESPACE="$(jq -r '.APP_DEPLOYMENT_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-HELM_DEPLOYER_SERVICE_ACCOUNT_NAME="$(jq -r '.HELM_DEPLOYER_SERVICE_ACCOUNT_NAME' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
+PIPELINE_NAMESPACE=$(jq -r '.PIPELINE_NAMESPACE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+APP_DEPLOYMENT_NAMESPACE=$(jq -r '.APP_DEPLOYMENT_NAMESPACE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+HELM_DEPLOYER_SERVICE_ACCOUNT_NAME=$(jq -r '.HELM_DEPLOYER_SERVICE_ACCOUNT_NAME' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
 
-DOCKER_REGISTRY_CREDENTIALS="$(jq -r '.DOCKER_REGISTRY_CREDENTIALS' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.encrypted.json")"
+DOCKER_REGISTRY_CREDENTIALS=$(jq -r '.DOCKER_REGISTRY_CREDENTIALS' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.encrypted.json")
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "PIPELINE_NAMESPACE: $PIPELINE_NAMESPACE"

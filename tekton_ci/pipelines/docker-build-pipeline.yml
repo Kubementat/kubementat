@@ -57,7 +57,7 @@ spec:
     - name: app-git-ssh-key-secret-name
       description: |
         The name of the secret storing the base64 encoded ssh private key
-        for accessing the app github repository (see tekton_ci/automation/setup_pipelines.sh)
+        for accessing the app github repository
 
     # IMAGE PUSH CONFIG
     - name: builder-image

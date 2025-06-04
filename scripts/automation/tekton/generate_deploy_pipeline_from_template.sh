@@ -2,7 +2,7 @@
 
 #################################
 #
-# This script creates a new deployment pipeline for an app in ../pipelines
+# This script creates a new deployment pipeline for an app
 #
 #################################
 
@@ -46,8 +46,8 @@ check_env() {
 check_env
 
 # read config
-PIPELINE_TEMPLATE="../pipelines/templates/template-deploy-pipeline.yml"
-TARGET_FILE="../pipelines/deploy-pipeline-${APP_NAME}.yml"
+PIPELINE_TEMPLATE="../../../tekton_ci/pipelines/templates/template-deploy-pipeline.yml"
+TARGET_FILE="../../../tekton_ci/pipelines/deploy-pipeline-${APP_NAME}.yml"
 
 check_file_exists "$TARGET_FILE"
 

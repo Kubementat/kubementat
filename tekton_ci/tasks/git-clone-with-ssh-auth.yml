@@ -73,7 +73,7 @@ spec:
     default: "private-key"
   stepTemplate:
     env:
-      # ATTENTION: load keys from previously created k8s secret (see setup_pipelines.sh)
+      # ATTENTION: load keys from previously created k8s secret 
       - name: GIT_DEPLOYER_PRIVATE_KEY
         valueFrom:
           secretKeyRef:
