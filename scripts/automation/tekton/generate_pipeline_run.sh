@@ -7,8 +7,8 @@
 #################################
 
 PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
-PIPELINES_DIRECTORY="../../../tekton_ci/tekton/pipelines"
-PIPELINERUNS_DIRECTORY="../../../tekton_ci/tekton/pipeline-runs"
+PIPELINES_DIRECTORY="../../../tekton_ci/pipelines"
+PIPELINERUNS_DIRECTORY="../../../tekton_ci/pipeline-runs"
 
 ## HELPER FUNCTIONS
 check_target_file_exists() {

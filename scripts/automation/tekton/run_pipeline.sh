@@ -12,7 +12,7 @@
 set -e
 
 PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
-PIPELINERUNS_DIRECTORY="../../../tekton_ci/tekton/pipeline-runs"
+PIPELINERUNS_DIRECTORY="../../../tekton_ci/pipeline-runs"
 
 ENVIRONMENT="$1"
 TEAM="$2"

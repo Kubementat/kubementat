@@ -9,7 +9,7 @@
 set -e
 
 PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
-TRIGGERS_DIRECTORY="../../../tekton_ci/tekton/triggers"
+TRIGGERS_DIRECTORY="../../../tekton_ci/triggers"
 
 if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" || "$APP_NAME" == "" || "$PIPELINE_NAME" == "" || "$TRIGGER_TYPE" == "" ]]; then
   echo "Set all according environment variables first."

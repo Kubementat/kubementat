@@ -12,8 +12,8 @@
 set -e
 
 PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
-TASKS_DIRECTORY="../../../tekton_ci/tekton/tasks"
-PIPELINES_DIRECTORY="../../../tekton_ci/tekton/pipelines"
+TASKS_DIRECTORY="../../../tekton_ci/tasks"
+PIPELINES_DIRECTORY="../../../tekton_ci/pipelines"
 
 ENVIRONMENT="$1"
 TEAM="$2"
