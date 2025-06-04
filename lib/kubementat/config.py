@@ -16,31 +16,61 @@ TEKTON_API_GROUP = "tekton.dev"
 
 class Config:
     '''
+    The Config class loads configuration values from JSON files stored in specific directories based on environment and team.
 
-    This class is used to load the configuration files from the platform_config directory.
-    It is a singleton class, so only one instance of the class can be created.
-    The class is initialized with the environment and team name.
-    The class has a method to load the configuration files from the platform_config directory.
-    The class has a method to get the configuration value for a given key.
+    Parameters
+    ----------
+    environment : str
+        The environment name (e.g., 'dev', 'prod')
+    team : str
+        The team name
+    kubementat_main_dir : Path, optional
+        Main directory path for Kubementat project. If not provided,
+        it defaults to the parent directory of the lib folder.
+    platform_config_dir : Path, optional
+        Directory where platform configuration files are stored. If not provided,
+        it defaults to 'platform_config' directory within kubementat_main_dir.
+    tekton_pipeline_run_dir : Path, optional
+        Directory for Tekton pipeline runs. If not provided, it defaults to
+        'tekton_ci/pipeline-runs' directory within kubementat_main_dir.
+
+   Important Methods
+    -------
+    get(category):
+        Returns configuration values for specified category (team_static, team_static_encrypted,
+        env_static, env_static_encrypted).
+
     '''
-    _instance = None
 
     def __init__(self, environment, team, kubementat_main_dir=None, platform_config_dir=None, tekton_pipeline_run_dir=None):
-        if Config._instance is not None:
-            raise ValueError("Config instance already exists")
+        '''
+        Initializes the Config instance with given parameters and sets up default paths.
 
-        # default -> set the kubementat main directory: ../.. above the lib directory
-        # but allow overwriting the path
+        Parameters
+        ----------
+        environment : str
+            Environment name (e.g., 'dev', 'prod')
+        team : str
+            Team name
+        kubementat_main_dir : Path, optional
+            Main directory path for Kubementat project. If not provided,
+            it defaults to the parent directory of the lib folder.
+        platform_config_dir : Path, optional
+            Directory where platform configuration files are stored. If not provided,
+            it defaults to 'platform_config' directory within kubementat_main_dir.
+        tekton_pipeline_run_dir : Path, optional
+            Directory for Tekton pipeline runs. If not provided, it defaults to
+            'tekton_ci/pipeline-runs' directory within kubementat_main_dir.
+        '''
+        # Set default paths and override with provided values if any
         self.kubementat_main_dir = Path(__file__).absolute().parent.parent.parent
         if kubementat_main_dir is not None:
             self.kubementat_main_dir = kubementat_main_dir
 
-        # default platform config dir is the platform_config directory in the kubementat main directory
         self.platform_config_dir = f"{self.kubementat_main_dir}/platform_config"
         if platform_config_dir is not None:
             self.platform_config_dir = platform_config_dir
 
-        # default pipeline run dir is the pipeline-runs directory in tekton_ci/pipeline-runs directory
         self.tekton_pipeline_run_dir = f"{self.kubementat_main_dir}/tekton_ci/pipeline-runs"
         if tekton_pipeline_run_dir is not None:
             self.tekton_pipeline_run_dir = tekton_pipeline_run_dir
@@ -49,56 +79,35 @@ class Config:
         self.TEKTON_API_GROUP = TEKTON_API_GROUP
         self.environment = environment
         self.team = team
-        self.config = self.load_config()
+        self.config = self._load_config()
 
-        Config._instance = self
+    def _load_config(self):
+        '''
+        Loads configuration values from JSON files into a dictionary.
 
-    @classmethod
-    def get_environment(cls):
-        return cls._instance.environment
+        The function loads both static and encrypted configuration files for the environment
+        and team. If no team-specific files are found, it logs a warning and proceeds with
+        only the environment-level configurations.
 
-    @classmethod
-    def get_team(cls):
-        return cls._instance.team
+        Returns
+        -------
+        dict
+            Configuration values organized by category (team_static, team_static_encrypted,
+            env_static, env_static_encrypted)
 
-    @classmethod
-    def get_kubementat_main_dir(cls):
-        return cls._instance.kubementat_main_dir
-
-    @classmethod
-    def get_tekton_pipeline_run_dir(cls):
-        return cls._instance.tekton_pipeline_run_dir
-
-    @classmethod
-    def get_instance(cls, environment=None, team=None):
-        if cls._instance is None:
-            # If no instance exists and parameters are provided, create new one
-            if environment is not None and team is not None:
-                cls._instance = cls(environment, team)
-            else:
-                raise ValueError("Config instance not initialized")
-        return cls._instance
-
-    def load_config(self):
-        """
-        Load configuration files from platform_config directory
-
-        Args:
-            environment (str): Environment name
-            team (str): Team name
-
-        Returns:
-            dict: Configuration values loaded from JSON files
-        """
-
+        Raises
+        ------
+        FileNotFoundError
+            If any configuration file is not found
+        '''
         try:
+            # Load static and encrypted environment configs
             with open(f"{self.platform_config_dir}/{self.environment}/static.json", 'r') as f:
                 env_static = json.load(f)
             with open(f"{self.platform_config_dir}/{self.environment}/static.encrypted.json", 'r') as f:
                 env_static_encrypted = json.load(f)
 
-            # TODO: #REFACTOR , rethink this and the consequences
-            # load team config if present
+            # Load team-specific configs if they exist
             team_static = {}
             team_static_encrypted = {}
 
@@ -115,7 +124,7 @@ class Config:
                 with open(team_static_encrypted_path, 'r') as f:
                     team_static_encrypted = json.load(f)
             else:
-                logging.warning(f"No team static config found at {team_static_encrypted_path}")
+                logging.warning(f"No team static encrypted config found at {team_static_encrypted_path}")
 
             logging.info(f"Loaded configuration for environment: {self.environment} and team: {self.team}")
 
@@ -132,17 +141,20 @@ class Config:
 
     def get(self, category) -> dict:
         '''
-        Get the configuration value for a given category.
+        Returns configuration values for the specified category.
 
-        Args:
-            category (str): The category to get the configuration value for.
-            Available categories:
+        Parameters
+        ----------
+        category : str
+            The category of configuration to retrieve. Options are:
                 - team_static
                 - team_static_encrypted
                 - env_static
                 - env_static_encrypted
 
-        Returns:
-            The configuration dictionary for the given category.
+        Returns
+        -------
+        dict
+            Configuration values for the specified category
         '''
         return self.config[category]

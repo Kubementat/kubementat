@@ -24,7 +24,7 @@ class Automation:
     def __init__(self, environment, team):
         self.environment = environment
         self.team = team
-        self.config = Config.get_instance(environment, team)
+        self.config = Config(environment, team)
         self.kubernetes_utils = KubernetesUtils()
 
     ###########################
@@ -39,7 +39,7 @@ class Automation:
         self.check_cluster_permissions()
 
         # Get default variables from the environment if not set
-        project_root_dir = self.config.get_kubementat_main_dir()
+        project_root_dir = self.config.kubementat_main_dir
         components_dir = os.path.join(project_root_dir, 'tekton_ci', 'automation', 'components')
 
         logging.info("######################################################")
@@ -64,7 +64,7 @@ class Automation:
             self.setup_pipelines()
 
             # TODO: #REFACTOR replace with python function call from this class once implemented
-            automation_dir = os.path.join(self.config.get_kubementat_main_dir(), "tekton_ci", "automation")
+            automation_dir = os.path.join(self.config.kubementat_main_dir, "tekton_ci", "automation")
             run_file = os.path.join(automation_dir, "setup_triggers.sh")
             self._run_install_script("Tekton Setup Triggers", automation_dir, run_file)
         else:
@@ -206,10 +206,10 @@ class Automation:
 
       # Apply tasks and pipelines
       logging.info("Applying tasks...")
-      self._setup_pipelines_apply_resources(f"{self.config.get_kubementat_main_dir()}/tekton_ci/tasks", pipeline_ns, kind="Task", group=self.config.TEKTON_API_GROUP, version=self.config.TEKTON_API_VERSION)
+      self._setup_pipelines_apply_resources(f"{self.config.kubementat_main_dir}/tekton_ci/tasks", pipeline_ns, kind="Task", group=self.config.TEKTON_API_GROUP, version=self.config.TEKTON_API_VERSION)
       logging.info("Tasks applied successfully!")
       logging.info("Applying pipelines...")
-      self._setup_pipelines_apply_resources(f"{self.config.get_kubementat_main_dir()}/tekton_ci/pipelines", pipeline_ns, kind="Pipeline", group=self.config.TEKTON_API_GROUP, version=self.config.TEKTON_API_VERSION)
+      self._setup_pipelines_apply_resources(f"{self.config.kubementat_main_dir}/tekton_ci/pipelines", pipeline_ns, kind="Pipeline", group=self.config.TEKTON_API_GROUP, version=self.config.TEKTON_API_VERSION)
       logging.info("Pipelines applied successfully!")
 
       logging.info("Tekton Pipeline and Task Setup completed successfully!")

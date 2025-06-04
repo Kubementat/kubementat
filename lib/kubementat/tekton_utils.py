@@ -14,7 +14,7 @@ class TektonUtils:
         self.kubernetes_utils = KubernetesUtils()
         self.environment = environment
         self.team = team
-        self.config = Config.get_instance(environment, team)
+        self.config = Config(environment, team)
         self.pipeline_namespace = self.config.get('team_static').get('PIPELINE_NAMESPACE')
 
     def list_pipelines(self):
@@ -100,7 +100,7 @@ class TektonUtils:
     def list_available_pipeline_runs(self) -> None:
         """List available pipeline run files for the given team."""
         logging.info(f"Team '{self.team}' pipeline runs:")
-        team_dir = Path(f"{self.config.get_tekton_pipeline_run_dir()}/{self.team}")
+        team_dir = Path(f"{self.config.tekton_pipeline_run_dir}/{self.team}")
         if team_dir.exists():
             for yml_file in team_dir.glob("*.yml"):
                 logging.info(f"  {Path(yml_file).name}")
@@ -109,7 +109,7 @@ class TektonUtils:
 
         logging.info("##############")
         logging.info("Global pipeline runs:")
-        global_dir = Path(self.config.get_tekton_pipeline_run_dir())
+        global_dir = Path(self.config.tekton_pipeline_run_dir)
         if global_dir.exists():
             for yml_file in global_dir.glob("*.yml"):
                 logging.info(f"  global/{Path(yml_file).name}")
@@ -177,9 +177,9 @@ class TektonUtils:
 
         if pipeline_run_file_identifier.startswith("global/"):
             logging.info(f"Running global pipeline!")
-            pipeline_run_file_path = f"{self.config.get_tekton_pipeline_run_dir()}/{pipeline_run_file_identifier.replace('global/', '')}"
+            pipeline_run_file_path = f"{self.config.tekton_pipeline_run_dir}/{pipeline_run_file_identifier.replace('global/', '')}"
         else:
-            pipeline_run_file_path = f"{self.config.get_tekton_pipeline_run_dir()}/{self.team}/{pipeline_run_file_identifier}"
+            pipeline_run_file_path = f"{self.config.tekton_pipeline_run_dir}/{self.team}/{pipeline_run_file_identifier}"
         logging.info(f"Running file: {pipeline_run_file_path}")
 
         # Read the pipeline run file
