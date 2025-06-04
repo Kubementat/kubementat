@@ -9,7 +9,7 @@
 set -e
 
 PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
-TRIGGERS_DIRECTORY="../../../tekton_ci/tekton/triggers"
+TRIGGERS_DIRECTORY="../../../tekton_ci/triggers"
 
 ENVIRONMENT="$1"
 TEAM="$2"
