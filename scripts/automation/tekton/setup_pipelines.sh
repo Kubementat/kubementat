@@ -12,8 +12,10 @@
 set -e
 
 PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
-TASKS_DIRECTORY="../../../tekton_ci/tasks"
-PIPELINES_DIRECTORY="../../../tekton_ci/pipelines"
+TEKTON_DIRECTORY="../../../tekton_ci"
+TASKS_DIRECTORY="${TEKTON_DIRECTORY}/tasks"
+PIPELINES_DIRECTORY="${TEKTON_DIRECTORY}/pipelines"
+PIPELINERUNS_DIRECTORY="${TEKTON_DIRECTORY}/pipeline-runs"
 
 ENVIRONMENT="$1"
 TEAM="$2"
@@ -38,6 +40,10 @@ echo "PIPELINE_NAMESPACE: $PIPELINE_NAMESPACE"
 echo "APP_DEPLOYMENT_NAMESPACE: $APP_DEPLOYMENT_NAMESPACE"
 echo "#########################"
 
+team_pipeline_runs_dir="${PIPELINERUNS_DIRECTORY}/${TEAM}"
+echo "Creating pipeline-runs directory: $team_pipeline_runs_dir"
+mkdir -p "$team_pipeline_runs_dir"
+
 echo "Configuring namespace: $PIPELINE_NAMESPACE"
 kubectl create namespace $PIPELINE_NAMESPACE || true
 
@@ -50,7 +56,7 @@ kubectl create namespace $APP_DEPLOYMENT_NAMESPACE || true
 # in the according git repositories for enabling access.
 echo "#########################"
 echo "Configuring deployer ssh key secret..."
-GIT_DEPLOYER_PRIVATE_KEY_BASE64="$(jq -r '.GIT_DEPLOYER_PRIVATE_KEY_BASE64' ../../platform_config/"${ENVIRONMENT}"/static.encrypted.json)"
+GIT_DEPLOYER_PRIVATE_KEY_BASE64=$(jq -r '.GIT_DEPLOYER_PRIVATE_KEY_BASE64' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.encrypted.json")
 kubectl apply -n "$PIPELINE_NAMESPACE" -f - <<EOF
 apiVersion: v1
 kind: Secret
@@ -69,7 +75,7 @@ EOF
 # HINT: we are encoding the git deployer private key with base64 again as it is a binary file and this is not working with k8s secrets correctly when decoding for a container
 echo "#########################"
 echo "Configuring deployer gpg key secret..."
-GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64_DOUBLE_ENCODED="$(jq -r '.GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64 | @base64' ../../platform_config/"${ENVIRONMENT}"/static.encrypted.json)"
+GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64_DOUBLE_ENCODED=$(jq -r '.GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64 | @base64' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.encrypted.json")
 kubectl apply -n "$PIPELINE_NAMESPACE" -f - <<EOF
 apiVersion: v1
 kind: Secret

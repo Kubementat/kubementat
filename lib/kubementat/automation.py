@@ -164,10 +164,17 @@ class Automation:
       app_deployment_ns = self.config.get('team_static').get('APP_DEPLOYMENT_NAMESPACE')
       git_ssh_key = self.config.get('env_static_encrypted').get('GIT_DEPLOYER_PRIVATE_KEY_BASE64')
       git_gpg_key = self.config.get('env_static_encrypted').get('GIT_DEPLOYER_GPG_PRIVATE_KEY_BASE64')
+      team_pipeline_run_directory = os.path.join(self.config.kubementat_main_dir, 'tekton_ci', 'pipeline-runs', self.team)
 
       logging.info(f"Helm Deployer Service Account: {helm_deployer_sa}")
       logging.info(f"Pipeline Namespace: {pipeline_ns}")
       logging.info(f"App Deployment Namespace: {app_deployment_ns}")
+      logging.info(f"Team Pipeline-run directory: {team_pipeline_run_directory}")
+      
+      # Create the pipeline-runs directory for the team
+      logging.info("Creating team pipeline run directory: {team_pipeline_run_directory}")
+      if not os.path.isdir(team_pipeline_run_directory):
+        os.makedirs(team_pipeline_run_directory)
 
       # Create namespaces
       self.kubernetes_utils.create_namespace(pipeline_ns)
