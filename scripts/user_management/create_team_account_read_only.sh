@@ -15,6 +15,8 @@ ENVIRONMENT="$1"
 TEAM="$2"
 SERVICE_ACCOUNT_NAME="$3"
 
+PLATFORM_CONFIG_DIRECTORY="../../platform_config"
+
 if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" || "$SERVICE_ACCOUNT_NAME" == "" ]]; then
   echo "Usage: create_team_account_read_only.sh <ENVIRONMENT> <TEAM> <SERVICE_ACCOUNT_NAME>"
   echo "e.g.: create_team_account_read_only.sh dev dev1 mrandersonro"
@@ -27,8 +29,8 @@ check_cluster_and_access
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-APP_DEPLOYMENT_NAMESPACE="$(jq -r '.APP_DEPLOYMENT_NAMESPACE' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.json")"
-PIPELINE_NAMESPACE="$(jq -r '.PIPELINE_NAMESPACE' "../../platform_config/${ENVIRONMENT}/${TEAM}/static.json")"
+APP_DEPLOYMENT_NAMESPACE=$(jq -r '.APP_DEPLOYMENT_NAMESPACE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+PIPELINE_NAMESPACE=$(jq -r '.PIPELINE_NAMESPACE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
 TEKTON_NAMESPACE="tekton-pipelines"
 GRAFANA_NAMESPACE="grafana"
 POLARIS_NAMESPACE="polaris"

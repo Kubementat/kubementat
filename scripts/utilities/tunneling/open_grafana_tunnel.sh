@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# this is already integrated natively into the 'kmt tunnel-grafana' command
+
 #################################
 #
 # Opens a tunnel connection to the grafana dashboard for the given environment

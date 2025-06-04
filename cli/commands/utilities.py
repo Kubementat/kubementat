@@ -3,7 +3,7 @@ import subprocess
 import os
 import glob
 
-UTILITIES_SUB_DIRECTORY='utilities'
+UTILITIES_SUB_DIRECTORY='scripts/utilities'
 
 # --------------------------------------------
 # RUN A CONTAINER IPIPELINE

@@ -33,6 +33,9 @@ class Config:
     tekton_pipeline_run_dir : Path, optional
         Directory for Tekton pipeline runs. If not provided, it defaults to
         'tekton_ci/pipeline-runs' directory within kubementat_main_dir.
+    tekton_team_pipeline_run_dir : Path, optional
+        Directory for Tekton pipeline runs for the according team. If not provided, it defaults to
+        'tekton_ci/pipeline-runs/{TEAM_NAME}' directory within kubementat_main_dir.
 
    Important Methods
     -------
@@ -42,7 +45,7 @@ class Config:
 
     '''
 
-    def __init__(self, environment, team, kubementat_main_dir=None, platform_config_dir=None, tekton_pipeline_run_dir=None):
+    def __init__(self, environment, team, kubementat_main_dir=None, platform_config_dir=None, tekton_pipeline_run_dir=None, tekton_team_pipeline_run_dir=None):
         '''
         Initializes the Config instance with given parameters and sets up default paths.
 
@@ -61,24 +64,32 @@ class Config:
         tekton_pipeline_run_dir : Path, optional
             Directory for Tekton pipeline runs. If not provided, it defaults to
             'tekton_ci/pipeline-runs' directory within kubementat_main_dir.
+        tekton_team_pipeline_run_dir : Path, optional
+            Directory for Tekton pipeline runs for the according team. If not provided, it defaults to
+            'tekton_ci/pipeline-runs/{TEAM_NAME}' directory within kubementat_main_dir.
         '''
-        # Set default paths and override with provided values if any
-        self.kubementat_main_dir = Path(__file__).absolute().parent.parent.parent
-        if kubementat_main_dir is not None:
-            self.kubementat_main_dir = kubementat_main_dir
-
-        self.platform_config_dir = f"{self.kubementat_main_dir}/platform_config"
-        if platform_config_dir is not None:
-            self.platform_config_dir = platform_config_dir
-
-        self.tekton_pipeline_run_dir = f"{self.kubementat_main_dir}/tekton_ci/pipeline-runs"
-        if tekton_pipeline_run_dir is not None:
-            self.tekton_pipeline_run_dir = tekton_pipeline_run_dir
-
         self.TEKTON_API_VERSION = TEKTON_API_VERSION
         self.TEKTON_API_GROUP = TEKTON_API_GROUP
         self.environment = environment
         self.team = team
+        
+        # Set default paths and override with provided values if any
+        self.kubementat_main_dir = Path(__file__).absolute().parent.parent.parent.resolve()
+        if kubementat_main_dir is not None:
+            self.kubementat_main_dir = Path(kubementat_main_dir).resolve()
+
+        self.platform_config_dir = Path(f"{self.kubementat_main_dir}/platform_config").resolve()
+        if platform_config_dir is not None:
+            self.platform_config_dir = Path(platform_config_dir).resolve()
+
+        self.tekton_pipeline_run_dir = Path(f"{self.kubementat_main_dir}/tekton_ci/pipeline-runs").resolve()
+        if tekton_pipeline_run_dir is not None:
+            self.tekton_pipeline_run_dir = Path(tekton_pipeline_run_dir).resolve()
+
+        self.tekton_team_pipeline_run_dir = Path(f"{self.kubementat_main_dir}/tekton_ci/pipeline-runs/{self.team}").resolve()
+        if tekton_team_pipeline_run_dir is not None:
+            self.tekton_team_pipeline_run_dir = Path(tekton_team_pipeline_run_dir).resolve()
+
         self.config = self._load_config()
 
     def _load_config(self):
@@ -127,6 +138,10 @@ class Config:
                 logging.warning(f"No team static encrypted config found at {team_static_encrypted_path}")
 
             logging.info(f"Loaded configuration for environment: {self.environment} and team: {self.team}")
+            logging.info(f"Kubementat Main Directory: {self.kubementat_main_dir}")
+            logging.info(f"Platform Config Directory: {self.platform_config_dir}")
+            logging.info(f"Tekton Pipeline Run Directory: {self.tekton_pipeline_run_dir}")
+            logging.info(f"Tekton Team Pipeline Run Directory: {self.tekton_team_pipeline_run_dir}")
 
             return {
                 'team_static': team_static,
@@ -138,7 +153,7 @@ class Config:
         except FileNotFoundError as e:
             logging.error(f"Configuration file not found - {e}")
             raise
-
+    
     def get(self, category) -> dict:
         '''
         Returns configuration values for the specified category.

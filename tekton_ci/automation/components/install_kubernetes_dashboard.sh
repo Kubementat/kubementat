@@ -96,5 +96,5 @@ echo "#########################"
 echo ""
 
 echo "Kubernetes dashboard installation finished. You can access the dashboard via the url provided in the output of the helm deployment."
-echo "For retrieving the login token you can use the utility script in utilities/secret_management/retrieve_token_for_service_account.sh , e.g. like this:"
+echo "For retrieving the login token you can use the utility script in scripts/secret_management/retrieve_token_for_service_account.sh , e.g. like this:"
 echo "./retrieve_token_for_service_account.sh $KUBERNETES_DASHBOARD_DEPLOYMENT_NAMESPACE $SERVICE_ACCOUNT_NAME"

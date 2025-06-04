@@ -37,7 +37,7 @@ helm -n "$KUBERNETES_DASHBOARD_DEPLOYMENT_NAMESPACE" status "$KUBERNETES_DASHBOA
 
 echo "Use the url provided below for login."
 echo "The required token for login will be displayed below."
-pushd secret_management
+pushd ../secret_management
 
 ./retrieve_token_for_service_account.sh "$KUBERNETES_DASHBOARD_DEPLOYMENT_NAMESPACE" kubernetes-dashboard-read-only-cluster-user
 

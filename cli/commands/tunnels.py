@@ -9,7 +9,7 @@ sys.path.append(import_path)
 from kubementat.automation import Automation
 from kubementat.kubernetes_utils import KubernetesUtils
 
-UTILITIES_SUB_DIRECTORY='utilities'
+UTILITIES_SUB_DIRECTORY='scripts/utilities'
 
 ##########################
 #### TUNNEL SCRIPTS ######

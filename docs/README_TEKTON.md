@@ -15,7 +15,7 @@ The information below describes the initial setup and usage of the automated tas
   - https://marketplace.visualstudio.com/items?itemName=ms-kubernetes-tools.vscode-kubernetes-tools
 
 # Preparations (Only for new environments)
-As the "dev" environment is already configured in platform_config/dev we can keep the configuration as is once we have git-crypt unlocked the repo (see README_GIT_CRYPT.md).
+As the "dev" environment is already configured in platform_config/dev we can keep the configuration as is once we have git-crypt unlocked the repo (see docs/README_GIT_CRYPT.md).
 
 If you want to setup a new additional environment this configuration can be copied over and adjusted accordingly. The sub-topics below describe the key generation for a new env.
 
@@ -37,7 +37,7 @@ cat service-deployer.key | base64 -w 0
 
 ## Git-crypt deployer gpg key
 If you need to add a new deployer gpg key
-see README_GIT_CRYPT.md
+see docs/README_GIT_CRYPT.md
 
 # Initial setup and installation instructions
 ## Automated Tekton Installation
@@ -94,27 +94,22 @@ export TRIGGER_TYPE='github'
 
 # Usage instructions
 
-## Access tekton dashboard via kubectl local tunneling
-As the tekton dashboard is not accessible via ingress per default we need to open a tunnel via kubectl.
-For opening the tunnel you can use the helper script as follows:
+## Access tekton dashboard via kmt local tunneling
+As the tekton dashboard is not accessible via ingress per default we need to open a tunnel via the kmt cli:
 ```
-cd utilities
-# general: ./open_tekton_dashboard_tunnel.sh
-./open_tekton_dashboard_tunnel.sh
-# leave the console open
-
-# in another console or the preferably the browser open:
-curl http://127.0.0.1:9097/#/pipelines
+pushd cli
+ENVIRONMENT="dev"
+./kmt tunnel-tekton $ENVIRONMENT
 ```
 
 ## Run a pipeline
-For running a pipeline (= starting a Tekton pipelinerun) you can use the run_pipeline.sh helper script to simplify pipeline runs.
+For running a pipeline (= starting a Tekton pipelinerun) you can use the tekton-run-pipeline feature of the kmt cli (see in cli directory: ./kmt tekton-run-pipeline --help).
 
 ```
-cd automation
+pushd ../cli
 
-# For listing available pipeline runs you can call the run_pipeline.sh script without providing a pipeline run definition yaml file
-# General: ./run_pipeline <ENVIRONMENT> <TEAM>
+# For listing available pipeline runs you can call the function without providing a pipeline run definition yaml file
+# General: ./kmt tekton-run-pipeline <ENVIRONMENT> <TEAM>
 
 # Then after choosing the according pipeline run you wish to execute you can start the run via
 # General usage: ./run_pipeline <ENVIRONMENT> <TEAM> <PIPELINE_RUN_DEFINITION_YAML> <OPTIONAL: ALLOW_PARALLEL_RUN (default: true)>

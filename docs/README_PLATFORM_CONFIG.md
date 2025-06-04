@@ -10,7 +10,7 @@ Here is an example structure for the configuration of the nginx-example in ENVIR
 
 All relevant env and team specific configuration is contained in json files and read by the automation scripts and the pipeline execution scripts. The jq command line tool is used for reading out information from those configuration files.
 
-All files with the *.encrypted.* format are encrypted via git-crypt (See README_GIT_CRYPT.md for more details on git-crypt usage).
+All files with the *.encrypted.* format are encrypted via git-crypt (See docs/README_GIT_CRYPT.md for more details on git-crypt usage).
 
 # List of configuration options
 

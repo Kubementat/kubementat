@@ -8,6 +8,8 @@
 
 set -e
 
+PLATFORM_CONFIG_DIRECTORY="../../platform_config"
+
 ENVIRONMENT="$1"
 NAMESPACE="$2"
 
@@ -23,9 +25,9 @@ kubectl config current-context
 echo "#########################"
 echo ""
 
-DOCKER_REGISTRY_BASE_URL="$(jq -r '.DOCKER_REGISTRY_BASE_URL' ../platform_config/"${ENVIRONMENT}"/static.json)"
-TEKTON_CI_IMAGE_NAME="$(jq -r '.TEKTON_CI_IMAGE_NAME' ../platform_config/"${ENVIRONMENT}"/static.json)"
-TEKTON_CI_IMAGE_TAG="$(jq -r '.TEKTON_CI_IMAGE_TAG' ../platform_config/"${ENVIRONMENT}"/static.json)"
+DOCKER_REGISTRY_BASE_URL=$(jq -r '.DOCKER_REGISTRY_BASE_URL' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
+TEKTON_CI_IMAGE_NAME=$(jq -r '.TEKTON_CI_IMAGE_NAME' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
+TEKTON_CI_IMAGE_TAG=$(jq -r '.TEKTON_CI_IMAGE_TAG' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
 
 CI_IMAGE="$DOCKER_REGISTRY_BASE_URL/${TEKTON_CI_IMAGE_NAME}:${TEKTON_CI_IMAGE_TAG}"
 set -u

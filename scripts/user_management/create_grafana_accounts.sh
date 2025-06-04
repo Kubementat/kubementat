@@ -12,6 +12,7 @@ ENVIRONMENT="$1"
 GRAFANA_BASE_URL="$2"
 
 DEFAULT_GRAFANA_BASE_URL="http://127.0.0.1:31827"
+PLATFORM_CONFIG_DIRECTORY="../../platform_config"
 
 if [[ "$ENVIRONMENT" == "" ]]; then
   echo "Usage: create_grafana_accounts.sh <ENVIRONMENT> <GRAFANA_BASE_URL (optional)>"
@@ -29,7 +30,7 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-GRAFANA_USERS="$(jq -r '.GRAFANA_USERS' "../../platform_config/${ENVIRONMENT}/static.encrypted.json")"
+GRAFANA_USERS=$(jq -r '.GRAFANA_USERS' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.encrypted.json")
 
 for row in $(echo "${GRAFANA_USERS}" | jq -r '.[] | @base64'); do
     _jq() {

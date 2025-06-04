@@ -27,6 +27,8 @@ If you are interested in the naming of this project, you can have a look [here](
 
 Each of the given sub-directories contains additional README*.md files that document the actual component. For further details dive into the sub-directories.
 
+- __docs__: Documentation for kubementat
+- __cli__: Contains the kmt cli, which is the central tool for managing the kubementat installation and workflows
 - __docker_files__: All custom Dockerfiles used for creating docker images and running CI tasks
 - __helm_charts__: All helm charts used for deploying apps for the POC
   - nginx-example: the helm chart for deploying the nginx-example helm chart to a k8s cluster
@@ -34,17 +36,18 @@ Each of the given sub-directories contains additional README*.md files that docu
   - This configuration is used by the automation scripts
 - __tekton_ci__: The tekton CI installation and pipeline scripts for automating tasks of the POC
   - this contains all needed scripts and pipeline descriptions for spinning up the build and deployment pipelines on a k8s cluster
-- __utilities__: Useful scripts for working with K8S
-  - e.g. for starting containers, debugging, viewing logs, viewing cluster status and usage ...
-  - this also contains scripts for the following use cases:
-    - user management
-    - secret management
-    - tunneling
-    - kubernetes helpers
-    - helm helpers
+- __scripts__: All bash and python scripts
+  - __automation__: Automation scripts for kubementat workflows
+  - __utilities__: Useful scripts for working with K8S
+      - e.g. for starting containers, debugging, viewing logs, viewing cluster status and usage ...
+      - tunneling (also implemented into the kmt cli)
+      - kubernetes helpers
+      - helm helpers
+  - __user_management__: Managing users and groups on k8s clusters
+  - __secret_management__: Managing secrets in Kubernetes and Kubementat
 
 ## Git-Crypt
-You need to unlock the repository to be able to use \*.encrypted.\* files in the repository (for more details see: README_GIT_CRYPT.md).
+You need to unlock the repository to be able to use \*.encrypted.\* files in the repository (for more details see: docs/README_GIT_CRYPT.md).
 ```
 git-crypt unlock
 ```

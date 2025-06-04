@@ -100,7 +100,7 @@ class TektonUtils:
     def list_available_pipeline_runs(self) -> None:
         """List available pipeline run files for the given team."""
         logging.info(f"Team '{self.team}' pipeline runs:")
-        team_dir = Path(f"{self.config.tekton_pipeline_run_dir}/{self.team}")
+        team_dir = Path(f"{self.config.tekton_team_pipeline_run_dir}")
         if team_dir.exists():
             for yml_file in team_dir.glob("*.yml"):
                 logging.info(f"  {Path(yml_file).name}")
@@ -179,7 +179,7 @@ class TektonUtils:
             logging.info(f"Running global pipeline!")
             pipeline_run_file_path = f"{self.config.tekton_pipeline_run_dir}/{pipeline_run_file_identifier.replace('global/', '')}"
         else:
-            pipeline_run_file_path = f"{self.config.tekton_pipeline_run_dir}/{self.team}/{pipeline_run_file_identifier}"
+            pipeline_run_file_path = f"{self.config.tekton_team_pipeline_run_dir}/{pipeline_run_file_identifier}"
         logging.info(f"Running file: {pipeline_run_file_path}")
 
         # Read the pipeline run file

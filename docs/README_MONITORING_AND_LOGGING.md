@@ -4,12 +4,12 @@
 
 This setup uses Grafana for displaying and analyzing the captured metrics and logs via dashboards.
 
-You can view the grafana dashboard via the following commands:
+You can view the grafana dashboard via the following kmf command:
 ```
-cd utilities
-./open_grafana_tunnel.sh
+pushd cli
+ENVIRONMENT="dev"
+./kmt tunnel-grafana $ENVIRONMENT
 
-# Access http://localhost:3000/ via your browser and login
 # Credentials are stored in the GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD configuration variables in platform_config/${ENVIRONMENT}/static.encrypted.json
 # e.g. cat platform_config/dev/static.encrypted.json | grep "GRAFANA_"
 ```
