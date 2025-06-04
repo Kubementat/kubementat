@@ -138,11 +138,11 @@ EOF
 
 echo "#########################"
 echo "Configuring tasks..."
-kubectl apply -n "$PIPELINE_NAMESPACE" -f ../tasks/
+kubectl apply -n "$PIPELINE_NAMESPACE" -f $TASKS_DIRECTORY
 
 echo "#########################"
 echo "Configuring pipelines..."
-kubectl apply -n "$PIPELINE_NAMESPACE" -f ../pipelines/
+kubectl apply -n "$PIPELINE_NAMESPACE" -f $PIPELINES_DIRECTORY
 
 echo "########################"
 echo "Tasks:"
