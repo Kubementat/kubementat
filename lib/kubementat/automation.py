@@ -279,13 +279,31 @@ class Automation:
       logging.info(f"Setting up role bindings for {helm_deployer_sa}")
       self._setup_pipelines_setup_role_bindings(pipeline_ns, app_deployment_ns, helm_deployer_sa)
 
-      # Apply tasks and pipelines
-      logging.info("Applying tasks...")
-      self._setup_pipelines_apply_resources(f"{self.config.kubementat_main_dir}/tekton_ci/tasks", pipeline_ns, kind="Task", group=self.config.TEKTON_API_GROUP, version=self.config.TEKTON_API_VERSION)
-      logging.info("Tasks applied successfully!")
-      logging.info("Applying pipelines...")
-      self._setup_pipelines_apply_resources(f"{self.config.kubementat_main_dir}/tekton_ci/pipelines", pipeline_ns, kind="Pipeline", group=self.config.TEKTON_API_GROUP, version=self.config.TEKTON_API_VERSION)
-      logging.info("Pipelines applied successfully!")
+      # Apply kubementat tekton default tasks and pipelines from tekton_ci/ directory
+      logging.info("Applying default tekton tasks...")
+      self.apply_resources(f"{self.config.kubementat_main_dir}/tekton_ci/tasks", pipeline_ns, kind="Task", group=self.config.TEKTON_API_GROUP, version=self.config.TEKTON_API_VERSION)
+      logging.info("Default Tasks applied successfully!")
+      logging.info("Applying default tekton pipelines...")
+      self.apply_resources(f"{self.config.kubementat_main_dir}/tekton_ci/pipelines", pipeline_ns, kind="Pipeline", group=self.config.TEKTON_API_GROUP, version=self.config.TEKTON_API_VERSION)
+      logging.info("Default Pipelines applied successfully!")
+
+      # Apply tasks and pipelines from env directory
+      env_dir_tekton = f"{self.config.platform_config_dir}/{self.environment}/tekton"
+      team_dir_tekton = f"{self.config.platform_config_dir}/{self.environment}/{self.team}/tekton"
+      
+      # Apply tekton tasks and pipelines from team directory in platform_config
+      for dir in [ env_dir_tekton, team_dir_tekton]:
+        tasks_dir = f"{dir}/tasks"
+        pipelines_dir = f"{dir}/pipelines"
+        if os.path.exists(tasks_dir):
+            self.apply_resources(tasks_dir, pipeline_ns, kind="Task", group=self.config.TEKTON_API_GROUP, version=self.config.TEKTON_API_VERSION)
+        else:
+            logging.info(f"Tasks directory {tasks_dir} does not exist. Skipping.")
+        if os.path.exists(pipelines_dir):
+            self.apply_resources(pipelines_dir, pipeline_ns, kind="Pipeline", group=self.config.TEKTON_API_GROUP, version=self.config.TEKTON_API_VERSION)
+        else:
+            logging.info(f"Pipelines directory {pipelines_dir} does not exist. Skipping.")
+      
 
       logging.info("Tekton Pipeline and Task Setup completed successfully!")
       self._setup_pipelines_show_results(pipeline_ns, app_deployment_ns, helm_deployer_sa)
@@ -327,7 +345,7 @@ class Automation:
         )
         self.kubernetes_utils.create_or_replace_role_binding(pipeline_ns, "helm-deployer-role-binding-pipeline-namespace-access", binding)
 
-    def _setup_pipelines_apply_resources(self, resource_dir, target_namespace, kind, group, version):
+    def apply_resources(self, resource_dir, target_namespace, kind, group, version):
         '''
         Applies Kubernetes resources from specified directories.
 
@@ -343,7 +361,7 @@ class Automation:
 
         - None (performs side-effect operations)
         '''
-        logging.info(f"Processing resources in directory: {resource_dir}")
+        logging.info(f"Applying {kind} resources from directory: {resource_dir} in namespace: {target_namespace} ...")
 
         for filename in os.listdir(resource_dir):
             if filename.endswith('.yml'):

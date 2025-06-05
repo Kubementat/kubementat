@@ -118,6 +118,26 @@ cd cli
 ./kmt --help
 ```
 
+## Platform Configuration
+The whole kubementat stack is configured via the platform_config directory.
+The directories structure is as follows:
+- ENVIRONMENT - The kubernetes cluster level (e.g. dev, prod)
+  - __static.json__ - contains static configuration for the environment/cluster
+  - __static.encrypted.json__ - contains credentials for the environment/cluster
+  - 'tekton' directory - contains team specific pipelines and tasks in the according directories (optional)
+  
+  - TEAM - Per team configurations (e.g. dev1, smoke)
+    - __static.json__ - contains static configuration for the team
+    - __static.encrypted.json__ - contains credentials for the team
+    - 'tekton' directory - contains team specific pipelines and tasks in the according directories (optional)
+    - contains helm deployment configurations for the according team namespace
+
+For tekton pipelines and tasks the load order when executing the tekton-setup-pipelines function via kmt is as follows:
+- Kubementat default resources
+- Environment resources (in platform_config/{ENVIRONMENT_NAME}/tekton)
+- Team resources (in platform_config/{ENVIRONMENT_NAME}/{TEAM_NAME}/tekton)
+When resources with the same name occur, they will be overwritten in that order also. So the team resource overrides the environment resources overwrites the default resource.
+
 ### Git Repository
 - This project is intended as a template to build your own customizations on top.
 - You need to either fork this repository to your own public github account or clone and push to your own private git repository.
