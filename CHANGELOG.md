@@ -1,3 +1,10 @@
+# 0.4.0
+- feature: add helmfile-apply to the kmt cli
+- feature: kmt tekton-setup-pipelines - also load tekton tasks and pipelines from platform_config/ENV/tekton/(tasks|pipelines) and platform_config/ENV/TEAM/tekton/(tasks|pipelines)
+- refactor - implement helfile_apply in HelmUtils and use it in install kubementat automation and in kmt cli calls instead of the bash version
+- refactor - move tekton_ci/automation/components to scripts/automation/components
+- refactor - moves tekton_ci/scripts directory to scripts/tasks , removes duplicate or obsolete scripts (general helm based approach for installing backing services will be implemented soon)
+
 # 0.3.0
 - Begins refactoring BASH utilities to python
   - adds the first iteration of the __kubementat lib__
