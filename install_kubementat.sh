@@ -126,7 +126,7 @@ check_cluster_and_access
 
 echo ""
 echo "Installing Kubementat components..."
-pushd tekton_ci/automation/components > /dev/null
+pushd scripts/automation/components > /dev/null
 
 # tekton
 print_configuring_section "Tekton CI"

@@ -10,6 +10,8 @@
 
 set -e
 
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
+
 ENVIRONMENT="$1"
 if [[ "$ENVIRONMENT" == "" ]]; then
   echo "Usage: install_tekton.sh <ENVIRONMENT_NAME>"
@@ -22,9 +24,9 @@ set -u
 echo "#########################"
 echo "Loading configuration from platform_config ..."
 TEKTON_NAMESPACE="tekton-pipelines"
-TEKTON_VERSION_PIPELINE="$(jq -r '.TEKTON_VERSION_PIPELINE' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
-TEKTON_VERSION_TRIGGERS="$(jq -r '.TEKTON_VERSION_TRIGGERS' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
-TEKTON_VERSION_DASHBOARD="$(jq -r '.TEKTON_VERSION_DASHBOARD' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+TEKTON_VERSION_PIPELINE=$(jq -r '.TEKTON_VERSION_PIPELINE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
+TEKTON_VERSION_TRIGGERS=$(jq -r '.TEKTON_VERSION_TRIGGERS' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
+TEKTON_VERSION_DASHBOARD=$(jq -r '.TEKTON_VERSION_DASHBOARD' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "TEKTON_NAMESPACE: $TEKTON_NAMESPACE"

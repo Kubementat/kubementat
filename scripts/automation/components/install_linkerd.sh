@@ -6,6 +6,8 @@
 #
 #################################
 
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
+
 ENVIRONMENT="$1"
 
 UPDATE_ENABLED="false"
@@ -25,7 +27,7 @@ echo "#########################"
 echo "Loading configuration from platform_config ..."
 LINKERD_NAMESPACE="linkerd"
 LINKERD_VIZ_NAMESPACE="linkerd-viz"
-LINKERD_HA_ENABLED="$(jq -r '.LINKERD_HA_ENABLED' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+LINKERD_HA_ENABLED=$(jq -r '.LINKERD_HA_ENABLED' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "LINKERD_NAMESPACE: $LINKERD_NAMESPACE"
@@ -57,7 +59,7 @@ if [[ "$linkerd_namespace_present" == "" ]]; then
 
   # TODO: FIXME: use the existing prometheus for installing linkerd viz
   # alternatively configure platform prometheus to federate linkerd data from linkerd viz prometheus installation
-  # linkerd viz install -f "../../../platform_config/${ENVIRONMENT}/linkerd/viz_config.encrypted.yaml" | kubectl apply -f -
+  # linkerd viz install -f "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/linkerd/viz_config.encrypted.yaml" | kubectl apply -f -
 
   # TODO: FEATURE: Install grafana???
   # Docs: https://linkerd.io/2.12/tasks/grafana/

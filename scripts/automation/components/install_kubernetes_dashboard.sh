@@ -7,7 +7,6 @@
 #################################
 
 set -e
-
 ENVIRONMENT="$1"
 if [[ "$ENVIRONMENT" == "" ]]; then
   echo "Usage: install_kubernetes_dashboard.sh <ENVIRONMENT_NAME>"

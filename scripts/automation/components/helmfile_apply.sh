@@ -7,6 +7,8 @@
 
 set -e
 
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
+
 ENVIRONMENT="$1"
 HELMFILE_LABEL_FILTER="$2"
 INTERACTIVE_FLAG=""
@@ -28,7 +30,7 @@ echo "Executing helmfile apply for environment ${ENVIRONMENT} with label filter:
 echo "######################################################"
 echo ""
 
-HELMFILE_WORKING_DIRECTORY="../../../platform_config/${ENVIRONMENT}/kubementat_components"
+HELMFILE_WORKING_DIRECTORY="${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/kubementat_components"
 HELMFILE_FILENAME="helmfile.yaml"
 
 echo ""
@@ -48,9 +50,9 @@ echo "Applying helmfile: $HELMFILE_FILENAME"
 echo ""
 
 # read GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD from platform_config
-GRAFANA_ADMIN_USER="$(jq -r '.GRAFANA_ADMIN_USER' "../../../platform_config/$ENVIRONMENT/static.encrypted.json")"
+GRAFANA_ADMIN_USER=$(jq -r '.GRAFANA_ADMIN_USER' "${PLATFORM_CONFIG_DIRECTORY}/$ENVIRONMENT/static.encrypted.json")
 export GRAFANA_ADMIN_USER
-GRAFANA_ADMIN_PASSWORD="$(jq -r '.GRAFANA_ADMIN_PASSWORD' "../../../platform_config/$ENVIRONMENT/static.encrypted.json")"
+GRAFANA_ADMIN_PASSWORD=$(jq -r '.GRAFANA_ADMIN_PASSWORD' "${PLATFORM_CONFIG_DIRECTORY}/$ENVIRONMENT/static.encrypted.json")
 export GRAFANA_ADMIN_PASSWORD
 
 helmfile apply --color $INTERACTIVE_FLAG -f "$HELMFILE_FILENAME" -l "$HELMFILE_LABEL_FILTER"

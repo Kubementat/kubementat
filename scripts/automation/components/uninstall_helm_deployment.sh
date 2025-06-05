@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+# TODO: REFACTOR: this is not required anymore once the service setup is changed
 ######################################
 #
 # This script removes the given component from the cluster in ENVIRONMENT
@@ -7,6 +8,8 @@
 ######################################
 
 set -e
+
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
 
 ENVIRONMENT="$1"
 COMPONENT_NAME="$2"
@@ -19,15 +22,15 @@ fi
 
 set -u
 
-DEPLOYMENT_NAMESPACE_VARIABLE_NAME="$(printf '%s' "${COMPONENT_NAME}_DEPLOYMENT_NAMESPACE")"
+DEPLOYMENT_NAMESPACE_VARIABLE_NAME=$(printf '%s' "${COMPONENT_NAME}_DEPLOYMENT_NAMESPACE")
 echo "DEPLOYMENT_NAMESPACE_VARIABLE_NAME: $DEPLOYMENT_NAMESPACE_VARIABLE_NAME"
-DEPLOYMENT_NAME_VARIABLE_NAME="$(printf '%s' "${COMPONENT_NAME}_DEPLOYMENT_NAME")"
+DEPLOYMENT_NAME_VARIABLE_NAME=$(printf '%s' "${COMPONENT_NAME}_DEPLOYMENT_NAME")
 echo "DEPLOYMENT_NAME_VARIABLE_NAME: $DEPLOYMENT_NAME_VARIABLE_NAME"
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-DEPLOYMENT_NAMESPACE="$(jq -r ".${DEPLOYMENT_NAMESPACE_VARIABLE_NAME}" ../../../platform_config/"${ENVIRONMENT}"/static.json)"
-DEPLOYMENT_NAME="$(jq -r ".${DEPLOYMENT_NAME_VARIABLE_NAME}" ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+DEPLOYMENT_NAMESPACE=$(jq -r ".${DEPLOYMENT_NAMESPACE_VARIABLE_NAME}" "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
+DEPLOYMENT_NAME=$(jq -r ".${DEPLOYMENT_NAME_VARIABLE_NAME}" "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo ""

@@ -198,7 +198,7 @@ pushd cli
 # TODO: Fix accessing the kubernetes dashboard
 You can install the kubernetes dashboard via the helmfile apply feature:
 ```
-pushd tekton_ci/automation/components
+pushd scripts/automation/components
 ./install_kubernetes_dashboard.sh dev
 popd
 ```
@@ -213,7 +213,7 @@ popd
 ## Vault
 You can install vault via the helmfile apply feature:
 ```
-pushd tekton_ci/automation/components
+pushd scripts/automation/components
 ./helmfile_apply.sh dev 'component_name=vault' true
 popd
 ```
@@ -227,4 +227,4 @@ popd
 
 ## Additional Features
 - Routing: Kubementat provides templated configuration for configuring nginx ingress controller and cert-manager for ingress routing (see install_routing.sh)
-- Helmfile based component installation: See tekton_ci/automation/components/helmfile.yaml templates/environment/kubementat_components/helmfile.yaml.template for already preconfigured/templated components.
+- Helmfile based component installation: See templates/environment/kubementat_components/helmfile.yaml.template for already preconfigured/templated components.

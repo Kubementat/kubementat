@@ -67,7 +67,7 @@ class Automation:
         self.check_cluster_permissions()
 
         # Get default variables from the environment if not set
-        components_dir = os.path.join(self.config.kubementat_main_dir, 'tekton_ci', 'automation', 'components')
+        components_dir = os.path.join(self.config.kubementat_main_dir, 'scripts', 'automation', 'components')
 
         logging.info("######################################################")
         logging.info(f"CONFIGURING: Kubementat for environment {self.environment} and team {self.team}")

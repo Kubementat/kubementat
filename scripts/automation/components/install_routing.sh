@@ -10,6 +10,8 @@
 
 set -e
 
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
+
 ENVIRONMENT="$1"
 if [[ "$ENVIRONMENT" == "" ]]; then
   echo "Usage: install_routing.sh <ENVIRONMENT_NAME>"
@@ -22,7 +24,7 @@ set -u
 echo "#########################"
 date
 echo "Loading configuration from platform_config ..."
-CLUSTER_MANAGER_EMAIL="$(jq -r '.CLUSTER_MANAGER_EMAIL' ../../../platform_config/"${ENVIRONMENT}"/static.json)"
+CLUSTER_MANAGER_EMAIL=$(jq -r '.CLUSTER_MANAGER_EMAIL' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/static.json")
 
 #### helmfile apply
 date

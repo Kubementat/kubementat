@@ -42,9 +42,10 @@ see docs/README_GIT_CRYPT.md
 # Initial setup and installation instructions
 ## Automated Tekton Installation
 ```
-cd automation/components
+pushd scripts/automation/components
 # ./install_tekton.sh <ENVIRONMENT>
 ./install_tekton.sh dev
+popd
 ```
 
 ## Automated Tekton pipeline and task setup

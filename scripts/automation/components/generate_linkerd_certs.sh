@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-
+PLATFORM_CONFIG_DIRECTORY="../../../platform_config"
 
 ENVIRONMENT="$1"
 
@@ -15,7 +15,7 @@ set -eu
 ### generate CA certs for linkerd
 
 CERTIFICATE_VALIDITY_IN_DAYS="730" # 2 years default
-LINKERD_CONFIG_DIRECTORY="../../../platform_config/${ENVIRONMENT}/kubementat_components/linkerd"
+LINKERD_CONFIG_DIRECTORY="${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/kubementat_components/linkerd"
 CA_PRIVATE_KEY_FILENAME="${LINKERD_CONFIG_DIRECTORY}/linkerd_ca_private_key.encrypted.pem"
 CA_PUBLIC_KEY_FILENAME="${LINKERD_CONFIG_DIRECTORY}/linkerd_ca_public_key.encrypted.pem"
 ISSUER_PRIVATE_KEY_FILENAME="${LINKERD_CONFIG_DIRECTORY}/linkerd_issuer_private_key.encrypted.pem"
