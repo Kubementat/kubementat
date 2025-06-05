@@ -8,6 +8,18 @@ from kubementat.config import Config
 from kubementat.kubernetes_utils import KubernetesUtils
 
 class Automation:
+    '''
+    A class that provides Kubernetes automation capabilities for installing Kubementat components, setting up pipelines, managing secrets, and configuring Docker registry access.
+    
+    Parameters:
+
+    - environment: str - The target environment (e.g., dev, prod)
+    - team: str - The team identifier
+
+    Returns:
+
+    - None (performs side-effect operations)
+    '''  
     KUBEMENTAT_DEPENDENCIES = [
         "kubectl",
         "helm",
@@ -32,8 +44,24 @@ class Automation:
     ###########################
     def install_kubementat(self, configure_tekton_pipelines=True,
         enable_linkerd=False, helmfile_installation_group='standard'):
+        '''
+        Main installation logic for Kubementat components including Tekton, Linkerd, and pipeline setup.
 
-        """Main installation logic for Kubementat components"""
+        Parameters:
+
+        - configure_tekton_pipelines: bool = True - Whether to configure Tekton pipelines
+        - enable_linkerd: bool = False - Whether to install Linkerd service mesh
+        - helmfile_installation_group: str = 'standard' - Helmfile installation group
+
+        Returns:
+
+        - None (performs side-effect operations)
+
+        Raises:
+
+        - Exception - If dependency checks fail or installation scripts encounter errors
+        '''
+
         self.check_install_dependencies()
         self.validate_cluster_prompt()
         self.check_cluster_permissions()
@@ -79,6 +107,22 @@ class Automation:
         self._print_install_finish_message()
 
     def check_install_dependencies(self):
+        '''
+        Verifies that all required tools are installed.
+
+        Parameters:
+
+        - None
+
+        Returns:
+
+        - None (performs side-effect operations)
+
+        Raises:
+
+        - Exception - If any required tool is missing
+
+        '''
         # Check dependencies
         for dep in self.KUBEMENTAT_DEPENDENCIES:
             if shutil.which(dep) is None:
@@ -110,6 +154,9 @@ class Automation:
                 logging.info("Please answer yes or no.")
 
     def check_cluster_permissions(self):
+        '''
+        Verifies necessary Kubernetes permissions for cluster operations.
+        '''
         try:
             subprocess.run(["kubectl", "auth", "can-i", "create", "namespace"], input="yes", text=True, check=True)
             subprocess.run(["kubectl", "auth", "can-i", "create", "deployment"], input="yes", text=True,
@@ -157,6 +204,26 @@ class Automation:
     # setup pipelines automation
     ###########################
     def setup_pipelines(self):
+      """
+      Configure pipeline infrastructure in a Kubernetes cluster
+
+      This method sets up the complete pipeline environment by:
+      1. Creating necessary directories for pipeline runs
+      2. Setting up Kubernetes namespaces
+      3. Creating SSH and GPG secrets
+      4. Configuring service accounts and role bindings
+      5. Applying Tekton tasks and pipelines
+      6. Displaying setup results
+
+      Parameters:
+          self: Automation class instance with access to configuration and Kubernetes utilities
+          
+      Returns:
+          None (performs side-effect operations)
+          
+      Raises:
+          Exception: If any Kubernetes operation fails
+      """    
       logging.info(f"Starting setup_pipelines execution with environment: {self.environment} and team: {self.team}")
 
       helm_deployer_sa = self.config.get('team_static').get('HELM_DEPLOYER_SERVICE_ACCOUNT_NAME')
@@ -222,7 +289,23 @@ class Automation:
       self._setup_pipelines_show_results(pipeline_ns, app_deployment_ns, helm_deployer_sa)
 
     def _setup_pipelines_setup_role_bindings(self, pipeline_ns, app_ns, sa_name):
+        '''
+        Creates role bindings for pipeline namespace and app deployment.
 
+        Parameters:
+
+        - pipeline_ns: str - Pipeline namespace
+        - app_ns: str - Application deployment namespace
+        - sa_name: str - Service account name
+
+        Returns:
+
+        - None (performs side-effect operations)
+
+        Raises:
+
+        - Exception - If role binding creation fails
+        '''
         # Define the Role Binding for the app deployment
         # Create within app namespace but point to service account within pipeline namespace
         logging.info(f"Creating role binding for cluster role helm-deployer-cluster-role in namespace {app_ns} pointing to service account {sa_name} in namespace {pipeline_ns}")
@@ -243,6 +326,21 @@ class Automation:
         self.kubernetes_utils.create_or_replace_role_binding(pipeline_ns, "helm-deployer-role-binding-pipeline-namespace-access", binding)
 
     def _setup_pipelines_apply_resources(self, resource_dir, target_namespace, kind, group, version):
+        '''
+        Applies Kubernetes resources from specified directories.
+
+        Parameters:
+
+        - resource_dir: str - Directory containing resource files
+        - target_namespace: str - Target namespace for resource application
+        - kind: str - Resource type (Task/Pipeline)
+        - group: str - API group
+        - version: str - API version
+
+        Returns:
+
+        - None (performs side-effect operations)
+        '''
         logging.info(f"Processing resources in directory: {resource_dir}")
 
         for filename in os.listdir(resource_dir):
@@ -338,6 +436,21 @@ class Automation:
     # secret setup automation
     ###########################
     def setup_secrets(self):
+        '''
+        Configures SSH and GPG secrets in the pipeline namespace.
+
+        Parameters:
+
+        - None (uses instance configuration)
+
+        Returns:
+
+        - None (performs side-effect operations)
+
+        Raises:
+
+        - Exception - If secret creation fails
+        '''
         namespace = self.config.get('team_static').get('PIPELINE_NAMESPACE')
         logging.info(f"Environment: {self.environment}")
         logging.info(f"Team: {self.team}")
@@ -387,6 +500,21 @@ class Automation:
     # docker registry access automation
     ###########################
     def setup_docker_registry_access(self):
+        '''
+        Configures Docker registry access for specified namespaces.
+
+        Parameters:
+
+        - None (uses instance configuration)
+
+        Returns:
+
+        - None (performs side-effect operations)
+
+        Raises:
+
+        - Exception - If Docker secret creation fails
+        '''
         pipeline_namespace = self.config.get('team_static').get('PIPELINE_NAMESPACE')
         app_deployment_namespace = self.config.get('team_static').get('APP_DEPLOYMENT_NAMESPACE')
         helm_deployer_service_account_name = self.config.get('team_static').get('HELM_DEPLOYER_SERVICE_ACCOUNT_NAME')
@@ -460,6 +588,21 @@ class Automation:
 
     ## uninstall pipelines
     def uninstall_pipelines(self):
+        '''
+        Deletes the pipeline namespace to uninstall pipelines.
+
+        Parameters:
+
+        - None (uses instance configuration)
+
+        Returns:
+
+        - None (performs side-effect operations)
+
+        Raises:
+
+        - Exception - If namespace deletion fails
+        '''
         logging.info(f"Starting uninstall_pipelines execution with environment: {self.environment} and team: {self.team}")
         pipeline_ns = self.config.get('team_static').get('PIPELINE_NAMESPACE')
         logging.info(f"Pipeline Namespace: {pipeline_ns}")
@@ -472,6 +615,24 @@ class Automation:
 
     ## tunnels
     def open_tunnel_grafana(self, local_port=3001, remote_port=3000, host='0.0.0.0'):
+        '''
+        Opens a tunnel to the Grafana dashboard.
+
+        Parameters:
+
+        - local_port: int = 3001 - Local port for tunnel
+        - remote_port: int = 3000 - Remote port (Grafana default)
+        - host: str = '0.0.0.0' - Host IP
+
+        Returns:
+
+        - None (performs side-effect operations)
+
+        Raises:
+
+        - Exception - If tunneling fails
+        
+        '''
         # TODO: make this a config
         namespace = 'grafana'
         component_name = 'grafana'
@@ -480,6 +641,24 @@ class Automation:
         return self.kubernetes_utils.open_tunnel(namespace, pod_name, local_port, remote_port, host)
 
     def open_tunnel_tekton_dashboard(self, local_port=9097, remote_port=9097, host='0.0.0.0'):
+        '''
+        Opens a tunnel to the Tekton dashboard.
+
+        Parameters:
+
+        - local_port: int = 9097 - Local port for tunnel
+        - remote_port: int = 9097 - Remote port (Tekton default)
+        - host: str = '0.0.0.0' - Host IP
+
+        Returns:
+
+        - None (performs side-effect operations)
+
+        Raises:
+
+        - Exception - If tunneling fails
+
+        '''
         # TODO: make this a config
         namespace = 'tekton-pipelines'
         selector = "app=tekton-dashboard"
@@ -487,6 +666,23 @@ class Automation:
         return self.kubernetes_utils.open_tunnel(namespace, pod_name, local_port, remote_port, host)
 
     def open_tunnel_polaris(self, local_port=8082, remote_port=8080, host='0.0.0.0'):
+        '''
+        Opens a tunnel to the Polaris service.
+
+        Parameters:
+
+        - local_port: int = 8082 - Local port for tunnel
+        - remote_port: int = 8080 - Remote port (Polaris default)
+        - host: str = '0.0.0.0' - Host IP
+
+        Returns:
+
+        - None (performs side-effect operations)
+
+        Raises:
+
+        - Exception - If tunneling fails
+        '''
         # TODO: make this a config
         namespace = 'polaris'
         selector = "app.kubernetes.io/name=polaris,app.kubernetes.io/instance=polaris"
@@ -494,6 +690,23 @@ class Automation:
         return self.kubernetes_utils.open_tunnel(namespace, pod_name, local_port, remote_port, host)
 
     def open_tunnel_vault(self, local_port=8205, remote_port=8200, host='0.0.0.0'):
+        '''
+        Opens a tunnel to the Vault service.
+
+        Parameters:
+
+        - local_port: int = 8205 - Local port for tunnel
+        - remote_port: int = 8200 - Remote port (Vault default)
+        - host: str = '0.0.0.0' - Host IP
+
+        Returns:
+
+        - None (performs side-effect operations)
+
+        Raises:
+
+        - Exception - If tunneling fails
+        '''
         # TODO: make this a config
         namespace = 'vault'
         selector = "app.kubernetes.io/instance=vault,app.kubernetes.io/name=vault"

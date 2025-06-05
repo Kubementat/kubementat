@@ -163,8 +163,6 @@ This section describes the general directory structure for the tekton related re
 - pipelines: contains the tekton pipeline definition yaml files chaining tasks together to a pipeline
 - tasks: contains the tekton task definition yaml files describing the automations
 - pipeline-runs: contains pipeline run configuration yaml files which are used by the run_pipeline.sh script described in the section above. It contains sub-directories for each team configuring the runs with the according team's configuration (currently dev1 and dev2). General tasks which are not dependending on team configuration are located in the pipeline-runs root directory (e.g. build-pipeline-ci-images-run.yml)
-- scripts: contains scripts that are executed from within tekton tasks of the automation, e.g. install_mysql_helm_chart.sh
-- examples: contains some tekton examples for getting started with tekton automation development, this is not used within the automation
 
 ## Making code changes
 This section describes the general processes for extending the existing automations:

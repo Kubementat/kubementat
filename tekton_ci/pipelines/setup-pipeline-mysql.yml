@@ -104,7 +104,7 @@ spec:
         - name: image
           value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
         - name: path-to-automation-script
-          value: "/workspace/$(params.automation-git-project-name)/tekton_ci/scripts/install_mysql_helm_chart.sh"
+          value: "/workspace/$(params.automation-git-project-name)/scripts/tasks/install_mysql_helm_chart.sh"
         - name: environment
           value: "$(params.environment)"
         - name: team
@@ -123,7 +123,7 @@ spec:
         - name: image
           value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
         - name: path-to-automation-script
-          value: "/workspace/$(params.automation-git-project-name)/tekton_ci/scripts/setup_mysql_databases.sh"
+          value: "/workspace/$(params.automation-git-project-name)/scripts/tasks/setup_mysql_databases.sh"
         - name: environment
           value: "$(params.environment)"
         - name: team

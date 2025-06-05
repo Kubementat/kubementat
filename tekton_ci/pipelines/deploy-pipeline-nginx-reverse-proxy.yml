@@ -102,7 +102,7 @@ spec:
         - name: image
           value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
         - name: path-to-automation-script
-          value: "/workspace/$(params.automation-git-project-name)/tekton_ci/scripts/install_nginx_reverse_proxy.sh"
+          value: "/workspace/$(params.automation-git-project-name)/scripts/tasks/install_nginx_reverse_proxy.sh"
         - name: environment
           value: "$(params.environment)"
         - name: team

@@ -9,6 +9,8 @@
 
 set -e
 
+PLATFORM_CONFIG_DIRECTORY="../../platform_config"
+
 ENVIRONMENT="$1"
 TEAM="$2"
 if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" ]]; then
@@ -21,15 +23,15 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-APP_DEPLOYMENT_NAMESPACE="$(jq -r '.APP_DEPLOYMENT_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-MYSQL_DEPLOYMENT_NAME="$(jq -r '.MYSQL_DEPLOYMENT_NAME' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-MYSQL_VOLUME_STORAGE_CLASS="$(jq -r '.MYSQL_VOLUME_STORAGE_CLASS' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-MYSQL_VOLUME_SIZE="$(jq -r '.MYSQL_VOLUME_SIZE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-MYSQL_DATABASE_NAME="$(jq -r '.MYSQL_DATABASE_NAME' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.encrypted.json)"
-MYSQL_HOST="$(jq -r '.MYSQL_HOST' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.encrypted.json)"
-MYSQL_ROOT_PASSWORD="$(jq -r '.MYSQL_ROOT_PASSWORD' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.encrypted.json)"
-MYSQL_HELM_CHART_VERSION="$(jq -r '.MYSQL_HELM_CHART_VERSION' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-MYSQL_HELM_DEPLOYMENT_TIMEOUT="$(jq -r '.MYSQL_HELM_DEPLOYMENT_TIMEOUT' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
+APP_DEPLOYMENT_NAMESPACE=$(jq -r '.APP_DEPLOYMENT_NAMESPACE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+MYSQL_DEPLOYMENT_NAME=$(jq -r '.MYSQL_DEPLOYMENT_NAME' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+MYSQL_VOLUME_STORAGE_CLASS=$(jq -r '.MYSQL_VOLUME_STORAGE_CLASS' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+MYSQL_VOLUME_SIZE=$(jq -r '.MYSQL_VOLUME_SIZE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+MYSQL_DATABASE_NAME=$(jq -r '.MYSQL_DATABASE_NAME' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.encrypted.json")
+MYSQL_HOST=$(jq -r '.MYSQL_HOST' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.encrypted.json")
+MYSQL_ROOT_PASSWORD=$(jq -r '.MYSQL_ROOT_PASSWORD' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.encrypted.json")
+MYSQL_HELM_CHART_VERSION=$(jq -r '.MYSQL_HELM_CHART_VERSION' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+MYSQL_HELM_DEPLOYMENT_TIMEOUT=$(jq -r '.MYSQL_HELM_DEPLOYMENT_TIMEOUT' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "TEAM: $TEAM"

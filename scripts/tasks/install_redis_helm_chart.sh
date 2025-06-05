@@ -9,6 +9,8 @@
 
 set -e
 
+PLATFORM_CONFIG_DIRECTORY="../../platform_config"
+
 ENVIRONMENT="$1"
 TEAM="$2"
 if [[ "$ENVIRONMENT" == "" || "$TEAM" == "" ]]; then
@@ -21,17 +23,17 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-APP_DEPLOYMENT_NAMESPACE="$(jq -r '.APP_DEPLOYMENT_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-REDIS_DEPLOYMENT_NAME="$(jq -r '.REDIS_DEPLOYMENT_NAME' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-REDIS_VOLUME_STORAGE_CLASS="$(jq -r '.REDIS_VOLUME_STORAGE_CLASS' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-REDIS_VOLUME_SIZE="$(jq -r '.REDIS_VOLUME_SIZE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-REDIS_REPLICA_COUNT="$(jq -r '.REDIS_REPLICA_COUNT' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-REDIS_MASTER_HOST="$(jq -r '.REDIS_MASTER_HOST' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.encrypted.json)"
-REDIS_PASSWORD="$(jq -r '.REDIS_PASSWORD' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.encrypted.json)"
-REDIS_HELM_CHART_VERSION="$(jq -r '.REDIS_HELM_CHART_VERSION' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-REDIS_HELM_DEPLOYMENT_TIMEOUT="$(jq -r '.REDIS_HELM_DEPLOYMENT_TIMEOUT' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-REDIS_AUTH_SENTINEL_ENABLED="$(jq -r '.REDIS_AUTH_SENTINEL_ENABLED' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-REDIS_AUTH_ENABLED="$(jq -r '.REDIS_AUTH_ENABLED' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
+APP_DEPLOYMENT_NAMESPACE=$(jq -r '.APP_DEPLOYMENT_NAMESPACE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+REDIS_DEPLOYMENT_NAME=$(jq -r '.REDIS_DEPLOYMENT_NAME' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+REDIS_VOLUME_STORAGE_CLASS=$(jq -r '.REDIS_VOLUME_STORAGE_CLASS' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+REDIS_VOLUME_SIZE=$(jq -r '.REDIS_VOLUME_SIZE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+REDIS_REPLICA_COUNT=$(jq -r '.REDIS_REPLICA_COUNT' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+REDIS_MASTER_HOST=$(jq -r '.REDIS_MASTER_HOST' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.encrypted.json")
+REDIS_PASSWORD=$(jq -r '.REDIS_PASSWORD' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.encrypted.json")
+REDIS_HELM_CHART_VERSION=$(jq -r '.REDIS_HELM_CHART_VERSION' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+REDIS_HELM_DEPLOYMENT_TIMEOUT=$(jq -r '.REDIS_HELM_DEPLOYMENT_TIMEOUT' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+REDIS_AUTH_SENTINEL_ENABLED=$(jq -r '.REDIS_AUTH_SENTINEL_ENABLED' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+REDIS_AUTH_ENABLED=$(jq -r '.REDIS_AUTH_ENABLED' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "TEAM: $TEAM"

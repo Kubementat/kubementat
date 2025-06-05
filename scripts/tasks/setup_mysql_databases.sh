@@ -9,6 +9,8 @@
 
 set -e
 
+PLATFORM_CONFIG_DIRECTORY="../../platform_config"
+
 ENVIRONMENT="$1"
 TEAM="$2"
 
@@ -23,10 +25,12 @@ set -u
 
 echo "#########################"
 echo "Loading configuration from platform_config ..."
-APP_DEPLOYMENT_NAMESPACE="$(jq -r '.APP_DEPLOYMENT_NAMESPACE' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.json)"
-MYSQL_DATABASE_NAME="$(jq -r '.MYSQL_DATABASE_NAME' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.encrypted.json)"
-MYSQL_HOST="$(jq -r '.MYSQL_HOST' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.encrypted.json)"
-MYSQL_ROOT_PASSWORD="$(jq -r '.MYSQL_ROOT_PASSWORD' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.encrypted.json)"
+APP_DEPLOYMENT_NAMESPACE=$(jq -r '.APP_DEPLOYMENT_NAMESPACE' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.json")
+MYSQL_DATABASE_NAME=$(jq -r '.MYSQL_DATABASE_NAME' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.encrypted.json")
+MYSQL_HOST=$(jq -r '.MYSQL_HOST' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.encrypted.json")
+MYSQL_ROOT_PASSWORD=$(jq -r '.MYSQL_ROOT_PASSWORD' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.encrypted.json")
+
+MYSQL_DATABASE_CONFIGURATION=$(jq -r '.MYSQL_DATABASE_CONFIGURATION' "${PLATFORM_CONFIG_DIRECTORY}/${ENVIRONMENT}/${TEAM}/static.encrypted.json")
 
 echo "ENVIRONMENT: $ENVIRONMENT"
 echo "TEAM: $TEAM"
@@ -38,7 +42,6 @@ echo "#########################"
 echo "Iterating through db configuration..."
 
 SQL_COMMANDS="SHOW DATABASES;"
-MYSQL_DATABASE_CONFIGURATION="$(jq -r '.MYSQL_DATABASE_CONFIGURATION' ../../platform_config/"${ENVIRONMENT}"/"${TEAM}"/static.encrypted.json)"
 for row in $(echo "${MYSQL_DATABASE_CONFIGURATION}" | jq -r '.[] | @base64'); do
     _jq() {
      echo ${row} | base64 --decode | jq -r ${1}
