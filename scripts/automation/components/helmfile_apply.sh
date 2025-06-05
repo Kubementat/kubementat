@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# TODO: this can be removed once migrating to full kmt cli control
+# This is used throughout the code on multiple places and needs to be replaced with a function call to HelmUtils.helmfile_apply
+# keeping it for now, but this won't be maintained any longer
+
 #################################
 #
 # This script executes helmfile apply with all required settings for a environment (cluster)

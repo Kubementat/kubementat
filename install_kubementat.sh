@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# TODO: remove this once migrating to kmt cli fully
+#
 #
 # Installs all needed components for a fully functional k8s cluster installation:
 #

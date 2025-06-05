@@ -6,6 +6,7 @@ import subprocess
 from kubernetes import client
 from kubementat.config import Config
 from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.helm_utils import HelmUtils
 
 class Automation:
     '''
@@ -38,6 +39,7 @@ class Automation:
         self.team = team
         self.config = Config(environment, team)
         self.kubernetes_utils = KubernetesUtils()
+        self.helm_utils = HelmUtils(environment, team)
 
     ###########################
     # kubementat cluster installation automation
@@ -78,13 +80,13 @@ class Automation:
         run_file = os.path.join(components_dir, "install_tekton.sh")
         self._run_install_script("Tekton", components_dir, run_file)
 
-        # TODO: #REFACTOR replace with python function call from this class once implemented
-        try:
-            subprocess.run([os.path.join(components_dir, "helmfile_apply.sh"), self.environment,
-                            f"group={helmfile_installation_group}", "true"], check=True, cwd=components_dir)
-        except subprocess.CalledProcessError as e:
-            logging.info(f"Helmfile apply failed: {e}")
-            exit(1)
+        # helmfile apply
+        group_filter = f"group={helmfile_installation_group}"
+        self.helm_utils.helmfile_apply(
+            environment_name=self.environment,
+            helmfile_label_filter=group_filter, 
+            interactive=False
+        )
 
         # Setup pipelines and triggers
         if configure_tekton_pipelines:
