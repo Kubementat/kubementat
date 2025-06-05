@@ -12,6 +12,7 @@ from commands import tunnels
 from commands import tekton
 from commands import kubementat
 from commands import utilities
+from commands import helm
 
 @click.group(help='Kubementat CLI')
 @click.pass_context
@@ -42,6 +43,9 @@ if __name__ == '__main__':
     main.add_command(tekton.setup_triggers)
     main.add_command(tekton.list)
     main.add_command(tekton.uninstall_pipelines)
+    
+    # helm
+    main.add_command(helm.helmfile_apply)
 
     # utilities
     main.add_command(utilities.run_ci_container)
