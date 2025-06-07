@@ -31,7 +31,8 @@ def run_script(kubementat_main_dir, environment, team, script_name, execution_su
 @click.argument('team',envvar='TEAM')
 @click.pass_obj
 def initialize(config, environment, team):
-    run_script(config.kubementat_main_dir, environment, team, 'initialize_kubementat.sh', '')
+    automation = Automation(environment, team)
+    automation.initialize()
 
 # Install kubementat
 @click.command(name='install', help='Install kubementat on a k8s cluster')

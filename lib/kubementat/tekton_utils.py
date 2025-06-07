@@ -14,7 +14,7 @@ class TektonUtils:
         self.kubernetes_utils = KubernetesUtils()
         self.environment = environment
         self.team = team
-        self.config = Config(environment, team)
+        self.config = Config(environment, team, preload_configs=False)
         self.pipeline_namespace = self.config.get('team_static').get('PIPELINE_NAMESPACE')
 
     def list_pipelines(self):

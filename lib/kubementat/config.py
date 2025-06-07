@@ -36,6 +36,8 @@ class Config:
     tekton_team_pipeline_run_dir : Path, optional
         Directory for Tekton pipeline runs for the according team. If not provided, it defaults to
         'tekton_ci/pipeline-runs/{TEAM_NAME}' directory within kubementat_main_dir.
+    preload_configs : bool, optional
+        If set to False, configuration values are not loaded from JSON files directly and are lazy loaded on access later. Default is True.
 
    Important Methods
     -------
@@ -45,7 +47,7 @@ class Config:
 
     '''
 
-    def __init__(self, environment, team, kubementat_main_dir=None, platform_config_dir=None, tekton_pipeline_run_dir=None, tekton_team_pipeline_run_dir=None):
+    def __init__(self, environment, team, kubementat_main_dir=None, platform_config_dir=None, tekton_pipeline_run_dir=None, tekton_team_pipeline_run_dir=None, preload_configs = True):
         '''
         Initializes the Config instance with given parameters and sets up default paths.
 
@@ -89,10 +91,17 @@ class Config:
         self.tekton_team_pipeline_run_dir = Path(f"{self.kubementat_main_dir}/tekton_ci/pipeline-runs/{self.team}").resolve()
         if tekton_team_pipeline_run_dir is not None:
             self.tekton_team_pipeline_run_dir = Path(tekton_team_pipeline_run_dir).resolve()
+        
+        self.templates_dir = Path(f"{self.kubementat_main_dir}/templates").resolve()
+        
+        self.env_static_config_path = Path(f"{self.platform_config_dir}/{self.environment}/static.json").resolve()
+        self.env_static_encrypted_config_path = Path(f"{self.platform_config_dir}/{self.environment}/static.encrypted.json").resolve()
+        self.team_static_config_path = Path(f"{self.platform_config_dir}/{self.environment}/{self.team}/static.json").resolve()
+        self.team_static_encrypted_config_path = Path(f"{self.platform_config_dir}/{self.environment}/{self.team}/static.encrypted.json").resolve()
+        
+        self.config = self._load_config(preload_configs)
 
-        self.config = self._load_config()
-
-    def _load_config(self):
+    def _load_config(self, preload_configs=True):
         '''
         Loads configuration values from JSON files into a dictionary.
 
@@ -111,31 +120,31 @@ class Config:
         FileNotFoundError
             If any configuration file is not found
         '''
+        
+        # skip early if preloading is not activated (e.g. for kmt initialize)
+        if not preload_configs:
+            return {
+                'team_static': None,
+                'team_static_encrypted': None,
+                'env_static': None,
+                'env_static_encrypted': None
+            }
+        
         try:
             # Load static and encrypted environment configs
-            with open(f"{self.platform_config_dir}/{self.environment}/static.json", 'r') as f:
-                env_static = json.load(f)
-            with open(f"{self.platform_config_dir}/{self.environment}/static.encrypted.json", 'r') as f:
-                env_static_encrypted = json.load(f)
+            env_static = self._load_json_file(self.env_static_config_path)
+            env_static_encrypted = self._load_json_file(self.env_static_encrypted_config_path)
 
             # Load team-specific configs if they exist
-            team_static = {}
-            team_static_encrypted = {}
-
-            team_static_path = f"{self.platform_config_dir}/{self.environment}/{self.team}/static.json"
-            team_static_encrypted_path = f"{self.platform_config_dir}/{self.environment}/{self.team}/static.encrypted.json"
-
-            if os.path.exists(team_static_path):
-                with open(team_static_path, 'r') as f:
-                    team_static = json.load(f)
+            if os.path.exists(self.team_static_config_path):
+                team_static = self._load_json_file(self.team_static_config_path)
             else:
-                logging.warning(f"No team static config found at {team_static_path}")
+                logging.warning(f"No team static config found at {self.team_static_config_path}")
 
-            if os.path.exists(team_static_encrypted_path):
-                with open(team_static_encrypted_path, 'r') as f:
-                    team_static_encrypted = json.load(f)
+            if os.path.exists(self.team_static_encrypted_config_path):
+                team_static_encrypted = self._load_json_file(self.team_static_encrypted_config_path)
             else:
-                logging.warning(f"No team static encrypted config found at {team_static_encrypted_path}")
+                logging.warning(f"No team static encrypted config found at {self.team_static_encrypted_config_path}")
 
             logging.info(f"Loaded configuration for environment: {self.environment} and team: {self.team}")
             logging.info(f"Kubementat Main Directory: {self.kubementat_main_dir}")
@@ -172,4 +181,10 @@ class Config:
         dict
             Configuration values for the specified category
         '''
+        if self.config[category] is None:
+            self.config = self._load_config(True)
         return self.config[category]
+    
+    def _load_json_file(self, file_path):
+        with open(file_path, 'r') as f:
+            return json.load(f)

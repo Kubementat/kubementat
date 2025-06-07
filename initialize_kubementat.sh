@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# TODO: remove this script once migrating to full kmt cli usage
+# DO NOT UPDATE THIS ANY LONGER
 ####
 # This script initializes a basic configuration for getting up and running with kubementat automations and platform setup
 ####
@@ -84,12 +86,6 @@ function print_cli_versions(){
 
 function generate_password(){
   gpg --gen-random --armor 1 14
-}
-
-function does_file_with_pattern_exist {
-   local arg="$*"
-   local files=($arg)
-   [ ${#files[@]} -gt 1 ] || [ ${#files[@]} -eq 1 ] && [ -e "${files[0]}" ]
 }
 
 # TODO: ensure that the contents of e.g. platform_config/dev/${TEAM}/static.json are filled with according vaules, e.g. APP_DEPLOYMENT_NAMESPACE, PIPELINE_NAMESPACE,  etc.
@@ -327,20 +323,18 @@ cp templates/environment/mirrored_docker_images.json.template platform_config/$T
 echo "Writing platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.json"
 jq \
   --arg storage_class "$KUBERNETES_DEFAULT_STORAGE_CLASS" \
-  '.POSTGRES_VOLUME_STORAGE_CLASS |= $storage_class | .MONGODB_VOLUME_STORAGE_CLASS |= $storage_class | .MYSQL_VOLUME_STORAGE_CLASS |= $storage_class | .REDIS_VOLUME_STORAGE_CLASS |= $storage_class' \
+  '.MYSQL_VOLUME_STORAGE_CLASS |= $storage_class | .REDIS_VOLUME_STORAGE_CLASS |= $storage_class' \
   templates/environment/team/static.json.template >platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.json
 
 # Configure platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.encrypted.json
 echo "Writing platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.encrypted.json"
 jq \
-  --arg mongodb_pw "$(generate_password)" \
   --arg mysql_database_pw "$(generate_password)" \
   --arg mysql_root_pw "$(generate_password)" \
   --arg redis_pw "$(generate_password)" \
-  --arg postgres_pw "$(generate_password)" \
   --arg gitlab_webhook_secret "$(generate_password)" \
   --arg github_webhook_secret "$(generate_password)" \
-  '.POSTGRES_ADMIN_PASSWORD |= $postgres_pw | .MONGODB_ROOT_PASSWORD |= $mongodb_pw | .MYSQL_DATABASE_CONFIGURATION[0].PASSWORD |= $mysql_database_pw | .MYSQL_ROOT_PASSWORD |= $mysql_root_pw | .REDIS_PASSWORD |= $redis_pw | .GITLAB_WEBHOOK_SECRET |= $gitlab_webhook_secret | .GITHUB_WEBHOOK_SECRET |= $github_webhook_secret' \
+  '.MYSQL_DATABASE_CONFIGURATION[0].PASSWORD |= $mysql_database_pw | .MYSQL_ROOT_PASSWORD |= $mysql_root_pw | .REDIS_PASSWORD |= $redis_pw | .GITLAB_WEBHOOK_SECRET |= $gitlab_webhook_secret | .GITHUB_WEBHOOK_SECRET |= $github_webhook_secret' \
   templates/environment/team/static.encrypted.json.template >platform_config/$TARGET_ENVIRONMENT/$TARGET_TEAM/static.encrypted.json
 echo ""
 echo "#####################"

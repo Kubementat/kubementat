@@ -10,7 +10,7 @@ class HelmUtils:
     def __init__(self, environment, team):
         """Initialize Helm utilities class"""
         self.environment = environment
-        self.config = Config(environment, team)
+        self.config = Config(environment, team, preload_configs=False)
         self.components_dir = os.path.join(self.config.kubementat_main_dir, 'scripts', 'automation', 'components')
         return None
       
