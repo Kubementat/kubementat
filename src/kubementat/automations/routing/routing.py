@@ -42,13 +42,9 @@ from kubernetes import client
 
 from kubementat import shell
 from kubementat.automations.routing import traefik_presence
-from kubementat.config import Config, component_config_key
-from kubementat.constants import DEFAULT_STATIC_ANSWERS, TRAEFIK_CHART
+from kubementat.config import Config
+from kubementat.constants import COMPONENT, DEFAULT_INGRESS_CLASSES, TRAEFIK_CHART
 from kubementat.helm_utils import HelmUtils
-
-# The component, spelled the way every other component is spelled, so the config keys it names are
-# derived rather than remembered. Same string as `traefik_presence.COMPONENT`, for the same reason.
-COMPONENT = "traefik"
 
 # What `install_routing` decided. One of these three is what the CLI and any later caller reads, and
 # the string is the one that has to survive being pasted into a bug report.
@@ -104,18 +100,6 @@ LETSENCRYPT_ISSUERS = (
 # Where the ACME account's contact address comes from -- the same key the deleted script read with
 # `jq -r` out of `platform_config/<environment>/static.json`.
 CLUSTER_MANAGER_EMAIL_KEY = "CLUSTER_MANAGER_EMAIL"
-
-# What a class is called when `static.json` does not say. `constants.DEFAULT_NAMESPACES` is the
-# sibling this mirrors: a name the configuration is asked for and code answers for, so that renaming
-# the key in one file is not a code change. It is not a second answer, and this is the line that
-# proves it: the value is read out of `constants.DEFAULT_STATIC_ANSWERS` under the key this read
-# takes (`TRAEFIK_INGRESS_CLASS`, built the same way `_component_value` builds it), so the one place
-# the word `traefik` is written as this key's default is `constants.py`. It used to be written
-# here, which is how the routing path acquired its own private L0 while the read path had none.
-# Indexing the table rather than calling the accessor is deliberate: a missing entry should be a
-# `KeyError` on import and not a `None` that reaches `spec.ingressClassName` months later.
-DEFAULT_INGRESS_CLASSES = {COMPONENT: DEFAULT_STATIC_ANSWERS[component_config_key(COMPONENT, "INGRESS_CLASS")]}
-
 
 # ---------------------------------------------------------------------------------------
 # the answer

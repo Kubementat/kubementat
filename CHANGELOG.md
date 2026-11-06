@@ -1,5 +1,29 @@
 # Unreleased
 
+- **Routing's component name and its ingress-class default are owned by `constants.py`, and no
+  routing import reaches the ingress generator.** `constants.COMPONENT` is the one place
+  `"traefik"` is written as a component name, and `constants.DEFAULT_INGRESS_CLASSES` is the fallback
+  table both routing reads go through. `automations/routing/routing.py` and
+  `automations/routing/traefik_presence.py` keep their own spellings no longer; `ingress_generator.py`
+  imports both from `constants` and imports nothing from `automations`, which is the whole point of
+  the move — the manifest generator used to depend on the command module to learn a word.
+
+  **Why the table is indexed and not written again.** The value of `DEFAULT_INGRESS_CLASSES` is read
+  out of `constants.DEFAULT_STATIC_ANSWERS["TRAEFIK_INGRESS_CLASS"]` rather than spelled a second
+  time, so `"traefik"` as the default of that key is still written once. The key itself is spelled as
+  a literal, and that is `constants.py`'s own idiom rather than a shortcut: the rule that gives the
+  key its format is `config.component_config_key`, and `config.py` imports `constants.py`, so
+  importing it back is the cycle this phase exists to remove. The invariant survives the spelling —
+  one place states the value — and the agreement between the two spellings of the key is pinned in
+  `tests/test_the_defaults_initialize_seeded_have_a_single_owner.py`, where a key written in two
+  places would be two owners of one naming rule.
+
+  **What did not move.** `component_config_key` stays in `config.py`; it has 104 references across 20
+  files and its target home is `core/config/keys.py`, which does not exist yet. `constants.py` gained
+  no import line — it is pure data, and that is the invariant the cycle-free phase depends on.
+  `ingress_generator.py`'s manifest, warnings, and read order are unchanged, and
+  `DEFAULT_INGRESS_CLASSES["traefik"]` is `"traefik"` exactly as it was before the move.
+
 - **Reading the shipped manifest is a configuration read, and `config_answers` no longer imports
   `helm_utils` to make it.** `kubementat.config_reads_index` answers three questions about the
   packaged helmfile with nothing but a `Config` and the filesystem: which directory the manifest

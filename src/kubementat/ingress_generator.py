@@ -9,9 +9,11 @@ This replaces it. Three things it does on purpose:
     a `dict` that a caller can read as well as print. Nothing here is a `cat << EOF`.
 *   **The class is answered, not recited.** `Config._component_value("traefik", "INGRESS_CLASS",
     DEFAULT_INGRESS_CLASSES)` is the read, which resolves to the `static.json` key
-    `TRAEFIK_INGRESS_CLASS` through `component_config_key` -- the same key and the same fallback
-    `kubementat.automations.routing.routing` uses when it points the cert-manager solver at a
-    class, so a generated Ingress and the solver that has to reach it cannot disagree. The
+    `TRAEFIK_INGRESS_CLASS` through `component_config_key` -- the same key and the same fallback the
+    routing command uses when it points the cert-manager solver at a
+    class, so a generated Ingress and the solver that has to reach it cannot disagree. Both halves of
+    that agreement now come from `constants.py`, and nothing here reaches into the routing package to
+    get them. The
     fallback is `traefik` because `constants.DEFAULT_STATIC_ANSWERS` says so, and that
     table is also what the cluster's release is configured with: the traefik block in
     `helmfile.yaml.gotmpl` reads the variable `helm_utils.export_ingress_class` puts into the
@@ -45,7 +47,7 @@ from pathlib import Path
 
 import yaml
 
-from kubementat.automations.routing.routing import COMPONENT, DEFAULT_INGRESS_CLASSES
+from kubementat.constants import COMPONENT, DEFAULT_INGRESS_CLASSES
 
 # The Ingress this generates is a `networking.k8s.io/v1` object, which is what the script declared
 # and what every cluster kubementat installs on runs.
@@ -61,7 +63,7 @@ INGRESS_NAME_SUFFIX = "-ingress"
 CERT_SECRET_SUFFIX = "-cert"
 
 # Named so this file says `DEFAULT_INGRESS_CLASS` where it means the answer, without a literal.
-# The value is `routing.py`'s map, read for the component that owns the key.
+# The value is `constants.DEFAULT_INGRESS_CLASSES`, read for the component that owns the key.
 DEFAULT_INGRESS_CLASS = DEFAULT_INGRESS_CLASSES[COMPONENT]
 
 # What a path that cannot be written because something is already in it is called. The rule is

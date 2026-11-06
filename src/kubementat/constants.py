@@ -253,6 +253,37 @@ DEFAULT_STATIC_ANSWERS = {
     "TRAEFIK_INGRESS_CLASS": "traefik",
 }
 
+# The component the routing role belongs to, spelled once. It used to be spelled three times: here,
+# in `automations/routing/routing.py` and in `automations/routing/traefik_presence.py`, each pair of
+# hands saying it derived the config keys rather than wrote them out, which is three owners of one
+# component name and no single place a rename has to visit. The string is this file's own
+# convention — lower-case, hyphenated, equal to the helmfile release name — so it belongs beside the
+# tables that key on it and nowhere else, and `constants.py` still imports nothing for it.
+COMPONENT = "traefik"
+
+# The fallback for the ingress-class read, as `DEFAULT_NAMESPACES` is the fallback for the namespace
+# read: one key per component, one place that says what the default is. The value is not written
+# again here, and that is the whole point — it is read out of `DEFAULT_STATIC_ANSWERS` under the key
+# this read takes, so the one place the word `traefik` stands as this key's default is that table.
+# It used to be written here as well as in `routing.py`, which is how the routing path acquired its
+# own private L0 while the read path had none, and the reason it is still spelled out in one place is
+# the sentence that comment carried.
+#
+# The key is spelled as a literal rather than built. The rule that gives the key its *format* —
+# component name upper-cased and its hyphens turned into underscores — lives in
+# `config.component_config_key`, and this file may not import it: `config.py` imports this file, and
+# importing it back is the cycle. Spelling the key is `constants.py`'s own idiom rather than a
+# workaround, and every key in `DEFAULT_STATIC_ANSWERS` above is spelled exactly this way; this table
+# indexes one key and states which one. The invariant the routing comment was written to protect —
+# that one place states the value — holds just as well when the index is written here, and the
+# agreement between the two spellings is pinned by a test in
+# `tests/test_the_defaults_initialize_seeded_have_a_single_owner.py` rather than left to whoever
+# remembers to edit both.
+#
+# Indexing the table rather than calling `static_answer` is deliberate too: a missing entry is a
+# `KeyError` on import and not a `None` that reaches `spec.ingressClassName` months later.
+DEFAULT_INGRESS_CLASSES = {COMPONENT: DEFAULT_STATIC_ANSWERS["TRAEFIK_INGRESS_CLASS"]}
+
 # What `config init` seeds into `<root>/<environment>/static.encrypted.json`, and the only place these
 # numbers are written. Exactly one key is here, and why only one is the whole content of this comment.
 #

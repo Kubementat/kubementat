@@ -50,13 +50,9 @@ from kubernetes import client
 
 from kubementat import shell
 from kubementat.config import component_config_key
-from kubementat.constants import TRAEFIK_CHART, TRAEFIK_CONTROLLER_NAME
+from kubementat.constants import COMPONENT, TRAEFIK_CHART, TRAEFIK_CONTROLLER_NAME
 from kubementat.helm_utils import helm_list_releases_argv
 from kubementat.kubernetes_utils import KubernetesUtils
-
-# The component, spelled the way every other component is spelled: lower-case, hyphenated, and
-# used to derive the config key rather than to write it out.
-COMPONENT = "traefik"
 
 # The only three answers `classification` can take.
 CLASSIFICATION_NONE = "none"

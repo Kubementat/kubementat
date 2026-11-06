@@ -39,7 +39,6 @@ from pathlib import Path
 import pytest
 
 from kubementat import config_answers, config_derived, constants
-from kubementat.automations.routing import routing
 from kubementat.config import Config, component_config_key
 
 ENVIRONMENT = "l0env"
@@ -230,18 +229,25 @@ def test_a_tree_that_declared_nothing_still_answers_the_ingress_class_and_l0_sai
     how a test can say "the same key" without quoting it.
 
     The answer is still `L0` from `constants.py`, and that is the half of this row that matters: the
-    fallback this read *used* to make was `routing.DEFAULT_INGRESS_CLASSES`' own literal, which was a
-    second owner of the same word. It is now read out of this table, so the two paths agree by
-    construction and not by whoever remembered to edit both.
+    fallback this read *used* to make was a literal written in `routing.py`, which was a second owner
+    of the same word. It is now read out of this table by the table's own module, so the two paths
+    agree by construction and not by whoever remembered to edit both.
     """
     config = seed(tmp_path)
 
-    answer = config._component_value(routing.COMPONENT, "INGRESS_CLASS",
-                                     routing.DEFAULT_INGRESS_CLASSES)
+    answer = config._component_value(constants.COMPONENT, "INGRESS_CLASS",
+                                     constants.DEFAULT_INGRESS_CLASSES)
     assert answer == "traefik"
-    assert answered_by(config, component_config_key(routing.COMPONENT, "INGRESS_CLASS")) == "default"
-    assert routing.DEFAULT_INGRESS_CLASSES[routing.COMPONENT] == \
+    assert answered_by(config, component_config_key(constants.COMPONENT,
+                                                    "INGRESS_CLASS")) == "default"
+    assert constants.DEFAULT_INGRESS_CLASSES[constants.COMPONENT] == \
         constants.DEFAULT_STATIC_ANSWERS["TRAEFIK_INGRESS_CLASS"]
+    # The key `constants.DEFAULT_INGRESS_CLASSES` indexes its own table with is spelled, not built.
+    # It must still be the key `component_config_key` builds, because a key spelled in two places is
+    # two owners of a naming rule: the day the two spellings disagree, this fallback answers a key no
+    # layer carries and the operator's own `static.json` stops being read. That is a statement about
+    # the naming behaviour and not about where the source lives, so it belongs here.
+    assert "TRAEFIK_INGRESS_CLASS" == component_config_key(constants.COMPONENT, "INGRESS_CLASS")
 
 
 # --- the set, and what it must not do ----------------------------------------------------------
@@ -300,7 +306,7 @@ def test_constants_py_is_the_only_place_in_src_that_writes_these_values():
       `1.17.1` or `ubuntu-ci-minimal` into a reader — the re-seed this file exists to prevent;
     * the **pair** check: no line outside `constants.py` may name one of these ten keys *and* a
       string literal equal to its value, which catches the second owner that is spelled out (a
-      fallback table like `routing.DEFAULT_INGRESS_CLASSES` used to be) and is invisible to the
+      fallback table like the one `routing.py` used to own) and is invisible to the
       value check because the word also names a component.
 
     Two values are exempt from the value check and are named as exempt, because `traefik` and
