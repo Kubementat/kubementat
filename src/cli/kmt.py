@@ -32,7 +32,7 @@ def configure_logging():
 # The group carries no context object any more. It used to carry a `Config` holding one field,
 # `kubementat_main_dir`, and 32 commands accepted it through `@click.pass_obj` without reading it:
 # the project root is resolved where a path is actually derived, by
-# `kubementat.config.default_kubementat_main_dir`, so a `kmt` installed into site-packages still
+# `kubementat.core.config.config.default_kubementat_main_dir`, so a `kmt` installed into site-packages still
 # drives the checkout `KUBEMENTAT_HOME` names (D11) without a second copy of the rule in the CLI.
 # What a command receives now is a `kubementat.cluster.Context`, built per command by
 # `@kmt_context` — because "which cluster" is decided by the command's own arguments, and a

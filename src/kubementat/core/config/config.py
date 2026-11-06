@@ -9,10 +9,10 @@ from typing import Optional
 import click
 import yaml
 
-from kubementat import config_derived
+from kubementat.core.config import derived as config_derived
 from kubementat.core import constants
 from kubementat.core.assets import asset_path
-from kubementat.config_reads import read_decrypted
+from kubementat.core.config.reads import read_decrypted
 from kubementat.errors import TeamNotSuppliedError
 
 # Importing this module configures logging and nothing else. The `logging.basicConfig`
@@ -36,8 +36,10 @@ TEKTON_API_GROUP = "tekton.dev"
 TRIGGERS_API_VERSION = "v1beta1"
 TRIGGERS_API_GROUP = "triggers.tekton.dev"
 
-# `Path(__file__).parents[2]` is the repository root for a checkout and *site-packages*
+# `Path(__file__).parents[4]` is the repository root for a checkout and *site-packages*
 # for an installed wheel, so it is only a default and never the answer on its own (D11).
+# Four, not two, because this module sits two directories below the package root: the
+# count is the whole arithmetic the function depends on, and it travels with the file.
 # The environment variables below are the override: the same tree can be read from
 # anywhere, which is what the CI container needs (`kmt` in site-packages, checkout in
 # /workspace).
@@ -257,7 +259,7 @@ def default_kubementat_main_dir() -> Path:
     set, the checkout this module lives in otherwise. An explicit `kubementat_main_dir`
     argument outranks both — see `Config.__init__`, which is where that precedence lives.
     '''
-    return _directory_from_environment(KUBEMENTAT_HOME_ENV_VAR) or Path(__file__).resolve().parents[2]
+    return _directory_from_environment(KUBEMENTAT_HOME_ENV_VAR) or Path(__file__).resolve().parents[4]
 
 
 def default_platform_config_dir() -> Path:

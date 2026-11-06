@@ -20,7 +20,7 @@ from kubernetes import client, utils
 from cli.commands.utilities import create_ingress
 from conftest import FIXTURE_TEAM
 from cluster_fixture import configuration_only_context
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.errors import (IngressArgumentNotSuppliedError, IngressPortNotUsableError,
                               IngressTargetExistsError)
 from kubementat.ingress_generator import (

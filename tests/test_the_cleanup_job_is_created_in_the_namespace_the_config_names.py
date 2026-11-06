@@ -237,7 +237,7 @@ def test_renaming_the_namespace_moves_the_job_with_it(fixture_repo, dry_run_env,
         "the job still lands in a namespace the code remembered rather than the one it read"
 
     # And it is the same accessor every other component uses — there is no second answer here.
-    from kubementat.config import Config
+    from kubementat.core.config.config import Config
 
     assert Config(fixture_repo.environment, fixture_repo.team,
                   preload_configs=False).component_namespace(

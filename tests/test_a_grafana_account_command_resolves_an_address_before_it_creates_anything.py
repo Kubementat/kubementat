@@ -28,7 +28,7 @@ from click.testing import CliRunner
 from cli.commands import users
 from kubementat import grafana_accounts
 from kubementat import grafana_client
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 
 TUNNELLED_URL = "http://127.0.0.1:3001"
 CLUSTER_IP_URL = "http://10.43.19.7:80"

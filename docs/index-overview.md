@@ -291,7 +291,7 @@ User → kmt CLI → src/kubementat/ → Kubernetes Cluster
 | 1 | `src/kubementat/automation.py` | 700+ line monolith — main refactoring target |
 | 2 | ~~`src/cli/kmt`~~ | **resolved 2026-10-28** — the pre-FIN-01 CLI entry file is deleted; nothing imported it and nothing could |
 | 3 | `src/cli/commands/tunnels.py` | Has the tunnel-vault-ui bug |
-| 4 | `src/kubementat/config.py` | Config loading — lazy loading, encrypted JSON |
+| 4 | `src/kubementat/core/config/config.py` | Config loading — lazy loading, encrypted JSON |
 | 5 | `src/kubementat/kubernetes_utils.py` | K8s API wrapper — solid but could use more type hints |
 | 6 | `src/kubementat/tekton_utils.py` | Pipeline execution — placeholder replacement logic |
 | 8 | `pyproject.toml` | Project config — entry point, dependencies |

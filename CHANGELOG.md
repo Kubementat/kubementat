@@ -1,5 +1,44 @@
 # Unreleased
 
+- **The four configuration modules moved under `kubementat.core.config`.** Phase 2's second pure
+  move, so the dotted path is what changes and nothing else is: `kubementat.config` is now
+  `kubementat.core.config.config`, `kubementat.config_derived` is `kubementat.core.config.derived`,
+  `kubementat.config_reads` is `kubementat.core.config.reads` and `kubementat.config_reads_index` is
+  `kubementat.core.config.release_index`. `git mv` measured it honestly: three of the four crossed
+  the tree with **0 lines changed**, the fourth with 6 in and 4 out, and all ten of those lines are
+  its own import lines and the one arithmetic line named below. No shim, no re-export and no alias
+  stands at the old path — `python -c "import kubementat.config"` raises `ModuleNotFoundError` —
+  and `core/config/__init__.py` is a docstring and nothing else, because a re-export would be the
+  convenience that costs the suite: a patch string applied to one attribute while the call runs
+  through the other is a green test and a wrong product. **What it cost:** 64 files rewrote a path
+  (15 under `src/`, 46 under `tests/`, 3 in the operator docs), 5 test files carried the path as a
+  *string* rather than as an import line — 10 strings, of which 5 name the module path and fail
+  silently and 5 name a file and fail loudly — and 183 `setattr` patch sites moved without being
+  touched, because they patch the module object the caller imported and that object is the same one
+  either way. Suite unchanged: **1775 passed, 1
+  skipped**, import cycles none, layer violations none.
+
+  **Two things the Phase 2 text said that the tree did not, and one of them changed behaviour.**
+  First: "pure move, no line inside changes" did not survive the file it described.
+  `default_kubementat_main_dir()` answers the checkout by counting levels off `__file__`, and the
+  destination sits *two* directories below the package root, not one, so
+  `Path(__file__).resolve().parents[2]` had to become `parents[4]`. Two tests caught it in the first
+  run — `tests/test_import_hygiene.py::test_the_root_the_cli_drives_is_the_checkout` and
+  `tests/test_config_path_resolution.py::test_the_project_root_is_the_checkout_only_when_kubementat_home_is_unset`
+  — and both now resolve the checkout, so `KUBEMENTAT_HOME` unset still answers this checkout and
+  nothing else. It is the only line in the ticket that changed what kubementat does, and it is a
+  line no grep could have found. Second: the rewrite list a grep of import statements draws is 7
+  files short of the tree — the comments in `src/cli/kmt.py` and `src/cli/commands/utilities.py`, the
+  docstring in `core/assets/__init__.py`, three `from kubementat import config as config_module`
+  bindings in `tests/`, and `REPO_ROOT / "src" / "kubementat" / "config.py"` in the test that parses
+  this module's own source. **Measured in the artifact, not argued:** a clean
+  wheel built outside this checkout ships 111 entries, 5 of them `kubementat/core/config/*.py` and 0
+  under any old path. That measurement is only honest outside the checkout: the `build/` directory
+  tracked here is an additive cache that setuptools never prunes, and `uv build --wheel` inside it
+  produces 177 entries including `kubementat/config.py`, `kubementat/config_diff.py` and
+  `kubementat/assets/` — files this tree no longer has. A wheel built here is a second way to reach
+  the same object, and unlike the `__init__.py` it is invisible until someone installs it.
+
 - **The declared values, the version and the shipped data moved under `kubementat.core`.** This is
   the first of Phase 2's pure moves, so it can honestly say *nothing about kubementat changed*; what
   changed is the dotted path you import from. `kubementat.constants` is `kubementat.core.constants`,

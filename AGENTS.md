@@ -58,7 +58,7 @@ We separate the cli implementation ( `src/cli` ) strictly from the core kubement
 
 - Stored in an external config directory:`<external_config_dir>/{environment}/{team}/` directory
 - Two JSON files: `static.json` (public) and `static.encrypted.json` (git-crypt protected)
-- Loaded via `Config` class in `src/kubementat/config.py`
+- Loaded via `Config` class in `src/kubementat/core/config/config.py`
 
 ### Git-Crypt
 

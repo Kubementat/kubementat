@@ -24,10 +24,10 @@ import ast
 import inspect
 from pathlib import Path
 
-from kubementat import config as config_module
+from kubementat.core.config import config as config_module
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PY = REPO_ROOT / "src" / "kubementat" / "config.py"
+CONFIG_PY = REPO_ROOT / "src" / "kubementat" / "core" / "config" / "config.py"
 
 # The roots that could hold a second owner of the rule. `templates` is not here: it moved inside the
 # package, so "src" sweeps it and naming the old root would sweep nothing.

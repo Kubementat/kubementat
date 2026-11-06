@@ -46,7 +46,7 @@ import yaml
 from cluster_parity import compare, operations_from_calls
 from conftest import run_bash
 from cluster_fixture import configuration_only_context
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.errors import IngressPortNotUsableError
 from kubementat.ingress_generator import IngressGenerator
 

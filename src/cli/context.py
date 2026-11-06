@@ -46,7 +46,7 @@ import os
 import click
 
 from kubementat.cluster import CLUSTER_KUBE_CONTEXT_KEY, Context
-from kubementat.config import check_configuration_stamp, resolve_platform_config_dir
+from kubementat.core.config.config import check_configuration_stamp, resolve_platform_config_dir
 from kubementat.errors import (
     ClusterIdentityCollisionError,
     ClusterResolutionError,

@@ -33,7 +33,7 @@ from pathlib import Path
 import pytest
 
 from kubementat import helm_utils
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.helm_utils import HelmUtils
 from asset_paths import asset_path, values_path
 from cluster_fixture import configuration_only_context

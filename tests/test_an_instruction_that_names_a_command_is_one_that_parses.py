@@ -34,7 +34,7 @@ from kubementat import ci_utils
 from kubementat import errors
 from kubementat import config_init, config_validate
 from kubementat.automations.routing import routing
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 
 ENVIRONMENT = "instructionenv"
 TEAM = "instructionteam"

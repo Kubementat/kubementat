@@ -3,7 +3,7 @@
 The outcome of moving the data is a sentence about installation, not about directories. `templates/`
 used to
 sit at the repository root, and every reader reached it by walking *up* out of
-`src/kubementat/config.py` to a root that only exists in a checkout. A wheel has no root to walk
+`src/kubementat/core/config/config.py` to a root that only exists in a checkout. A wheel has no root to walk
 up to, so the same code answered `KUBEMENTAT_HOME` or failed. Resolving from inside the package
 answers all three installs with one line:
 

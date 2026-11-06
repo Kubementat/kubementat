@@ -44,7 +44,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from cli.commands import config as config_module
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.config_init import SKIPPED
 
 ENVIRONMENT = "prod"

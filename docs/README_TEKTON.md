@@ -16,7 +16,7 @@ The versions kubementat installs are the `TEKTON_VERSION_*` keys of the environm
 `constants.DEFAULT_STATIC_ANSWERS` inside the installed `kmt` when it does not (R-12.1). No command
 writes those three keys into a directory; a fresh `static.json` does not contain them. The API version
 it *speaks* is a constant in
-`src/kubementat/config.py` (`TEKTON_API_GROUP` / `TEKTON_API_VERSION`). Both halves belong in the same
+`src/kubementat/core/config/config.py` (`TEKTON_API_GROUP` / `TEKTON_API_VERSION`). Both halves belong in the same
 tree: writing v1 manifests against a 0.x controller, or reading v1beta1 objects from a v1-only
 controller, fails the same way — a 404 per resource.
 

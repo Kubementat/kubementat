@@ -19,7 +19,7 @@ import pytest
 import requests
 
 from kubementat import grafana_client
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.errors import (GrafanaConfigurationError, GrafanaError,
                               GrafanaUnauthorizedError)
 from kubementat.grafana_client import GrafanaClient

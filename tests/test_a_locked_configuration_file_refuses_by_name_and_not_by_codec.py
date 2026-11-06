@@ -5,7 +5,7 @@ every read of an encrypted kubementat file answer the same question in its own w
 caught it and described it in four different sentences, two did not catch it at all, and
 `config_init.cluster_is_unaddressed` swallowed it and answered *"this environment addresses no
 cluster"* — the one place in `src/` that printed a confident falsehood about a file it had never
-read. The seam is `read_decrypted(path, what)` in `kubementat/config_reads.py`, and the rule it
+read. The seam is `read_decrypted(path, what)` in `kubementat/core/config/reads.py`, and the rule it
 enforces is **one sentence, many error types**: every caller keeps its own exception and its own
 shape, and the sentence is the same one.
 
@@ -54,8 +54,8 @@ import pytest
 from kubementat import config_init, config_validate
 from kubementat.cluster import ClusterTarget, _read_kubeconfig, _static_declaration
 from kubementat.errors import ClusterFileUnreadableError
-from kubementat.config import Config
-from kubementat.config_reads import LockedConfigFileError, read_decrypted
+from kubementat.core.config.config import Config
+from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
 from kubementat.config_validate import validate_tree
 
 ENVIRONMENT = "dev"
@@ -417,7 +417,7 @@ MATERIAL = re.compile(r"static\.json|static\.encrypted\.json|env_static|team_sta
                       r"|KUBECONFIG|\.kube/config|values\.encrypted")
 
 # The seam's own module: it is the bottom of the graph and not a consumer of it.
-SEAM_MODULE = "kubementat/config_reads.py"
+SEAM_MODULE = "kubementat/core/config/reads.py"
 
 # Reads that are deliberately not this seam's, each with the reason it is exempt. The Kubernetes
 # client's own read and `kubectl config view` are on this list in prose rather than as a line: they
@@ -443,7 +443,7 @@ EXEMPT = {
 # and is not exempt has to be caught by `reads_outside_the_seam` below, but this list is what makes the number
 # itself a fact and not a guess.
 DOCUMENTED_SEAM_SITES = [
-    ("kubementat/config.py", "_load_json_file"),
+    ("kubementat/core/config/config.py", "_load_json_file"),
     ("kubementat/config_init.py", "_read_document"),
     ("kubementat/config_init.py", "cluster_is_unaddressed"),
     ("kubementat/config_validate.py", "_read_object_file"),
@@ -641,7 +641,7 @@ def test_the_seam_never_runs_git_crypt_and_never_parses(tmp_path):
     Checked against the module's own source rather than against a shim, because there is nothing to
     run: a seam that execed `git-crypt` would be indistinguishable from a helper that decodes.
     """
-    tree = ast.parse((SRC / "kubementat" / "config_reads.py").read_text(encoding="utf-8"))
+    tree = ast.parse((SRC / "kubementat" / "core" / "config" / "reads.py").read_text(encoding="utf-8"))
     imports = {getattr(node, "module", None) or getattr(node, "names", [None])[0].name
                for node in ast.walk(tree) if isinstance(node, (ast.Import, ast.ImportFrom))}
     calls = {ast.unparse(node.func) for node in ast.walk(tree) if isinstance(node, ast.Call)} \

@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 from click.exceptions import ClickException
 
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 
 ENVIRONMENT = "dev"
 TEAM = "fixture"

@@ -1,4 +1,4 @@
-"""No test may build a `kubementat.config.Config` against this checkout and let it read.
+"""No test may build a `kubementat.core.config.config.Config` against this checkout and let it read.
 
 Row 14, measured. `tests/test_tekton_api_version_preflight.py` asked one thing of a `Config` call
 that passed no root and left the load on — a module constant assigned at `config.py:153`, three
@@ -13,7 +13,7 @@ The fix is one keyword. A guard is what stops it coming back from a different fi
 derived from the source of every test in `tests/` rather than from a list written down here — a list
 is a list that goes stale the day someone adds a file.
 
-The rule: every `Config(...)` call that resolves to `kubementat.config.Config` must say where the
+The rule: every `Config(...)` call that resolves to `kubementat.core.config.config.Config` must say where the
 configuration lives, or say not to load it. Concretely it must pass `preload_configs=False`, or
 `kubementat_main_dir=` / `platform_config_dir=`, or the enclosing test must have redirected
 `KUBEMENTAT_HOME` / `KUBEMENTAT_PLATFORM_CONFIG_DIR` in the environment before the call —
@@ -45,7 +45,7 @@ from pathlib import Path
 
 TESTS_DIR = Path(__file__).resolve().parent
 
-CONFIG_MODULES = ("kubementat.config",)
+CONFIG_MODULES = ("kubementat.core.config.config",)
 
 # The environment dials that move the root. A call made by a test that turned one of these is not
 # reading this checkout, whatever the constructor's arguments look like.
@@ -67,7 +67,7 @@ def _bindings(tree):
             for alias in node.names:
                 if alias.name == "Config":
                     # `alias.name` is what the class is called in its own module, so a test that
-                    # renames it (`from kubementat.config import Config as Cfg`) is still caught.
+                    # renames it (`from kubementat.core.config.config import Config as Cfg`) is still caught.
                     bound[alias.asname or alias.name] = node.module
     return bound
 
@@ -154,7 +154,7 @@ def test_no_test_loads_config_from_the_checkout_root():
         offenders.extend(_violations(path))
 
     assert offenders == [], (
-        "these tests build a kubementat.config.Config with no root and the load left on, so the run"
+        "these tests build a kubementat.core.config.config.Config with no root and the load left on, so the run"
         " opens this checkout's platform_config — written by `kmt initialize`, untracked by git,"
         " and so a test that is green only where someone has run it:"
         f"\n  {'  '.join(offenders)}\n"

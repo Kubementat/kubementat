@@ -36,7 +36,7 @@ import pytest
 
 from kubementat import automation, config_init
 from kubementat.core import constants
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.config_init import (CREATED, EXISTED, SKIPPED, InitStep, init_configuration,
                                     warn_cluster_not_addressed)
 

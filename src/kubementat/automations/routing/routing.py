@@ -43,7 +43,7 @@ from kubernetes import client
 from kubementat import errors
 from kubementat import shell
 from kubementat.automations.routing import traefik_presence
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.core.constants import COMPONENT, DEFAULT_INGRESS_CLASSES, TRAEFIK_CHART
 from kubementat.helm_utils import HelmUtils
 

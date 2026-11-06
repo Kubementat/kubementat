@@ -22,7 +22,7 @@ from cluster_fixture import configuration_only_context
 from asset_paths import values_path
 from kubementat import helm_utils
 from kubementat.core import constants
-from kubementat.config import component_config_key
+from kubementat.core.config.config import component_config_key
 from kubementat.config_init import init_configuration
 from kubementat.helm_utils import HelmUtils
 

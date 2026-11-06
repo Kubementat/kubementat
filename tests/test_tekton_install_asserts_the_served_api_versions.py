@@ -24,7 +24,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from kubementat import config as config_module
+from kubementat.core.config import config as config_module
 from kubementat.automation import Automation
 from kubementat.errors import TektonControllerWithoutConfiguredApiError
 from kubementat.tekton_utils import (

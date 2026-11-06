@@ -24,7 +24,7 @@ import logging
 import click
 import pytest
 
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.helm_utils import export_component_release_knobs
 
 ENVIRONMENT = "layerenv"

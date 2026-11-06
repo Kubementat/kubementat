@@ -32,7 +32,7 @@ from conftest import as_k8s_object
 from kubementat import helm_utils, shell
 from kubementat.automations.routing import traefik_presence
 from kubementat.cluster import ClusterTarget, Context
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.helm_utils import helm_list_releases_argv
 
 CONFIGURED = "traefik"

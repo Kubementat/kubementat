@@ -33,7 +33,7 @@ from cluster_parity import API_PROGRAM
 
 from kubementat import errors
 from kubementat.core import constants
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.cluster import Context
 from kubementat.helm_utils import HelmUtils
 from conftest import run_kmt

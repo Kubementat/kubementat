@@ -105,7 +105,7 @@ def relocate_asset_root(root, monkeypatch) -> Path:
     therefore not something a test can arrange a divergence against. Moving the resolver is how
     that half stays addressable without teaching the product a root it was told to stop using.
     """
-    from kubementat import config as config_module
+    from kubementat.core.config import config as config_module
 
     target = Path(root)
     monkeypatch.setattr(config_module, "asset_path", lambda *parts: target.joinpath(*parts))

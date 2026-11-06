@@ -26,7 +26,7 @@ from kubementat.cluster import (
     STATIC_SOURCE_PREFIX,
     EnvironmentRegistry,
 )
-from kubementat.config import resolve_platform_config_dir
+from kubementat.core.config.config import resolve_platform_config_dir
 
 TABLE_HEADERS = ("ENVIRONMENT", "CLUSTER_ADDRESS", "CONTEXT", "SOURCE", "CHECK")
 

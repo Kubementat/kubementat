@@ -55,9 +55,10 @@ from pathlib import Path
 from typing import Any
 
 
-from kubementat import config_derived, config_init, config_reads_index
+from kubementat import config_init
+from kubementat.core.config import derived as config_derived, release_index as config_reads_index
 from kubementat.core import constants
-from kubementat.config import Config, _NOTHING_DECLARED, component_config_key
+from kubementat.core.config.config import Config, _NOTHING_DECLARED, component_config_key
 
 # The three tags `config show` prints. They name the *layer that answers*, which is why a key that
 # falls through from the environment is tagged `environment` even in a team-scoped run, and why a

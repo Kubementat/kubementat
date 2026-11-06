@@ -45,7 +45,7 @@ from typing import Any, NamedTuple, Optional
 
 import requests
 
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat import errors
 
 # The paths, spelled once. Every one of them appears in the bash, so nothing here is a guess about

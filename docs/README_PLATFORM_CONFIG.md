@@ -90,7 +90,7 @@ tells you which two paths it is talking about.
 
 ## static.json
 
-The keys are read through `Config._component_value` (`src/kubementat/config.py:405`): configuration
+The keys are read through `Config._component_value` (`src/kubementat/core/config/config.py:405`): configuration
 answers first, `src/kubementat/constants.py` is the fallback, and a key that is missing warns once and
 uses the built-in default instead of failing. A warning that names the key is therefore not an error —
 it is kubementat telling you the cluster got its default and you may want something else. The rule
@@ -102,7 +102,7 @@ to something it was never told to talk to.
 
 Two keys break that rule, and they break it toward the manifest. `<COMPONENT>_ENABLED` and
 `<COMPONENT>_VERSION` are answered by `Config.component_release_enabled` and
-`Config.component_release_version` (`src/kubementat/config.py`), which read the layers only — the team's
+`Config.component_release_version` (`src/kubementat/core/config/config.py`), which read the layers only — the team's
 pair, then the environment's — and fall back to no constant at all. So `false` is not a warning and not a
 default: it is `installed: false` in the spec helmfile builds, which removes a release that is live and is
 not an error on a cluster that never had one. A version nobody names answers from the shipped manifest,
@@ -149,7 +149,7 @@ defaults are `kubementat/core/assets/templates/environment/static.json.template`
 `kmt`). Three of them
 (`TRAEFIK_DEPLOYMENT_NAMESPACE`, `TRAEFIK_INGRESS_CLASS`, `TRAEFIK_SERVICE_SELECTOR`) belong to the
 component and are named by deriving the component's name into the key (`component_config_key`,
-`src/kubementat/config.py:82-96`); the fourth, `CLUSTER_MANAGER_EMAIL`, is read directly and has no default
+`src/kubementat/core/config/config.py:82-96`); the fourth, `CLUSTER_MANAGER_EMAIL`, is read directly and has no default
 an operator can lean on.
 
 | key | default | who reads it | what it decides |

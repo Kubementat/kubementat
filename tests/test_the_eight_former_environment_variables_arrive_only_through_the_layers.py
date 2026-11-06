@@ -37,7 +37,7 @@ from kubementat import ci_utils, config_answers, tekton_utils
 from kubementat.core import constants
 from kubementat.ci_utils import CiUtils
 from kubementat.errors import CiImageNotConfiguredError
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 
 REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src"
@@ -199,7 +199,7 @@ PROCESS_ENVIRONMENT_USES = {
                "and nothing else — asserted against the module's own table, not against this row.",
         "mode": "read",
     },
-    ("src/kubementat/config.py", "_directory_from_environment"): {
+    ("src/kubementat/core/config/config.py", "_directory_from_environment"): {
         "names": ("KUBEMENTAT_HOME", "KUBEMENTAT_PLATFORM_CONFIG_DIR"),
         "constants": ("KUBEMENTAT_HOME_ENV_VAR", "KUBEMENTAT_PLATFORM_CONFIG_DIR_ENV_VAR"),
         "why": "the two directory overrides; they name a root, not an answer.",
@@ -309,7 +309,7 @@ def _component_key_names(path: Path, symbol: str) -> tuple:
     builds the key; a component that arrives from a loop does not, and that is what the second half of
     the return value says. The fold calls the product's own function rather than guessing the rule.
     """
-    from kubementat.config import component_config_key
+    from kubementat.core.config.config import component_config_key
 
     module_constants = _module_string_constants(path)
     tree = ast.parse(path.read_text(encoding="utf-8"))

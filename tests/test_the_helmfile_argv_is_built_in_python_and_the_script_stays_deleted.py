@@ -34,8 +34,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from kubementat import config_reads_index, helm_utils
-from kubementat.config import Config
+from kubementat import helm_utils
+from kubementat.core.config import release_index as config_reads_index
+from kubementat.core.config.config import Config
 from cluster_fixture import configuration_only_context
 from kubementat.helm_utils import HelmUtils
 

@@ -32,7 +32,7 @@ from kubementat.cluster import (
     ClusterTarget,
     Context,
 )
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 
 # The credentials a fixture kubeconfig carries. They are never real, and one test's whole job is
 # to prove none of these strings ever reaches a `repr`.

@@ -13,7 +13,7 @@ from kubementat import shell
 from kubementat import errors
 from kubementat.core import constants
 from kubementat import config_bootstrap, config_keys
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.kubernetes_utils import (DEPLOYMENT_LABEL, MANAGED_BY_KUBEMENTAT, MANAGED_BY_LABEL,
                                          KubernetesUtils, helm_target_args)
 from kubementat.helm_utils import HelmUtils, helm_list_releases_argv

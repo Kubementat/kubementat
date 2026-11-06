@@ -59,8 +59,8 @@ import yaml
 
 from kubementat import cluster as _cluster
 from kubementat import config_init
-from kubementat.config import ConfigurationStamp, Config
-from kubementat.config_reads import LockedConfigFileError, read_decrypted
+from kubementat.core.config.config import ConfigurationStamp, Config
+from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
 
 # The finding kinds. Exactly two, because the exit code is decided by their presence and nothing
 # else: `error` refuses, `warning` prints and continues. That second shape is not invented here --

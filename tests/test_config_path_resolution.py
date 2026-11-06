@@ -7,7 +7,7 @@ Three defects live under this subject:
   the override that makes an installed `kmt` read the checkout it was pointed at, and it is
   the prerequisite for the CI-container work: there the checkout is `/workspace/...` while
   `kmt` itself is installed.
-* **D10** — `logging.basicConfig()` ran while `kubementat.config` was still being imported,
+* **D10** — `logging.basicConfig()` ran while `kubementat.core.config.config` was still being imported,
   so every library consumer got a root handler and an INFO level whether it wanted them or
   not. The CLI installs the handler now; importing the library installs nothing.
 * The generated trigger config had no accessor at all — `tekton_team_pipeline_dir`,
@@ -33,7 +33,7 @@ from pathlib import Path
 import pytest
 from click.exceptions import ClickException
 
-from kubementat.config import Config, default_kubementat_main_dir
+from kubementat.core.config.config import Config, default_kubementat_main_dir
 from kubementat.config_init import init_configuration
 from asset_paths import asset_path
 
@@ -366,7 +366,7 @@ def test_initialization_creates_the_team_trigger_directory(tmp_path, monkeypatch
 def test_importing_the_library_configures_no_logging():
     """D10: the import used to leave a root handler and an INFO level behind."""
     result = run_python(
-        "import logging, kubementat.config;"
+        "import logging, kubementat.core.config.config;"
         "print(len(logging.getLogger().handlers), logging.getLogger().level)"
     )
     assert result.returncode == 0, result.stderr

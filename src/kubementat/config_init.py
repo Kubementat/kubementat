@@ -86,10 +86,10 @@ from typing import Any, Iterable
 import click
 
 from kubementat.core import constants
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.cluster import (CLUSTER_KUBECONFIG_PATH_KEY, CLUSTER_KUBE_CONTEXT_KEY,
                                 IN_TREE_KUBECONFIG_FILENAME)
-from kubementat.config_reads import read_decrypted
+from kubementat.core.config.reads import read_decrypted
 
 # Step actions. `existed` is the one that belongs to foreign material: `force=True` accepts it and
 # touches nothing of it, so recording it as `created` or `skipped` would both be false.

@@ -34,7 +34,7 @@ import pytest
 from kubementat.core import constants
 from kubementat.ci_utils import CiUtils
 from kubementat.errors import CiImageNotConfiguredError
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.automations.routing import routing
 from kubementat.helm_utils import HelmUtils
 
@@ -413,7 +413,7 @@ def test_the_layers_are_read_once_per_configuration_and_not_per_key(tmp_path, mo
     returned. A per-key re-read of the disk would show up here as extra loads, and would be the
     failure mode a 52-caller read path deserves to have.
     """
-    from kubementat import config as config_module
+    from kubementat.core.config import config as config_module
     loads = []
     real_load = config_module.Config._load_json_file
 

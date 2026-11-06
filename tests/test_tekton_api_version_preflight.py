@@ -16,7 +16,7 @@ import pytest
 
 from pathlib import Path
 
-from kubementat import config as config_module
+from kubementat.core.config import config as config_module
 from kubementat import config_keys
 from kubementat import k8s_apply
 from kubementat.automation import Automation
@@ -258,7 +258,7 @@ def test_kubementat_speaks_exactly_one_tekton_api_version_and_it_is_v1(tmp_path,
     assert config_module.TEKTON_API_GROUP == "tekton.dev"
 
     monkeypatch.setenv("TEKTON_API_VERSION", "v1beta1")
-    from kubementat.config import Config
+    from kubementat.core.config.config import Config
 
     assert Config("dev", "dev1", kubementat_main_dir=str(tmp_path),
                   platform_config_dir=str(tmp_path / "platform_config"),

@@ -33,7 +33,7 @@ import gnupg
 import pytest
 
 from kubementat.automation import Automation
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 

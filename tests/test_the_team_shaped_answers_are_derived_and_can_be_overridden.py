@@ -5,7 +5,7 @@
 answers an operator has to repeat. `initialize` used to produce them by substituting the name into a
 `REPLACEME_TEAM` template, which is the reason they were never written down anywhere and the reason a
 tree that skipped the substitution answered with the placeholder. So they are computed at read time,
-as L0, in `kubementat/config_derived.py`.
+as L0, in `kubementat/core/config/derived.py`.
 
 Two behaviors, and this file judges both, because only one of them can be seen from a passing run:
 
@@ -33,8 +33,9 @@ from pathlib import Path
 import pytest
 
 import kubementat
-from kubementat import config_answers, config_derived
-from kubementat.config import Config
+from kubementat import config_answers
+from kubementat.core.config import derived as config_derived
+from kubementat.core.config.config import Config
 from kubementat.errors import TeamNotSuppliedError
 
 ENVIRONMENT = "derivedenv"
@@ -317,7 +318,7 @@ def test_the_derived_answers_are_stable_and_carry_no_entropy():
     for key, rule in config_derived.RULES.items():
         assert rule(TEAM) == rule(TEAM), key
 
-    source = Path(kubementat.config_derived.__file__).read_text()
+    source = Path(kubementat.core.config.derived.__file__).read_text()
     tree = ast.parse(source)
     imports = set()
     for node in ast.walk(tree):

@@ -19,7 +19,7 @@ import re
 import sys
 from pathlib import Path
 
-from kubementat.config import default_kubementat_main_dir
+from kubementat.core.config.config import default_kubementat_main_dir
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -40,13 +40,13 @@ def run_python(code: str) -> subprocess.CompletedProcess:
 
 def test_import_kubementat_works_from_a_clean_dir():
     """The package has to import on its own, without a path hack helping it."""
-    result = run_python("import kubementat.config")
+    result = run_python("import kubementat.core.config.config")
     assert result.returncode == 0, result.stderr
 
 
 def test_lib_kubementat_is_no_longer_importable():
     """The second module tree has to be gone, not just unused."""
-    result = run_python("import lib.kubementat.config")
+    result = run_python("import lib.kubementat.core.config.config")
     assert result.returncode != 0
     assert "ModuleNotFoundError" in result.stderr
 
@@ -57,7 +57,7 @@ def test_kubementat_resolves_to_src():
     This catches the other way a second tree comes back: an editable install or a
     `PYTHONPATH` that points at a copy nobody is editing.
     """
-    result = run_python("import kubementat.config as m; print(m.__file__)")
+    result = run_python("import kubementat.core.config.config as m; print(m.__file__)")
     assert result.returncode == 0, result.stderr
     loaded = Path(result.stdout.strip())
     assert loaded.is_absolute()

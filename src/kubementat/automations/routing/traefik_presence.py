@@ -49,7 +49,7 @@ from typing import Optional
 from kubernetes import client
 
 from kubementat import shell
-from kubementat.config import component_config_key
+from kubementat.core.config.config import component_config_key
 from kubementat.core.constants import COMPONENT, TRAEFIK_CHART, TRAEFIK_CONTROLLER_NAME
 from kubementat.helm_utils import helm_list_releases_argv
 from kubementat.kubernetes_utils import KubernetesUtils

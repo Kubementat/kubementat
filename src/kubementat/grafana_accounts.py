@@ -45,7 +45,7 @@ questions in `docs/plans/finish-python-migration.md`:
 import logging
 from typing import Any, Optional
 
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.errors import GrafanaConfigurationError
 from kubementat.grafana_client import GrafanaAccount, GrafanaClient
 from kubementat.kubernetes_utils import KubernetesUtils

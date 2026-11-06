@@ -20,7 +20,7 @@ import logging
 import pytest
 from click.exceptions import ClickException
 
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 
 ENVIRONMENT = "testenv"
 TEAM = "testteam"

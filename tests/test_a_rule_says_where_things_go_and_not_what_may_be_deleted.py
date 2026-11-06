@@ -21,7 +21,7 @@ from click.testing import CliRunner
 
 from cluster_fixture import configuration_only_context
 from kubementat.automation import Automation
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 from kubementat.errors import TeamNotSuppliedError
 
 ENVIRONMENT = "dev"

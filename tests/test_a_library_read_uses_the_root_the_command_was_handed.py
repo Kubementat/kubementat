@@ -34,7 +34,7 @@ from cluster_fixture import configuration_only_context, redirect_checkout
 from kubementat import grafana_accounts, grafana_client
 from kubementat.automations.routing import routing
 from kubementat.automation import Automation
-from kubementat.config import Config
+from kubementat.core.config.config import Config
 
 ENVIRONMENT = "dev"
 TEAM = "dev1"
