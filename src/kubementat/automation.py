@@ -14,8 +14,11 @@ from kubementat import errors
 from kubementat.core import constants
 from kubementat import config_bootstrap, config_keys
 from kubementat.core.config.config import Config
+# `helm_target_args` is one of the helpers P2-4 moved out of `kubernetes_utils.py` down to the
+# class whose address it spells, so it is imported from there and not from the god-object.
+from kubementat.core.identity.target import helm_target_args
 from kubementat.kubernetes_utils import (DEPLOYMENT_LABEL, MANAGED_BY_KUBEMENTAT, MANAGED_BY_LABEL,
-                                         KubernetesUtils, helm_target_args)
+                                         KubernetesUtils)
 from kubementat.helm_utils import HelmUtils, helm_list_releases_argv
 from kubementat.tekton_utils import (
     HELM_DEPLOYER_CLUSTER_ROLE_NAME,

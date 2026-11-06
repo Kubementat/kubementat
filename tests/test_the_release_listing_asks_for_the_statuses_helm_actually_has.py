@@ -32,7 +32,8 @@ from kubementat import helm_utils
 from kubementat.automation import Automation
 from kubementat.core.identity.context import Context
 from kubementat.helm_utils import HelmUtils, helm_list_releases_argv
-from kubementat.kubernetes_utils import KubernetesUtils, helm_target_args
+from kubementat.core.identity.target import helm_target_args
+from kubementat.kubernetes_utils import KubernetesUtils
 
 # The argv the fix ships. Written out here rather than read from the module so a change to the
 # constant has to be agreed with the change to this list, and so a `--all` put back under the

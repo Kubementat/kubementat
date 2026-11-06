@@ -22,7 +22,7 @@ import pytest
 from kubementat import shell
 from kubementat.kubernetes_utils import KubernetesUtils
 from cluster_fixture import TARGET_DEV
-from kubementat.kubernetes_utils import kubectl_target_args
+from kubementat.core.identity.target import kubectl_target_args
 
 
 class RecordedRun:

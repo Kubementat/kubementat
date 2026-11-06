@@ -1,5 +1,41 @@
 # Unreleased
 
+- **Five pure helpers left `kubernetes_utils.py`, which is the last thing taken out of it before it gets
+  split rather than moved.** `parse_cpu`, `parse_memory` and `plural_for_kind` are in a new
+  `core/quantities.py`; `kubectl_target_args` and `helm_target_args` sit in `core/identity/target.py` below
+  the class whose address they spell. The file goes from 2 081 lines to 1 977, all five old paths raise
+  `AttributeError`, and every moved definition is **byte-identical** — 28, 25, 13, 13 and 23 lines, zero
+  changed line-pairs. `quantities.py` has **no import statements at all**: not stdlib, not `errors`, so
+  there is nothing above it to reach and it adds no edge to the graph. The god-object binds the modules
+  rather than the names, so its nine call sites became qualified calls, which is what keeps `KubernetesUtils`
+  pointing at one definition per helper. (12 files; 2 cross-references that pointed at the old homes
+  repointed: a `:func:` reference in `helm_utils.py`, and two docstrings whose line citations would have
+  stranded themselves across a −104-line file.)
+  **How the builders were proved to still address the cluster: mutation.** Mutating
+  `str(target.context)` inside `kubectl_target_args` fails **7 tests**, including the three parity-tunnel
+  tests that compare an argv against the deleted bash script's own line — where the flag is load-bearing in
+  what is asserted rather than in what is present. The same mutation in `helm_target_args` fails **1**. The
+  worker reported that as a hole: *no test asserts a literal `--kube-context` in a full helm argv.* That is
+  half true, and the half that is true is worse stated than found. Presence is asserted —
+  `test_the_release_listing_asks_for_the_statuses_helm_actually_has.py:175` checks a captured argv, and
+  `test_no_helm_call_is_addressed_by_the_process_any_more.py:269` sweeps every helm call in `src/` for the
+  flag. What is asserted once is the **value**: `test_no_helm_call_is_addressed_by_the_process_any_more.py:365`
+  compares the built list exactly. So helm's addressing is not untested, it is tested once where kubectl's
+  is caught in seven places — a thinness worth closing, and tracked as its own ticket rather than smuggled
+  into this one.
+  **The census got it backwards, and said so.** §8 item 5 told the next ticket to move `helm_target_args`
+   *with helm* on the grounds that `kubernetes_utils.py` never calls it. The plan puts both builders in the
+   identity layer, and the code agrees with the plan: they address a `ClusterTarget`, the helm spelling is
+   one line of a rule kubectl spells differently, and `automation.py:2001` reads `helm_target_args` too,
+   so "with helm" would put the addressing rule wherever a caller happens to reach. Corrected in the census
+   document with the reasoning, keeping the observation that made item 5 look right (this file never calls
+   it — which is precisely why dragging it along with the method rows would have been pointless). §3's line
+   numbers run one short of the tree because the census was taken at 2 080 lines, and §3 also listed
+   `automations/routing/routing.py` as an outside caller of `kubectl_target_args` when that file imports
+   nothing and mentions it only in prose.
+  Suite unchanged: **1775 passed, 1 skipped**, cycles none, layer violations none. `kubernetes_utils.py`
+  still holds the 77-method class, unchanged in structure.
+
 - **`Context` left `cluster.py` for `core/identity/context.py`, and `cluster.py` was deleted rather than
   emptied.** One name, 18 members, 502 lines with the decorator, and **zero changed line-pairs** — the
   class source is byte-equal to what it was one commit ago. The reason is the same one that made the

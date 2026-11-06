@@ -25,7 +25,7 @@ import logging
 
 from kubementat import errors
 from kubementat import shell
-from kubementat.kubernetes_utils import kubectl_target_args
+from kubementat.core.identity.target import kubectl_target_args
 
 # The pod the script always ran, under the name it always used. kubementat has never had more
 # than one CI container to run, so a configurable name would be a knob for a question nobody asks.

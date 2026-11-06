@@ -27,7 +27,8 @@ from kubernetes.client.exceptions import ApiException
 from kubementat import errors
 from kubementat.errors import (NamespaceNotFoundError,
                                PodNotFoundError, ServiceAccountTokenNotFoundError)
-from kubementat.kubernetes_utils import KubernetesUtils, parse_memory
+from kubementat.core.quantities import parse_memory
+from kubementat.kubernetes_utils import KubernetesUtils
 from cli.context import kmt_context
 
 

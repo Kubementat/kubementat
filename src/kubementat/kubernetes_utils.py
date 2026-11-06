@@ -9,6 +9,14 @@ from typing import Optional
 from kubernetes import client, dynamic
 
 from kubementat.core.identity.context import Context
+# The helpers P2-4 moved out of this file are reached through their modules and not by name, for the
+# reason `context.py` gives for the same choice: a name import here would leave
+# `kubementat.kubernetes_utils.parse_memory` standing beside the function it points at, which is a
+# second route to one definition and exactly what a `monkeypatch` at the module nobody runs misses.
+# `quantities` is bound the way `constants` is bound everywhere; `_target` is the alias `context.py`
+# and `registry.py` use for the same module.
+from kubementat.core import quantities
+from kubementat.core.identity import target as _target
 from kubementat.core.identity.target import ClusterTarget
 from kubementat.errors import (
     ClusterNotConfiguredError,
@@ -91,78 +99,6 @@ def _reason(error) -> str:
     return str(getattr(error, "reason", "") or error)
 
 
-def kubectl_target_args(target) -> list:
-    """The argv fragment that points a `kubectl` at *target*, and nothing else.
-
-    The rule is stated in the negative: a `kubectl` invocation that is not given its cluster is
-    a bug, not a shortcut. This is the only place that sentence is turned into argv, so a call that
-    forgets the flags is a call that cannot be written without skipping this function.
-
-    Both flags come from the `ClusterTarget` the caller already resolved -- never from what the
-    process's kubeconfig happens to say. `--context` is what a kubeconfig-based target addresses;
-    `--kubeconfig` is named only when the target resolved a file, because naming a file kubectl
-    would otherwise have found for itself is a claim about provenance this object is allowed to
-    make and no one else is.
-    """
-    args = []
-    if target.kubeconfig_path is not None:
-        args += ["--kubeconfig", str(target.kubeconfig_path)]
-    if target.context:
-        args += ["--context", str(target.context)]
-    if not args:
-        raise ClusterNotConfiguredError(
-            f"environment '{target.environment}' addressed a cluster through "
-            f"{target.source}, which carries no kubecontext and no kubeconfig file, and "
-            f"{target.source} cannot be handed to a kubectl session. `kubectl logs`/`exec`/"
-            f"`port-forward` need one of --context or --kubeconfig (\u00a710.2); a target built from a "
-            f"connection document has neither, so those three calls have no address to carry and "
-            f"refuse rather than guess."
-        )
-    return args
-
-
-def helm_target_args(target) -> list:
-    """The argv fragment that points a *helm* or *helmfile* at *target*, and nothing else.
-
-    The same sentence as :func:`kubectl_target_args`, in helm's spelling: `--kubeconfig` for the
-    file and `--kube-context` for the context (helm does not accept kubectl's `--context`), and
-    both binaries take them wherever the subcommand goes. Refusing a target that names neither is
-    the point, not a nicety: `helm_utils.py` used to hand the cluster over in the environment
-    (`os.environ["KUBECONFIG"]`), which is how a helm run could land on a cluster the operator had
-    not named and leave no trace of the choice in the argv it logged.
-    """
-    args = []
-    if target.kubeconfig_path is not None:
-        args += ["--kubeconfig", str(target.kubeconfig_path)]
-    if target.context:
-        args += ["--kube-context", str(target.context)]
-    if not args:
-        raise ClusterNotConfiguredError(
-            f"helm needs the cluster named on the command line, and environment "
-            f"'{target.environment}' addressed a cluster through {target.source}, which carries no "
-            f"kubecontext and no kubeconfig file. helm and helmfile accept --kube-context and "
-            f"--kubeconfig (\u00a711); a target built from a connection document has neither, so the "
-            f"read has no address to carry and refuses rather than picking up whatever"
-            f" ~/.kube/config the running user happens to have."
-        )
-    return args
-
-
-def plural_for_kind(kind: str) -> str:
-    """The resource name a kind is addressed by in the API path.
-
-    `f"{kind.lower()}s"` was the whole rule, and it broke on the one kind anything here applies
-    that is not a Tekton resource: an `Ingress` lives under `ingresses`, so the naive plural asked
-    for `ingresss` and the answer was a 404 that named neither the kind nor the path. Kubernetes
-    itself pluralises by rule, and the two rules that cover every kind kubementat sends are the
-    ones below -- which is why the answer is derived here and not written out per kind.
-    """
-    lowered = (kind or "").strip().lower()
-    if lowered.endswith(("s", "x", "ch", "sh")):
-        return lowered + "es"
-    return lowered + "s"
-
-
 # How kubementat addresses a deployment's pods, wherever a selector is needed (the same
 # label stream_logs documents): the helm release name. Reading a deployment by anything
 # else finds the pods a manual `kubectl label` left behind.
@@ -188,46 +124,6 @@ MANAGED_BY_KUBEMENTAT = "kubementat"
 # reason the script it replaced was written that way -- a one-token argv entry cannot be
 # re-parsed by a shell that is not there.
 DEPLOYMENT_SHELL_COMMAND = ("/bin/bash",)
-
-
-def parse_cpu(value) -> float:
-    """A Kubernetes quantity of cpu, in cores. "500m" -> 0.5, "2" -> 2.0, nanocores too."""
-    text = str(value).strip()
-    if not text:
-        return 0.0
-    try:
-        if text.endswith("m"):
-            return float(text[:-1]) / 1000.0
-        if text.endswith("n"):
-            return float(text[:-1]) / 1_000_000_000.0
-        return float(text)
-    except ValueError as error:
-        raise ValueError(f"Not a cpu quantity: {value!r}") from error
-
-
-def parse_memory(value) -> float:
-    """A Kubernetes quantity of memory, in bytes.
-
-    Kubernetes writes the binary suffixes (Ki, Mi, Gi, ...) for most memory fields; the
-    decimal ones (K, M, G, ...) are legal and show up from custom quantities, so both are
-    read. A bare number is bytes.
-    """
-    text = str(value).strip()
-    if not text:
-        return 0.0
-    suffixes = (
-        ("Ei", 1024 ** 6), ("Pi", 1024 ** 5), ("Ti", 1024 ** 4), ("Gi", 1024 ** 3),
-        ("Mi", 1024 ** 2), ("Ki", 1024),
-        ("E", 1000 ** 6), ("P", 1000 ** 5), ("T", 1000 ** 4), ("G", 1000 ** 3),
-        ("M", 1000 ** 2), ("k", 1000),
-    )
-    try:
-        for suffix, factor in suffixes:
-            if text.endswith(suffix):
-                return float(text[:-len(suffix)]) * factor
-        return float(text)
-    except ValueError as error:
-        raise ValueError(f"Not a memory quantity: {value!r}") from error
 
 
 def _percent_of(part: dict, whole: dict) -> dict:
@@ -266,7 +162,7 @@ def _byte_quantity(value) -> int:
     if value is None:
         return 0
     if isinstance(value, str):
-        return int(parse_memory(value))
+        return int(quantities.parse_memory(value))
     return int(value)
 
 
@@ -447,7 +343,7 @@ class KubernetesUtils:
         they get it: from the target, asked lazily like everything else, so a command that streams
         no logs and opens no tunnel never resolves one.
         """
-        return kubectl_target_args(self.target)
+        return _target.kubectl_target_args(self.target)
 
     # ------------------------------------------------------------------
     # reads that decide something — the kubectl side of these is gone
@@ -1206,7 +1102,7 @@ class KubernetesUtils:
         if not resource_name:
             raise ValueError("Resource name is required in body['metadata']['name']")
 
-        plural_identifier = plural_identifier or plural_for_kind(kind)
+        plural_identifier = plural_identifier or quantities.plural_for_kind(kind)
 
         try:
             # First try to create the resource
@@ -1923,8 +1819,8 @@ class KubernetesUtils:
             for item in metrics.get("items", []):
                 node_usage = {"cpu": 0.0, "memory": 0.0}
                 for container in item.get("containers", []):
-                    node_usage["cpu"] += parse_cpu(container.get("usage", {}).get("cpu", 0))
-                    node_usage["memory"] += parse_memory(
+                    node_usage["cpu"] += quantities.parse_cpu(container.get("usage", {}).get("cpu", 0))
+                    node_usage["memory"] += quantities.parse_memory(
                         container.get("usage", {}).get("memory", 0))
                 usage[item.get("metadata", {}).get("name")] = node_usage
         except client.exceptions.ApiException as error:
@@ -1954,8 +1850,8 @@ class KubernetesUtils:
                 for container in (pod.spec.containers or []) + (pod.spec.init_containers or []):
                     resources = container.resources
                     if resources and resources.requests:
-                        totals["cpu"] += parse_cpu(resources.requests.get("cpu", 0))
-                        totals["memory"] += parse_memory(resources.requests.get("memory", 0))
+                        totals["cpu"] += quantities.parse_cpu(resources.requests.get("cpu", 0))
+                        totals["memory"] += quantities.parse_memory(resources.requests.get("memory", 0))
             pod_distribution.append({
                 "name": pod.metadata.name,
                 "namespace": pod.metadata.namespace,
@@ -1967,8 +1863,8 @@ class KubernetesUtils:
         for node in sorted(nodes, key=lambda n: n.metadata.name):
             name = node.metadata.name
             allocatable = {
-                "cpu": parse_cpu((node.status.allocatable or {}).get("cpu", 0)),
-                "memory": parse_memory((node.status.allocatable or {}).get("memory", 0)),
+                "cpu": quantities.parse_cpu((node.status.allocatable or {}).get("cpu", 0)),
+                "memory": quantities.parse_memory((node.status.allocatable or {}).get("memory", 0)),
             }
             node_requested = requested.get(name, {"cpu": 0.0, "memory": 0.0})
             percent = _percent_of(node_requested, allocatable)

@@ -352,8 +352,7 @@ def test_helm_target_args_refuses_a_target_that_cannot_be_addressed():
     nothing to carry. Saying "and then we read `~/.kube/config`" would be the report's failure arriving
     from the other side: a release applied to whichever cluster the running user last looked at.
     """
-    from kubementat.core.identity.target import ClusterTarget
-    from kubementat.kubernetes_utils import helm_target_args
+    from kubementat.core.identity.target import ClusterTarget, helm_target_args
 
     with pytest.raises(Exception) as raised:
         helm_target_args(ClusterTarget(environment="dev", context=None, kubeconfig_path=None,

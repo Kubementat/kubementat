@@ -1,10 +1,13 @@
 """The one description of a cluster: *which* one, *where* it was declared, and its address.
 
-This is `ClusterTarget` and nothing else. It moved out of `cluster.py` whole — decorator, field
-order, docstrings, the lot — because the value of the class is that there is exactly one of it:
-`isinstance(ctx_or_target, ClusterTarget)` at `kubernetes_utils.py:324` answers a question about a
-class object, and two class objects reached by two import paths answer it `False` in a way that
-reads as a refusal about configuration. So there is one home, one binding per importer, and no
+This is `ClusterTarget`, and the two argv builders that stand below it and spell its address for
+the binaries that still run — here rather than in a generic `core/kubectl.py` because both read
+this class's fields, and a helper that reads a class's fields belongs beside it.
+`ClusterTarget` itself moved out of `cluster.py` whole — decorator, field order, docstrings, the
+lot — because the value of the class is that there is exactly one of it: the
+`isinstance(ctx_or_target, ClusterTarget)` branch of `KubernetesUtils.__init__` answers a question
+about a class object, and two class objects reached by two import paths answer it `False` in a way
+that reads as a refusal about configuration. So there is one home, one binding per importer, and no
 `cluster.py` copy standing behind the real one.
 
 Two shapes here are load-bearing and do not follow from the rest of the file:
@@ -268,3 +271,68 @@ class ClusterTarget:
             f"kubeconfig_path={kubeconfig}, address={self.address!r}, source={self.source!r}"
             f"{redacted})"
         )
+
+# --------------------------------------------------------------------------
+# The address spelled for the two binaries that still run. Both are here and not in a
+# generic kubectl helper for the reason the bodies give: they read `ClusterTarget` fields
+# and refuse when the target names neither a context nor a file, so which class answers
+# the question is what the answer is made of. Moved whole out of `kubernetes_utils.py`
+# (P2-4), bodies verbatim, so that the module which says what a cluster is also says how
+# it is addressed -- and so that `kubernetes_utils.py`, which is being left to be split,
+# stops being the place a decision about addressing lives.
+# --------------------------------------------------------------------------
+
+def kubectl_target_args(target) -> list:
+    """The argv fragment that points a `kubectl` at *target*, and nothing else.
+
+    The rule is stated in the negative: a `kubectl` invocation that is not given its cluster is
+    a bug, not a shortcut. This is the only place that sentence is turned into argv, so a call that
+    forgets the flags is a call that cannot be written without skipping this function.
+
+    Both flags come from the `ClusterTarget` the caller already resolved -- never from what the
+    process's kubeconfig happens to say. `--context` is what a kubeconfig-based target addresses;
+    `--kubeconfig` is named only when the target resolved a file, because naming a file kubectl
+    would otherwise have found for itself is a claim about provenance this object is allowed to
+    make and no one else is.
+    """
+    args = []
+    if target.kubeconfig_path is not None:
+        args += ["--kubeconfig", str(target.kubeconfig_path)]
+    if target.context:
+        args += ["--context", str(target.context)]
+    if not args:
+        raise ClusterNotConfiguredError(
+            f"environment '{target.environment}' addressed a cluster through "
+            f"{target.source}, which carries no kubecontext and no kubeconfig file, and "
+            f"{target.source} cannot be handed to a kubectl session. `kubectl logs`/`exec`/"
+            f"`port-forward` need one of --context or --kubeconfig (\u00a710.2); a target built from a "
+            f"connection document has neither, so those three calls have no address to carry and "
+            f"refuse rather than guess."
+        )
+    return args
+
+def helm_target_args(target) -> list:
+    """The argv fragment that points a *helm* or *helmfile* at *target*, and nothing else.
+
+    The same sentence as :func:`kubectl_target_args`, in helm's spelling: `--kubeconfig` for the
+    file and `--kube-context` for the context (helm does not accept kubectl's `--context`), and
+    both binaries take them wherever the subcommand goes. Refusing a target that names neither is
+    the point, not a nicety: `helm_utils.py` used to hand the cluster over in the environment
+    (`os.environ["KUBECONFIG"]`), which is how a helm run could land on a cluster the operator had
+    not named and leave no trace of the choice in the argv it logged.
+    """
+    args = []
+    if target.kubeconfig_path is not None:
+        args += ["--kubeconfig", str(target.kubeconfig_path)]
+    if target.context:
+        args += ["--kube-context", str(target.context)]
+    if not args:
+        raise ClusterNotConfiguredError(
+            f"helm needs the cluster named on the command line, and environment "
+            f"'{target.environment}' addressed a cluster through {target.source}, which carries no "
+            f"kubecontext and no kubeconfig file. helm and helmfile accept --kube-context and "
+            f"--kubeconfig (\u00a711); a target built from a connection document has neither, so the "
+            f"read has no address to carry and refuses rather than picking up whatever"
+            f" ~/.kube/config the running user happens to have."
+        )
+    return args

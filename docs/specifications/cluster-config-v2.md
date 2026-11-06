@@ -900,7 +900,8 @@ Both binaries accept the target: `helmfile --kube-context/--kubeconfig` (1.7.0) 
 nothing.
 
 > **Three measured details of this rule, as of `018050d` and `eca4c31`.** (1) The flags are written in one
-> place, `helm_target_args` (`kubernetes_utils.py:116`), and it spells the context `--kube-context` because helm
+> place, `helm_target_args` (`core/identity/target.py`, moved there from `kubernetes_utils.py` by
+> P2-4), and it spells the context `--kube-context` because helm
 > rejects kubectl's `--context` — the same sentence `kubectl_target_args` writes in kubectl's spelling, and the
 > reason a guard that recognised only one spelling would report an addressed call as unaddressed. (2) **The
 > exempt list the guard declares has a seventh entry:** `helmfile --version`, which the dependency check runs

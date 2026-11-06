@@ -9,9 +9,9 @@ from kubernetes import client
 from kubementat import shell
 from kubementat.core.config import release_index as config_reads_index
 from kubementat.core import constants
-from kubementat.core.identity.target import ClusterTarget
+from kubementat.core.identity.target import ClusterTarget, helm_target_args
 from kubementat.core.config.keys import component_config_key
-from kubementat.kubernetes_utils import KubernetesUtils, helm_target_args
+from kubementat.kubernetes_utils import KubernetesUtils
 from pathlib import Path
 
 # `helm list`'s read for "what releases live here", with the statuses named instead of left to a
@@ -60,7 +60,7 @@ def helm_list_releases_argv(target) -> list:
     reads before the answer.
 
     A target that names neither is refused rather than guessed, by the same rule
-    :func:`~kubementat.kubernetes_utils.kubectl_target_args` wrote down for `kubectl`.
+    :func:`~kubementat.core.identity.target.kubectl_target_args` wrote down for `kubectl`.
 
     Args:
         target: The `ClusterTarget` the caller resolved. Never read from a default.

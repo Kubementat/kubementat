@@ -34,7 +34,8 @@ from cluster_fixture import TARGET_DEV, configuration_only_context
 from asset_paths import values_path
 from kubementat.helm_utils import HelmUtils
 from kubementat.errors import PodNotFoundError
-from kubementat.kubernetes_utils import KubernetesUtils, kubectl_target_args
+from kubementat.core.identity.target import kubectl_target_args
+from kubementat.kubernetes_utils import KubernetesUtils
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
