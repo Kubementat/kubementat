@@ -122,7 +122,7 @@ Every public row is covered by the assignment, one row per method, no gaps and n
 | function | lines | code | callers in this file | callers outside |
 |---|---|---:|---|---|
 | `_reason` | 70–90 | 19 | `delete_ingress_class` (531), `delete_persistent_volume_claim` (574), `delete_cluster_scoped` (622) | none |
-| `kubectl_target_args` | 93–120 | 26 | `kubectl_args` (449) | `ci_utils.py:28,117`, `automations/routing/routing.py`, 7 test files |
+| `kubectl_target_args` | 93–120 | 26 | `kubectl_args` (449) | `ci_utils.py:28,117`, 7 test files |
 | `helm_target_args` | 123–147 | 24 | **none** | `automation.py:18`, `helm_utils.py:12,214,297`, 2 test files |
 | `plural_for_kind` | 150–162 | 12 | `create_or_replace_custom_resource` (1208) | none |
 | `parse_cpu` | 192–204 | 13 | `cluster_capacity` (1925, 1956, 1969) | none |
@@ -136,6 +136,13 @@ Every public row is covered by the assignment, one row per method, no gaps and n
 Plus `DeleteOutcome` (46–67, a `(deleted, reason)` tuple with `__new__`/`__bool__` and a `deleted`/`reason` pair of accessors) returned by the three delete methods above, and nine constants: `SERVICE_ACCOUNT_TOKEN_SECRET_TYPE` (27), `SERVICE_ACCOUNT_NAME_ANNOTATION` (28), `NAMESPACE_GONE_WAIT_S` (35), `NAMESPACE_POLL_INTERVAL_S` (36), `NODE_STATS_PATH` (43), `DEPLOYMENT_LABEL` (168), `MANAGED_BY_LABEL` (182), `MANAGED_BY_KUBEMENTAT` (183), `DEPLOYMENT_SHELL_COMMAND` (189).
 
 Four observations before the split:
+
+- **Status after P2-4, which moved all five out.** `parse_cpu`, `parse_memory` and `plural_for_kind` are in
+  `core/quantities.py`; `kubectl_target_args` and `helm_target_args` are in `core/identity/target.py`, below
+  the class whose address they spell. None of them is in this file any more, and `kubectl_target_args` is
+  reached from `routing.py` only in prose — that file imports nothing here and gets the flags through
+  `KubernetesUtils.kubectl_args`. The line numbers in this table were taken at `e9c9759`, when the file was
+  2 080 lines, and run one short of the tree: 93/123/150/192/207 are 94/124/151/193/208.
 
 - Eight of the eleven are used nowhere outside this file: the six private ones (`_reason`, `_percent_of`,
   `_node_summary`, `_byte_quantity`, `_usage_percentage`, `_pod_summary`) plus `parse_cpu` and
@@ -351,7 +358,14 @@ first. The string paths a move must hunt down are the five in section 6 and the 
    one home that both importing modules can reach, instead of letting each side keep its copy.
 4. Settle `workloads` ⇄ `exec` (section 4.3) before writing either file, and do not settle it with a
    second copy of the pod lookup.
-5. Move `helm_target_args` (123) with helm, not with the kubernetes rows: this file never calls it.
+5. ~~Move `helm_target_args` with helm, not with the kubernetes rows: this file never calls it.~~
+   **Resolved by P2-4 against this census, and it was the census that was wrong.** Both argv builders went
+   to `core/identity/target.py`, as the plan's P2-4 says, because what they do is address a
+   `ClusterTarget` — the helm flag spelling is one line of a rule that kubectl spells differently — and
+   because `automation.py:2001` reads `helm_target_args` too, so placing it with helm would put the
+   addressing rule in whichever module the calling code happens to reach. The observation underneath item 5
+   stands: this file never calls it, which is exactly why carrying it along with the method rows was
+   pointless.
 6. Keep `api_client=` (310–332) and `ClusterTarget.client` as the seam. They are what the recorder and
    the 34 test files that use it depend on, and they are the only way the suite reaches a cluster.
 7. Prove the 23 un-named methods from the consumer side after each move. No unit test can check them,
