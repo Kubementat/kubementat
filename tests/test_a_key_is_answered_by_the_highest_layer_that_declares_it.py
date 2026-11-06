@@ -32,7 +32,7 @@ import click
 import pytest
 
 from kubementat.core import constants
-from kubementat.ci_utils import CiUtils
+from kubementat.automations.ci import CiUtils
 from kubementat.errors import CiImageNotConfiguredError
 from kubementat.core.config.config import Config
 from kubementat.automations.routing import routing

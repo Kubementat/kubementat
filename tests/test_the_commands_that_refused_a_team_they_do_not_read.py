@@ -41,11 +41,11 @@ ENVIRONMENT = "dev"
 # it. A file that cannot produce its evidence is the same failure as a file that should not have one,
 # so both halves are asserted: the sentence this file claims, and the code the claim is about.
 SURVIVORS = {
-    "src/kubementat/ci_utils.py": ("the namespace `-n` puts the CI container in",
+    "src/kubementat/automations/ci.py": ("the namespace `-n` puts the CI container in",
                                    '"-n", str(self.team)'),
     "src/kubementat/tekton_utils.py": ("the namespace the Tekton objects live in",
                                        "config.get('team_static')"),
-    "src/kubementat/user_management.py": ("the name the account kubeconfig's context is built from",
+    "src/kubementat/infrastructure/user_management.py": ("the name the account kubeconfig's context is built from",
                                           '-cluster-{team}-{service_account_name}'),
 }
 
@@ -178,7 +178,7 @@ def test_the_two_classes_that_had_false_guards_no_longer_carry_the_half_they_nev
     -- `CiUtils` for an argv namespace, `TektonUtils` for a configuration read -- are covered by the
     census above, which is the file that decides whether the attribute is dead.
     """
-    for path in ("src/kubementat/infrastructure/helm.py", "src/kubementat/ingress_generator.py"):
+    for path in ("src/kubementat/infrastructure/helm.py", "src/kubementat/automations/ingress.py"):
         tree = ast.parse((REPO_ROOT / path).read_text(encoding="utf-8"), filename=str(path))
         stored = [node for node in ast.walk(tree)
                   if isinstance(node, ast.Assign) and any(

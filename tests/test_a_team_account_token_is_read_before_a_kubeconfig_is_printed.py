@@ -29,7 +29,7 @@ import time
 
 import pytest
 
-from kubementat import user_management
+import kubementat.infrastructure.user_management as user_management
 from kubementat.automation import Automation
 from kubementat.errors import ServiceAccountTokenNotFoundError
 from kubementat.infrastructure.kubernetes import KubernetesUtils

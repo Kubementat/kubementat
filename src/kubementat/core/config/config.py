@@ -815,7 +815,7 @@ class Config:
                 # L0 that lives in `constants.DEFAULT_STATIC_ANSWERS` comes back through
                 # `_declare_in_layers`, and the table under this call's `defaults` is what the
                 # namespace and selector families still use. Silence here would be a regression
-                # against the operator-visible sentence `ingress_generator.py` relies on.
+                # against the operator-visible sentence `ingress.py` relies on.
                 self._warn_once_about_default(key, layers, None, value.strip(), component)
             return value.strip()
 

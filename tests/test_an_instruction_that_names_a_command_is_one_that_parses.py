@@ -30,7 +30,7 @@ import pytest
 from click.testing import CliRunner
 
 from cli.commands import config as config_module
-from kubementat import ci_utils
+import kubementat.automations.ci as ci_utils
 from kubementat import errors
 from kubementat import config_init, config_validate
 from kubementat.automations.routing import routing

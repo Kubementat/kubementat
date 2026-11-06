@@ -29,7 +29,7 @@ import pytest
 from kubernetes import client
 
 from conftest import is_a_write
-from kubementat import user_management
+import kubementat.infrastructure.user_management as user_management
 from kubementat.automation import Automation
 from cluster_fixture import configuration_only_context
 

@@ -29,7 +29,7 @@ import pytest
 from conftest import is_a_write
 from click.exceptions import ClickException
 
-from kubementat import user_management
+import kubementat.infrastructure.user_management as user_management
 from kubementat.automation import Automation
 from kubementat.core.identity.context import Context
 

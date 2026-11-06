@@ -30,7 +30,7 @@ import yaml
 
 from click.exceptions import ClickException
 
-from kubementat import user_management
+import kubementat.infrastructure.user_management as user_management
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 from cluster_fixture import TARGET_DEV, UNREAD_ROOT, configuration_only_context

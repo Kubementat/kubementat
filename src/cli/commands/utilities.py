@@ -1,10 +1,10 @@
 import click
 from pathlib import Path
 
-from kubementat.ci_utils import CiUtils
+from kubementat.automations.ci import CiUtils
 from kubementat.errors import (IngressArgumentNotSuppliedError, IngressPortNotUsableError,
                               IngressTargetExistsError)
-from kubementat.ingress_generator import IngressGenerator
+from kubementat.automations.ingress import IngressGenerator
 from cli.context import kmt_context
 
 # --------------------------------------------

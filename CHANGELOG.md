@@ -1,5 +1,16 @@
 # Unreleased
 
+- **The last three flat modules under `src/kubementat/` took their homes.** `ci_utils.py` is
+  `automations/ci.py` and `ingress_generator.py` is `automations/ingress.py` — both are verbs, not
+  services, which is what puts them beside `routing` rather than below it; and `user_management.py`
+  is `infrastructure/user_management.py`, not an automation, because what it does is build the
+  account kubeconfig document from configuration and cluster reads — a primitive the team-account
+  verb sits on. The plan's tree had the accounts verb here rather than this module, and the plan
+  was the one that said "names may adjust once you see the call sites". The guard tables that walk
+  the source by path (the three-services-that-ask-for-a-team census, the dead-code confirmation
+  sweep) were retargeted, which is the whole reason those guards read paths: a moved file that they
+  silently stop checking is the failure they would otherwise let through.
+
 - **The grafana modules took their homes under `infrastructure/grafana/`.** `grafana_client.py` is
   now `client.py` and `grafana_accounts.py` is `accounts.py`; both reached their new paths with
   their contents unchanged, because this half of the move is a placement question and no seam is

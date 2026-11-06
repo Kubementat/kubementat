@@ -33,7 +33,7 @@ from click.testing import CliRunner
 from cli.commands import users
 from cluster_fixture import STAGING_SERVER, write_kubeconfig
 from conftest import is_a_write
-from kubementat import user_management
+import kubementat.infrastructure.user_management as user_management
 from kubementat.automation import Automation
 from cluster_fixture import configuration_only_context
 

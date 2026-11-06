@@ -28,7 +28,7 @@ from kubementat.tekton_utils import (
     preflight_installed_tekton_api_versions,
     preflight_tekton_api_version,
 )
-from kubementat import user_management
+import kubementat.infrastructure.user_management as user_management
 
 
 # The only thing the binary-version check reads out of a `--version` answer: the first

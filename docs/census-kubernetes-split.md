@@ -231,11 +231,11 @@ methods are named where the number is more than one.
 | `src/kubementat/automation.py` | 17 | `DEPLOYMENT_LABEL`, `MANAGED_BY_KUBEMENTAT`, `MANAGED_BY_LABEL`, `KubernetesUtils`, `helm_target_args` | 72 references over 38 methods; keeps one instance as `self.kubernetes_utils` (138) |
 | `src/kubementat/tekton_utils.py` | 4 | `KubernetesUtils` | 25 references over 16 methods; instance at 942, a second one built at 1440 to hand to `apply_resources` |
 | `src/kubementat/helm_utils.py` | 12 | `KubernetesUtils`, `helm_target_args` | instance at 115; `list_persistent_volume_claims` (626), `delete_persistent_volume_claim` (643), and it answers its own `target` property from the instance (126, used at 214, 297, 368, 584) |
-| `src/kubementat/user_management.py` | 34 | `KubernetesUtils` | takes the instance as a parameter at 111, 224, 244; `target` (139), `self_can` (161), `get_service_account_token` (236), `kubectl_args` as an attribute (257) |
+| `src/kubementat/infrastructure/user_management.py` | 34 | `KubernetesUtils` | takes the instance as a parameter at 111, 224, 244; `target` (139), `self_can` (161), `get_service_account_token` (236), `kubectl_args` as an attribute (257) |
 | `src/kubementat/grafana_accounts.py` | 51 | `KubernetesUtils` | instance at 153, `get_service_endpoint` (154) |
 | `src/kubementat/automations/routing/routing.py` | 485, 585 | `KubernetesUtils`, function-local imports | `kubectl_args` (487), `list_ingress_classes` (588) |
 | `src/kubementat/automations/routing/traefik_presence.py` | 55 | `KubernetesUtils` | builds a default instance at 444, then hands three of its members to the probe helpers: `target` (485), `list_ingress_classes` (525), `list_pods_for_all_namespaces` (554) |
-| `src/kubementat/ci_utils.py` | 28 | `kubectl_target_args` | no method at all: builds its own argv (117) |
+| `src/kubementat/automations/ci.py` | 28 | `kubectl_target_args` | no method at all: builds its own argv (117) |
 | `src/kubementat/k8s_apply.py` | none | names the class in prose at 133 | `create_or_replace_custom_resource` (188) on whatever object it is handed (signature 95) |
 
 Fifty-five of the 77 public methods are referenced from outside the file. The other 22 are the client
@@ -334,7 +334,7 @@ the source.
 | `src/kubementat/automation.py` | 72 (38 methods) | the whole install/uninstall surface: `list_namespaces`, `create_namespace`, `namespace_phases`, `wait_namespaces_gone`, `delete_namespace`, `delete_cluster_scoped`, the RBAC pairs, `list_secrets`, `delete_secret`, `self_can`, `cluster_is_reachable`, `open_tunnel`, `get_pod_name_for_deployment`, … | holds one instance (138) and hands it to `k8s_apply` (632) and to `user_management` (938). Its own class moves later than this file does, so it is the largest thing a split here breaks |
 | `src/kubementat/tekton_utils.py` | 25 (16) | `api_version_is_served` ×2, the cluster-role and binding creators ×5, `create_or_replace_service_account` ×3, the custom-resource set, `service_endpoint_addresses` (1080) | builds a second instance at 1440 purely to pass to `apply_resources`; also moves later |
 | `src/kubementat/helm_utils.py` | 3 | `list_persistent_volume_claims` (626), `delete_persistent_volume_claim` (643), `target` (126) | its own move is in the same order of business as this one |
-| `src/kubementat/user_management.py` | 4 | `target` (139), `self_can` (161), `get_service_account_token` (236), `kubectl_args` (257) | parameter-typed; annotation at 111 and 224 |
+| `src/kubementat/infrastructure/user_management.py` | 4 | `target` (139), `self_can` (161), `get_service_account_token` (236), `kubectl_args` (257) | parameter-typed; annotation at 111 and 224 |
 | `src/kubementat/k8s_apply.py` | 1 | `create_or_replace_custom_resource` (188) | untyped parameter (95); it already depends on the method name, not the type |
 | `src/kubementat/automations/routing/routing.py` | 2 | `kubectl_args` (487), `list_ingress_classes` (588) | two function-local imports (485, 585) that survive a rename only if the string stays a real module path |
 | `src/kubementat/automations/routing/traefik_presence.py` | 3 | `target` (485), `list_ingress_classes` (525), `list_pods_for_all_namespaces` (554) | hands three members to its probe helpers, so a name change there is invisible to an import sweep |

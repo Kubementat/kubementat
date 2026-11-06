@@ -793,7 +793,7 @@ cluster.
    declares does not get to discover a different one").
 
 **Where to put it:** the comparison belongs on the read path that resolves the root and the target
-together (`src/kubementat/cluster.py`, `Context.build`, and/or `src/kubementat/ci_utils.py:143`'s
+together (`src/kubementat/cluster.py`, `Context.build`, and/or `src/kubementat/automations/ci.py:143`'s
 `require_target` site), reached whenever a layer-1 dial was *stated*; the TaskRun change belongs in the
 shipped templates under `src/kubementat/assets/tekton_ci/`.
 

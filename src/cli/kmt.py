@@ -129,7 +129,7 @@ def main():
     # in `src/` or `tekton_ci/` - reaching it meant knowing the filename and standing at the right
     # depth, because it resolved `../../../platform_config` against itself. No alias: the same
     # rule the other migrated scripts kept, and the class it writes is now answered through
-    # `Config` (`ingress_generator.py`) rather than `jq`'ing that same file.
+    # `Config` (`ingress.py`) rather than `jq`'ing that same file.
     cli.add_command(utilities.create_ingress)
 
     # kubernetes reads: the diagnostics that were scripts under

@@ -3,7 +3,7 @@
 The migration deleted `scripts/utilities/kubernetes/create_ingress_yml.sh` (105 lines). This file
 runs the
 blob at `git show bb30fb2:scripts/utilities/kubernetes/create_ingress_yml.sh` and
-`kubementat.ingress_generator.IngressGenerator` over the same arguments and the same fixture tree,
+`kubementat.automations.ingress.IngressGenerator` over the same arguments and the same fixture tree,
 and asks whether the two documents are the same document. The blob is the other half of the
 comparison and not a copy of the code's comments: it is also where the `jq` filter, the
 `cat << EOF` layout and the warning sentences are read out of.
@@ -48,7 +48,7 @@ from conftest import run_bash
 from cluster_fixture import configuration_only_context
 from kubementat.core.config.config import Config
 from kubementat.errors import IngressPortNotUsableError
-from kubementat.ingress_generator import IngressGenerator
+from kubementat.automations.ingress import IngressGenerator
 
 def generator(environment: str) -> IngressGenerator:
     """The Python side of the comparison, built the way `kmt create-ingress` builds it.

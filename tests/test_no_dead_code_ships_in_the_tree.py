@@ -253,7 +253,7 @@ def test_the_ingress_manifest_script_is_gone_and_the_command_answers_for_it():
     assert named_by == [], (
         f"something carries the path of the deleted script and could still run it: {named_by}; "
         f"the command is kmt create-ingress, and the class it writes is answered by "
-        f"src/kubementat/ingress_generator.py")
+        f"src/kubementat/automations/ingress.py")
 
 
 def test_creating_a_team_account_is_a_python_feature_now():
@@ -286,6 +286,6 @@ def test_there_is_only_one_confirmation_for_the_whole_flow():
                         getattr(target, "id", None) == "check_cluster_and_access":
                     callers.append(str(path.relative_to(REPO_ROOT)))
 
-    assert definitions == ["src/kubementat/user_management.py"], definitions
+    assert definitions == ["src/kubementat/infrastructure/user_management.py"], definitions
     assert set(callers) == {"src/kubementat/automation.py"}, callers
 

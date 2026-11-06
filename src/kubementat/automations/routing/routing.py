@@ -83,7 +83,7 @@ SKIP_LABEL_FILTER = "group=routing,component_name!=traefik"
 # it is the cluster: a list assembled at the call site is the only form that can carry it.
 
 
-# The two issuers `ingress_generator.py` (once `create_ingress_yml.sh`) and both tekton
+# The two issuers `ingress.py` (once `create_ingress_yml.sh`) and both tekton
 # EventListener ingress templates name by hand, so these names are load-bearing and only the solver
 # moves. `privateKeySecretRef` is carried
 # over from the script this replaced exactly as it stood -- both issuers pointed at a secret named
@@ -497,7 +497,7 @@ def _apply_cluster_issuers(ingress_class: str, ctx) -> None:
     releases and before the verification read: the solver has to name a class the cluster can show.
 
     Both issuer names are kept, and only the solver is touched, for the reason in the module header:
-    `ingress_generator.py` (once `create_ingress_yml.sh`) and both EventListener templates
+    `ingress.py` (once `create_ingress_yml.sh`) and both EventListener templates
     reference `letsencrypt` by string, so
     renaming one is a migration nobody asked for.
 

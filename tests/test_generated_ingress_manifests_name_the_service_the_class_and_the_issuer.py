@@ -23,7 +23,7 @@ from cluster_fixture import configuration_only_context
 from kubementat.core.config.config import Config
 from kubementat.errors import (IngressArgumentNotSuppliedError, IngressPortNotUsableError,
                               IngressTargetExistsError)
-from kubementat.ingress_generator import (
+from kubementat.automations.ingress import (
     DEFAULT_INGRESS_CLASS,
     GeneratedIngress,
     IngressGenerator,

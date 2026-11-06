@@ -24,7 +24,7 @@ from cli.commands.utilities import run_ci_container
 from kubementat.infrastructure import shell
 from kubementat.core.identity.target import kubectl_target_args
 from kubementat.core.identity.context import Context
-from kubementat.ci_utils import CI_CONTAINER_COMMAND, CI_CONTAINER_NAME, CiUtils
+from kubementat.automations.ci import CI_CONTAINER_COMMAND, CI_CONTAINER_NAME, CiUtils
 from kubementat.errors import CiImageNotConfiguredError
 
 # What the fixture's `static.json` says the CI image is, assembled the way `CiUtils` assembles it.
@@ -147,7 +147,7 @@ def test_the_container_is_not_captured(fixture_repo, dry_run_env, fake_binaries,
             seen.append(kwargs)
         return real_run(argv, **kwargs)
 
-    monkeypatch.setattr("kubementat.ci_utils.shell.run", watching)
+    monkeypatch.setattr("kubementat.automations.ci.shell.run", watching)
 
     CiUtils(Context.build(fixture_repo.environment, fixture_repo.team)).run_ci_container()
 

@@ -30,7 +30,7 @@ rather than the chart's: dropping nginx-ingress without naming a replacement lef
 path in kubementat classless — the Ingress-manifest script, the tekton EventListener ingresses and
 every `Ingress` in `platform_config` all named a class nothing installed any more, which is a
 failure that stays silent until a certificate or a listener stops answering. (The first of those is
-`ingress_generator.py`, which reads its class from configuration exactly as this component's key says it
+`ingress.py`, which reads its class from configuration exactly as this component's key says it
 should be read.) So the ingress
 controller gets an entry, a key and a chart exactly as `cert-manager` does, named by
 `TRAEFIK_CHART` below. What it does not get is an alias or a compatibility shim for the
