@@ -34,7 +34,8 @@ from pathlib import Path
 import pytest
 
 from kubementat import ci_utils, config_answers, constants, tekton_utils
-from kubementat.ci_utils import CiUtils, CiImageNotConfiguredError
+from kubementat.ci_utils import CiUtils
+from kubementat.errors import CiImageNotConfiguredError
 from kubementat.config import Config
 
 REPO = Path(__file__).resolve().parents[1]

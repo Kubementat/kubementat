@@ -16,7 +16,8 @@ a guard is how a command comes back.
 
 import click
 
-from kubementat.automation import Automation, MysqlNotConfiguredError
+from kubementat.automation import Automation
+from kubementat.errors import MysqlNotConfiguredError
 from kubementat.errors import PodNotFoundError
 from kubementat.kubernetes_utils import KubernetesUtils
 from cli.context import kmt_context

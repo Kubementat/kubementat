@@ -13,7 +13,8 @@ ACME contact and ends with the verb that fixes it, and it spelled the answer as
 which is Click's **two positionals**, and the command declares one. Typing it does not set the key; it
 answers `Error: Got unexpected extra argument`, measured. `kmt config set` takes `KEY=VALUE` as a single
 answer (`cli/commands/config.py:295`, `metavar='[KEY=VALUE]'`), and both
-`docs/README_PLATFORM_CONFIG.md:131` and `ci_utils.py`'s refusal already spell it that way. The guard
+`docs/README_PLATFORM_CONFIG.md:131` and `kubementat.errors.CiImageNotConfiguredError`, raised from
+`ci_utils.py`, already spell it that way. The guard
 here is that shape, checked by running what the refusal printed rather than by searching for an `=`.
 
 A usage error is what fails this file. A refusal that objects to the directory is a pass, because that
@@ -30,6 +31,7 @@ from click.testing import CliRunner
 
 from cli.commands import config as config_module
 from kubementat import ci_utils
+from kubementat import errors
 from kubementat import config_init, config_validate
 from kubementat.automations.routing import routing
 from kubementat.config import Config
@@ -130,10 +132,10 @@ def test_the_ci_image_refusal_prints_the_answer_as_one_argument(tmp_path):
     config = seed(tmp_path)
     ci = ci_utils.CiUtils.__new__(ci_utils.CiUtils)
     ci.config = config
-    with pytest.raises(ci_utils.CiImageNotConfiguredError) as error:
+    with pytest.raises(errors.CiImageNotConfiguredError) as error:
         ci_utils.CiUtils.ci_image(ci)
     root = Path(config.platform_config_dir)
-    _assert_parses(_argv_from(str(error.value), root), root, "ci_utils.CiImageNotConfiguredError")
+    _assert_parses(_argv_from(str(error.value), root), root, "errors.CiImageNotConfiguredError")
 
 
 def test_no_message_in_src_prints_an_answer_config_set_would_read_as_two_arguments():

@@ -233,3 +233,169 @@ class CommandExecutionError(KubementatError):
             tail = detail if len(detail) <= 2000 else detail[-2000:]
             lines.append(f"stderr: {tail}")
         return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# The grafana refusals.
+#
+# Three answers to three different questions: the request went wrong (GrafanaError, and its status),
+# the credential was refused (GrafanaUnauthorizedError), or the configuration could not express the
+# call at all so nothing was sent (GrafanaConfigurationError). They come from `grafana_client.py`,
+# and from `grafana_accounts.py` for the configuration half, because the two files are one client
+# split by whether it needs the cluster.
+#
+# The shape is the tree's own: `GrafanaError` is the family base, carries the status code, and
+# descends from `KubementatError` like everything else here; its two children say which kind of
+# refusal it was, so `except GrafanaError` still catches all three and `except
+# GrafanaConfigurationError` still means "edit a file, not a password".
+# ---------------------------------------------------------------------------
+
+
+class GrafanaError(KubementatError):
+    """Something grafana did not accept, or did not answer.
+
+    Carries the status code when there was one. A request that never got a response carries
+    `status_code=None`, because "no connection" is a different fact from "403" and the advice that
+    follows each is different.
+    """
+
+    def __init__(self, message: str, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class GrafanaConfigurationError(GrafanaError):
+    """The configuration cannot express this operation, so no request is sent.
+
+    Raised for a missing credential key and for a missing address. Both are file-and-editor
+    problems, not cluster problems, which is why they carry their own type: a caller that wants to
+    say "open `static.encrypted.json`" needs to be able to tell them apart from a 401.
+    """
+
+
+class GrafanaUnauthorizedError(GrafanaError):
+    """Grafana rejected the credential. Not the same as a wrong namespace or a closed port."""
+
+
+# ---------------------------------------------------------------------------
+# What the Ingress generator refuses to write.
+#
+# All three belong to one command's argument list, and all three used to be `Exception` with no
+# parent. A caller that asks "did kubementat refuse me, or did Python break" cannot tell with that,
+# which is the whole content of this group's edit: the classes, their messages, and their reasons are
+# unchanged, and each now answers to `KubementatError`.
+#
+# `IngressTargetExistsError` is the overwrite rule, and the rule is `TektonUtils`'s: kubementat does
+# not replace what it has already handed the operator. The other two are the argument checks the bash
+# script made by passing `$1`-`$3` unquoted, where a missing argument and an empty one looked the same
+# and a blank host applies and routes nothing.
+# ---------------------------------------------------------------------------
+
+
+class IngressTargetExistsError(KubementatError):
+    """Generated output is already where this generator was asked to write it."""
+
+
+class IngressArgumentNotSuppliedError(KubementatError):
+    """One of the three arguments this command requires came in empty.
+
+    bash checked all three because a missing `$1` and an empty `$1` looked the same to it, and a
+    manifest with a blank host applies and routes nothing. Click refuses an absent argument by
+    itself; this is the empty-string half, and it names the argument rather than printing the
+    whole usage block.
+    """
+
+
+class IngressPortNotUsableError(KubementatError):
+    """The port is not a number, so the manifest would name a port that does not exist.
+
+    bash interpolated `$3` straight into `number:`, which meant `80` became a number and `http`
+    became a string that the API server rejects. Refusing is the same answer with the failure
+    moved before the apply, and it names the argument it refused.
+    """
+
+
+# ---------------------------------------------------------------------------
+# A key the configuration was asked for and did not answer.
+#
+# The same refusal told about two different files, and it lives here rather than in either of them
+# because the caller that has to print the advice is not the module that read the key. Each names the
+# key, names the file it belongs in, and refuses to replace the missing answer with a plausible
+# default — which is the whole point of both: a guessed registry reference gets pulled on somebody
+# else's cluster, and a guessed database address opens a tunnel to a database nobody meant to reach.
+# ---------------------------------------------------------------------------
+
+
+class CiImageNotConfiguredError(KubementatError):
+    '''
+    The CI image cannot be named, which is now one of two different facts.
+
+    `TEKTON_CI_IMAGE_NAME` and `TEKTON_CI_IMAGE_TAG` carry an L0 now — the same two values the
+    shipped template carried, in `constants.DEFAULT_STATIC_ANSWERS` — so a tree that declares nothing
+    runs `ubuntu-ci-minimal:latest` and never reaches this exception. What still raises is:
+
+    * a key that was **declared and answers nothing** (`""`, `null`, a number). jq used to print the
+      four characters `null` into the image reference and `kubectl run` accepted it, so a value that
+      was written down and says nothing is refused rather than papered over with a default. That is
+      That is the override rule cutting both ways: the operator's file outranks `constants.py`, and
+      when it answers nothing it answers nothing.
+    * `DOCKER_REGISTRY_BASE_URL`, which has **no L0** and was left out of the shipped defaults. It
+      is reported and left alone.
+
+    One key of three is a whole answer either way, and the failure this exception replaces was a pull
+    error on somebody else's cluster instead of a missing key in a file.
+
+    The sentence names three things and no more, because that is the done-when a refusal is held
+    to: the key that is missing, the file it belongs in, and the verb that answers it. `routing._cluster_manager_email`
+    has always ended this way; this is that shape, on the one key of the row that has no L0 and a
+    live consumer.
+    '''
+
+    def __init__(self, missing_keys, config_path):
+        self.missing_keys = list(missing_keys)
+        self.config_path = config_path
+        super().__init__(
+            f"{', '.join(self.missing_keys)} is not answered in {self.config_path}, so kubementat "
+            f"cannot name the CI image to run. A key nobody wrote is not what is missing: the name and"
+            f" the tag have kubementat's own default, `ubuntu-ci-minimal:latest`. So either the key"
+            f" was declared and says nothing — set it to an image this cluster can pull, or delete the"
+            f" entry and let L0 answer — or DOCKER_REGISTRY_BASE_URL is unset, which kubementat does"
+            f" not default at all. Put the registry in that file: kmt config set <dir>"
+            f" <environment> DOCKER_REGISTRY_BASE_URL=<registry-url> is the verb, and nothing"
+            f" rewrites an answer that is there."
+        )
+
+
+class MysqlNotConfiguredError(KubementatError):
+    """A key the MySQL tunnel cannot guess is missing from the team's configuration.
+
+    kubementat does not install MySQL any more (owner decision 2026-10-27, the Bitnami image
+    that made the chart pullable disappeared), so there is no release the tooling can
+    interrogate to find a database out. Guessing is the dangerous answer here: a namespace
+    that happens to hold somebody else's MySQL would open a tunnel that reads and writes a
+    database nobody meant to reach, so a key that is not there has to stop the command rather
+    than be replaced by a plausible default. Named in the message is the key and the file it
+    belongs to, so the operator has something to edit.
+    """
+
+
+# ---------------------------------------------------------------------------
+# The refusal that says the work is not finished.
+#
+# `UninstallIncompleteError` is not about a key or an argument: the command ran, and something
+# kubementat owned is still on the cluster. It is here because the operator hears it from
+# `kmt uninstall`, which is the CLI's sentence and not the library's, and because what the message
+# carries is a list of what is still there — the thing to act on — rather than a claim that
+# something failed.
+# ---------------------------------------------------------------------------
+
+
+class UninstallIncompleteError(KubementatError):
+    """Something kubementat owned survived `kmt uninstall`.
+
+    The alternative is to log a warning and print `DONE`, which is precisely the failure this
+    command exists to make impossible: a real lane said DONE while two helm releases were
+    still running, and the residue assert had to be written against the cluster because nobody
+    in the tooling could be believed. Named in the message is what is still there, so the
+    operator has something to act on instead of a claim that the exit code was 0.
+    """

@@ -24,8 +24,8 @@ from cli.commands.utilities import run_ci_container
 from kubementat import shell
 from kubementat.kubernetes_utils import kubectl_target_args
 from kubementat.cluster import Context
-from kubementat.ci_utils import (CI_CONTAINER_COMMAND, CI_CONTAINER_NAME, CiImageNotConfiguredError,
-                                 CiUtils)
+from kubementat.ci_utils import CI_CONTAINER_COMMAND, CI_CONTAINER_NAME, CiUtils
+from kubementat.errors import CiImageNotConfiguredError
 
 # What the fixture's `static.json` says the CI image is, assembled the way `CiUtils` assembles it.
 CI_IMAGE = "registry.example.test/ci-runner:1.2.3"

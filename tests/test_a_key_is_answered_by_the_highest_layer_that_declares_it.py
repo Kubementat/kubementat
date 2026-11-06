@@ -32,7 +32,8 @@ import click
 import pytest
 
 from kubementat import constants
-from kubementat.ci_utils import CiUtils, CiImageNotConfiguredError
+from kubementat.ci_utils import CiUtils
+from kubementat.errors import CiImageNotConfiguredError
 from kubementat.config import Config
 from kubementat.automations.routing import routing
 from kubementat.helm_utils import HelmUtils

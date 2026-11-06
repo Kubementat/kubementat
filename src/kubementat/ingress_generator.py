@@ -48,6 +48,7 @@ from pathlib import Path
 import yaml
 
 from kubementat.constants import COMPONENT, DEFAULT_INGRESS_CLASSES
+from kubementat import errors
 
 # The Ingress this generates is a `networking.k8s.io/v1` object, which is what the script declared
 # and what every cluster kubementat installs on runs.
@@ -65,32 +66,6 @@ CERT_SECRET_SUFFIX = "-cert"
 # Named so this file says `DEFAULT_INGRESS_CLASS` where it means the answer, without a literal.
 # The value is `constants.DEFAULT_INGRESS_CLASSES`, read for the component that owns the key.
 DEFAULT_INGRESS_CLASS = DEFAULT_INGRESS_CLASSES[COMPONENT]
-
-# What a path that cannot be written because something is already in it is called. The rule is
-# `TektonUtils.generate_pipeline_run`'s (`tekton_utils.py:745`) moved here: kubementat does not
-# overwrite what it has already handed the operator.
-
-class IngressTargetExistsError(Exception):
-    """Generated output is already where this generator was asked to write it."""
-
-
-class IngressArgumentNotSuppliedError(Exception):
-    """One of the three arguments this command requires came in empty.
-
-    bash checked all three because a missing `$1` and an empty `$1` looked the same to it, and a
-    manifest with a blank host applies and routes nothing. Click refuses an absent argument by
-    itself; this is the empty-string half, and it names the argument rather than printing the
-    whole usage block.
-    """
-
-
-class IngressPortNotUsableError(Exception):
-    """The port is not a number, so the manifest would name a port that does not exist.
-
-    bash interpolated `$3` straight into `number:`, which meant `80` became a number and `http`
-    became a string that the API server rejects. Refusing is the same answer with the failure
-    moved before the apply, and it names the argument it refused.
-    """
 
 
 @dataclass(frozen=True)
@@ -144,9 +119,9 @@ class IngressGenerator:
         """The manifest, the class it names, and the warnings that go with it.
 
         Raises:
-            IngressArgumentNotSuppliedError: If `domain`, `service_name` or `service_port` is
+            kubementat.errors.IngressArgumentNotSuppliedError: If `domain`, `service_name` or `service_port` is
                 empty. The three are required for the same reason they were in bash's `$1..$3`.
-            IngressPortNotUsableError: If `service_port` is not a port number.
+            kubementat.errors.IngressPortNotUsableError: If `service_port` is not a port number.
 
         Returns:
             GeneratedIngress: `manifest` is the document, `answered_by` says whether configuration
@@ -199,7 +174,7 @@ class IngressGenerator:
         """
         target = Path(target)
         if target.exists():
-            raise IngressTargetExistsError(
+            raise errors.IngressTargetExistsError(
                 f"{target} already exists, and kubementat will not overwrite it. Review or remove "
                 f"the file this would replace, or point the command somewhere else.")
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -241,7 +216,7 @@ def _default_warning(default: str) -> str:
 
 def _supplied(value: str, name: str) -> str:
     if value is None or not str(value).strip():
-        raise IngressArgumentNotSuppliedError(
+        raise errors.IngressArgumentNotSuppliedError(
             f"{name} is empty. The command is "
             f"kmt create-ingress <ENVIRONMENT> <DOMAIN> <SERVICE_NAME> <SERVICE_PORT>.")
     return str(value).strip()
@@ -252,10 +227,10 @@ def _port(value) -> int:
     try:
         number = int(text)
     except ValueError:
-        raise IngressPortNotUsableError(
+        raise errors.IngressPortNotUsableError(
             f"SERVICE_PORT is '{text}', which is not a port number. Give the port the service "
             f"listens on, e.g. 80.")
     if not 1 <= number <= 65535:
-        raise IngressPortNotUsableError(
+        raise errors.IngressPortNotUsableError(
             f"SERVICE_PORT is {number}, which is not a port an Ingress can route to. Use 1-65535.")
     return number

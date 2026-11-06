@@ -20,7 +20,7 @@ from cli.context import kmt_context
 from cli.helpers import team_option
 from kubementat import grafana_accounts
 from kubementat.automation import Automation
-from kubementat.grafana_client import GrafanaError
+from kubementat.errors import GrafanaError
 
 
 def _environment_option():

@@ -23,6 +23,7 @@ names itself and its file before a pod is created.
 
 import logging
 
+from kubementat import errors
 from kubementat import shell
 from kubementat.kubernetes_utils import kubectl_target_args
 
@@ -39,46 +40,6 @@ CI_CONTAINER_FLAGS = ("--rm", "-i", "--tty")
 
 # The three keys the image is made of, in the order they are assembled.
 CI_IMAGE_KEYS = ("DOCKER_REGISTRY_BASE_URL", "TEKTON_CI_IMAGE_NAME", "TEKTON_CI_IMAGE_TAG")
-
-
-class CiImageNotConfiguredError(Exception):
-    '''
-    The CI image cannot be named, which is now one of two different facts.
-
-    `TEKTON_CI_IMAGE_NAME` and `TEKTON_CI_IMAGE_TAG` carry an L0 now — the same two values the
-    shipped template carried, in `constants.DEFAULT_STATIC_ANSWERS` — so a tree that declares nothing
-    runs `ubuntu-ci-minimal:latest` and never reaches this exception. What still raises is:
-
-    * a key that was **declared and answers nothing** (`""`, `null`, a number). jq used to print the
-      four characters `null` into the image reference and `kubectl run` accepted it, so a value that
-      was written down and says nothing is refused rather than papered over with a default. That is
-      That is the override rule cutting both ways: the operator's file outranks `constants.py`, and
-      when it answers nothing it answers nothing.
-    * `DOCKER_REGISTRY_BASE_URL`, which has **no L0** and was left out of the shipped defaults. It
-      is reported and left alone.
-
-    One key of three is a whole answer either way, and the failure this exception replaces was a pull
-    error on somebody else's cluster instead of a missing key in a file.
-
-    The sentence names three things and no more, because that is the done-when a refusal is held
-    to: the key that is missing, the file it belongs in, and the verb that answers it. `routing._cluster_manager_email`
-    has always ended this way; this is that shape, on the one key of the row that has no L0 and a
-    live consumer.
-    '''
-
-    def __init__(self, missing_keys, config_path):
-        self.missing_keys = list(missing_keys)
-        self.config_path = config_path
-        super().__init__(
-            f"{', '.join(self.missing_keys)} is not answered in {self.config_path}, so kubementat "
-            f"cannot name the CI image to run. A key nobody wrote is not what is missing: the name and"
-            f" the tag have kubementat's own default, `ubuntu-ci-minimal:latest`. So either the key"
-            f" was declared and says nothing — set it to an image this cluster can pull, or delete the"
-            f" entry and let L0 answer — or DOCKER_REGISTRY_BASE_URL is unset, which kubementat does"
-            f" not default at all. Put the registry in that file: kmt config set <dir>"
-            f" <environment> DOCKER_REGISTRY_BASE_URL=<registry-url> is the verb, and nothing"
-            f" rewrites an answer that is there."
-        )
 
 
 class CiUtils:
@@ -111,14 +72,14 @@ class CiUtils:
             str: The full image reference.
 
         Raises:
-            CiImageNotConfiguredError: If any of the three keys is absent or empty. A pull
+            kubementat.errors.CiImageNotConfiguredError: If any of the three keys is absent or empty. A pull
                 failure on somebody else's cluster is not how that is allowed to look.
         '''
         env_static = self.config.get('env_static')
         missing = [key for key in CI_IMAGE_KEYS
                    if not str(env_static.get(key) if env_static.get(key) is not None else "").strip()]
         if missing:
-            raise CiImageNotConfiguredError(missing, self.config.env_static_config_path)
+            raise errors.CiImageNotConfiguredError(missing, self.config.env_static_config_path)
         registry = str(env_static["DOCKER_REGISTRY_BASE_URL"]).rstrip("/")
         return f"{registry}/{env_static['TEKTON_CI_IMAGE_NAME']}:{env_static['TEKTON_CI_IMAGE_TAG']}"
 
@@ -130,7 +91,7 @@ class CiUtils:
             kubementat.shell.CommandResult: Whatever `kubectl run` did once the session ended.
 
         Raises:
-            CiImageNotConfiguredError: If the image is not configured, before any pod is created.
+            kubementat.errors.CiImageNotConfiguredError: If the image is not configured, before any pod is created.
             kubementat.errors.CommandExecutionError: If `kubectl` refuses the pod. A non-zero exit
                 here is the container's own exit code, so an interactive session the operator left
                 is reported, not swallowed.

@@ -1,5 +1,51 @@
 # Unreleased
 
+- **The nine refusals the grafana, Ingress, CI-image and uninstall commands raise moved to
+  `kubementat.errors`.** `GrafanaError`, `GrafanaConfigurationError` and `GrafanaUnauthorizedError`
+  were written in `grafana_client.py`, `IngressTargetExistsError`, `IngressArgumentNotSuppliedError`
+  and `IngressPortNotUsableError` in `ingress_generator.py`, `CiImageNotConfiguredError` in
+  `ci_utils.py`, and `UninstallIncompleteError` and `MysqlNotConfiguredError` in `automation.py`.
+  All nine are written once in `src/kubementat/errors.py` now, in four commented sections that say
+  what each group has in common — three answers about one HTTP endpoint, three refusals to write one
+  manifest, two "the file did not answer" refusals, and one that says the sweep left residue — and
+  every docstring travelled with its class verbatim, payloads included.
+
+  **The hierarchy, as decided and not re-opened.** Every one of the nine descends from
+  `KubementatError`; `GrafanaError` stays the middle base of `GrafanaConfigurationError` and
+  `GrafanaUnauthorizedError`, so `except GrafanaError` still means "grafana said no or said nothing"
+  and nothing wider, and `except GrafanaConfigurationError` still means "open the file". The eight
+  that arrived flat on `Exception` were re-hung onto the base rather than left beside it: no
+  `except KubementatError` exists anywhere in `src` or `tests`, so the widening that concern protects
+  against is a catch nobody has written, while the base's own docstring promises that one catch means
+  one kubementat refusal. No `NotFoundError`-style family was invented, and no family the tree
+  already had was dissolved.
+
+  **What did not change.** No message, no raise, no catch, no assertion text. None of the four
+  modules carried an `__all__`, so there was no list to prune — instead each module raises through
+  the `errors` module, the way `shell.py` has since the previous ticket, so no old address is
+  reachable. 21 import sites, 7 `except` clauses, 24 raises, one `module.ClassName` attribute
+  reference (`ci_utils.CiImageNotConfiguredError` in a test) and one such string label were repointed
+  across 9 source modules and 8 test files; seven docstring lines that spelled the old address now
+  spell `kubementat.errors.X`, since prose is invisible to the suite. The three
+  `click.ClickException` subclasses stayed put, as Phase 1 decided, and `tekton_utils.py` was not
+  touched — none of these nine is raised from it.
+
+  **One thing the census did not say, and it changed nothing.** `MysqlNotConfiguredError` is caught
+  in `cli/commands/tunnels.py:50` and raised nowhere in `src`: it is a refusal that survived the
+  `tunnel-polaris`/`tunnel-mysql` retirement still holding its `except`. It moved with the rest
+  because deleting a class is a different ticket's decision, and the suite is silent about a class
+  with no raise.
+
+  **Evidence.** `uv run pytest -q` reports 1775 passed, 1 skipped (53 s);
+  `git grep -n "^class \(Grafana\|Ingress\|CiImage\|UninstallIncomplete\|MysqlNotConfigured\)[A-Za-z]*Error" -- src/kubementat`
+  answers with `errors.py` and nothing else, and the same grep without the `Error` suffix also names
+  the non-error classes that were never candidates (`GrafanaClient`, `GrafanaUser`, `GrafanaAccount`,
+  `GrafanaAccountRow`, `IngressGenerator`, `IngressClass`); no qualified
+  `kubementat.grafana_client.X`/`ingress_generator.X`/`ci_utils.X`/`automation.X` error address
+  survives in `src` or `tests`; and `python3 .agent-work/import_graph.py src` prints `none` under
+  `== CYCLES ==` and `== LAYER VIOLATIONS ==`, with `grafana_client`, `ingress_generator`, `ci_utils`
+  and `automation` each gaining one edge to `kubementat.errors`.
+
 - **The five refusals that name a thing which is not there moved to `kubementat.errors`.**
   `PodNotFoundError`, `ServiceAccountTokenNotFoundError` and `NamespaceNotFoundError` were written in
   `kubernetes_utils.py`, `ResourceWithoutNameError` in `k8s_apply.py`, and `CommandExecutionError` in

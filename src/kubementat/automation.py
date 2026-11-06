@@ -27,30 +27,6 @@ from kubementat import k8s_apply
 from kubementat import user_management
 
 
-class UninstallIncompleteError(Exception):
-    """Something kubementat owned survived `kmt uninstall`.
-
-    The alternative is to log a warning and print `DONE`, which is precisely the failure this
-    command exists to make impossible: a real lane said DONE while two helm releases were
-    still running, and the residue assert had to be written against the cluster because nobody
-    in the tooling could be believed. Named in the message is what is still there, so the
-    operator has something to act on instead of a claim that the exit code was 0.
-    """
-
-
-class MysqlNotConfiguredError(Exception):
-    """A key the MySQL tunnel cannot guess is missing from the team's configuration.
-
-    kubementat does not install MySQL any more (owner decision 2026-10-27, the Bitnami image
-    that made the chart pullable disappeared), so there is no release the tooling can
-    interrogate to find a database out. Guessing is the dangerous answer here: a namespace
-    that happens to hold somebody else's MySQL would open a tunnel that reads and writes a
-    database nobody meant to reach, so a key that is not there has to stop the command rather
-    than be replaced by a plausible default. Named in the message is the key and the file it
-    belongs to, so the operator has something to edit.
-    """
-
-
 # The only thing the binary-version check reads out of a `--version` answer: the first
 # `major.minor.patch` triple. The lookbehind is what keeps `g0d08d0` in `v4.3.1+gc0d08d0` and a
 # timestamp in a build banner from being mistaken for the version.
@@ -1383,9 +1359,9 @@ class Automation:
 
         - click.ClickException: On "no" at the confirmation, so a cancellation is one line
           rather than a traceback of the CLI's own argument parsing.
-        - UninstallIncompleteError: When the cluster still carries something kubementat owned,
-          named in the message. An uninstall that says DONE while releases survive is the
-          failure this command exists to stop.
+        - kubementat.errors.UninstallIncompleteError: When the cluster still carries something
+          kubementat owned, named in the message. An uninstall that says DONE while releases survive
+          is the failure this command exists to stop.
         '''
         plan = self._read_uninstall_plan()
         self._print_uninstall_plan(plan)
@@ -1452,7 +1428,7 @@ class Automation:
 
         self._print_uninstall_result(plan, residue)
         if residue:
-            raise UninstallIncompleteError(
+            raise errors.UninstallIncompleteError(
                 "uninstall left kubementat residue behind, so the cluster is not clean:\n  "
                 + "\n  ".join(residue)
             )

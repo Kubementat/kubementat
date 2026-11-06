@@ -47,8 +47,8 @@ from cluster_parity import compare, operations_from_calls
 from conftest import run_bash
 from cluster_fixture import configuration_only_context
 from kubementat.config import Config
-from kubementat.ingress_generator import (IngressGenerator,
-                                          IngressPortNotUsableError)
+from kubementat.errors import IngressPortNotUsableError
+from kubementat.ingress_generator import IngressGenerator
 
 def generator(environment: str) -> IngressGenerator:
     """The Python side of the comparison, built the way `kmt create-ingress` builds it.

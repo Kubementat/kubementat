@@ -46,6 +46,7 @@ from typing import Any, NamedTuple, Optional
 import requests
 
 from kubementat.config import Config
+from kubementat import errors
 
 # The paths, spelled once. Every one of them appears in the bash, so nothing here is a guess about
 # where the API lives; `LOGIN_SEARCH` is the only one whose query is assembled rather than copied,
@@ -63,32 +64,6 @@ DEFAULT_CONNECT_TIMEOUT = (5.0, 30.0)
 # than on the status alone, because 412 also comes back for other validation failures, and those
 # deserve the "grafana said this" reading rather than "someone else already created this user".
 ALREADY_EXISTS_MARKERS = ("already exist", "user with the same", "same email or login")
-
-
-class GrafanaError(Exception):
-    """Something grafana did not accept, or did not answer.
-
-    Carries the status code when there was one. A request that never got a response carries
-    `status_code=None`, because "no connection" is a different fact from "403" and the advice that
-    follows each is different.
-    """
-
-    def __init__(self, message: str, status_code: Optional[int] = None):
-        super().__init__(message)
-        self.status_code = status_code
-
-
-class GrafanaConfigurationError(GrafanaError):
-    """The configuration cannot express this operation, so no request is sent.
-
-    Raised for a missing credential key and for a missing address. Both are file-and-editor
-    problems, not cluster problems, which is why they carry their own type: a caller that wants to
-    say "open `static.encrypted.json`" needs to be able to tell them apart from a 401.
-    """
-
-
-class GrafanaUnauthorizedError(GrafanaError):
-    """Grafana rejected the credential. Not the same as a wrong namespace or a closed port."""
 
 
 class GrafanaUser(NamedTuple):
@@ -162,7 +137,7 @@ class GrafanaClient:
         else:
             # Before the first request, because "401 with no credential configured" and "this file
             # names no admin" are different sentences and only one of them is actionable.
-            raise GrafanaConfigurationError(
+            raise errors.GrafanaConfigurationError(
                 "No credential to reach grafana with: neither GRAFANA_SERVICE_ACCOUNT_TOKEN nor "
                 "GRAFANA_ADMIN_USER is set. Both are read from the environment's "
                 "static.encrypted.json -- set one there, not in your shell, where kubementat "
@@ -194,7 +169,7 @@ class GrafanaClient:
 
         Raises
         ------
-        GrafanaConfigurationError
+        kubementat.errors.GrafanaConfigurationError
             When there is no address to use, or when an admin user is configured with no password.
         TypeError
             When no `Config` is handed, which is the shape of "this caller has no root".
@@ -207,7 +182,7 @@ class GrafanaClient:
                             f"{environment}/static.encrypted.json")
 
         if not admin_user and not token:
-            raise GrafanaConfigurationError(
+            raise errors.GrafanaConfigurationError(
                 f"Neither GRAFANA_ADMIN_USER nor GRAFANA_SERVICE_ACCOUNT_TOKEN is set in "
                 f"{environment_file}, so kubementat has no credential to open grafana's API with. "
                 f"grafana installs its admin account from that pair, so the account is probably "
@@ -218,7 +193,7 @@ class GrafanaClient:
             # helm_utils only warns about this, because it is writing a release that can install
             # without a readable API. Here the whole point is the API, and an empty password sends
             # a basic-auth request that answers 401 -- which would blame the user for the password.
-            raise GrafanaConfigurationError(
+            raise errors.GrafanaConfigurationError(
                 f"GRAFANA_ADMIN_USER is set but GRAFANA_ADMIN_PASSWORD is not in "
                 f"{environment_file}, so there is no password to send with {admin_user!r}. The "
                 f"release can install without a password; this command cannot read grafana "
@@ -260,7 +235,7 @@ class GrafanaClient:
             # Two accounts, one email. Grafana's unique index says this cannot happen, so if it
             # does, something has been written around the index and picking one is a decision
             # nobody delegated to a library.
-            raise GrafanaError(
+            raise errors.GrafanaError(
                 f"grafana returned more than one account for {email!r} "
                 f"({', '.join(str(user.user_id) for user in found)}). Two accounts with one email "
                 f"is not something this client picks a winner for; delete or rename one.")
@@ -310,11 +285,11 @@ class GrafanaClient:
 
         try:
             payload = self._request("POST", ADMIN_USERS, json_body=body)
-        except GrafanaError as error:
+        except errors.GrafanaError as error:
             if _says_already_exists(error):
                 existing = self.find_user(email)
                 if existing is None:
-                    raise GrafanaError(
+                    raise errors.GrafanaError(
                         f"grafana refused to create {email!r} as a duplicate, but would not name "
                         f"the account that is in the way when asked for it directly. Nothing was "
                         f"created. grafana's own answer was: {error}",
@@ -326,7 +301,7 @@ class GrafanaClient:
 
         user_id = payload.get("id") if isinstance(payload, dict) else None
         if user_id is None:
-            raise GrafanaError(
+            raise errors.GrafanaError(
                 "grafana answered the create call for "
                 f"{email!r} with {self._shape_of(payload)} -- no user id in it, so no account is "
                 "known to exist. Treating that as success is exactly how a create can be reported "
@@ -435,7 +410,7 @@ class GrafanaClient:
                                             auth=auth, params=params,
                                             json=json_body, timeout=self.timeout)
         except requests.RequestException as error:
-            raise GrafanaError(
+            raise errors.GrafanaError(
                 f"Could not reach grafana at {url}: {error}. This is not a rejected credential, it "
                 f"is no answer at all -- check the address, that the service is up, and that "
                 f"something is tunnelled there. The scripts this replaced defaulted to "
@@ -458,7 +433,7 @@ class GrafanaClient:
 
         text = (response.text or "").strip()
         if not text:
-            raise GrafanaError(
+            raise errors.GrafanaError(
                 f"{what} answered {response.status_code} with an empty body, and that is no "
                 f"answer: the bash helper read one as though it had been told the account was "
                 f"already there, and exited 0. Nothing here is known to have happened, so nothing "
@@ -466,7 +441,7 @@ class GrafanaClient:
         try:
             payload = json.loads(text)
         except ValueError as error:
-            raise GrafanaError(
+            raise errors.GrafanaError(
                 f"{what} answered {response.status_code} with a body that is not JSON "
                 f"({text[:120]!r}). Something other than grafana is on that address -- a proxy, a "
                 f"login page, a port-forward to the wrong port.", status_code=response.status_code
@@ -478,7 +453,7 @@ class GrafanaClient:
         # directory, and both raise when the body they were given cannot be read that way.
         return payload
 
-    def _failure(self, response: Any, what: str) -> GrafanaError:
+    def _failure(self, response: Any, what: str) -> errors.GrafanaError:
         """The exception for a non-2xx, with grafana's message in it when it sent one."""
         detail = ""
         try:
@@ -493,13 +468,13 @@ class GrafanaClient:
             message = f"{message}: {detail}"
         status = response.status_code
         if status in (401, 403):
-            return GrafanaUnauthorizedError(
+            return errors.GrafanaUnauthorizedError(
                 f"{message}. That is grafana rejecting the credential, not the address, the "
                 f"namespace or the user: this client sent its request as "
                 f"{self._credential_source}. If the pair is right, the account it belongs to is "
                 f"not an admin here, and an org role is not a grafana admin either.",
                 status)
-        return GrafanaError(message, status)
+        return errors.GrafanaError(message, status)
 
     def _shape_of(self, payload: Any) -> str:
         if isinstance(payload, dict):
@@ -516,14 +491,14 @@ def _checked_base_url(base_url: str) -> str:
     """
     url = (base_url or "").strip().rstrip("/")
     if not url:
-        raise GrafanaConfigurationError(
+        raise errors.GrafanaConfigurationError(
             "No grafana address was given, and kubementat will not guess one. "
             "scripts/user_management defaulted to http://127.0.0.1:31827, a NodePort no template "
             "opens and no lane tunnels to, which is how an account create that created nothing "
             "printed a success. Give the command the URL grafana actually answers on -- a "
             "port-forward this process started, or the service's ClusterIP.")
     if "://" not in url:
-        raise GrafanaConfigurationError(
+        raise errors.GrafanaConfigurationError(
             f"grafana address {base_url!r} has no scheme, so it is not an address. Use "
             f"http:// or https://.")
     if url.startswith("http://127.0.0.1:31827") or url.startswith("http://localhost:31827"):
@@ -545,14 +520,14 @@ def _directory(payload: Any, what: str) -> list:
     could not be answered.
     """
     if not isinstance(payload, dict) or "users" not in payload:
-        raise GrafanaError(
+        raise errors.GrafanaError(
             f"{what} answered {repr(payload)[:160]}, which is not a directory: there is no 'users' "
             f"key, so there is no way to tell whether the account is there. Guessing 'not there' "
             f"from that is how an account gets created twice, or how a create gets reported as "
             f"done without happening.")
     rows = payload["users"]
     if not isinstance(rows, list):
-        raise GrafanaError(f"{what} put {type(rows).__name__} where a list of users was expected.")
+        raise errors.GrafanaError(f"{what} put {type(rows).__name__} where a list of users was expected.")
     return rows
 
 
@@ -561,7 +536,7 @@ def _user_from_payload(row: dict) -> GrafanaUser:
                        login=str(row.get("login", "")), name=str(row.get("name", "")))
 
 
-def _says_already_exists(error: GrafanaError) -> bool:
+def _says_already_exists(error: errors.GrafanaError) -> bool:
     """Is this exception grafana's duplicate-account answer?
 
     Status 412 plus one of the phrases grafana's users service puts in that message -- and, for an

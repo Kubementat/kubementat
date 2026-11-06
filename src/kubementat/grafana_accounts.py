@@ -46,8 +46,8 @@ import logging
 from typing import Any, Optional
 
 from kubementat.config import Config
-from kubementat.grafana_client import (GrafanaAccount, GrafanaClient,
-                                       GrafanaConfigurationError)
+from kubementat.errors import GrafanaConfigurationError
+from kubementat.grafana_client import GrafanaAccount, GrafanaClient
 from kubementat.kubernetes_utils import KubernetesUtils
 
 # The key whose rows this flow creates. Same file the admin credentials come from, because a
@@ -198,7 +198,7 @@ def create_grafana_accounts(ctx, grafana_url: Optional[str] = None,
     ------
     GrafanaConfigurationError
         A bad row, or no address to use. Raised before any request goes out.
-    GrafanaError
+    kubementat.errors.GrafanaError
         Anything grafana refused or did not answer. The command fails; it does not continue to
         the next row and call that a partial success, because a half-created set of accounts is
         not a set an operator can reason about.
