@@ -304,6 +304,44 @@ The `Automation` class disappears; CLI commands import the slices
 
 ### Phase 4 — split `tekton_utils.py` into `infrastructure/tekton/`
 
+**P4-0: the census, run immediately before the split and not before then.** The mapping below is
+*correct about which method goes where* and silent about everything that makes a god-object split
+fail, so no ticket in this phase may be written without the table. Dispatch a read-only census
+(`scout`, `:low`, ~20 minutes, edits nothing but its own output file) and write the split tickets
+from what it returns, naming the sites it rules out.
+
+It must answer these, because the plan cannot:
+
+1. **Shared private helpers.** Every `_private` helper, and which of the four target files actually
+   calls it. A helper used by `install.py` *and* `runs.py` is the whole failure mode of this phase:
+   put it in the obvious file and the two modules import each other, recreating inside
+   `infrastructure/tekton/` the cycle this plan just deleted. The census names the helpers that have
+   two homes and says which one wins.
+2. **What the methods actually depend on.** Per method: does it need a cluster (`ctx`, a client,
+   `run`), or only a `Config` and the filesystem? The generation half is mostly the latter, and
+   that is what decides whether `generation.py` can be pure functions over data — the same
+   distinction `config_reads_index.py` was built on.
+3. **How the tests reach `TektonUtils`.** Not the string-argument check, which Phase 1 proved is
+   empty. **`monkeypatch.setattr(<object>, "name", ...)` in its object form is how this suite stubs
+   things — 183 `setattr(` sites** — and the case that matters is the one that fails *silently*: a
+   test patches `some_module.the_function`, the function later moves, and the module still binds the
+   name because it imports it. The patch lands on a binding no caller reads, the test passes, and it
+   asserts nothing. The census says, per method, which tests touch it and how, and flags every
+   module-level binding that would keep patching after the move.
+4. **The call graph that crosses files.** `setup_triggers` calls the generators and the apply
+   primitive; `install` waits for the webhook; the cleanup job is install-shaped but named with the
+   runs. Each crossing edge is either a legitimate call down, or a sign the file boundary is wrong.
+5. **The public surface the CLI and `automations/install` use**, so the new entry points are named
+   from callers and not from a guess about what is public.
+
+Output: the table in `docs/census-tekton-split.md`, committed with the first split ticket so the
+reasoning outlives the run; in the answer, the counts, the shared helpers, the tests that patch by
+object, and the sites OUT. The split tickets cite the file and never absorb the whole table.
+
+**Run the same census before `KubernetesUtils` (Phase 2) and before `Automation` (Phase 3).** Those
+two classes are bigger than this one, and question 3 is the one that bites them hardest: 77 methods
+across 11 importing modules is where a silently-unpatched test goes looking green.
+
 Per §4: `install.py`, `triggers.py`, `generation.py`, `runs.py`. `TektonUtils` disappears;
 each module is functions taking `ctx` (like the kubernetes split). CLI `tekton` commands and
 `automations/install` (which calls `TektonUtils` today) update to the new entry points. The
