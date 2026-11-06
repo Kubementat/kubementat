@@ -50,9 +50,9 @@ from kubementat.cluster import (
     ClusterIdentityCollisionError,
     ClusterResolutionError,
     Context,
-    TeamNotSuppliedError,
 )
 from kubementat.config import check_configuration_stamp, resolve_platform_config_dir
+from kubementat.errors import TeamNotSuppliedError
 
 # The variable Click's `envvar='ENVIRONMENT'` reads, spelled once because two halves of the CLI need
 # it: the commands that declare the argument, and this decorator for the commands that do not. Those

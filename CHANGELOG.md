@@ -1,5 +1,26 @@
 # Unreleased
 
+- **`kubementat.errors` is the module that names what kubementat refuses with, and
+  `TeamNotSuppliedError` moved into it.** `class KubementatError(Exception)` is the base every domain
+  error descends from, so one catch can mean "a kubementat refusal" instead of one type at a time. It
+  carries no behaviour and no message convention; the reason it exists at all is that an error class
+  which has to be caught by more than one module cannot live inside either of them without the other
+  importing it.
+
+  **The move is a move, not an alias.** `kubementat.config.TeamNotSuppliedError` is gone, and so is the
+  function-level import inside `config_derived.require_team` that existed only because that class sat in
+  a module importing the one that needed it. There is no compatibility alias, no re-export, no
+  deprecation branch: every `raise`, every `except`, and every import — the command layer's and the
+  suite's — names `kubementat.errors` now, and a caller that still imports the old path gets an
+  `ImportError` rather than the right class from the wrong address. `kubementat.cluster` still raises
+  it, but it imports it rather than re-exporting it, so nothing in the tree keeps its identity through
+  a module that was never its home.
+
+  **The other 35 exception classes are where they were.** They are a decision of their own — several of
+  them are `click.ClickException` subclasses, which is a question about who renders the refusal rather
+  than about where a class is defined — and dragging them along here would have made a two-line move
+  into a rewrite nobody could read.
+
 - **An environment's own kubeconfig is read ahead of `$KUBECONFIG`, and the advice is to put it inside
   the configuration directory.** `platform_config/<environment>/kubeconfig.encrypted.yaml` is now consulted
   when nothing declared a path — after `--kubeconfig`, `$CLUSTER_KUBECONFIG_PATH` and the environment's own

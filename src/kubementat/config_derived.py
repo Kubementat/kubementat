@@ -47,6 +47,8 @@ honest: the derivation answers, a declared value outranks it, and no destructive
 namespace from the rule.
 """
 
+from kubementat.errors import TeamNotSuppliedError
+
 # The five keys, spelled once so a test and the read path agree about what a key is called. These are
 # configuration keys and not Python names, which is why they carry their `static.json` spelling.
 APP_DEPLOYMENT_NAMESPACE = "APP_DEPLOYMENT_NAMESPACE"
@@ -71,14 +73,10 @@ def require_team(key: str, team) -> None:
     second question — no team, and which answer does that concern? `team` is what the run was given,
     which is the argument this module is a rule over and therefore the argument it checks.
 
-    The import is inside the function and not at the top of the module: `TeamNotSuppliedError` belongs
-    to `config.py`, and `config.py` imports this module. A module-level import would be a cycle that
-    resolves only when the two are read in one order, which is not a rule anyone should have to
-    remember before they fix a sentence.
+    It checks rather than defaults: the answer a missing team leaves behind is nothing to derive from,
+    and a refusal that names the key is the only honest remainder.
     """
     if team is None or not str(team).strip():
-        from kubementat.config import TeamNotSuppliedError
-
         raise TeamNotSuppliedError(
             f"{key} is a team-shaped answer: it follows from the team's name, and this run named no "
             f"team, so there is nothing to derive it from. kubementat does not answer a missing "

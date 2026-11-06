@@ -378,7 +378,7 @@ def test_a_configuration_read_without_a_team_refuses_as_it_did(tmp_path):
     config = Config(ENVIRONMENT, None, kubementat_main_dir=str(tmp_path),
                     platform_config_dir=str(tmp_path / "platform_config"))
 
-    from kubementat.config import TeamNotSuppliedError
+    from kubementat.errors import TeamNotSuppliedError
     with pytest.raises(TeamNotSuppliedError):
         config.get("team_static")
 

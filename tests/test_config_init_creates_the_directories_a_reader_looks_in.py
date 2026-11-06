@@ -31,8 +31,9 @@ import click
 import pytest
 
 from kubementat import config_init
-from kubementat.config import Config, TeamNotSuppliedError
+from kubementat.config import Config
 from kubementat.config_init import CREATED, SKIPPED, init_configuration
+from kubementat.errors import TeamNotSuppliedError
 
 ENVIRONMENT = "dev"
 TEAM = "ops"

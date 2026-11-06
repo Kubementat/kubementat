@@ -34,7 +34,8 @@ import pytest
 
 import kubementat
 from kubementat import config_answers, config_derived
-from kubementat.config import Config, TeamNotSuppliedError
+from kubementat.config import Config
+from kubementat.errors import TeamNotSuppliedError
 
 ENVIRONMENT = "derivedenv"
 TEAM = "astronauts"

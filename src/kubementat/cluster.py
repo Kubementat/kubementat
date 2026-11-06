@@ -40,8 +40,9 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 
 import yaml
 
-from kubementat.config import Config, TeamNotSuppliedError
+from kubementat.config import Config
 from kubementat.config_reads import LockedConfigFileError, read_decrypted
+from kubementat.errors import TeamNotSuppliedError
 
 # The two environment-level keys that decide which cluster a command means. They are here rather
 # than in `constants` because
@@ -177,15 +178,14 @@ class ClusterIdentityCollisionError(Exception):
     """
 
 
-# `TeamNotSuppliedError` is imported above rather than defined here. It belongs to
-# `kubementat.config`, which is the module that builds the team-scoped path the refusal is about,
-# and it is re-exported through this module's namespace so `kubementat.cluster.TeamNotSuppliedError`
-# stays the name callers catch. Defining a second one here would make the guard raise one type and
-# the services catch another. Not a resolution failure: the cluster resolved and `Context` carries
-# it. What is missing is the other half of the pair — `platform_config/{environment}/<team>/` — and
-# kmt does not guess what a command means, so the object says so rather than letting a service read
-# a path built out of a name nobody gave it. `Context.require_team` and `Config`'s team-scoped reads
-# raise it, so the refusal has one home instead of one per service.
+# `TeamNotSuppliedError` is imported above rather than defined here, and it comes from
+# `kubementat.errors` rather than from this module's neighbourhood: the same refusal is raised by
+# `Context.require_team` and by `Config`'s team-scoped reads, and defining a second one here would
+# make the guard raise one type and the services catch another. Not a resolution failure: the cluster
+# resolved and `Context` carries it. What is missing is the other half of the pair —
+# `platform_config/{environment}/<team>/` — and kmt does not guess what a command means, so the object
+# says so rather than letting a service read a path built out of a name nobody gave it. That both
+# call sites raise it is the reason the refusal has one home instead of one per service.
 
 
 def default_kubeconfig_path() -> str:

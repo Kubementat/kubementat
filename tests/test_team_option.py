@@ -16,7 +16,7 @@ from click.testing import CliRunner
 from cli import helpers
 from cli.commands import (component, helm, kubementat, routing, tekton, tunnels,
                            users, utilities)
-from kubementat.config import TeamNotSuppliedError
+from kubementat.errors import TeamNotSuppliedError
 
 TEAM = "smoke"
 

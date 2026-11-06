@@ -12,6 +12,7 @@ import yaml
 from kubementat import config_derived, constants
 from kubementat.assets import asset_path
 from kubementat.config_reads import read_decrypted
+from kubementat.errors import TeamNotSuppliedError
 
 # Importing this module configures logging and nothing else. The `logging.basicConfig`
 # call that used to sit here ran for every library consumer — importing `kubementat`
@@ -590,21 +591,6 @@ def component_config_key(component: str, suffix: str) -> str:
     'TEKTON_DASHBOARD_DEPLOYMENT_NAMESPACE'
     '''
     return f"{component.upper().replace('-', '_')}_{suffix}"
-
-
-class TeamNotSuppliedError(Exception):
-    '''
-    This work needs a team's configuration, and the run did not name one.
-
-    Not a resolution failure: the cluster resolved, and a `Context` built without a team still
-    carries it. What is missing is the other half of the pair — `platform_config/{environment}/<team>/`
-    — and the rule is that kmt does not guess it, so the object says so instead of letting a
-    service read a path built out of a name nobody gave it. Two calls raise it, for the same
-    reason: `Config` when a team-scoped value is read from a `Config` that has no team, and
-    `kubementat.cluster.Context.require_team` when a service asks a Context for the half it was
-    not given. One question, one sentence, and it lives here because this is the module that
-    builds the path the refusal is about.
-    '''
 
 
 class Config:
