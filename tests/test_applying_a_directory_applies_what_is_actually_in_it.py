@@ -1,6 +1,6 @@
-"""The directory-to-cluster primitive: `Automation.apply_resources()`, after D13.
+"""The directory-to-cluster primitive: `kubementat.k8s_apply.apply_resources()`.
 
-Everything Wave 1 and Wave 2 apply from a directory goes through this method — today the global
+Everything Wave 1 and Wave 2 apply from a directory goes through this function — today the global
 Tasks and Pipelines under `tekton_ci/` and the team's own two directories, tomorrow the generated
 trigger configs `setup_triggers` reads out of `platform_config/{env}/{team}/tekton/triggers/`. So its
 three blind spots were not three bugs in one function; they were three ways a resource somebody
@@ -21,8 +21,8 @@ from pathlib import Path
 
 import pytest
 
-from kubementat import automation as automation_module
-from kubementat.automation import Automation, ResourceWithoutNameError
+from kubementat import k8s_apply
+from kubementat.k8s_apply import ResourceWithoutNameError
 from asset_paths import tekton_ci_path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -58,10 +58,9 @@ class RecordingKubernetesUtils:
 
 
 def an_apply(directory):
-    automation = Automation.__new__(Automation)
-    automation.kubernetes_utils = RecordingKubernetesUtils()
-    automation.apply_resources(str(directory), "pipelines", "Task", "tekton.dev", "v1")
-    return automation.kubernetes_utils
+    recorder = RecordingKubernetesUtils()
+    k8s_apply.apply_resources(recorder, str(directory), "pipelines", "Task", "tekton.dev", "v1")
+    return recorder
 
 
 def write(path, text):
@@ -211,13 +210,12 @@ def test_the_nameless_document_does_not_stop_an_earlier_resource_from_reaching_t
     write(tmp_path / "1-good.yml", TASK.format(name="good"))
     write(tmp_path / "2-nameless.yml", "apiVersion: tekton.dev/v1\nkind: Task\nspec: {}\n")
 
-    automation = Automation.__new__(Automation)
-    automation.kubernetes_utils = RecordingKubernetesUtils()
+    recorder = RecordingKubernetesUtils()
 
     with pytest.raises(ResourceWithoutNameError):
-        automation.apply_resources(str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
+        k8s_apply.apply_resources(recorder, str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
 
-    assert automation.kubernetes_utils.names() == ["good"]
+    assert recorder.names() == ["good"]
 
 
 # ---------------------------------------------------------------------------
@@ -251,11 +249,11 @@ def test_the_shipped_asset_roots_have_no_template_inside_a_resource_root_it_is_a
     """
     for root in ("tasks", "pipelines"):
         directory = tekton_ci_path(root)
-        found = automation_module._resource_files(directory)
+        found = k8s_apply._resource_files(directory)
         flat = sorted(directory.glob("*.yml")) + sorted(directory.glob("*.yaml"))
 
         assert found == sorted(found), f"{root}: the walk is not ordered"
-        assert all(part != automation_module.GENERATOR_TEMPLATE_DIRECTORY
+        assert all(part != k8s_apply.GENERATOR_TEMPLATE_DIRECTORY
                    for path in found for part in path.relative_to(directory).parts[:-1]), \
             f"{root}: a template inside a resource root would be applied"
         assert set(flat) <= set(found), f"{root}: the flat glob found files the walk missed"
@@ -286,15 +284,13 @@ def test_a_resource_applied_twice_is_a_replacement_and_not_an_error(tmp_path):
     write(tmp_path / "task.yml", TASK.format(name="once"))
     recorder = RecordingKubernetesUtils()
 
-    automation = Automation.__new__(Automation)
-    automation.kubernetes_utils = recorder
-    automation.apply_resources(str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
-    automation.apply_resources(str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
+    k8s_apply.apply_resources(recorder, str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
+    k8s_apply.apply_resources(recorder, str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
 
     assert recorder.names() == ["once", "once"]
 
 
 def test_the_primitive_keeps_reading_both_suffixes_it_was_offered(tmp_path):
     """The suffix set is a constant now, so a future `.YAML` is a decision and not an accident."""
-    assert automation_module.RESOURCE_FILE_SUFFIXES == (".yml", ".yaml")
-    assert automation_module.GENERATOR_TEMPLATE_DIRECTORY == "templates"
+    assert k8s_apply.RESOURCE_FILE_SUFFIXES == (".yml", ".yaml")
+    assert k8s_apply.GENERATOR_TEMPLATE_DIRECTORY == "templates"

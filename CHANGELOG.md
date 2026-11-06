@@ -1,5 +1,35 @@
 # Unreleased
 
+- **`apply_resources` is a primitive in `kubementat.k8s_apply`, and `Automation` and `TektonUtils`
+  stopped importing each other.** `Automation.apply_resources` moved verbatim out of the class — the
+  walk, the three helpers that decide which document goes where, the log lines, the return value and
+  both refusals — and `kubementat.tekton_utils` stopped reaching for `Automation` to get it. That
+  deferred import inside `_apply_team_trigger_resources` was the cycle: `automation.py` imports
+  `tekton_utils.py` at module level, so the only way a trigger directory could be applied was to
+  import the class on the way past the import-time deadlock. Nothing is deferred now, because nothing
+  is left to defer, and the comment that explained the deferral is gone with it.
+
+  **The shape of the function.** `apply_resources(kubernetes_utils, resource_dir, target_namespace,
+  kind, group, version)` takes the object that answers `create_or_replace_custom_resource` and not a
+  union with anything that might hand it over. A union gets unwrapped on every call and answers
+  nothing: a caller already holds its own utils object, and a test that wants to watch this primitive
+  hands it the recorder it built. `setup_pipelines` passes `self.kubernetes_utils` through its layer
+  helper, and `setup_triggers` builds one from the `Context` it already had, exactly as
+  `Automation(self.ctx)` built it before.
+
+  **What did not change.** Nothing a cluster or a log sees: the same files are walked in the same
+  sorted order, `templates/` is still skipped, the same number is returned, and an absent directory
+  still raises `FileNotFoundError` while a layer that is not there still logs one line and carries
+  on. `ResourceWithoutNameError` travels with the code that raises it, so it is now
+  `kubementat.k8s_apply.ResourceWithoutNameError` — the same class, one owner, no alias, and the two
+  tests that caught it read the new address. The apply test drives the function through a recorder
+  instead of through `Automation.__new__`, and every assertion in it is the assertion it had.
+
+  **Evidence.** 1775 passed, 1 skipped (`uv run pytest -q`, 57 s), and
+  `python3 .agent-work/import_graph.py src` prints `none` under `== CYCLES ==` for the first time on
+  this branch. The shipped product roots still apply 29 documents — 20 Tasks and 9 Pipelines — read
+  off the walk and not off a target.
+
 - **Routing's component name and its ingress-class default are owned by `constants.py`, and no
   routing import reaches the ingress generator.** `constants.COMPONENT` is the one place
   `"traefik"` is written as a component name, and `constants.DEFAULT_INGRESS_CLASSES` is the fallback

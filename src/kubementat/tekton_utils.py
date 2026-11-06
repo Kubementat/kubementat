@@ -1,3 +1,4 @@
+from kubementat import k8s_apply
 from kubementat import shell
 from kubementat.kubernetes_utils import KubernetesUtils
 import base64
@@ -1052,10 +1053,10 @@ class TektonUtils:
 
     def __init__(self, ctx):
         # One `Context` and nothing else, the shape the other service classes have.
-        # `self.ctx` is kept because `setup_triggers` answers a pipeline-run question by handing
-        # the same object to `Automation` (`Automation(self.ctx)` below, the only other half of
-        # this pair): building a second `Context` there would resolve "which cluster" a second time
-        # for one method, which is what one `Context` is there to prevent.
+        # `self.ctx` is kept because it is what a second KubernetesUtils object is built from --
+        # the same object the old `Automation(self.ctx)` built -- and building a second `Context`
+        # to hand over would resolve "which cluster" a second time for one method, which is what
+        # one `Context` is there to prevent.
         self.ctx = ctx
         self.kubernetes_utils = KubernetesUtils(ctx)
         self.environment = ctx.environment
@@ -1244,7 +1245,7 @@ class TektonUtils:
 
         Raises:
             PipelineNamespaceNotConfiguredError: If the team's static config has no namespace.
-            kubementat.automation.ResourceWithoutNameError: If a trigger manifest has no name.
+            kubementat.k8s_apply.ResourceWithoutNameError: If a trigger manifest has no name.
             kubementat.shell.CommandExecutionError: Never, by this method itself — it calls no
                 `kubectl`, which is what the RBAC primitives made unnecessary.
             kubernetes.client.exceptions.ApiException: If the cluster refuses an object.
@@ -1552,15 +1553,12 @@ class TektonUtils:
                          f"`kmt tekton-generate-triggers`, or apply manifests here by hand.")
             return
 
-        # `apply_resources` is the primitive that owns "apply everything in a directory", and it
-        # lives on Automation. Reaching it from here is a local import rather than a module-level
-        # one because `automation.py` imports this module; the cycle that would otherwise be an
-        # import-time deadlock is a reason to import lazily, not a reason to duplicate the walk.
-        from kubementat.automation import Automation
+        # The primitive walks the directory and answers for every document in it; the object it
+        # hands the cluster is built here, which is why no `Automation` is needed to reach it.
         logging.info(f"Setting up configured triggers for team {self.team} ...")
-        Automation(self.ctx).apply_resources(
-            trigger_dir, namespace, kind=None,
-            group=self.config.TRIGGERS_API_GROUP, version=self.config.TRIGGERS_API_VERSION)
+        k8s_apply.apply_resources(KubernetesUtils(self.ctx), trigger_dir, namespace, kind=None,
+                                  group=self.config.TRIGGERS_API_GROUP,
+                                  version=self.config.TRIGGERS_API_VERSION)
 
     def generate_deploy_pipeline(self, app_name: str, git_url: str = None,
                                  git_project_name: str = None, git_server_host: str = None,

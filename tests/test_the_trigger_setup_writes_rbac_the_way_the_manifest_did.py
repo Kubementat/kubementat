@@ -26,7 +26,7 @@ import base64
 import pytest
 from kubernetes import client
 
-from kubementat.automation import ResourceWithoutNameError
+from kubementat.k8s_apply import ResourceWithoutNameError
 from kubementat.tekton_utils import (
     BINDINGS_AND_INTERCEPTORS_CLUSTER_ROLE_NAME,
     TRIGGER_CONTROLLER_ROLE_BINDING_NAME,

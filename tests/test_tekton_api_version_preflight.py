@@ -18,6 +18,7 @@ from pathlib import Path
 
 from kubementat import config as config_module
 from kubementat import config_keys
+from kubementat import k8s_apply
 from kubementat.automation import Automation
 from kubementat.tekton_utils import (
     TektonControllerWithoutConfiguredApiError,
@@ -128,9 +129,12 @@ def a_setup_pipelines_call_on(tmp_path, cluster, applied, monkeypatch):
     automation.helm_utils = None
     automation._setup_pipelines_setup_role_bindings = lambda *args: applied.append("roles")
     automation._setup_pipelines_show_results = lambda *args: applied.append("results")
-    automation.apply_resources = lambda directory, namespace, kind, group, version: applied.append(
-        (kind, str(directory))
-    )
+    # The apply primitive is a module function now, so the recorder replaces it where it lives:
+    # `_apply_manifest_layer` calls through `k8s_apply` and not through this instance.
+    monkeypatch.setattr(
+        k8s_apply, "apply_resources",
+        lambda kubernetes_utils, directory, namespace, kind, group, version: applied.append(
+            (kind, str(directory))))
     return automation
 
 
