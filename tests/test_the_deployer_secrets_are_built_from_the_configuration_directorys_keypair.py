@@ -33,7 +33,7 @@ import pytest
 
 from kubementat import config_keys
 from kubementat.automation import Automation
-from kubementat.config_keys import DeployerKeyMissingError
+from kubementat.errors import DeployerKeyMissingError
 
 ENVIRONMENT = "dev"
 TEAM = "dev1"

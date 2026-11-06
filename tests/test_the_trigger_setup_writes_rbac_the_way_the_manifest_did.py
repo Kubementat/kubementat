@@ -300,7 +300,7 @@ def test_the_old_trigger_directory_is_refused_by_name_and_nothing_is_applied(
     directory reaches the cluster. The RBAC above the read still ran: it is create-or-replace of
     the same objects, and the refusal is about the manifests, not about the accounts.
     """
-    from kubementat.tekton_utils import ObsoleteTriggerDirectoryError
+    from kubementat.errors import ObsoleteTriggerDirectoryError
 
     obsolete = obsolete_trigger_dir(fixture_repo)
     (obsolete / "hello").mkdir(parents=True)

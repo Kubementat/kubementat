@@ -303,17 +303,6 @@ WEBHOOK_SECRETS = (("gitlab-trigger-webhook-secret", "GITLAB_WEBHOOK_SECRET"),
                    ("github-trigger-webhook-secret", "GITHUB_WEBHOOK_SECRET"))
 
 
-class ObsoleteTriggerDirectoryError(click.ClickException):
-    """A tree that still has the old trigger directory is refused, by name.
-
-    The generated trigger configuration lived at `<team>/triggers/` until it moved under
-    `tekton/`; a tree can hold both, and only the new one is read, so the old directory standing
-    there is a set of manifests that are silently applied nowhere. Both points that would make
-    that silent — the reader and the writer — refuse instead, and the message names what was
-    found, what the new layout needs, and the verb that closes the gap.
-    """
-
-
 def _refuse_obsolete_team_trigger_dir(config) -> None:
     """Refuse a tree that still has `<team>/triggers/`, naming both directories.
 
@@ -326,7 +315,7 @@ def _refuse_obsolete_team_trigger_dir(config) -> None:
     """
     obsolete = Path(config.tekton_team_trigger_dir).parent.parent / "triggers"
     if obsolete.is_dir():
-        raise ObsoleteTriggerDirectoryError(
+        raise errors.ObsoleteTriggerDirectoryError(
             f"{obsolete} is the trigger directory a pre-move kubementat wrote, and nothing reads "
             f"it any more: the team's trigger configuration lives under "
             f"{config.tekton_team_trigger_dir}, the only path generated triggers are applied "
@@ -1563,7 +1552,8 @@ class TektonUtils:
             kubementat.errors.GenerationPlaceholderNotConfiguredError: If a template holds a placeholder with no
                 configured value, naming the key and the file it would have been read from.
             click.ClickException: From an unreadable `static.json`.
-            ObsoleteTriggerDirectoryError: If the tree still has the old `<team>/triggers/`
+            kubementat.errors.ObsoleteTriggerDirectoryError: If the tree still has the old
+          `<team>/triggers/`
                 directory — generating into the new path beside it would strand what the old one
                 holds, so the run stops and names both.
 

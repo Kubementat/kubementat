@@ -16,7 +16,8 @@ convention, no exit code, no payload. A base class that carried behaviour would 
 forgot to carry it work by accident, and an accident with two owners is a bug nobody can find.
 """
 
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Union
 
 
 class KubementatError(Exception):
@@ -376,6 +377,69 @@ class MysqlNotConfiguredError(KubementatError):
     database nobody meant to reach, so a key that is not there has to stop the command rather
     than be replaced by a plausible default. Named in the message is the key and the file it
     belongs to, so the operator has something to edit.
+    """
+
+
+# ---------------------------------------------------------------------------
+# What the configuration tree itself refuses.
+#
+# These three refused from inside the modules that read or prepare the tree, each one descending
+# from `click.ClickException` — the shape that says "a command printed this" rather than
+# "kubementat refused", and the only gap left open by `cli/context.py`'s doctrine (the library
+# stays Click-free to raise; only the CLI decides how a refusal is printed). They now descend from
+# `KubementatError` like every other refusal, and the CLI renders them: the same one `Error:` line
+# and exit 1 they got for free as `ClickException`s, produced where they are caught and re-raised
+# rather than where they are raised. The prose below still says what each refusal means, because
+# that is the part no raise site may rewrite locally.
+# ---------------------------------------------------------------------------
+
+
+class LockedConfigFileError(KubementatError):
+    """A kubementat configuration file that is present but not readable — the git-crypt case.
+
+    The reason this is a named refusal and not a codec error: by the time it is raised, the code
+    that raised it has stopped understanding the bytes, and the operator's fix (`git-crypt
+    unlock`) is not a code fix. The path is part of the message because a tree can hold four files
+    with the same name.
+    """
+
+    # The half of the refusal that belongs to whoever owns the checkout, and not to kubementat.
+    # Spelled the same way in every command that ever had to say it.
+    UNLOCK_INSTRUCTION = (
+        "This is the git-crypt case: the file is in the checkout and its contents are ciphertext, "
+        "and kubementat reads a configuration it is only given — it never runs git-crypt unlock. "
+        "Run `git-crypt unlock` in this checkout, or let the pipeline unlock after checkout, then "
+        "ask again."
+    )
+
+    def __init__(self, path: Union[str, Path], why: Optional[str] = None) -> None:
+        self.path = Path(path)
+        self.why = why
+        detail = f": {why}." if why else "."
+        super().__init__(f"{self.path} is present and cannot be read as text{detail} "
+                         f"{self.UNLOCK_INSTRUCTION}")
+
+
+class DeployerKeyMissingError(KubementatError):
+    """A configuration directory that has no deployer keypair yet.
+
+    This is a named refusal rather than whatever the next layer would raise, because every site
+    that raises it is one an operator will be standing in front of: `setup_pipelines` reads these
+    files on its way to a Secret, and used to discover the absence three layers down inside the
+    Kubernetes client's serialization. The name of the class is the sentence the operator needs,
+    which is why the exception is what the guards propagate instead of a re-raise of something
+    else.
+    """
+
+
+class ObsoleteTriggerDirectoryError(KubementatError):
+    """A tree that still has the old trigger directory is refused, by name.
+
+    The generated trigger configuration lived at `<team>/triggers/` until it moved under
+    `tekton/`; a tree can hold both, and only the new one is read, so the old directory standing
+    there is a set of manifests that are silently applied nowhere. Both points that would make
+    that silent — the reader and the writer — refuse instead, and the message names what was
+    found, what the new layout needs, and the verb that closes the gap.
     """
 
 

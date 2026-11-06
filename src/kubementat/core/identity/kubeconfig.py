@@ -44,7 +44,8 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 
 import yaml
 
-from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
+from kubementat.core.config.reads import read_decrypted
+from kubementat.errors import LockedConfigFileError
 from kubementat.errors import (
     ClusterContextNotFoundError,
     ClusterFileUnreadableError,

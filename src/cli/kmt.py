@@ -16,6 +16,11 @@ from cli.commands import users
 from cli.commands import kubernetes
 from cli.commands import config
 from kubementat.core.version import get_version
+from kubementat.errors import (
+    DeployerKeyMissingError,
+    LockedConfigFileError,
+    ObsoleteTriggerDirectoryError,
+)
 
 
 # The library configures nothing when it is imported, so the CLI configures logging for
@@ -48,7 +53,26 @@ def print_version(ctx, param, value):
     ctx.exit()
 
 
-@click.group(help='Kubementat CLI')
+class KmtGroup(click.Group):
+    """The root group, which renders the refusals no decorated command met on its way.
+
+    `@kmt_context` renders the refusals the decorated commands can raise; the `config` and
+    `environments` verbs deliberately build no `Context` (they touch no cluster), so a tree refusal
+    raised on their way — a locked configuration file, the obsolete trigger directory, a missing
+    deployer keypair — would reach the terminal as a traceback. The CLI still renders them here,
+    one `Error:` line and exit 1, because "only the CLI decides how a refusal is printed" has to
+    hold for the whole surface and not only for the half of it that opens a socket.
+    """
+
+    def invoke(self, ctx):
+        try:
+            return super().invoke(ctx)
+        except (DeployerKeyMissingError, LockedConfigFileError,
+                ObsoleteTriggerDirectoryError) as error:
+            raise click.ClickException(str(error))
+
+
+@click.group(cls=KmtGroup, help='Kubementat CLI')
 @click.option('--version', 'version_requested', is_flag=True, is_eager=True, expose_value=False,
               callback=print_version, help="Print kubementat's version and exit.")
 def cli():

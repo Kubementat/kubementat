@@ -65,6 +65,7 @@ import click
 import gnupg
 
 from kubementat.config_init import CREATED, EXISTED, SKIPPED, InitStep
+from kubementat.errors import DeployerKeyMissingError
 from kubementat.crypto_utils import CryptoUtils
 
 # The four names, spelled once here for the same reason `config_init` spells the manifest's filename
@@ -126,17 +127,6 @@ class DeployerKeypair:
     gpg_private: Path
     gpg_public: Path
     gpg_email: str
-
-
-class DeployerKeyMissingError(click.ClickException):
-    """A configuration directory that has no deployer keypair yet.
-
-    It is a `ClickException` and not a bare `RuntimeError` because every site that raises it is one
-    an operator will be standing in front of: `setup_pipelines` reads these files on its way to a
-    Secret, and today it discovers the absence three layers down inside the Kubernetes client's
-    serialization. The name of the class is the sentence the operator needs, which is why the
-    exception is what the guards propagate instead of a re-raise of something else.
-    """
 
 
 def ensure_deployer_keypair(config_dir: Path, *, gpg_key: Path | None = None,

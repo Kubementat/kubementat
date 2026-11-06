@@ -1,10 +1,11 @@
 """One sentence for every read of a kubementat configuration file.
 
-Two names live here, and they exist because one failure was being described four different ways by
-code that had read the same file. `read_decrypted` is the read — bytes in, text out.
-`LockedConfigFileError` is the sentence that refusal gets, and the rule it encodes is **one sentence,
-many error types**: a caller that owns a named exception re-raises its own type with this sentence
-inside it, `config validate` turns it into a finding, and nobody rewrites the wording locally.
+One name lives here. `read_decrypted` is the read — bytes in, text out. The sentence its refusal
+gets, `LockedConfigFileError`, lives in `kubementat.errors` with every other refusal, and the rule
+it encodes is **one sentence, many error types**: a caller that owns a named exception re-raises
+its own type with this sentence inside it, `config validate` turns it into a finding, and nobody
+rewrites the wording locally. Both exist because one failure was being described four different
+ways by code that had read the same file.
 
 The reason it took a ticket to say this once is that `UnicodeDecodeError` is a `ValueError` and not
 an `OSError`, so every `except OSError` in the read graph walked straight past it. Four sites caught
@@ -47,37 +48,11 @@ and not about how one file is read. The latter is what this module states.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 
-import click
+from kubementat.errors import LockedConfigFileError
 
-__all__ = ["LockedConfigFileError", "read_decrypted"]
-
-# The half of the refusal that belongs to whoever owns the checkout, and not to kubementat. The file
-# is named by `LockedConfigFileError`; this is what to do about it, spelled the same way in every
-# command that ever had to say it.
-UNLOCK_INSTRUCTION = (
-    "This is the git-crypt case: the file is in the checkout and its contents are ciphertext, and "
-    "kubementat reads a configuration it is only given — it never runs git-crypt unlock. Run "
-    "`git-crypt unlock` in this checkout, or let the pipeline unlock after checkout, then ask again."
-)
-
-
-class LockedConfigFileError(click.ClickException):
-    """A kubementat configuration file that is present but not readable — the git-crypt case.
-
-    It is a `click.ClickException` and not a codec subclass for one reason: by the time this is
-    raised, the code that raised it has stopped understanding the bytes, and the operator's fix
-    (`git-crypt unlock`) is not a code fix. The path is part of the message because a tree can hold
-    four files with the same name.
-    """
-
-    def __init__(self, path: Union[str, Path], why: Optional[str] = None) -> None:
-        self.path = Path(path)
-        self.why = why
-        detail = f": {why}." if why else "."
-        super().__init__(f"{self.path} is present and cannot be read as text{detail} "
-                         f"{UNLOCK_INSTRUCTION}")
+__all__ = ["read_decrypted"]
 
 
 def read_decrypted(path: Union[str, Path], what: str = "configuration file") -> str:

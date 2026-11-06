@@ -16,7 +16,7 @@ Seven claims, one per read that the census measured, plus two about what the sea
    through. A locked layer file refuses with the file's name and git-crypt.
 2. `config_init._read_document` — the read-modify-write verbs (`config set`, `config unset`,
    `config set --generate`). It keeps its own refusal wording for unreadable and non-JSON, which is
-   why a `LockedConfigFileError` (a `ClickException`, not an `OSError`) walks past that handler
+   why a `LockedConfigFileError` (a `KubementatError`, not an `OSError`) walks past that handler
    intact.
 3. `config_init.cluster_is_unaddressed` — the fixed site. An undecodable file **raises**; absent,
    `null` and blank still answer `True`. Both halves are asserted here because the bug was the
@@ -51,14 +51,18 @@ import tokenize
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
+from cli.commands.config import config as config_group
+from cli.kmt import KmtGroup
 from kubementat import config_init, config_validate
 from kubementat.core.identity.registry import _static_declaration
 from kubementat.core.identity.kubeconfig import _read_kubeconfig
 from kubementat.core.identity.target import ClusterTarget
 from kubementat.errors import ClusterFileUnreadableError
 from kubementat.core.config.config import Config
-from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
+from kubementat.core.config.reads import read_decrypted
+from kubementat.errors import LockedConfigFileError
 from kubementat.config_validate import validate_tree
 
 ENVIRONMENT = "dev"
@@ -132,7 +136,7 @@ def test_a_locked_layer_file_refuses_the_command_that_reads_it_through_config(tm
     with pytest.raises(LockedConfigFileError) as refused:
         config.get("env_static_encrypted")
 
-    refused_by_name(refused.value.format_message(), locked)
+    refused_by_name(str(refused.value), locked)
 
 
 def test_a_locked_layer_file_refuses_a_plain_key_read_too_because_one_load_reads_all_four(tmp_path):
@@ -654,3 +658,33 @@ def test_the_seam_never_runs_git_crypt_and_never_parses(tmp_path):
         f"the seam runs something: {sorted(imports)}"
     assert not [call for call in calls if call.startswith(("json.", "yaml."))], \
         f"the seam parses what it only reads: {sorted(calls)}"
+
+
+# ---------------------------------------------------------------------------------------------
+# 10 — the whole CLI's one line: what the operator who ran `kmt config show` actually sees.
+# ---------------------------------------------------------------------------------------------
+
+
+def test_a_locked_layer_file_is_rendered_as_one_error_line_and_never_as_a_traceback(tmp_path):
+    """The rendering is product: exit 1 and one sentence, because the fix is `git-crypt unlock`.
+
+    The exception is one of the tree refusals that the `config` verbs raise on their way, with no
+    `Context` built and therefore none of the decorator's wrapping. The root group renders it, which
+    is the whole point of putting the rendering there instead of leaving it to the decorated half:
+    a run of `kmt config show` over the same tree the read seam refuses prints the sentence and
+    nothing else.
+    """
+    root = tmp_path / "config"
+    config_init.init_configuration(root=root, environment=ENVIRONMENT)
+    locked = lock(root / ENVIRONMENT / "static.encrypted.json")
+
+    # The root group's class wrapped around the real `config` subcommand, because `main()` is the
+    # only thing that registers commands on `cli` and an operator's run is what this row is about:
+    # this group IS how `kmt config show` dispatches.
+    root_group = KmtGroup(name="kmt")
+    root_group.add_command(config_group)
+
+    result = CliRunner(mix_stderr=False).invoke(root_group, ["config", "show", str(root), ENVIRONMENT])
+
+    assert result.exit_code == 1, f"{result.exception}; {result.output}"
+    refused_by_name(result.stderr, locked)

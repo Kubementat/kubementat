@@ -52,7 +52,8 @@ from typing import Any, Dict, Optional, Tuple
 
 from kubementat.core import constants
 from kubementat.core.config.config import Config
-from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
+from kubementat.core.config.reads import read_decrypted
+from kubementat.errors import LockedConfigFileError
 # The three modules below this one are bound and not unpacked, for the one reason every importer of
 # them has had: a name import would leave `kubementat.core.identity.registry.ClusterTarget` and
 # friends standing beside the objects themselves, and a second resolvable name for one object is

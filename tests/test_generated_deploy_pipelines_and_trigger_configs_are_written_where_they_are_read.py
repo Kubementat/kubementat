@@ -562,7 +562,7 @@ def test_a_tree_the_script_wrote_is_refused_by_name_and_not_generated_beside(che
     holds — only `tekton/triggers/` is ever read — so the generator refuses instead, names both
     paths, and writes nothing into the new one.
     """
-    from kubementat.tekton_utils import ObsoleteTriggerDirectoryError
+    from kubementat.errors import ObsoleteTriggerDirectoryError
 
     script_run = run_trigger_script(checkout)
     assert script_run.returncode == 0, script_run.stdout + script_run.stderr

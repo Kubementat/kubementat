@@ -29,11 +29,14 @@ there on a terminal, never inside a pipe.
   inventing the namespace it acts in. `kubementat.core.identity.context.Context` says what a
   Context without a team is good *for* (it resolves a cluster and names it) and what it is not
   (`require_team`).
-* **A named refusal is rendered, not rethrown.** Both families of refusal this decorator can meet —
-  `Context.build`'s cluster resolution and a service's `require_team` are wrapped
-  as `ClickException` so the operator gets one sentence and exit 1, not the tool's own traceback. The
-  library stays free of Click to raise them; only the CLI decides how they are printed, because a
-  refusal that arrives as a bug report teaches nothing the message did not.
+* **A named refusal is rendered, not rethrown.** Three families of refusal this decorator can meet —
+  `Context.build`'s cluster resolution, a service's `require_team`, and the tree refusals that ride
+  in on a command body (`TeamNotSuppliedError`, a missing deployer keypair, a locked configuration
+  file, an obsolete trigger directory) are wrapped as `ClickException` so the operator gets one
+  sentence and exit 1, not the tool's own traceback. The library stays free of Click to raise them;
+  only the CLI decides how they are printed, because a refusal that arrives as a bug report teaches
+  nothing the message did not. The same rendering covers the commands that build no `Context` at
+  all, through the group class in `cli.kmt`.
 * **Nothing here asks `kubectl`.** The answer comes from `Context.build`, which reads
   `platform_config` and a kubeconfig file and opens no socket. Both
   `kubectl config current-context` call sites are deleted for the same reason: a command whose cluster came
@@ -53,6 +56,9 @@ from kubementat.core.config.stamp import check_configuration_stamp
 from kubementat.errors import (
     ClusterIdentityCollisionError,
     ClusterResolutionError,
+    DeployerKeyMissingError,
+    LockedConfigFileError,
+    ObsoleteTriggerDirectoryError,
     TeamNotSuppliedError,
 )
 
@@ -129,7 +135,8 @@ def kmt_context(func):
         # `Error: …` line the resolution failures already produce -- see `_resolve`'s docstring.
         try:
             return func(*args, resolved, **params)
-        except TeamNotSuppliedError as error:
+        except (TeamNotSuppliedError, DeployerKeyMissingError,
+                LockedConfigFileError, ObsoleteTriggerDirectoryError) as error:
             raise click.ClickException(str(error))
 
     return with_context

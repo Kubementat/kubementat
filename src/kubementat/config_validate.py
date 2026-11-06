@@ -71,7 +71,8 @@ from kubementat.core.config.config import Config
 from kubementat.core.identity import registry as _registry
 from kubementat.core.identity.context import Context
 from kubementat.core.config.stamp import ConfigurationStamp
-from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
+from kubementat.core.config.reads import read_decrypted
+from kubementat.errors import LockedConfigFileError
 
 # The finding kinds. Exactly two, because the exit code is decided by their presence and nothing
 # else: `error` refuses, `warning` prints and continues. That second shape is not invented here --

@@ -39,9 +39,10 @@ from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 from kubementat import config_init, config_keys
 from kubementat.config_init import CREATED, EXISTED, SKIPPED
 from kubementat.config_keys import (GPG_PRIVATE_NAME, GPG_PUBLIC_NAME, KEYPAIR_FILE_NAMES,
-                                    SSH_PRIVATE_NAME, SSH_PUBLIC_NAME, DeployerKeyMissingError,
+                                    SSH_PRIVATE_NAME, SSH_PUBLIC_NAME,
                                     DeployerKeypair, ensure_deployer_keypair,
                                     require_deployer_keypair)
+from kubementat.errors import DeployerKeyMissingError
 from kubementat.crypto_utils import CryptoUtils
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

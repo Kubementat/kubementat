@@ -1,5 +1,27 @@
 # Unreleased
 
+- **The last three exceptions that were `click.ClickException` subclasses descend from
+  `KubementatError` now.** `LockedConfigFileError`, `DeployerKeyMissingError` and
+  `ObsoleteTriggerDirectoryError` were the whole remainder of the errors move: every other refusal
+  had come home to `errors.py` already, and these three had stayed in `core/config/reads.py`,
+  `config_keys.py` and `tekton_utils.py` with the CLI class as their base. That base was the gap
+  the doctrine had been claiming closed: `cli/context.py` says the library stays free of Click to
+  raise and only the CLI decides how a refusal is printed, and while that was true everywhere else
+  these three got their `Error:` line and exit 1 from Click itself, for free. They move with their
+  prose and with the one constructor they own (`UNLOCK_INSTRUCTION` travels with the class, as
+  nothing else imported it), the raise sites keep their sentences, and the CLI starts paying for
+  the rendering instead of receiving it: `kmt_context`'s catch names all four tree refusals it can
+  meet, and the root group carries a new `KmtGroup.invoke` that renders the ones its decorated half
+  never meets — the `config` and `environments` verbs build no `Context` because they touch no
+  cluster, so without the group class the same locked file that is one sentence inside a decorated
+  command was a traceback on the undecorated half. `errors.py` goes from 34 classes to 37,
+  `click` is now imported nowhere under `src/kubementat/` for a raise, and the old
+  `format_message()` accessor — a ClickException method a test used to read the message through —
+  became `str(exc)`, which is what the message is now. Proved as product and not as structure: the
+  new row in the locked-file test runs `kmt config show` over a tree whose encrypted half is
+  ciphertext, through the root group's class wrapped around the real `config` subcommand, and
+  asserts one exit-1 line and the sentence that names git-crypt. (15 files.)
+
 - **Five pure helpers left `kubernetes_utils.py`, which is the last thing taken out of it before it gets
   split rather than moved.** `parse_cpu`, `parse_memory` and `plural_for_kind` are in a new
   `core/quantities.py`; `kubectl_target_args` and `helm_target_args` sit in `core/identity/target.py` below

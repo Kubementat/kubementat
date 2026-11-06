@@ -827,9 +827,9 @@ def _read_document(path: Path) -> dict:
     """
     try:
         # The read is the seam's, so a file holding ciphertext is refused by name and asked
-        # about git-crypt rather than about the utf-8 codec. `LockedConfigFileError` is a
-        # `ClickException` and not an `OSError`, so it walks past the handler below untouched — which
-        # is what the docstring's promise needed to mean for this input.
+        # about git-crypt rather than about the utf-8 codec. `LockedConfigFileError` descends from
+        # `KubementatError` and not an `OSError`, so it walks past the handler below untouched —
+        # which is what the docstring's promise needed to mean for this input.
         raw = read_decrypted(path, "static layer file")
     except OSError as error:
         raise click.ClickException(
