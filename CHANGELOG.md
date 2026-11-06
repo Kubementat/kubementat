@@ -1,5 +1,46 @@
 # Unreleased
 
+- **The five refusals that name a thing which is not there moved to `kubementat.errors`.**
+  `PodNotFoundError`, `ServiceAccountTokenNotFoundError` and `NamespaceNotFoundError` were written in
+  `kubernetes_utils.py`, `ResourceWithoutNameError` in `k8s_apply.py`, and `CommandExecutionError` in
+  `shell.py`; all five are written once in `src/kubementat/errors.py` now, under a commented section
+  that says what they have in common — each names an object the reader was told to expect and the
+  cluster, the file, or the `PATH` does not have — and every docstring travelled with its class
+  verbatim.
+
+  **The one deviation from the census.** The census said `shell.py`'s `__all__` had to keep
+  `CommandExecutionError` bound so the 16 `module.ClassName` attribute references keep resolving.
+  Repointing them is better, so this does: `__all__` is `["CommandResult", "run"]` now, and every
+  reference that read the class off the `shell` module — 6 in `src/` and 8 in `tests/`, the census's
+  16 minus two that belong to `ci_utils` and `tekton_utils` — reads `errors.CommandExecutionError`
+  instead. `shell.py` no longer binds the class under any name, so the name is not reachable from two
+  modules, and an `__all__` that listed a class the module stopped owning is exactly the re-export the
+  project rule forbids. No reference was dynamic: the two `REPORT_ONLY_CALLS` sets in the kubectl and
+  helm argv scans read a call's AST name, and they match `errors.CommandExecutionError` as happily as
+  they matched the bare one.
+
+  **What did not change.** No message, no raise, no catch, no assertion text. The five classes stayed
+  flat on `Exception` and got no base — nothing in the tree catches this group as a family, so a
+  `NotFoundError` under them would be a comment about a hierarchy nobody uses, and re-hanging them off
+  `KubementatError` would widen what `except KubementatError` takes without a caller asking for that.
+  The three `click.ClickException` subclasses stayed put, as Phase 1 decided. 12 test files and 11
+  modules got import addresses and nothing else, and `kubernetes_utils.py` gained no package, no split
+  and no helper — that is Phase 2's work. Nine `Raises:` lines and two `:class:` mentions that spelled
+  the old address were repointed by hand, since prose is invisible to the suite; eight of the nine were
+  in other modules' docstrings and the ninth is `shell.run`'s own. One paragraph of
+  `k8s_apply.py`'s module docstring said the class "lives here", which stopped being true the moment it
+  moved, so it now says where it lives and why the raise still speaks from here.
+
+  **Evidence.** `uv run pytest -q` reports 1775 passed, 1 skipped (53 s);
+  `git grep -n "class .*NotFoundError\|class CommandExecutionError\|class ResourceWithoutNameError" -- src/kubementat`
+  answers with `errors.py` plus the two `tekton_utils` generation classes, which are another group's
+  still-to-move work and not a leak from this one; the same grep with the qualified forms
+  `kubementat.shell.X`/`kubementat.kubernetes_utils.X`/`k8s_apply.X` names no error class at all;
+  `git grep -n -A6 "__all__" -- src/kubementat/shell.py` shows no error class listed; and
+  `python3 .agent-work/import_graph.py src` prints `none` under `== CYCLES ==` and under
+  `== LAYER VIOLATIONS ==`, with `kubementat.shell -> kubementat.errors` the only new edge.
+
+
 - **The seven cluster refusals moved out of `kubementat.cluster` and into `kubementat.errors`.**
   `ClusterResolutionError`, `ClusterNotConfiguredError`, `ClusterContextNotFoundError`,
   `ClusterFileUnreadableError`, `ServiceAccountNotMountedError`, `StatedClusterMismatchError` and

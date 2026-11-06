@@ -361,7 +361,7 @@ class HelmUtils:
         installed when the sentence was written.
 
         Raises:
-            kubementat.shell.CommandExecutionError: When `helm` cannot answer. That is a cluster
+            kubementat.errors.CommandExecutionError: When `helm` cannot answer. That is a cluster
                 that is not reachable or a kubeconfig that is wrong, and guessing past it would
                 report an uninstalled component on a cluster that still has it.
         '''

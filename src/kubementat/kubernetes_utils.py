@@ -9,8 +9,14 @@ from typing import Optional
 from kubernetes import client, dynamic
 
 from kubementat.cluster import ClusterTarget, Context
-from kubementat.errors import ClusterNotConfiguredError
+from kubementat.errors import (
+    ClusterNotConfiguredError,
+    NamespaceNotFoundError,
+    PodNotFoundError,
+    ServiceAccountTokenNotFoundError,
+)
 
+from kubementat import errors
 from kubementat import shell
 
 # A Secret that carries a service account's credentials is recognised by its type plus the
@@ -154,31 +160,6 @@ def plural_for_kind(kind: str) -> str:
     if lowered.endswith(("s", "x", "ch", "sh")):
         return lowered + "es"
     return lowered + "s"
-
-
-class PodNotFoundError(Exception):
-    """No pod matched the query, i.e. the component is not running on this cluster.
-
-    "Component not installed" is an ordinary state, not a programming error, so it is
-    reported as a message the operator can act on rather than as an IndexError.
-    """
-
-
-class ServiceAccountTokenNotFoundError(Exception):
-    """A service account has no token secret to read.
-
-    Clusters since 1.24 do not mint a token for a service account on its own, so the
-    secret has to be requested once. This error names the command that does it.
-    """
-
-
-class NamespaceNotFoundError(Exception):
-    """The namespace named on the command line is not on this cluster.
-
-    Reading a namespace that was never created is an operator typo or a misremembered
-    install, not a programming error, so it is a message that names the namespace rather
-    than an ApiException whose status code means nothing without `kubectl explain`.
-    """
 
 
 # How kubementat addresses a deployment's pods, wherever a selector is needed (the same
@@ -1477,7 +1458,7 @@ class KubernetesUtils:
             # make the tunnel look frozen — nothing reaches the terminal until it exits.
             shell.run(argv, capture=False, check=True)
             return 0
-        except shell.CommandExecutionError as error:
+        except errors.CommandExecutionError as error:
             logging.error(f"An error occured while opening a tunnel to pod: {pod_name} in namespace: {namespace}.")
             logging.error(error)
             return 1

@@ -23,7 +23,8 @@ import pytest
 from kubernetes import client
 
 from kubementat import shell
-from kubementat.kubernetes_utils import KubernetesUtils, ServiceAccountTokenNotFoundError
+from kubementat.errors import ServiceAccountTokenNotFoundError
+from kubementat.kubernetes_utils import KubernetesUtils
 from cluster_fixture import TARGET_DEV
 
 # A status that is not 409/404: neither "exists" nor "already gone", so it has to reach

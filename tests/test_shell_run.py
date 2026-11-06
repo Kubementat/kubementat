@@ -22,7 +22,7 @@ import sys
 
 import pytest
 
-from kubementat import shell
+from kubementat import errors, shell
 
 # A program that prints what it was handed, so argv corruption is visible as a diff.
 PRINT_ARGV = "import json,sys; print(json.dumps(sys.argv[1:]))"
@@ -119,7 +119,7 @@ def test_output_is_held_back_when_captured(capfd):
 # verdicts
 # ---------------------------------------------------------------------------
 def test_a_non_zero_exit_raises_and_names_the_whole_command():
-    with pytest.raises(shell.CommandExecutionError) as excinfo:
+    with pytest.raises(errors.CommandExecutionError) as excinfo:
         shell.run([sys.executable, "-c", "import sys; sys.stderr.write('boom\\n'); sys.exit(3)"],
                   capture=True)
 
@@ -139,7 +139,7 @@ def test_check_false_hands_the_verdict_back_instead_of_raising():
 
 
 def test_a_missing_binary_is_reported_as_such():
-    with pytest.raises(shell.CommandExecutionError) as excinfo:
+    with pytest.raises(errors.CommandExecutionError) as excinfo:
         shell.run(["/definitely/not/here"])
 
     assert "not found" in str(excinfo.value).lower()
@@ -154,7 +154,7 @@ def test_a_missing_working_directory_blames_the_directory(tmp_path):
     """
     missing = tmp_path / "never-created"
 
-    with pytest.raises(shell.CommandExecutionError) as excinfo:
+    with pytest.raises(errors.CommandExecutionError) as excinfo:
         shell.run([sys.executable, "-c", "print('unreachable')"], cwd=str(missing))
 
     assert str(missing) in str(excinfo.value)
@@ -195,7 +195,7 @@ def test_retries_keep_trying_until_the_command_works(tmp_path):
 def test_retries_are_not_attempted_when_not_asked_for(tmp_path):
     script, counter = _flaky_script(tmp_path, successes_after=2)
 
-    with pytest.raises(shell.CommandExecutionError):
+    with pytest.raises(errors.CommandExecutionError):
         shell.run([str(script)])
 
     assert _attempts(counter) == 1
@@ -204,7 +204,7 @@ def test_retries_are_not_attempted_when_not_asked_for(tmp_path):
 def test_retries_are_exhausted_then_the_failure_is_reported(tmp_path):
     script, counter = _flaky_script(tmp_path, successes_after=9)
 
-    with pytest.raises(shell.CommandExecutionError):
+    with pytest.raises(errors.CommandExecutionError):
         shell.run([str(script)], retries=2, retry_backoff=0.01)
 
     assert _attempts(counter) == 3, "the 3-attempt ceiling the install scripts had"

@@ -131,7 +131,7 @@ class CiUtils:
 
         Raises:
             CiImageNotConfiguredError: If the image is not configured, before any pod is created.
-            kubementat.shell.CommandExecutionError: If `kubectl` refuses the pod. A non-zero exit
+            kubementat.errors.CommandExecutionError: If `kubectl` refuses the pod. A non-zero exit
                 here is the container's own exit code, so an interactive session the operator left
                 is reported, not swallowed.
         '''

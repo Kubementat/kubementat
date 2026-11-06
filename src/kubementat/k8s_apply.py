@@ -5,8 +5,10 @@ files, decides what each document is, and makes one call. A class holding it is 
 other holder of the same rule reach for that class, and `TektonUtils` — which needs the walk and
 not an `Automation` — was paying for it with a deferred import.
 
-`ResourceWithoutNameError` lives here for the same reason: this is the module that raises it, and
-the module that raises a refusal is the module that has to be able to name it.
+`ResourceWithoutNameError` is what this primitive raises when a document cannot be addressed. It
+lives in `kubementat.errors` because the refusal outlives this module — `setup_triggers` reuses the
+walk and has to be able to name the same failure — while what the refusal says about the file it
+found is told here, at the raise.
 """
 
 import logging
@@ -14,17 +16,7 @@ from pathlib import Path
 
 import yaml
 
-
-class ResourceWithoutNameError(Exception):
-    """A document that was supposed to be applied cannot be addressed.
-
-    The alternative was a `KeyError` from inside the log line that prints the resource's name,
-    which is the wrong diagnosis at the wrong address: it reads as kubementat's bug, not as a
-    manifest that is missing the one field every Kubernetes object is identified by. Named here
-    instead so a caller (and `setup_triggers`, which reuses this primitive) can decide whether
-    one bad file should stop the whole directory.
-    """
-
+from kubementat.errors import ResourceWithoutNameError
 
 # Generator templates are not resources. They live in `templates/` directories by convention
 # (`tekton_ci/pipelines/templates/`, `tekton_ci/triggers/templates/`) and they carry unresolved

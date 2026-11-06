@@ -148,3 +148,88 @@ class ClusterIdentityCollisionError(KubementatError):
     belongs to someone else. The refusal is given no override flag, so there is nothing here to
     pass.
     """
+
+
+# ---------------------------------------------------------------------------
+# The refusals that name a thing which is not there.
+#
+# Four of these five are one sentence told about five different objects: the namespace, the pod, the
+# service account's token, or the name a document should have carried is not on the cluster, and the
+# refusal says so instead of letting the next line fail on it. They were raised from three different
+# modules, and they travel here together because a caller cannot care which module a refusal arrived
+# from — the sentence it has to answer is the same sentence either way, and none of the five is a
+# fact about the caller's own plumbing.
+#
+# `CommandExecutionError` is in the group for one reason and not for company: when the program a
+# command tries to start is not on the PATH, that is the same absence with a return code attached to
+# it. Its payload is the argv and the exit rather than a name, which is why it carries those two
+# fields.
+#
+# They share no family base of their own, and that is a different thing from sharing no base at all:
+# each descends from `KubementatError`, because the promise that base makes is "one catch means a
+# kubementat refusal", and a missing namespace is exactly such a refusal. A base that some domain
+# errors decline to join is a base that lies to whoever writes `except KubementatError`, and it lies
+# in the direction of the traceback rather than the answer. Nothing in the tree catches that base
+# today, so joining it changes no behaviour; it is the consistency that makes it worth having.
+# ---------------------------------------------------------------------------
+
+
+class PodNotFoundError(KubementatError):
+    """No pod matched the query, i.e. the component is not running on this cluster.
+
+    "Component not installed" is an ordinary state, not a programming error, so it is
+    reported as a message the operator can act on rather than as an IndexError.
+    """
+
+
+class ServiceAccountTokenNotFoundError(KubementatError):
+    """A service account has no token secret to read.
+
+    Clusters since 1.24 do not mint a token for a service account on its own, so the
+    secret has to be requested once. This error names the command that does it.
+    """
+
+
+class NamespaceNotFoundError(KubementatError):
+    """The namespace named on the command line is not on this cluster.
+
+    Reading a namespace that was never created is an operator typo or a misremembered
+    install, not a programming error, so it is a message that names the namespace rather
+    than an ApiException whose status code means nothing without `kubectl explain`.
+    """
+
+
+class ResourceWithoutNameError(KubementatError):
+    """A document that was supposed to be applied cannot be addressed.
+
+    The alternative was a `KeyError` from inside the log line that prints the resource's name,
+    which is the wrong diagnosis at the wrong address: it reads as kubementat's bug, not as a
+    manifest that is missing the one field every Kubernetes object is identified by. Named here
+    instead so a caller (and `setup_triggers`, which reuses this primitive) can decide whether
+    one bad file should stop the whole directory.
+    """
+
+
+class CommandExecutionError(KubementatError):
+    """A command exited non-zero, or could not be started.
+
+    ``argv`` and ``returncode`` stay on the exception so callers can decide what to do
+    without parsing the message.
+    """
+
+    def __init__(self, result, message=None):
+        self.result = result
+        self.argv = list(result.argv)
+        self.returncode = result.returncode
+        super().__init__(message or self._default_message())
+
+    def _default_message(self):
+        detail = (self.result.stderr or "").strip()
+        lines = [
+            f"Command failed with exit code {self.returncode}: {self.result.argv_display}",
+        ]
+        if detail:
+            # Keep the operator's console readable; the whole log is where the noise lives.
+            tail = detail if len(detail) <= 2000 else detail[-2000:]
+            lines.append(f"stderr: {tail}")
+        return "\n".join(lines)

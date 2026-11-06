@@ -10,6 +10,7 @@ from pathlib import Path
 from kubernetes import client
 import click
 from kubementat import shell
+from kubementat import errors
 from kubementat import constants
 from kubementat import config_bootstrap, config_keys
 from kubementat.config import Config
@@ -366,7 +367,7 @@ class Automation:
             if not self.kubernetes_utils.self_can("create", resource)
         ]
         if denied:
-            raise shell.CommandExecutionError(
+            raise errors.CommandExecutionError(
                 shell.CommandResult(["kubectl", "auth", "can-i", "create", "<cluster scope>"], 1),
                 "this service account cannot create: " + ", ".join(denied))
         logging.info("Cluster permission check passed.")

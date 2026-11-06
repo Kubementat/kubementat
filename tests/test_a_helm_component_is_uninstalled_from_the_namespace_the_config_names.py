@@ -31,7 +31,7 @@ import pytest
 
 from cluster_parity import API_PROGRAM
 
-from kubementat import shell
+from kubementat import errors
 from kubementat import constants
 from kubementat.config import Config
 from kubementat.cluster import Context
@@ -443,7 +443,7 @@ def test_an_unreachable_cluster_is_not_reported_as_an_absent_component(fixture_r
     configured(fixture_repo)
     fake_binaries.respond("helm", "connect: connection refused", exit_code=1, subcommand="list")
 
-    with pytest.raises(shell.CommandExecutionError):
+    with pytest.raises(errors.CommandExecutionError):
         uninstalled(fixture_repo, recorded_api)
 
     assert not [command for command in fake_binaries.commands() if "delete" in command]

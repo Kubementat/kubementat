@@ -40,6 +40,7 @@ import click
 import yaml
 from kubernetes import client
 
+from kubementat import errors
 from kubementat import shell
 from kubementat.automations.routing import traefik_presence
 from kubementat.config import Config
@@ -206,7 +207,7 @@ def install_routing(ctx, update: bool = False,
     ------
     FileNotFoundError:
         When the environment has no `static.json`, which is what every other command does too.
-    kubementat.shell.CommandExecutionError:
+    kubementat.errors.CommandExecutionError:
         When `helmfile apply` fails, or when the `--update` CRD step fails: both raise with the
         command's output attached, like every other apply in the codebase. Nothing retries, so a run
         that half-applied is the operator's to read rather than a second attempt's to hide.
@@ -403,7 +404,7 @@ def _apply_chart_crds_before_the_release(chart: str = TRAEFIK_CHART, ctx=None) -
 
     Raises
     ------
-    kubementat.shell.CommandExecutionError:
+    kubementat.errors.CommandExecutionError:
         If either read fails. Proceeding would mean reporting an *upgraded* release over
         definitions that cannot serve it, and that is the one outcome here the next command cannot
         diagnose -- a controller that starts but 404s every custom resource looks, from the outside,
@@ -428,13 +429,13 @@ def _apply_chart_crds_before_the_release(chart: str = TRAEFIK_CHART, ctx=None) -
     shown = shell.run(["helm", "show", "crds", chart], capture=True, check=False)
     definitions = (shown.stdout or "").strip()
     if not shown.ok:
-        raise shell.CommandExecutionError(shown, (
+        raise errors.CommandExecutionError(shown, (
             f"--update asks for {chart}'s CustomResourceDefinitions before it upgrades anything, and"
             f" `helm show crds {chart}` failed. An upgrade over definitions that cannot serve the new"
             f" controller is not an upgrade, so nothing was applied. Most often the repository is"
             f" not added to this helm:\n{shell_output(shown)}"))
     if not definitions:
-        raise shell.CommandExecutionError(shown, (
+        raise errors.CommandExecutionError(shown, (
             f"--update asks for {chart}'s CustomResourceDefinitions before it upgrades anything, and"
             f" `helm show crds {chart}` answered with nothing. A chart that ships no crds/ is not"
             f" {TRAEFIK_CHART}, and applying nothing then calling the release upgraded is what this"
@@ -449,7 +450,7 @@ def _apply_chart_crds_before_the_release(chart: str = TRAEFIK_CHART, ctx=None) -
                          "--server-side", "--force-conflicts", "-f", "-"],
                         input=definitions, capture=True, check=False)
     if not applied.ok:
-        raise shell.CommandExecutionError(applied, (
+        raise errors.CommandExecutionError(applied, (
             f"the CustomResourceDefinitions of {chart} could not be applied (exit"
             f" {applied.returncode}), so no release was upgraded. `kubectl apply --server-side"
             f" --force-conflicts` owns the fields it applies on purpose; a conflict it refuses is"

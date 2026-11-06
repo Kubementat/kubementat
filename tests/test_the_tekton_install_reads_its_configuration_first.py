@@ -17,7 +17,7 @@ than to report that the operator is doing something twice.
 
 import pytest
 
-from kubementat import shell
+from kubementat import errors, shell
 from kubementat.tekton_utils import (
     HELM_DEPLOYER_CLUSTER_ROLE_NAME,
     TEKTON_RELEASE_BASE_URL,
@@ -223,7 +223,7 @@ def test_kubectl_refusing_a_manifest_is_the_operator_saying_no(fixture_repo, dry
     """
     fake_binaries.responses.joinpath("kubectl.exit").write_text("1")
 
-    with pytest.raises(shell.CommandExecutionError) as error:
+    with pytest.raises(errors.CommandExecutionError) as error:
         install(fixture_repo)
 
     assert error.value.result.returncode == 1

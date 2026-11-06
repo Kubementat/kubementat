@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 from kubementat import k8s_apply
-from kubementat.k8s_apply import ResourceWithoutNameError
+from kubementat.errors import ResourceWithoutNameError
 from asset_paths import tekton_ci_path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

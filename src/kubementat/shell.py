@@ -9,8 +9,9 @@ The rules it enforces are the reason the module exists:
   again (see plan D8).
 * **No mutating the whole process.** Working directory is an argument (``cwd=``), not
   ``os.chdir``.
-* **Failures name the command.** A non-zero exit raises :class:`CommandExecutionError`
-  carrying the full argv and the return code, so the operator sees what was tried.
+* **Failures name the command.** A non-zero exit raises
+  :class:`kubementat.errors.CommandExecutionError` carrying the full argv and the return code, so
+  the operator sees what was tried.
 
 The module is deliberately free of click, config and cluster knowledge; it is the bottom
 layer that both ``cli/`` and ``kubementat`` may import.
@@ -22,7 +23,9 @@ import shlex
 import subprocess
 import time
 
-__all__ = ["CommandResult", "CommandExecutionError", "run"]
+from kubementat import errors
+
+__all__ = ["CommandResult", "run"]
 
 
 class CommandResult:
@@ -48,31 +51,6 @@ class CommandResult:
         return f"CommandResult(argv={self.argv!r}, returncode={self.returncode})"
 
 
-class CommandExecutionError(Exception):
-    """A command exited non-zero, or could not be started.
-
-    ``argv`` and ``returncode`` stay on the exception so callers can decide what to do
-    without parsing the message.
-    """
-
-    def __init__(self, result, message=None):
-        self.result = result
-        self.argv = list(result.argv)
-        self.returncode = result.returncode
-        super().__init__(message or self._default_message())
-
-    def _default_message(self):
-        detail = (self.result.stderr or "").strip()
-        lines = [
-            f"Command failed with exit code {self.returncode}: {self.result.argv_display}",
-        ]
-        if detail:
-            # Keep the operator's console readable; the whole log is where the noise lives.
-            tail = detail if len(detail) <= 2000 else detail[-2000:]
-            lines.append(f"stderr: {tail}")
-        return "\n".join(lines)
-
-
 def run(argv, *, cwd=None, env=None, capture=False, check=True, retries=0,
         retry_backoff=0.5, dry_run=False, input=None):
     """Run *argv* and return a :class:`CommandResult`.
@@ -91,8 +69,8 @@ def run(argv, *, cwd=None, env=None, capture=False, check=True, retries=0,
         what you want for anything interactive (``kubectl port-forward``); capturing is for
         output you are about to parse.
     check:
-        Raise :class:`CommandExecutionError` on a non-zero exit. ``check=False`` hands the
-        verdict back to the caller.
+        Raise :class:`kubementat.errors.CommandExecutionError` on a non-zero exit. ``check=False``
+        hands the verdict back to the caller.
     retries:
         Extra attempts after the first for commands that fail for transient reasons. The
         delay is constant, ``retry_backoff`` seconds between attempts — this matches the
@@ -115,7 +93,7 @@ def run(argv, *, cwd=None, env=None, capture=False, check=True, retries=0,
         If *argv* is a string, or holds a non-string item.
     ValueError:
         If *argv* is empty.
-    CommandExecutionError:
+    kubementat.errors.CommandExecutionError:
         On a non-zero exit with ``check=True``, or on an unusable command line.
     """
     argv = _validated_argv(argv)
@@ -143,18 +121,18 @@ def run(argv, *, cwd=None, env=None, capture=False, check=True, retries=0,
             # the directory we were asked to start in is. Only one of them means the
             # operator should go install something.
             if cwd is not None and not os.path.isdir(cwd):
-                raise CommandExecutionError(
+                raise errors.CommandExecutionError(
                     CommandResult(argv, 127),
                     f"Working directory does not exist: {cwd}\n"
                     f"Command that would have run: {_display(argv)}",
                 ) from error
-            raise CommandExecutionError(
+            raise errors.CommandExecutionError(
                 CommandResult(argv, 127),
                 f"Command not found: {argv[0]} ({error})\n"
                 f"Full command: {_display(argv)}",
             ) from error
         except OSError as error:
-            raise CommandExecutionError(
+            raise errors.CommandExecutionError(
                 CommandResult(argv, 126), f"Could not execute {argv[0]}: {error}"
             ) from error
         # KeyboardInterrupt deliberately propagates: Ctrl+C is the user's decision.
@@ -178,7 +156,7 @@ def run(argv, *, cwd=None, env=None, capture=False, check=True, retries=0,
             continue
 
         if check:
-            raise CommandExecutionError(result)
+            raise errors.CommandExecutionError(result)
         logging.warning(f"Command exited {result.returncode} (check=False): {_display(argv)}")
         return result
 

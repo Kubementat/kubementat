@@ -26,13 +26,14 @@ from pathlib import Path
 
 import pytest
 
-from kubementat import constants, shell
+from kubementat import constants, errors, shell
 from kubementat.automation import Automation
 from kubementat.config import component_config_key
 from cluster_fixture import TARGET_DEV, configuration_only_context
 from asset_paths import values_path
 from kubementat.helm_utils import HelmUtils
-from kubementat.kubernetes_utils import KubernetesUtils, PodNotFoundError, kubectl_target_args
+from kubementat.errors import PodNotFoundError
+from kubementat.kubernetes_utils import KubernetesUtils, kubectl_target_args
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -505,7 +506,7 @@ def test_a_denied_verb_stops_the_run_and_names_the_verbs_it_denied(recorded_api)
     automation = Automation.__new__(Automation)
     automation.kubernetes_utils = utils
 
-    with pytest.raises(shell.CommandExecutionError) as error:
+    with pytest.raises(errors.CommandExecutionError) as error:
         automation.check_cluster_permissions()
     assert "clusterroles" in str(error.value)
 

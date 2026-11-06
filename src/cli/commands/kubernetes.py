@@ -24,10 +24,10 @@ from pathlib import Path
 import click
 from kubernetes.client.exceptions import ApiException
 
-from kubementat import shell
-from kubementat.kubernetes_utils import (KubernetesUtils, NamespaceNotFoundError,
-                                         PodNotFoundError, ServiceAccountTokenNotFoundError,
-                                         parse_memory)
+from kubementat import errors
+from kubementat.errors import (NamespaceNotFoundError,
+                               PodNotFoundError, ServiceAccountTokenNotFoundError)
+from kubementat.kubernetes_utils import KubernetesUtils, parse_memory
 from cli.context import kmt_context
 
 
@@ -231,7 +231,7 @@ def _attach(action, *args):
         return action(*args)
     except (NamespaceNotFoundError, PodNotFoundError) as error:
         raise click.ClickException(str(error))
-    except shell.CommandExecutionError as error:
+    except errors.CommandExecutionError as error:
         raise click.ClickException(str(error))
 
 

@@ -31,8 +31,8 @@ from conftest import FIXTURE_ENVIRONMENT
 from kubementat.kubernetes_utils import kubectl_target_args
 from kubementat import shell
 from cluster_fixture import TARGET_DEV
-from kubementat.kubernetes_utils import (NamespaceNotFoundError, PodNotFoundError,
-                                         KubernetesUtils)
+from kubementat.errors import NamespaceNotFoundError, PodNotFoundError
+from kubementat.kubernetes_utils import KubernetesUtils
 
 NAMESPACE = "deploy-me"
 DEPLOYMENT = "web"

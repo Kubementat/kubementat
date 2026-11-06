@@ -1116,7 +1116,7 @@ class TektonUtils:
 
         Raises:
             TektonReleaseVersionNotConfiguredError: If a pinned release version is not configured.
-            kubementat.shell.CommandExecutionError: If `kubectl` refuses a manifest.
+            kubementat.errors.CommandExecutionError: If `kubectl` refuses a manifest.
             kubernetes.client.exceptions.ApiException: If the ClusterRole cannot be written.
         """
         env_static = self.config.get('env_static')
@@ -1245,8 +1245,8 @@ class TektonUtils:
 
         Raises:
             PipelineNamespaceNotConfiguredError: If the team's static config has no namespace.
-            kubementat.k8s_apply.ResourceWithoutNameError: If a trigger manifest has no name.
-            kubementat.shell.CommandExecutionError: Never, by this method itself — it calls no
+            kubementat.errors.ResourceWithoutNameError: If a trigger manifest has no name.
+            kubementat.errors.CommandExecutionError: Never, by this method itself — it calls no
                 `kubectl`, which is what the RBAC primitives made unnecessary.
             kubernetes.client.exceptions.ApiException: If the cluster refuses an object.
         """
@@ -1387,7 +1387,7 @@ class TektonUtils:
         Raises:
             CleanupJobImageNotConfiguredError: If the CI image cannot be named from configuration.
             KeyError: If `cluster-cronjobs` is not a kubementat component (a typo, not a rename).
-            kubementat.shell.CommandExecutionError: Never by this method itself — it calls no
+            kubementat.errors.CommandExecutionError: Never by this method itself — it calls no
                 `kubectl`.
             kubernetes.client.exceptions.ApiException: If the cluster refuses an object.
         """
