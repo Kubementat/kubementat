@@ -1,7 +1,7 @@
 """The 1:1 check compares the siblings in the root the command was told about — not the ones the
 process finds for itself.
 
-The whole claim about `Context.build` is that one root is threaded, and `cluster.py:1067` is
+The whole claim about `Context.build` is that one root is threaded, and its declaration layers are
 the half where that is easy to get wrong: the environment's own `static.json` and the sibling
 sweep are two reads, and plumbing the flag to only the first would still resolve *this*
 environment correctly. It would just compare it against a different tree's siblings, which is how

@@ -33,7 +33,8 @@ environment. Same anti-bootstrap claim, same nothing-is-written.
 
 **One refusal about keys, and it is the cheap true one.** The two cluster keys on `--team` are refused
 for one reason — one directory is exactly one cluster, and what resolves it reads the environment's
-file and no other (`cluster.py:737`, `cluster.py:898`). No table of "keys a team reader consults"
+file and no other (`EnvironmentRegistry.resolve` and `_environment_declaration`, both in
+`core/identity/registry.py`). No table of "keys a team reader consults"
 appears anywhere, because `config show` already answers that by tagging each key with the layer and the
 file it came from, and this verb would be guessing about every call site in `src/` to hold one.
 

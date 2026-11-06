@@ -27,7 +27,7 @@ What this cannot catch, said plainly so nobody reads it as more than it is:
 * **`**kwargs` splats** pass without anything being checked, because the call site says a dial is
   being forwarded and the scan cannot see the dictionary.
 * **the indirections**: a `Config(...)` built inside `src/` on behalf of a test
-  (`Context.build` does exactly this at `cluster.py:724`, with `preload_configs=False`, and the
+  (`Context.build` does exactly this, with `preload_configs=False`, and the
   service classes receive that object inside the `Context` rather than building one of their own), a
   helper defined in `conftest.py` that defaults the root, or a test that leaves `KUBEMENTAT_HOME`
   unset and lets a command construct one for itself. None of those are a `Config` call in `tests/`,

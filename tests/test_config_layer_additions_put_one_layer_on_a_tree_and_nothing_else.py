@@ -10,8 +10,9 @@ function creates a layer — is what both of them here are held to.
 
 **One layer, and no answers.** The write set is the environment's two static files plus its two
 `tekton/` directories, or the team's two empty files plus its four layer directories. No template is
-copied, no namespace is written, no cluster key goes into a team's file (`cluster.py:737` and
-`:898` read the environment's file and no other, and one directory is exactly one cluster). Where a
+copied, no namespace is written, no cluster key goes into a team's file (`EnvironmentRegistry.resolve`
+and `_environment_declaration`, both in `core/identity/registry.py`, read the environment's file and no
+other, and one directory is exactly one cluster). Where a
 key belongs it is `null`, the same way `init` writes it, because `config set` is the verb that answers
 and these two verbs write no answer at all.
 
@@ -272,7 +273,8 @@ def test_add_team_writes_two_empty_documents_and_the_four_directories_the_proper
     The documents are asserted as empty and not as present: an empty file that exists and a file with
     a cluster key in it both satisfy `is_file()`, and only one of them is a team layer — the other is
     a claim that a team addresses a cluster of its own, which is the measured wrong answer
-    (`cluster.py:737`, `:898`: one directory is exactly one cluster, and the reader opens the
+    (`EnvironmentRegistry.resolve` and `_environment_declaration`, in `core/identity/registry.py`:
+    one directory is exactly one cluster, and the reader opens the
     environment's file). The four directories are compared against `Config`, so a moved property is a
     failed assertion here and not a path that quietly keeps matching itself.
     """

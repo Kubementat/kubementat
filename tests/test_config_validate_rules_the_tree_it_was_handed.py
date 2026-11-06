@@ -56,7 +56,8 @@ ENVIRONMENT = "prod"
 TEAM = "alpha"
 
 # The server the collision rows point two environments at. One address, spelled once, because the
-# 1:1 check compares servers and not context names (`cluster.py:768-797`), so "the same address
+# 1:1 check compares servers and not context names (`EnvironmentRegistry.collision_check`, now in
+# `core/identity/registry.py`), so "the same address
 # twice" is the whole fixture this row needs.
 SHARED_SERVER = "https://10.0.1.9:6443"
 
@@ -214,7 +215,8 @@ def test_two_environments_in_one_root_are_refused_by_the_collision_sentence(tmp_
     })
     for environment in (ENVIRONMENT, "dev"):
         # The same two cluster keys in both environments' own `static.json`, the way the registry
-        # reads them (`cluster.py:737`: the environment's file and no other).
+        # reads them (`EnvironmentRegistry.resolve` and `_environment_declaration`, both in
+        # `core/identity/registry.py`: the environment's file and no other).
         path = root / environment / "static.json"
         existing = json.loads(path.read_text(encoding="utf-8"))
         existing.update({CLUSTER_KUBE_CONTEXT_KEY: "shared",
