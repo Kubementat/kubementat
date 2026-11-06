@@ -43,6 +43,7 @@ into this file would tell a moved property from a moved directory badly.
 """
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -180,7 +181,7 @@ def added_team(root: Path) -> None:
 # --- (1) the environment's file answers, read back through `Config` --------------------------------
 
 
-def test_set_on_the_environment_layer_lands_in_that_file_and_answers_a_read(tmp_path):
+def test_set_on_the_environment_layer_lands_in_that_file_and_answers_a_read(tmp_path, caplog):
     """Test 1: one answer, the environment layer, and a `Config` read that agrees without a grep.
 
     The read is what makes this a behaviour test and not a file-format test. A team-less reader asks
@@ -191,7 +192,11 @@ def test_set_on_the_environment_layer_lands_in_that_file_and_answers_a_read(tmp_
     """
     root = initialized_root(tmp_path)
 
-    result = run_verb("set", root, ENVIRONMENT, f"{KEY}={ENVIRONMENT_ANSWER}")
+    # The sentence is logged and not echoed, so it is read out of `caplog`. Cleared first because
+    # `initialized_root` logged it already, and this assertion is about the `set` run below saying it.
+    with caplog.at_level(logging.WARNING):
+        caplog.clear()
+        result = run_verb("set", root, ENVIRONMENT, f"{KEY}={ENVIRONMENT_ANSWER}")
 
     assert result.exit_code == 0, reported(result)
     assert printed(result) == [f"{CREATED} {properties(root).env_static_config_path}"], printed(result)
@@ -200,7 +205,7 @@ def test_set_on_the_environment_layer_lands_in_that_file_and_answers_a_read(tmp_
         "the environment file declares the key but a loaded Config does not answer it"
     # An environment layer that reaches no cluster still says so, under the same condition `init` and
     # `add-environment` say it under: this verb changed nothing about that null.
-    assert "does not address a cluster yet" in result.stderr
+    assert "does not address a cluster yet" in caplog.text
     assert tree(root) == INITIALIZED_LAYER, "one answer is one key, not one answer plus one directory"
 
 

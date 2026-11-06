@@ -76,6 +76,7 @@ environment's file and no other.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 from dataclasses import dataclass
@@ -1149,20 +1150,24 @@ def warn_cluster_not_addressed(environment, static_json_path) -> None:
     which is why it is a function here and not a `Config` method: the verb half has a `Config` and a
     `Context` and this module has neither.
 
-    On stderr, like the resolution report: it is guidance about state and not the command's output.
+    It is guidance about state and not the command's output, so it goes out as a warning rather than
+    as a line of the run's stdout. The sentence is the product's and the channel is not: `logging` is
+    what the surrounding library uses everywhere else (`config.py:905`, `automations/routing.py:320`),
+    and this was the one place under `src/kubementat/` that wrote operator-facing text straight to a
+    stream. The CLI's `configure_logging` puts warnings on stderr, so a human at a terminal
+    still reads this below the `created` lines; under `kmt` the difference is the record's timestamp
+    and `WARNING -` prefix.
+
     The three facts it owes the reader — that the environment is configured, that
     `CLUSTER_KUBE_CONTEXT is null`, and which file to edit — are asserted by
-    `tests/test_config_init_creates_a_tree_and_reports_what_it_touched.py`, so they survive as
-    an API and not as prose.
+    `tests/test_config_init_creates_a_tree_and_reports_what_it_touched.py` through the logging capture,
+    so they survive as an API and not as prose.
     """
-    click.echo("", err=True)
-    click.echo(f"Environment '{environment}' is configured, but it does not address a cluster yet: "
-               f"CLUSTER_KUBE_CONTEXT is null in {static_json_path}.", err=True)
-    click.echo("Edit that file to name the context that reaches this environment's cluster "
-               "(and CLUSTER_KUBECONFIG_PATH too, if it is not the kubeconfig kubectl reads by "
-               "default).", err=True)
-    click.echo("kubementat will not fill it in from this machine: an environment is invalid until "
-               "someone says which cluster it is, which is why init wrote null and not a guess.",
-               err=True)
-    click.echo("Run kmt environments list to see what every configured environment addresses.",
-               err=True)
+    logging.warning(
+        f"Environment '{environment}' is configured, but it does not address a cluster yet: "
+        f"CLUSTER_KUBE_CONTEXT is null in {static_json_path}. "
+        "Edit that file to name the context that reaches this environment's cluster "
+        "(and CLUSTER_KUBECONFIG_PATH too, if it is not the kubeconfig kubectl reads by default). "
+        "kubementat will not fill it in from this machine: an environment is invalid until someone "
+        "says which cluster it is, which is why init wrote null and not a guess. "
+        "Run kmt environments list to see what every configured environment addresses.")

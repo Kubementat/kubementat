@@ -37,6 +37,7 @@ note about them.
 """
 
 import json
+import logging
 import stat
 import subprocess
 from pathlib import Path
@@ -164,22 +165,27 @@ def tracked(root, tools) -> list:
                           capture_output=True, text=True).stdout.split()
 
 
-def test_the_first_run_writes_the_tree_and_reports_every_path_it_touched(root, tools):
+def test_the_first_run_writes_the_tree_and_reports_every_path_it_touched(root, tools, caplog):
     """Test 1: one line per prepared path, and the cluster sentence where guidance about state goes.
 
     The stdout/stderr split is the assertion, not decoration. The step lines come out of the library,
     which prints nothing on its own, so the verb owns them — and the file list they make is the whole
     of stdout, which is why the closing instruction is on stderr beside the cluster sentence.
+
+    The cluster sentence is asserted through `caplog` and not through the runner's stderr, because it
+    is a `logging.warning` rather than an echo. Under the CLI that record lands on stderr like the
+    instruction did; what a unit run can still pin down is that it is nowhere on stdout.
     """
-    result = run_init(root, "--environment", ENVIRONMENT, *identity_arguments())
+    with caplog.at_level(logging.WARNING):
+        result = run_init(root, "--environment", ENVIRONMENT, *identity_arguments())
 
     assert result.exit_code == 0, reported(result)
     printed = lines(result.stdout)
     assert printed == [f"created {path}" for path in prepared_paths(root)], reported(result)
     assert all(line.startswith("created ") for line in printed)
 
-    assert "does not address a cluster yet" in result.stderr
-    assert ENVIRONMENT in result.stderr
+    assert "does not address a cluster yet" in caplog.text
+    assert ENVIRONMENT in caplog.text
     assert "does not address a cluster" not in result.stdout
 
 
@@ -375,20 +381,26 @@ def test_the_verb_writes_nothing_under_the_checkout(root, tools):
     assert after == before
 
 
-def test_an_environment_handed_its_cluster_by_a_flag_does_not_claim_to_address_none(root, tools):
+def test_an_environment_handed_its_cluster_by_a_flag_does_not_claim_to_address_none(root, tools,
+                                                                                     caplog):
     """The sentence is conditional, and this is the case that makes the condition matter.
 
     `--set CLUSTER_KUBE_CONTEXT=dev-cluster` is an ordinary answer, so the tree written addresses a
     cluster and printing `CLUSTER_KUBE_CONTEXT is null` afterwards would be a false statement about
     the very tree the command configured. A verb that prints guidance because it always does is a
     verb that eventually tells an operator to edit a file that is already right.
+
+    Asserted against `caplog` because the sentence is a logged warning now; the empty-stderr half is
+    kept beside it, because a run that did say it in a stream would still be caught.
     """
-    result = run_init(root, "--environment", ENVIRONMENT, "--set", "CLUSTER_KUBE_CONTEXT=dev-cluster",
-                      *identity_arguments())
+    with caplog.at_level(logging.WARNING):
+        result = run_init(root, "--environment", ENVIRONMENT, "--set",
+                          "CLUSTER_KUBE_CONTEXT=dev-cluster", *identity_arguments())
 
     assert result.exit_code == 0
-    assert "does not address a cluster yet" not in result.stderr, \
+    assert "does not address a cluster yet" not in caplog.text, \
         "the null sentence printed over a tree that was just handed its cluster"
+    assert "does not address a cluster yet" not in result.stderr
     assert json.loads((root / ENV_STATIC).read_text())["CLUSTER_KUBE_CONTEXT"] == "dev-cluster"
 
 

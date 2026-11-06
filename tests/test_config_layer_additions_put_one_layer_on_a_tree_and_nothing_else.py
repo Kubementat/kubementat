@@ -165,7 +165,7 @@ def team_layer_paths(root, environment, team) -> list[Path]:
 # --- (1) one environment layer lands on a tree that already exists --------------------------------
 
 
-def test_add_environment_lands_the_layer_on_a_tree_init_made(tmp_path):
+def test_add_environment_lands_the_layer_on_a_tree_init_made(tmp_path, caplog):
     """Test 1: the environment's two files and two `tekton/` directories appear, and nothing else.
 
     `tree(after) - tree(before)` is the set, so a fifth path that rode along is a failure here and not
@@ -176,7 +176,12 @@ def test_add_environment_lands_the_layer_on_a_tree_init_made(tmp_path):
     before = tree(root)
     manifest_before = (root / MANIFEST).read_bytes()
 
-    result = run_verb("add-environment", root, NEW_ENVIRONMENT)
+    # The cluster sentence is a warning the verb logs and not a line it echoes, so the capture here is
+    # `caplog` and not the runner's streams. Cleared first: `initialized_root` logged the same sentence
+    # about `dev`, and this assertion is about the verb run below.
+    with caplog.at_level(logging.WARNING):
+        caplog.clear()
+        result = run_verb("add-environment", root, NEW_ENVIRONMENT)
 
     assert result.exit_code == 0, reported(result)
     assert tree(root) - before == NEW_ENVIRONMENT_LAYER
@@ -190,8 +195,9 @@ def test_add_environment_lands_the_layer_on_a_tree_init_made(tmp_path):
         f"{CREATED} {path}"
         for path in (config.env_static_config_path, config.env_static_encrypted_config_path,
                      config.tekton_env_task_dir, config.tekton_env_pipeline_dir)], printed(result)
-    assert "does not address a cluster yet" in result.stderr
-    assert NEW_ENVIRONMENT in result.stderr
+    assert "does not address a cluster yet" in caplog.text, \
+        "the new environment reaches no cluster, and the verb that created it has to say so"
+    assert NEW_ENVIRONMENT in caplog.text
 
 
 # --- (2) the second run ---------------------------------------------------------------------------

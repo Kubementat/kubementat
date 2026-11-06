@@ -378,7 +378,7 @@ def test_reading_the_written_tree_back_through_config_still_warns_that_the_defau
 # --- (7) one sentence, one owner ---------------------------------------------------------------
 
 
-def test_the_cluster_is_not_addressed_sentence_has_one_owner(tmp_path, capsys):
+def test_the_cluster_is_not_addressed_sentence_has_one_owner(tmp_path, caplog):
     """The sentence is one function, and no second implementation of it survives in `src/`.
 
     `initialize` was the second caller and it is deleted; what remains is the reason the sentence
@@ -389,9 +389,10 @@ def test_the_cluster_is_not_addressed_sentence_has_one_owner(tmp_path, capsys):
     """
     path = config_root(tmp_path) / ENVIRONMENT / "static.json"
 
-    warn_cluster_not_addressed(ENVIRONMENT, path)
+    with caplog.at_level(logging.WARNING):
+        warn_cluster_not_addressed(ENVIRONMENT, path)
 
-    printed = capsys.readouterr().err
+    printed = caplog.text
     assert f"Environment '{ENVIRONMENT}' is configured, but it does not address a cluster" in printed
     assert "CLUSTER_KUBE_CONTEXT is null" in printed
     assert str(path) in printed, "the file to edit was not named as a path"

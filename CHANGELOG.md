@@ -1,5 +1,33 @@
 # Unreleased
 
+- **`config init`'s cluster warning is logged now, and the console shows it differently.** This is
+  the first change in the epic that says *this changes what you see*, because the rest of it can
+  honestly claim the opposite. `config_init.warn_cluster_not_addressed` — the sentence that fires
+  when `config init` or `config add-environment` prepares an environment that addresses no cluster
+  — was the one place under `src/kubementat/` that wrote operator-facing text with `click.echo`.
+  It now uses `logging.warning`, which is what the other 437 output sites use (`config.py:905`,
+  `automations/routing.py:320`). Every sentence is word for word the same, and the comparison was
+  made by calling both implementations and diffing the text: `word-for-word identical: True`.
+
+  **What the operator sees.** Before: five stderr lines — one blank, then one per sentence. After:
+  one stderr record carrying all four sentences, prefixed with the CLI's logging format, so
+  `2026-11-06 11:52:43,815 - WARNING - Environment 'dev' is configured, but it does not address a
+  cluster yet: …`. The leading blank line is gone and the four paragraphs became one wrapped
+  paragraph; that is the whole visible delta, plus the timestamp and level. `kmt config init <dir>
+  --environment dev --gpg-email <email>` on a tree with `CLUSTER_KUBE_CONTEXT: null` is how to see
+  it. It is still stderr and still guidance — `cli.kmt.configure_logging` sends the root handler
+  there — so nothing that reads a script's stdout changes.
+
+  **The tests moved because the channel moved, and that was a decision.** Four tests asserted the
+  sentence through `result.stderr` on `CliRunner`, and `CliRunner` never sees a log record: the
+  assertions are now against `caplog`, which is what this suite already uses for warnings. Two
+  assertions that the sentence is *not* printed over a tree that was just handed its cluster keep
+  both halves — `caplog` and the empty `result.stderr` — so a verb that echoed it back as a stream
+  would still fail. `test_every_bootstrap_assert_passes_a_tree_that_is_correct.py` needed nothing:
+  its copy of the sentence is a fixture for the e2e harness, and the harness's own assert reads the
+  real CLI's stderr, where a warning still lands. No `click.echo` remains in `config_init.py`; the
+  `import click` stays, because 25 `click.ClickException` raises and one `ClickException` subclass
+  still use it — Phase 1's standing decision, untouched here.
 - **The eleven refusals `tekton_utils.py` raises moved to `kubementat.errors`.**
   `TektonControllerWithoutConfiguredApiError`, `PipelineNamespaceNotConfiguredError`,
   `TektonReleaseVersionNotConfiguredError`, `TektonWebhookNotReachableError` and
