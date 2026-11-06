@@ -28,7 +28,8 @@ from cluster_fixture import configuration_only_context
 from kubementat import helm_utils
 from kubementat.core import constants
 from kubementat.automation import Automation
-from kubementat.core.config.config import Config, component_config_key
+from kubementat.core.config.config import Config
+from kubementat.core.config.keys import component_config_key
 from kubementat.helm_utils import HelmUtils
 from asset_paths import template_path, values_path
 

@@ -1,14 +1,19 @@
-"""The layering lives in `config.py` and moved no call site. Census E's whole finding was *where*
-the answer came from, so the answer to it has to be keepable in one place — and a rule that lives in
-one place is a rule a later ticket can move without noticing unless something here is structural.
+"""The layering lives in `core/config/keys.py`, left every call site alone, and has one owner.
+
+Census E's whole finding was *where* the answer came from, so the answer to it has to be keepable in
+one place — and a rule that lives in one place is a rule a later ticket can move without noticing
+unless something here is structural. P2-2d moved that one place out of `config.py` and into `keys.py`,
+which is why the exclusions below name two files instead of one: the owner is `keys.py` and `config.py`
+is the module that reaches it.
 
 Four claims, one test each, in the shape the tree already uses for deletions and single-owner rules
 (`ast.parse` over the shipped roots, method bodies read out of the syntax tree rather than
 paragraph-matched):
 
-* **Only `config.py` speaks the layering.** The tables and the walk are its vocabulary; a second
-  file that names `CATEGORY_LAYERS` or the pair constants is a second owner of the order, and two
-  owners of one rule is how a listing and a command start disagreeing about which layer answered.
+* **Two files name the layering, and no more.** The tables and the walk are `keys.py`'s vocabulary and
+  `config.py` is the only reader of it; a third file that names `CATEGORY_LAYERS` or the pair constants
+  is a second owner of the order, and two owners of one rule is how a listing and a command start
+  disagreeing about which layer answered.
 * **The raw category dictionaries are private to `config.py`.** A caller that reaches past the
   layered view and reads `env_static` out of the loaded configuration answers for itself again,
   which is the census E bug with a nicer name.
@@ -25,13 +30,19 @@ import inspect
 from pathlib import Path
 
 from kubementat.core.config import config as config_module
+from kubementat.core.config import keys as keys_module
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PY = REPO_ROOT / "src" / "kubementat" / "core" / "config" / "config.py"
+KEYS_PY = REPO_ROOT / "src" / "kubementat" / "core" / "config" / "keys.py"
 
 # The roots that could hold a second owner of the rule. `templates` is not here: it moved inside the
 # package, so "src" sweeps it and naming the old root would sweep nothing.
 CALLER_ROOTS = ("src", "scripts", "tekton_ci", "examples", "tools")
+
+# The files that are allowed to name the layering: the module that owns it and the module that reads
+# it. A third name here is a second owner, and that is what the first test is for.
+LAYERING_OWNERS = (CONFIG_PY, KEYS_PY)
 
 # The vocabulary the layering is spelled in. A file outside `config.py` that names any of these has
 # not called the rule, it has *re-implemented* it.
@@ -87,17 +98,22 @@ def statements_of(function):
 # --- the layering has one owner ----------------------------------------------------------
 
 
-def test_only_config_py_names_the_layering():
-    """A rule with two owners is a rule that rots the day one spelling is edited."""
+def test_only_keys_py_and_config_py_name_the_layering():
+    """A rule with two owners is a rule that rots the day one spelling is edited.
+
+    `keys.py` owns the tables and `config.py` is the reader they were written for, and both are
+    excluded below for that one reason. Excluding a *directory* or a name pattern would be the
+    weaker check and would pass the day a third file copies a chain into itself.
+    """
     offenders = {}
     for path in shipped_python_files(*CALLER_ROOTS):
-        if path == CONFIG_PY:
+        if path in LAYERING_OWNERS:
             continue
         named = [term for term in LAYERING_VOCABULARY if term in path.read_text(encoding="utf-8")]
         if named:
             offenders[relative(path)] = named
     assert not offenders, \
-        f"the layering is spelled outside config.py: {offenders}"
+        f"the layering is spelled outside its owner and its reader: {offenders}"
 
 
 def test_the_configurations_own_dictionaries_are_private_to_config_py():
@@ -169,10 +185,10 @@ def test_component_value_resolves_through_the_shared_path_and_reads_no_category(
 
 def test_the_resolution_path_is_the_only_walk_of_the_layers():
     """One function walks the layers, and everything else asks it."""
-    assert callable(getattr(config_module, "_declare_in_layers")), "the walk has been renamed"
+    assert callable(getattr(keys_module, "_declare_in_layers")), "the walk has been renamed"
     assert "_declare_in_layers" in calls_inside(config_method("_resolved")), \
         "Config._resolved does not use the shared walk"
-    assert "_declare_in_layers" in config_module._layered_view.__code__.co_names, \
+    assert "_declare_in_layers" in keys_module._layered_view.__code__.co_names, \
         "_layered_view answers keys without the shared walk"
 
 
@@ -188,27 +204,27 @@ def test_the_four_categories_and_their_layers_are_what_the_ticket_said_they_are(
     plaintext file beside it, which is why the last two asserts are about the table's shape rather
     than about its order.
     """
-    assert set(config_module.CATEGORY_LAYERS) == CATEGORIES
+    assert set(keys_module.CATEGORY_LAYERS) == CATEGORIES
     assert config_module.TEAM_SCOPED_CATEGORIES == ("team_static", "team_static_encrypted")
-    assert config_module.CATEGORY_LAYERS["env_static"] == (("L1", "env_static"),)
-    assert config_module.CATEGORY_LAYERS["env_static_encrypted"] == (("L1", "env_static_encrypted"),)
-    assert config_module.CATEGORY_LAYERS["team_static"] == (
+    assert keys_module.CATEGORY_LAYERS["env_static"] == (("L1", "env_static"),)
+    assert keys_module.CATEGORY_LAYERS["env_static_encrypted"] == (("L1", "env_static_encrypted"),)
+    assert keys_module.CATEGORY_LAYERS["team_static"] == (
         ("L2", "team_static"), ("L1", "env_static"))
-    assert config_module.CATEGORY_LAYERS["team_static_encrypted"] == (
+    assert keys_module.CATEGORY_LAYERS["team_static_encrypted"] == (
         ("L2", "team_static_encrypted"), ("L1", "env_static_encrypted"))
     # Within a pair the encrypted file comes first, because that is the half that answers a read that
     # was addressed to neither file -- a component's namespace, the class an Ingress names.
-    assert config_module.TEAM_PAIR == (("L2", "team_static_encrypted"), ("L2", "team_static"))
-    assert config_module.ENVIRONMENT_PAIR == (
+    assert keys_module.TEAM_PAIR == (("L2", "team_static_encrypted"), ("L2", "team_static"))
+    assert keys_module.ENVIRONMENT_PAIR == (
         ("L1", "env_static_encrypted"), ("L1", "env_static"))
 
-    for category, chain in config_module.CATEGORY_LAYERS.items():
+    for category, chain in keys_module.CATEGORY_LAYERS.items():
         kinds = {("_encrypted" in name) for _, name in chain}
         assert len(kinds) == 1, (
             f"the `{category}` chain mixes an encrypted and a plain file, so a secret addressed to "
             f"one could be answered by the other: {chain}")
-    assert config_module.COMPONENT_LAYERS == (
-        config_module.TEAM_PAIR + config_module.ENVIRONMENT_PAIR)
+    assert keys_module.COMPONENT_LAYERS == (
+        keys_module.TEAM_PAIR + keys_module.ENVIRONMENT_PAIR)
 
 
 def test_config_get_still_takes_a_category_alone():

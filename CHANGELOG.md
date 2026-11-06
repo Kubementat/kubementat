@@ -1,5 +1,32 @@
 # Unreleased
 
+- **The layering moved out of `config.py`, and this is the split the other three were ordered for.**
+  `LAYER_TEAM`, `LAYER_ENVIRONMENT`, the two pairs, `CATEGORY_LAYERS`, `COMPONENT_LAYERS`,
+  `_NOTHING_DECLARED`, `_answers_from_a_team_layer`, `_declare_in_layers`, `_layered_view` and
+  `component_config_key` are the whole of `src/kubementat/core/config/keys.py`: the 11 names of the
+  census's `keys.py` row, each one byte-identical to its source at the previous commit. `keys.py` is
+  207 lines and `config.py` ends the split at 905, from 1 446; `NON_TEAM_ENVIRONMENT_DIRECTORIES` and
+  `TEAM_SCOPED_CATEGORIES` are the two names that stayed, because the only methods that read them
+  stayed too. Why this one is the hard ticket is that
+  `_declare_in_layers` is *two-homed* — `keys.py:110` calls it, `Config._resolved` calls it — so
+  only one definition is allowed, and the sentinel compared with `is` beside it has three readers
+  and one importer (`Config._release_knob`, `_layered_view`, `config_answers.py:61`). The proof the
+  ticket asked for is that identity: `keys._NOTHING_DECLARED is config_answers._NOTHING_DECLARED`
+  prints `True`, and `config.py` holds no copy of it because it reaches all seven names through the
+  module rather than binding them — `config.CATEGORY_LAYERS`, `config.component_config_key` and
+  `config._declare_in_layers` all raise `AttributeError`. **`component_config_key` is the largest
+  repoint in the epic: 13 import statements**, 3 in `src/` and 10 in `tests/`, not the 5/8 the
+  census table splits them into, and none is left behind — the grep for the old home is empty and
+  the grep for the new one counts 13. None of the 11 is a `patch(...)` target anywhere in the
+  suite, so nothing needed a name-level indirection; `config.py` still calls through `keys` because
+  that is what the `AttributeError` gate demands. 11 files carry a repointed import and one test
+  file changed shape: `test_the_layering_lives_in_config_and_left_every_call_site_alone.py` asserted
+  that *only* `config.py` names the layering, which the move contradicts, so it now asserts that
+  exactly two files do — `keys.py` as owner and `config.py` as its one reader — and its 13 module
+  attribute reads moved to `keys`. Suite unchanged: **1775 passed, 1 skipped**, cycles none, layer
+  violations none; the graph still points one way (`config → keys → {derived, constants}`, and
+  `keys → config` is not an edge).
+
 - **The tree's stamp moved out of `config.py`, and the module that stayed does not need it.**
   `ConfigurationStamp` and its ten members, `read_configuration_stamp`, `check_configuration_stamp` and
   `SCHEMA_VERSION_WINDOW` now live in `src/kubementat/core/config/stamp.py`, and they are the four

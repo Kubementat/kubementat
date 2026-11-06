@@ -41,7 +41,8 @@ import pytest
 from kubementat import config_answers
 from kubementat.core.config import derived as config_derived
 from kubementat.core import constants
-from kubementat.core.config.config import Config, component_config_key
+from kubementat.core.config.config import Config
+from kubementat.core.config.keys import component_config_key
 
 ENVIRONMENT = "l0env"
 TEAM = "cartographers"

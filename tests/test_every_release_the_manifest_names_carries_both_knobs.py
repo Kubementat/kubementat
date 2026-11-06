@@ -32,7 +32,8 @@ import pytest
 
 from asset_paths import values_path
 from cluster_fixture import UNREAD_ROOT, configuration_only_context
-from kubementat.core.config.config import Config, component_config_key
+from kubementat.core.config.config import Config
+from kubementat.core.config.keys import component_config_key
 from kubementat.helm_utils import HelmUtils
 
 MANIFEST = values_path("helmfile.yaml.gotmpl")

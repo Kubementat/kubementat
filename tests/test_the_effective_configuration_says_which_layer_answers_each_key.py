@@ -48,7 +48,8 @@ from cli.commands import config as config_module
 from kubementat import config_answers, shell
 from kubementat.core.config import release_index as config_reads_index
 from kubementat.core import constants
-from kubementat.core.config.config import Config, component_config_key
+from kubementat.core.config.config import Config
+from kubementat.core.config.keys import component_config_key
 from kubementat.config_init import add_team, init_configuration
 
 ENVIRONMENT = "prod"

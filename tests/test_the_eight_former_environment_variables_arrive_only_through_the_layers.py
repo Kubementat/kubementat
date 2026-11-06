@@ -309,7 +309,7 @@ def _component_key_names(path: Path, symbol: str) -> tuple:
     builds the key; a component that arrives from a loop does not, and that is what the second half of
     the return value says. The fold calls the product's own function rather than guessing the rule.
     """
-    from kubementat.core.config.config import component_config_key
+    from kubementat.core.config.keys import component_config_key
 
     module_constants = _module_string_constants(path)
     tree = ast.parse(path.read_text(encoding="utf-8"))

@@ -10,7 +10,7 @@ from kubementat import shell
 from kubementat.core.config import release_index as config_reads_index
 from kubementat.core import constants
 from kubementat.cluster import ClusterTarget
-from kubementat.core.config.config import component_config_key
+from kubementat.core.config.keys import component_config_key
 from kubementat.kubernetes_utils import KubernetesUtils, helm_target_args
 from pathlib import Path
 
