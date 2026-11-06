@@ -9,8 +9,10 @@ reach the same object, and a second way is exactly what makes a `monkeypatch.set
 nobody is running: the patch is applied to the attribute named in the call, the code reads the
 attribute it reached, and when the two differ the test is green and the product is not.
 `kubementat.core.identity.kubeconfig` is therefore reached through its own dotted path, one way
-each, and every caller imports the name it actually calls. This first ticket moves only that module;
-`target.py`, `comparison.py`, `registry.py` and `context.py` come with the tickets that follow, and
-the order is not arbitrary: `kubeconfig ← target ← comparison ← registry ← context`, so the leaf
-moves first and every edge in every commit points down.
+each, and every caller imports the name it actually calls. This first ticket moved only that module;
+`target.py`, `comparison.py`, `registry.py` and `context.py` came with the tickets after it, and the
+order is not arbitrary: `kubeconfig ← target ← comparison ← registry ← context`, so the leaf moved
+first and every edge in every commit pointed down. `context.py` arrived last, and with it
+`src/kubementat/cluster.py` was deleted rather than left as a shell, because `Context` is the class
+the other four are read by and none of them reads.
 """

@@ -287,7 +287,7 @@ def test_helmfile_apply_hands_the_class_over_before_it_runs_helmfile(tmp_path, m
     recorder = RecordingShell()
     monkeypatch.setattr(helm_utils, "shell", recorder)
     try:
-        from kubementat.cluster import Context
+        from kubementat.core.identity.context import Context
         HelmUtils(Context.build(ENVIRONMENT, TEAM)).helmfile_apply(
             ENVIRONMENT, "group=routing", helmfile_working_directory=str(tmp_path),
             helmfile_path=str(MANIFEST))

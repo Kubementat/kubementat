@@ -59,16 +59,17 @@ from typing import Any, Optional
 import click
 import yaml
 
-from kubementat import cluster as _cluster
 from kubementat import config_init
 from kubementat.core.constants import CLUSTER_KUBECONFIG_PATH_KEY, CLUSTER_KUBE_CONTEXT_KEY
 from kubementat.core.config.config import Config
-# The registry is bound as its own module here because the alias read below is the only thing in
-# this file that reaches it: `kubementat.cluster` used to carry the class, and reading it through
-# that alias after the move is an `AttributeError` rather than a wrong answer — which is the good
-# outcome, but it is still an outcome that never reaches the finding the rule owns. `_cluster` stays
-# imported beside it for `Context._collision`, which did not move.
+# Both reads below name their object by import rather than through a module alias, and that is the
+# point: a `from kubementat import cluster as _cluster` outlives the module it named, and the
+# attribute read that used to work through it fails as an `AttributeError` at the call instead of
+# raising at the import — an outcome that never reaches the finding the rule owns. `Context` is
+# imported by name because this file is its reader and not its owner, and `EnvironmentRegistry` is
+# bound as the module because the class it owns is what the alias below asks.
 from kubementat.core.identity import registry as _registry
+from kubementat.core.identity.context import Context
 from kubementat.core.config.stamp import ConfigurationStamp
 from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
 
@@ -437,7 +438,7 @@ def _collision_findings(root: Path, findings: list[Finding]) -> None:
         if not others:
             continue
         reported.update(frozenset((name, c.environment)) for c in others)
-        sentence = str(_cluster.Context._collision(record.target, others))
+        sentence = str(Context._collision(record.target, others))
         findings.append(Finding(ERROR, "cluster-collision", sentence,
                                 root / name / "static.json"))
 

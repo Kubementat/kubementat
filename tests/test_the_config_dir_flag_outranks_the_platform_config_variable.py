@@ -29,7 +29,7 @@ from click.testing import CliRunner
 from cli.commands import environments
 from cluster_fixture import (DEV_SERVER, PROD_SERVER, redirect_checkout, STAGING_SERVER,
                              write_environment, write_kubeconfig)
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 
 PLATFORM_CONFIG_VARIABLE = "KUBEMENTAT_PLATFORM_CONFIG_DIR"
 

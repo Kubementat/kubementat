@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 from kubementat.core.identity import kubeconfig as kubeconfig_module
 from kubementat.config_init import init_configuration
 from conftest import cluster_state

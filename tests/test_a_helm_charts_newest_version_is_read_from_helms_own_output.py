@@ -30,7 +30,7 @@ from click.testing import CliRunner
 
 from cli.commands import helm
 from kubementat.helm_utils import HelmUtils
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 
 REPO = "prometheus-community"
 CHART = "prometheus"

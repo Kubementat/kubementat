@@ -435,7 +435,7 @@ EXEMPT = {
     ("kubementat/core/identity/target.py", "from_service_account"):
         "the token the kubelet mounted for this pod, which is a credential the process is running "
         "with and not a configuration file it was handed — it moved with `ClusterTarget`, so the "
-        "read is here and not in `cluster.py`",
+        "read is here and not in the module the class left",
     ("kubementat/config_init.py", "_apply_layer_plan"):
         "the bytes-compare before a whole-document write; it reads a file it is about to write, not "
         "a file it is about to answer, and it never decodes (census R7)",

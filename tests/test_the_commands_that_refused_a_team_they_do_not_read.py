@@ -32,7 +32,7 @@ from click.testing import CliRunner
 
 from cli.commands import component, helm, routing, utilities
 from kubementat.automations.routing import routing as routing_module
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ENVIRONMENT = "dev"
@@ -74,7 +74,7 @@ def require_team_call_sites():
     """Every call of `require_team` in `src/`, as `(file, the sentence it was given)` pairs.
 
     Read out of the syntax tree and not with a grep, because the claim is about calls and not about
-    the word: the same name in a docstring, in `cluster.py`'s definition, or in a `helpers.py`
+    the word: the same name in a docstring, in `context.py`'s definition, or in a `helpers.py`
     comment is not what the census counts.
     """
     sites = []

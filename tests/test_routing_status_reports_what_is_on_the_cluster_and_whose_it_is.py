@@ -31,7 +31,7 @@ from cluster_fixture import TARGET_DEV, stamp_tree, write_kubeconfig
 from conftest import as_k8s_object, cluster_state
 from kubementat import shell
 from kubementat.automations.routing import traefik_presence
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 from kubementat.core.identity.target import ClusterTarget
 from kubementat.helm_utils import helm_list_releases_argv
 

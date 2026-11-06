@@ -22,7 +22,7 @@ from cluster_fixture import DEV_SERVER, stamp_tree, write_environment, write_kub
 from asset_paths import values_path
 from kubementat import helm_utils
 from kubementat.core import constants
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 from kubementat.core.config.keys import component_config_key
 from kubementat.helm_utils import HelmUtils
 

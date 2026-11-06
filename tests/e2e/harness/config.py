@@ -603,7 +603,8 @@ CAPABILITIES = {
     # is here: it is how the lane answers "what environments do I have, and what cluster is each one"
     # without contacting a cluster, and it is the read the 1:1 check itself runs (`EnvironmentRegistry`
     # backs both), so a stage that invented its own argv would be a second opinion about a primitive.
-    # It takes no environment and no team because it resolves nothing -- see `cluster.Context.build`.
+    # It takes no environment and no team because it resolves nothing -- see `Context.build` in
+    # `kubementat/core/identity/context.py`.
     "environments.list": _c(
         capability="environments.list",
         argv=["kmt", "environments", "list"],

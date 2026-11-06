@@ -23,10 +23,10 @@ from pathlib import Path
 
 import yaml
 
-from kubementat.cluster import Context
 from kubementat.core.config.config import Config
 from kubementat.core.constants import SOURCE_CONNECTION, STATIC_SOURCE_PREFIX
 from kubementat.core.identity import kubeconfig as _kubeconfig_module
+from kubementat.core.identity.context import Context
 from kubementat.core.identity.kubeconfig import (
     KUBERNETES_SERVICE_HOST_ENV,
     KUBERNETES_SERVICE_PORT_ENV,
@@ -256,7 +256,8 @@ def mounted_service_account(monkeypatch, root, *, host="10.0.0.1", port="6443",
     environment against the running cluster without spelling the string out twice.
 
     The root is patched on `kubementat.core.identity.kubeconfig`, the module that owns the name and
-    that `cluster.py` therefore reads through, and not on `kubementat.cluster`. Patching the module
+    that `core/identity/context.py` therefore reads through, and not on the module the class reading
+    it used to live inside. Patching the module
     the constant left would leave this fixture believing it had unmounted the pod while the layer
     under test read the real `/var/run/secrets/kubernetes.io/serviceaccount` off the machine — a
     green run that proved nothing about the layer it was about.

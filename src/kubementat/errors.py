@@ -36,9 +36,9 @@ class TeamNotSuppliedError(KubementatError):
     — and the rule is that kmt does not guess it, so the object says so instead of letting a
     service read a path built out of a name nobody gave it. Two calls raise it, for the same
     reason: `Config` when a team-scoped value is read from a `Config` that has no team, and
-    `kubementat.cluster.Context.require_team` when a service asks a Context for the half it was
-    not given. One question, one sentence, and it lives here rather than in the module that builds
-    the path the refusal is about, because that refusal outlives where the path happens to be
+    `kubementat.core.identity.context.Context.require_team` when a service asks a Context for the half
+    it was not given. One question, one sentence, and it lives here rather than in the module that
+    builds the path the refusal is about, because that refusal outlives where the path happens to be
     assembled: the cluster layer asks it too, and neither module owns an answer that belongs to the
     pair.
     '''

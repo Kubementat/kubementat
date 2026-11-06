@@ -33,16 +33,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # package, so "src" sweeps it and naming the old root would sweep nothing.
 CALLER_ROOTS = ("src", "scripts", "tekton_ci", "examples", "tools")
 
-THE_CLUSTER_MODULE = "src/kubementat/cluster.py"
+THE_CONTEXT_MODULE = "src/kubementat/core/identity/context.py"
 THE_REGISTRY_MODULE = "src/kubementat/core/identity/registry.py"
 
-# The class these guards are about is defined in one of these two, and which one is the fact they
-# exist to notice: the check moved out of `cluster.py` with the registry that owns it, so a sweep of
-# one file would answer "not in the module" about a definition that is simply elsewhere. The file a
-# class was found in comes back with the node, which is what `inside` needs as well — counting the
-# single probe of the running cluster proves nothing about sharing unless it is counted against the
-# file the check is written in.
-DEFINITION_MODULES = (THE_CLUSTER_MODULE, THE_REGISTRY_MODULE)
+# The class these guards are about, and the method it asks, each live in exactly one of these two —
+# which is the fact the tuple encodes and the reason it is not two entries per name. `Context`, the
+# class, is defined only in `context.py`: the `Context.build` sweep below reaches it there, and a
+# definition found anywhere else would mean the class object has a second home. `collision_check`,
+# the method, is defined only in `registry.py`: it left `cluster.py` with the registry that owns it,
+# and it did not come back. Both answers used to be a sweep of one file, and the move that deleted
+# `cluster.py` is the second time this tuple had to be told — a guard that pins a filename fails as
+# "not in the module" about a definition that is simply elsewhere, so `method` reads both and hands
+# the file back with the node.
+DEFINITION_MODULES = (THE_CONTEXT_MODULE, THE_REGISTRY_MODULE)
 
 
 def definition_paths():
@@ -117,9 +120,9 @@ def method(class_name, method_name):
 def inside(node, sites, module):
     """The subset of `sites` that fall within `node`, which is how "who probes it" is answered.
 
-    `module` is the file `node` is in, and it has to be stated: `cluster.py` no longer holds the
-    check these sites are counted against, so filtering on one hard-coded path would report a
-    correct answer as a wrong one.
+    `module` is the file `node` is in, and it has to be stated: the check these sites are counted
+    against is written in `registry.py` and its only caller is a method of a class defined in
+    `context.py`, so filtering on one hard-coded path would report a correct answer as a wrong one.
     """
     return [site for site in sites
             if site[0] == module

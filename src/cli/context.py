@@ -26,8 +26,9 @@ there on a terminal, never inside a pipe.
   `pvc-usage`, the diagnostics reads and the three component tunnels carry no `--team`, so the
   `Context` they build carries none. That is the deleted `DEFAULT_TEAM` read from the other side —
   kmt does not guess what a command means, and inventing a team for a command that took none would be
-  inventing the namespace it acts in. `kubementat.cluster.Context` says what a Context without a team
-  is good *for* (it resolves a cluster and names it) and what it is not (`require_team`).
+  inventing the namespace it acts in. `kubementat.core.identity.context.Context` says what a
+  Context without a team is good *for* (it resolves a cluster and names it) and what it is not
+  (`require_team`).
 * **A named refusal is rendered, not rethrown.** Both families of refusal this decorator can meet —
   `Context.build`'s cluster resolution and a service's `require_team` are wrapped
   as `ClickException` so the operator gets one sentence and exit 1, not the tool's own traceback. The
@@ -45,7 +46,7 @@ import os
 
 import click
 
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 from kubementat.core.constants import CLUSTER_KUBE_CONTEXT_KEY
 from kubementat.core.config.paths import resolve_platform_config_dir
 from kubementat.core.config.stamp import check_configuration_stamp

@@ -33,7 +33,7 @@ contradict it.
 
 import pytest
 
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 from kubementat.core.constants import SOURCE_FLAG
 from kubementat.errors import (
     ClusterFileUnreadableError,

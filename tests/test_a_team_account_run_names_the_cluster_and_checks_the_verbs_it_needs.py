@@ -31,7 +31,7 @@ from click.exceptions import ClickException
 
 from kubementat import user_management
 from kubementat.automation import Automation
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 
 # The credential the cluster is holding for the account by the time the flow prints.
 ACCOUNT_TOKEN = "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZlYXR1cmUifQ.payload.signature"

@@ -19,10 +19,10 @@ anything.
 
 The order the file stands in is the whole of its legality, and it is the order the census chose for
 the split: `kubeconfig <- target <- comparison <- registry <- context`. It reads the three modules
-below it and nothing above it — `kubementat.cluster` least of all, since that is the module that
+below it and nothing above it — `context.py` least of all, since that is the module that
 stands on this one and is the only way a split that looks acyclic can turn out to have a back edge.
-`context.py` does not exist yet and nothing here needs it: every name it will own is a reader of
-this module and never a dependency of it.
+`context.py` exists now and nothing here needs it: every name it owns is a reader of this module and
+never a dependency of it, which is the edge the last move had to keep pointing the same way.
 
 **`ClusterComparison` lives here and not in `comparison.py`, and that is a divergence the census
 flags rather than one it hides.** The plan puts the comparison *object* beside the object that
@@ -57,7 +57,7 @@ from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
 # them has had: a name import would leave `kubementat.core.identity.registry.ClusterTarget` and
 # friends standing beside the objects themselves, and a second resolvable name for one object is
 # what a `monkeypatch.setattr` aimed at the module nobody is running then misses. The aliases match
-# the ones in `cluster.py` so that a line read here is the line that was read there.
+# the ones in `context.py` so that a line read here is the line that was read there.
 from kubementat.core.identity import comparison as _comparison
 from kubementat.core.identity import kubeconfig as _kubeconfig
 from kubementat.core.identity import target as _target

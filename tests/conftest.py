@@ -599,8 +599,9 @@ def no_cluster_is_running_this_process(monkeypatch):
     fixture has run, which is the whole of the ordering rule.
 
     The patch lands on `kubementat.core.identity.kubeconfig`, the module that owns
-    `SERVICE_ACCOUNT_ROOT` and that `cluster.py` reads it through, and `raising=True` is what makes
-    that home an assertion rather than a hope: this fixture used to patch `kubementat.cluster` with
+    `SERVICE_ACCOUNT_ROOT` and that `core/identity/context.py` reads it through, and
+    `raising=True` is what makes that home an assertion rather than a hope: this fixture used to
+    patch `kubementat.cluster` with
     `raising=False`, which is the shape of failure that stays green after the name moves, because
     the miss is silent and the layer under test reads the machine's real mount.
     """

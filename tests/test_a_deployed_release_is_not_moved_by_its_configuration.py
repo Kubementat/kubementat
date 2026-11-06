@@ -35,7 +35,7 @@ import pytest
 
 from conftest import run_kmt
 from kubementat.helm_utils import HelmUtils
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 
 # The manifest this environment applies. Two releases with different owners' namespaces, so a test
 # can say "this one is renamed" and "this one is not touched" without the vocabulary being fake:

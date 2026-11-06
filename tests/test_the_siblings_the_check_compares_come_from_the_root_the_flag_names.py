@@ -23,7 +23,7 @@ import pytest
 
 from cluster_fixture import (DEV_SERVER, PROD_SERVER, STAGING_SERVER, redirect_checkout,
                              write_environment, write_kubeconfig)
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 from kubementat.errors import ClusterIdentityCollisionError
 
 PLATFORM_CONFIG_VARIABLE = "KUBEMENTAT_PLATFORM_CONFIG_DIR"

@@ -1,60 +1,46 @@
-"""An environment addresses one cluster, and the address is the claim the 1:1 check compares.
+"""The one object that says which environment, which team, and which cluster a command means.
 
-One object lives here, and it exists to stop "which cluster" being answered six times by six
-different classes. Everything the object was made out of is elsewhere: `ClusterTarget`, the frozen
-value object that says *which* cluster and *where* that was declared, sits in
-`core/identity/target.py`, and the enumeration and resolution of the environments it asks about sit
-in `core/identity/registry.py`, imported rather than duplicated — one class object is what makes
-`isinstance(ctx_or_target, ClusterTarget)` answer the same way for every caller, and this module
-has no copy to be wrong about. Nothing in this module runs a command, opens a
-socket, or asks a cluster anything: every address is read out of a file before a service exists
-— or, last of the layers that can answer, out of the material the kubelet mounted in the pod that
-is asking.
+One name here: `Context`, with the eighteen members it is made of. It exists so that "which cluster"
+is answered once per command instead of once per service class, and that is why it is the last name
+out of `cluster.py` rather than the first: `Context` reads upward into every module of
+`core/identity/` and nothing reads down into it, so the move adds no edge pointing anywhere new.
+When it landed there was nothing left in that file to keep — it held this class and no other name —
+so `src/kubementat/cluster.py` is deleted rather than emptied, and `import kubementat.cluster` now
+fails with `ModuleNotFoundError` instead of answering with a shell.
 
-* `ClusterTarget` — read from `core/identity/target.py` by every comparison, resolution and
-  refusal below; it carries its own server address, so a comparison cannot forget to happen.
-* The registry — read from `core/identity/registry.py`: the environments under one root, each one's
-  own claim, the record of what the 1:1 check compared, and the single-file read a claim is made
-  from. `Context.build` is its caller and not its owner, which is why the module is bound here
-  rather than unpacked into this namespace.
-* `Context` — the pair of `(config, target)` plus the team and environment they belong to,
-  built in one place so a command either has a cluster it can name or does not run.
-* The 1:1 check's primitives — the running cluster's own address, the address equality the check and
-  the report line must agree on, and the report line — are read from `core/identity/comparison.py`.
-  The check that combines them is the registry's method, and the record of its answer
-  (`ClusterComparison`) went with it, so nothing here holds either half of that pair.
+The shape, which is the whole argument for one object instead of six constructor arguments:
 
-Two decisions that are load-bearing and not obvious from the shape of the code:
+* `environment`, `team`, `config` and `target`, plus the two guards — `require_team` and
+  `require_target` — that say what a nullable half means at the one point a call site has to *use*
+  it rather than print it.
+* `resolution_report`, what the 1:1 check compared, spelled as the lines a command prints before it
+  runs. That is what keeps the report and the refusal from being two answers about one cluster.
+* `for_configuration`, the one shape with no target: for the verb that writes a configuration root
+  and never addresses a cluster. Every other command gets `build`, and `build` cannot produce that
+  state.
+* `build`, the resolution order. It is the only place that order lives and the only place a command
+  runs the 1:1 check, and it asks `EnvironmentRegistry.collision_check` rather than writing the
+  filter beside it — which is what makes the report line and the refusal read one comparison.
 
-* **The address is resolved by reading the YAML, not by loading the client.**
-  `kubernetes.config.load_kube_config` would run any exec plugin the kubeconfig names and would
-  mutate the process-wide default `Configuration` — the side effect `ClusterTarget.client()` now
-  avoids by loading into its own. Reading the file directly means the address is available for every
-  environment in the root, cheaply enough for the check to run on reads, and it means an
-  `environments list` cannot trigger a credential refresh.
-* **`$KUBECONFIG` is read when we are asked, not when the module was imported.**
-  `kubernetes.config.kube_config.KUBE_CONFIG_DEFAULT_LOCATION` is a module-level constant the
-  library captured at import (the fixtures in `tests/conftest.py:547` exist because of this), so
-  a default resolved through it would silently disagree with the environment the caller is in.
-  `kubeconfig.default_kubeconfig_path` applies the same documented rule — `$KUBECONFIG`, then
-  `~/.kube/config` — at call time, and the target's `client()` hands the concrete path it answers
-  to the library so the address and the client cannot disagree.
+Two things about the layering are facts and not taste:
 
-  What reads a kubeconfig lives one level down, in `core/identity/kubeconfig.py`: the files a
-  `$KUBECONFIG` list names, the merge rule that decides which context wins, the server string read
-  out of the YAML, and the material a pod is mounted with. That module is below this one and reads
-  nothing in it, which is the direction the whole identity split runs in. `target.py` stands on the
-  same leaf, `comparison.py` — the 1:1 check's primitives, which this module held until now — stands
-  on `target.py`, and `registry.py` stands on both, so what this module imports reaches
-  `cluster → registry → comparison → target → kubeconfig` with every edge pointing down and the
-  longest chain ending where the files are read. This module is now the only one of the five that
-  stands above the whole of `core/identity/`, which is the shape Phase 2 was for: once `Context` is
-  the last name here, `cluster.py` is a shell that binds four modules and builds one object.
-  `kubeconfig` is imported
-  as `_kubeconfig` because `Context.build` already names a parameter `kubeconfig`: bound under its own
-  name, the module would be shadowed by that parameter — usually by `None` — on every path that was
-  handed no flag, and the failure would be an `AttributeError` about a `NoneType` inside a resolution
-  that had nothing wrong with it.
+* **Everything the object is made of is elsewhere.** Which cluster, and where that was declared, is
+  `core/identity/target.py`; the environments under one root, each one's claim and the record of what
+  the check compared are `core/identity/registry.py`; the running cluster's own address, the address
+  equality and the report line are `core/identity/comparison.py`; the files a `$KUBECONFIG` list
+  names, and the material a pod is mounted with, are `core/identity/kubeconfig.py`. Each is bound as
+  the module and not unpacked, because a second resolvable name for one object is what a
+  `monkeypatch.setattr` aimed at the module nobody runs then misses. The chain is
+  `context -> registry -> comparison -> target -> kubeconfig`, every edge points down, and the
+  longest one ends where the files are read.
+* **The kubeconfig module is bound as `_kubeconfig`** because `build` already names a parameter
+  `kubeconfig`. Bound under its own name it would be shadowed by that parameter — usually by `None` —
+  on every path that was handed no flag, and the failure would be an `AttributeError` about a
+  `NoneType` inside a resolution that had nothing wrong with it.
+
+What this module never does is run a command, open a socket, or ask a cluster anything. Every address
+is read out of a file before a service exists, or, last of the layers that can answer, out of the
+material the kubelet mounted in the pod that is asking.
 """
 
 from __future__ import annotations
@@ -66,24 +52,22 @@ from typing import Dict, Optional, Tuple
 
 from kubementat.core import constants
 from kubementat.core.config.config import Config
-# The 1:1 check primitives are bound as the module and not by their three names, for the same
-# reason `target` is bound that way below: all three are reached from inside this file today, and a
-# name import would leave `kubementat.cluster.running_cluster_address` standing beside the function
-# itself — a second binding for one function object, which is what a patch aimed at the module nobody
-# runs then misses. The same rule kept them out of this file's namespace.
+# The three modules below this one are bound and not unpacked, for the one reason every importer of
+# them has had: a name import would leave `kubementat.core.identity.context.ClusterTarget` and
+# friends standing beside the objects themselves, and a second resolvable name for one object is
+# what a `monkeypatch.setattr` aimed at the module nobody is running then misses. The aliases match
+# the ones registry.py and comparison.py use, so a line read here is the line that was read there.
 from kubementat.core.identity import comparison as _comparison
 from kubementat.core.identity import kubeconfig as _kubeconfig
-# The registry is bound as the module for the same reason `target` is, with one more fact on top of
-# it: `EnvironmentRegistry`, `_environment_declaration` and `_static_declaration` are all three read
-# from here, and a name import would leave `kubementat.cluster.EnvironmentRegistry` standing beside
-# the class the registry module owns. `AttributeError` is the point — a moved name that is still
-# reachable from the module that lost it is a name the next reader will grep for and find.
 from kubementat.core.identity import registry as _registry
-# `ClusterTarget` is bound here as the module and not the name on purpose: a name import
-# would answer `kubementat.cluster.ClusterTarget`, and a second door to one class object is
-# what a `monkeypatch.setattr` on the class then misses. The ten readers left below reach the
-# class through the module that owns it; the eleventh went with `_report_line`.
 from kubementat.core.identity import target as _target
+# `TeamNotSuppliedError` is imported rather than defined here, and it comes from `kubementat.errors`
+# rather than from this module's neighbourhood: the same refusal is raised by `require_team` and by
+# `Config`'s team-scoped reads, and defining a second one here would make the guard raise one type
+# and the services catch another. Not a resolution failure: the cluster resolved and `Context`
+# carries it. What is missing is the other half of the pair — `platform_config/{environment}/<team>/`
+# — and kmt does not guess what a command means, so the object says so rather than letting a service
+# read a path built out of a name nobody gave it.
 from kubementat.errors import (
     ClusterContextNotFoundError,
     ClusterIdentityCollisionError,
@@ -92,16 +76,6 @@ from kubementat.errors import (
     StatedClusterMismatchError,
     TeamNotSuppliedError,
 )
-
-
-# `TeamNotSuppliedError` is imported above rather than defined here, and it comes from
-# `kubementat.errors` rather than from this module's neighbourhood: the same refusal is raised by
-# `Context.require_team` and by `Config`'s team-scoped reads, and defining a second one here would
-# make the guard raise one type and the services catch another. Not a resolution failure: the cluster
-# resolved and `Context` carries it. What is missing is the other half of the pair —
-# `platform_config/{environment}/<team>/` — and kmt does not guess what a command means, so the object
-# says so rather than letting a service read a path built out of a name nobody gave it. That both
-# call sites raise it is the reason the refusal has one home instead of one per service.
 
 
 @dataclass(frozen=True)

@@ -23,7 +23,7 @@ from click.testing import CliRunner
 from cli.commands.utilities import run_ci_container
 from kubementat import shell
 from kubementat.kubernetes_utils import kubectl_target_args
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 from kubementat.ci_utils import CI_CONTAINER_COMMAND, CI_CONTAINER_NAME, CiUtils
 from kubementat.errors import CiImageNotConfiguredError
 

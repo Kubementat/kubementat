@@ -173,7 +173,7 @@ def context_of(config):
     `ctx.environment` now, so the context is built from the very same `Config` object the
     fixture's assertions are about — not a second read of the same files.
     """
-    from kubementat.cluster import Context
+    from kubementat.core.identity.context import Context
     from cluster_fixture import UNADDRESSED_SERVER
     from kubementat.core.identity.target import ClusterTarget
     from kubementat.core.constants import SOURCE_CONNECTION

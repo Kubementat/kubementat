@@ -30,7 +30,7 @@ import pytest
 from cluster_fixture import TARGET_DEV
 from kubementat import helm_utils
 from kubementat.automation import Automation
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 from kubementat.helm_utils import HelmUtils, helm_list_releases_argv
 from kubementat.kubernetes_utils import KubernetesUtils, helm_target_args
 

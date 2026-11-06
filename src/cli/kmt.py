@@ -34,7 +34,7 @@ def configure_logging():
 # the project root is resolved where a path is actually derived, by
 # `kubementat.core.config.paths.default_kubementat_main_dir`, so a `kmt` installed into site-packages still
 # drives the checkout `KUBEMENTAT_HOME` names (D11) without a second copy of the rule in the CLI.
-# What a command receives now is a `kubementat.cluster.Context`, built per command by
+# What a command receives now is a `kubementat.core.identity.context.Context`, built per command by
 # `@kmt_context` — because "which cluster" is decided by the command's own arguments, and a
 # group callback runs before those are parsed.
 # `--version` answers from the distribution metadata and not from a string written here, so the

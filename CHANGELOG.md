@@ -1,5 +1,39 @@
 # Unreleased
 
+- **`Context` left `cluster.py` for `core/identity/context.py`, and `cluster.py` was deleted rather than
+  emptied.** One name, 18 members, 502 lines with the decorator, and **zero changed line-pairs** — the
+  class source is byte-equal to what it was one commit ago. The reason is the same one that made the
+  registry move cheap: the new module binds `target`, `kubeconfig`, `comparison` and `registry` under the
+  aliases the old file used, so no body line has to reach further than it already did.
+  `import kubementat.cluster` raises `ModuleNotFoundError`, and no file imports it; `Context` is one object
+  in `kubernetes_utils`, `cli/context.py` and `config_validate`, proved by patching `require_team` and
+  watching a team-less `Context` go from `TeamNotSuppliedError` to a named team through the patched
+  member. 32 import sites and one alias read (`config_validate.py`, reaching
+  `_cluster.Context._collision` — the shape that fails at the call rather than at the import) were
+  repointed, and one keyed table followed its function:
+  `("src/kubementat/cluster.py", "_process_value")` in
+  `test_the_eight_former_environment_variables_arrive_only_through_the_layers.py:195`, which is checked
+  against every `os.environ` site's `(path, symbol)` in `src/`, so a stale key fails loudly instead of
+  looking like a rule that passed.
+  **The collision guard had to be re-derived, not appended to.** Its `DEFINITION_MODULES` named
+  `cluster.py`, which no longer exists, so the tuple is now `(context.py, registry.py)` — and the comment
+  splits what each half answers: the *class* guard resolves only in `context.py`, the *method* guard
+  (`collision_check`, its definition count, and the single running-cluster probe `inside()` counts) only in
+  `registry.py`. One home each, so the tuple is a question about location and not a set of candidates —
+  which is the right shape, because a candidate set is how a guard ends up accepting a definition in
+  whichever file it finds one.
+  **One thing worth knowing before the next ticket:** no test patches a `Context` member today. The three
+  member-patch couplings the census lists are all on `ClusterTarget`, which moved in P2-3b. So deleting
+  the module that held `Context` cannot be graded by watching patches break — it has to be graded by the
+  import graph and by the fact that every importer now points at one definition.
+  **What the move left behind, honestly:** seven comments in five test files cite
+  `cluster.py:<line-number>`, which is now a dangling *path* rather than merely a stale line. The deferred
+  comment sweep became more urgent, not less. `docs/` needs the same treatment on a longer time scale,
+  twelve files naming the module.
+  Census note: the row's 502 LOC is right and the section heading's 501 is one short — it counts the class
+  body without the decorator, which is the number that would matter for nothing.
+  Suite unchanged: **1775 passed, 1 skipped**, cycles none, layer violations none.
+
 - **The registry left `cluster.py` for `core/identity/registry.py`** — `EnvironmentRegistry`,
   `EnvironmentResolution`, `ClusterComparison`, `_static_declaration`, `_declared_value`,
   `_declaration_state`, `environment_file_missing`, `_environment_declaration` and

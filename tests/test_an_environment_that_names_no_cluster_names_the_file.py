@@ -19,7 +19,7 @@ the key disappeared is a different file with a different story to tell.
 import json
 import pytest
 
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 from kubementat.errors import ClusterNotConfiguredError
 
 from cluster_fixture import DEV_SERVER, checkout, redirect_checkout, write_environment, write_kubeconfig

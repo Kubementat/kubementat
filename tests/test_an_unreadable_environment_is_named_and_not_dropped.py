@@ -22,7 +22,7 @@ nothing else in it gets a "not verified" line too.
 
 """
 
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 from kubementat.core.identity.registry import EnvironmentRegistry
 
 from cluster_fixture import (

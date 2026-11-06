@@ -21,7 +21,8 @@ Two shapes here are load-bearing and do not follow from the rest of the file:
 What this module does *not* answer is which layer said a cluster: the flag, the process, the
 environment's own `static.json`, the mounted service account. That ordering belongs above it, and
 the class is what those layers all build. It imports `kubeconfig` (the leaf), `constants`, and the
-kubernetes library inside `client()` only — never `kubementat.cluster`, which is where it came from.
+kubernetes library inside `client()` only — never `core/identity/context.py`, which is the module
+that stands above it and builds the object this one is read out of.
 """
 
 from __future__ import annotations

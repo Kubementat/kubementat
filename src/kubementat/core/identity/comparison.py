@@ -7,7 +7,7 @@ sentence that says *which* sibling was held back and why. Nothing here asks for 
 environment name, or a path.
 
 The order the file stands in is the whole of its legality. It reads `target.py` and `kubeconfig.py`
-below it and no module above it — `kubementat.cluster` least of all, which is the point of installing
+below it and no module above it — `context.py` least of all, which is the point of installing
 it before `registry.py` and `context.py` rather than beside them. `kubeconfig.py` is the leaf, the one
 line here that touches a cluster at all is a call down into it, and every edge added by this commit
 therefore points down.

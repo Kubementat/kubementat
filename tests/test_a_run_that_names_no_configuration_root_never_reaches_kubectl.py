@@ -29,7 +29,7 @@ from cli.commands import config as config_command
 from cli.commands import kubementat
 from cluster_fixture import (DEV_SERVER, checkout, redirect_checkout, write_environment,
                              write_kubeconfig)
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 from kubementat.core.identity.target import ClusterTarget
 
 PLATFORM_CONFIG_VARIABLE = "KUBEMENTAT_PLATFORM_CONFIG_DIR"

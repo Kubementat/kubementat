@@ -30,7 +30,7 @@ from click.testing import CliRunner
 
 from cli.commands import config as config_command
 from kubementat.core import constants
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 from kubementat.helm_utils import HelmUtils
 
 ENVIRONMENT = "dev"

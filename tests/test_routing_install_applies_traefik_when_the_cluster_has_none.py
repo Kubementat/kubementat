@@ -21,7 +21,7 @@ import yaml
 
 from conftest import as_k8s_object, cluster_state
 from kubementat import helm_utils, shell
-from kubementat.cluster import Context
+from kubementat.core.identity.context import Context
 from kubementat.automations.routing import routing
 
 # What the shims print for `helm show crds traefik/traefik`: one definition, in the shape that read
