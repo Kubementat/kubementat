@@ -1,5 +1,37 @@
 # Unreleased
 
+- **The seven cluster refusals moved out of `kubementat.cluster` and into `kubementat.errors`.**
+  `ClusterResolutionError`, `ClusterNotConfiguredError`, `ClusterContextNotFoundError`,
+  `ClusterFileUnreadableError`, `ServiceAccountNotMountedError`, `StatedClusterMismatchError` and
+  `ClusterIdentityCollisionError` are written in `src/kubementat/errors.py` now, under a commented
+  cluster section, and the prose that says why each refusal exists travelled with the class. The
+  shape stayed the one readers need: `ClusterResolutionError` is still the middle base of the five
+  resolution failures, so `except ClusterResolutionError` still means "no cluster was named" and
+  nothing wider, and `ClusterIdentityCollisionError` sits beside it rather than under it, because a
+  caller that carries on past a resolution failure must not carry on past a collision. Both, plus the
+  five, now descend from `KubementatError`.
+
+  **What did not change.** Nothing an operator can feel: `cli/context.py` still converts
+  `(ClusterResolutionError, ClusterIdentityCollisionError)` into one `Error: …` line on stderr and
+  exit 1, no message gained or lost a word, and no class name is printed anywhere it was not printed
+  before. Two refusals — the not-configured case and the context-not-found case — were run against
+  the same throwaway configuration root from HEAD's tree and from this one, and both stderr lines and
+  both exit codes came back byte-identical. `cluster.py` raises every one of these by the same name it
+  always raised; only where that name comes from moved, which is why the move is 14 import statements
+  (2 in `src/`, 12 in tests), one `Raises:` line, and zero changed assertions: the 40 `pytest.raises`
+  calls and the `issubclass` check that pin these refusals kept their text and changed their address.
+  No shim, no alias, no re-export and no deprecated name — `kubementat.cluster.ClusterNotConfiguredError`
+  is simply gone, and the two references that spelled it that way (`traefik_presence.py`'s `Raises:` line
+  and one sentence of a test docstring that called the class "the module's own type") followed the class.
+  The three `click.ClickException` subclasses stayed exactly where they are, because moving them would
+  make `errors.py` import `click` and would change what `config_validate.py:285` and `:470` catch.
+
+  **Evidence.** `uv run pytest -q` reports 1775 passed, 1 skipped (55 s);
+  `git grep -n "^class Cluster[A-Za-z]*Error" -- src/kubementat` answers with `errors.py` only;
+  `git grep -n "kubementat.cluster.Cluster" -- src tests` is empty; `python3
+  .agent-work/import_graph.py src` prints `none` under `== CYCLES ==` and under
+  `== LAYER VIOLATIONS ==`.
+
 - **`apply_resources` is a primitive in `kubementat.k8s_apply`, and `Automation` and `TektonUtils`
   stopped importing each other.** `Automation.apply_resources` moved verbatim out of the class — the
   walk, the three helpers that decide which document goes where, the log lines, the return value and

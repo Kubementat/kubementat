@@ -25,13 +25,15 @@ import os
 import pytest
 
 from kubementat.cluster import (
-    ClusterFileUnreadableError,
-    ClusterNotConfiguredError,
     ClusterTarget,
     SOURCE_CONNECTION,
     SOURCE_ENV,
     SOURCE_FLAG,
     STATIC_SOURCE_PREFIX,
+)
+from kubementat.errors import (
+    ClusterFileUnreadableError,
+    ClusterNotConfiguredError,
 )
 
 from cluster_fixture import (

@@ -22,16 +22,18 @@ import pytest
 
 from kubementat import cluster as cluster_module
 from kubementat.cluster import (
-    ClusterIdentityCollisionError,
-    ClusterNotConfiguredError,
-    ClusterResolutionError,
     ClusterTarget,
     Context,
     EnvironmentRegistry,
-    ServiceAccountNotMountedError,
     SOURCE_FLAG,
     SOURCE_SERVICE_ACCOUNT,
     STATIC_SOURCE_PREFIX,
+)
+from kubementat.errors import (
+    ClusterIdentityCollisionError,
+    ClusterNotConfiguredError,
+    ClusterResolutionError,
+    ServiceAccountNotMountedError,
 )
 
 from cluster_fixture import (

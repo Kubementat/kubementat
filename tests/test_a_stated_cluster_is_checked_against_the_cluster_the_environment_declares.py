@@ -35,8 +35,10 @@ import pytest
 
 from kubementat.cluster import (
     Context,
-    ClusterFileUnreadableError,
     SOURCE_FLAG,
+)
+from kubementat.errors import (
+    ClusterFileUnreadableError,
     StatedClusterMismatchError,
 )
 

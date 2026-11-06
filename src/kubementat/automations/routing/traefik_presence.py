@@ -434,7 +434,7 @@ def discover(ctx, namespace: Optional[str] = None, reader=None,
         If the environment has no `static.json` at all, which is what every other command does
         too — a status command that guessed a namespace rather than say it could not read the
         configuration would be a report that is quietly wrong.
-    kubementat.cluster.ClusterNotConfiguredError:
+    kubementat.errors.ClusterNotConfiguredError:
         When `ctx` carries no cluster to address. Nothing here reads a machine it was not pointed
         at, and "the release read could not be addressed" is a better answer than an answer.
     """

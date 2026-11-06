@@ -28,7 +28,8 @@ import pytest
 from kubernetes import client, config
 
 from cluster_fixture import UNREAD_ROOT, DEV_SERVER, PROD_SERVER, write_kubeconfig
-from kubementat.cluster import ClusterNotConfiguredError, ClusterTarget, Context
+from kubementat.cluster import ClusterTarget, Context
+from kubementat.errors import ClusterNotConfiguredError
 from kubementat.kubernetes_utils import KubernetesUtils
 
 

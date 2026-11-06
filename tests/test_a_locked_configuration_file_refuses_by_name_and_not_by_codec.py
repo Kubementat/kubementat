@@ -27,8 +27,8 @@ Seven claims, one per read that the census measured, plus two about what the sea
 5. `config_validate._cluster_fact_finding` — silent about a file it could not read. It used to print
    "is null" over exactly that file, which is the same false sentence as row 3 wearing a warning.
 6. `cluster._static_declaration` and 7. `cluster._read_kubeconfig` — the cluster-resolution reads.
-   Both re-raise `ClusterFileUnreadableError`, the module's own type, with the seam's sentence inside
-   it and neither rewriting it.
+   Both re-raise `ClusterFileUnreadableError`, the cluster layer's own refusal type, with the seam's
+   sentence inside it and neither rewriting it.
 8. **The seam does not route around `missing_team_config_files`.** A missing *optional* team file
    still degrades the way it did: a warning at load and a named refusal at read. This is the
    falsification of the seam's own boundary — `FileNotFoundError` propagates and nothing converts it.
@@ -52,7 +52,8 @@ from pathlib import Path
 import pytest
 
 from kubementat import config_init, config_validate
-from kubementat.cluster import ClusterFileUnreadableError, ClusterTarget, _read_kubeconfig, _static_declaration
+from kubementat.cluster import ClusterTarget, _read_kubeconfig, _static_declaration
+from kubementat.errors import ClusterFileUnreadableError
 from kubementat.config import Config
 from kubementat.config_reads import LockedConfigFileError, read_decrypted
 from kubementat.config_validate import validate_tree

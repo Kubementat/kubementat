@@ -29,10 +29,12 @@ from click.testing import CliRunner
 from cli.commands import environments
 from kubementat.cluster import (
     Context,
-    ClusterIdentityCollisionError,
-    ClusterResolutionError,
     EnvironmentRegistry,
     ClusterTarget,
+)
+from kubementat.errors import (
+    ClusterIdentityCollisionError,
+    ClusterResolutionError,
 )
 
 from cluster_fixture import (

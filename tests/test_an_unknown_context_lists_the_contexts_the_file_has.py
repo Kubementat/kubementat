@@ -15,9 +15,11 @@ import pytest
 
 from kubementat.cluster import (
     Context,
+    ClusterTarget,
+)
+from kubementat.errors import (
     ClusterContextNotFoundError,
     ClusterFileUnreadableError,
-    ClusterTarget,
 )
 
 from cluster_fixture import (
