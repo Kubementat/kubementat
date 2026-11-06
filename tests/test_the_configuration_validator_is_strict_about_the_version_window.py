@@ -33,7 +33,10 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from cli.commands import config as config_command
-from kubementat.core.config import config as config_lib
+# `versions` is imported as a module and not by name because two of the sites below patch
+# `product_version` on it: the patch has to land on the module the stamp reads through, which is
+# `versions` and not the module the function used to be defined in.
+from kubementat.core.config import versions
 from kubementat.core import constants
 from kubementat.core.config.config import check_configuration_stamp
 from kubementat.config_init import init_configuration
@@ -154,7 +157,7 @@ def test_a_constraint_this_build_falls_outside_refuses_the_run(tmp_path):
     finding = {f.code: f for f in validate_tree(root, ENVIRONMENT).errors}["version-outside-window"]
 
     assert ">=0.0.1,<0.0.2" in finding.message
-    assert str(config_lib.product_version()) in finding.message
+    assert str(versions.product_version()) in finding.message
     assert constants.CONFIG_KUBEMENTAT_CONSTRAINT not in finding.message
 
     result = run_validate(root)
@@ -169,7 +172,7 @@ def test_a_version_this_build_cannot_determine_warns_and_blames_nothing(tmp_path
     whose stamp is fine must not be refused because this binary's packaging metadata is missing.
     """
     root = stamped_tree(tmp_path)
-    monkeypatch.setattr(config_lib, "product_version", lambda: None)
+    monkeypatch.setattr(versions, "product_version", lambda: None)
 
     report = validate_tree(root, ENVIRONMENT)
 

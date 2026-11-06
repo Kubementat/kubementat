@@ -1353,7 +1353,7 @@ class Context:
         """A layer-2 variable, treated the way every other variable in the tree is treated.
 
         Set-but-empty is not "unset": an empty `CLUSTER_KUBE_CONTEXT` would otherwise fall back
-        to a file and then be blamed for the file. `config.py:_directory_from_environment` refuses
+        to a file and then be blamed for the file. `paths.py:_directory_from_environment` refuses
         the same thing, and this is the same refusal.
         """
         if key not in os.environ:

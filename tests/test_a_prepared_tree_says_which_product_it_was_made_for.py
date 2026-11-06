@@ -25,7 +25,7 @@ from click.testing import CliRunner
 
 from cluster_fixture import stamp_tree, write_environment
 from cli.commands import routing
-from kubementat.core.config import config
+from kubementat.core.config import config, versions
 from kubementat.core import constants
 
 # What the running build is told to be, for the tests that must not depend on whatever version this
@@ -33,6 +33,12 @@ from kubementat.core import constants
 # a release does not silently change what these assert.
 IN_RANGE = "0.4.0"
 OUTSIDE_RANGE = "2.0.0"
+
+# The `product_version` patches below land on `versions` and not on `config` for one reason: the code
+# that answers is `ConfigurationStamp.running_version`, and it asks `versions.product_version()`, so
+# the patch and the read have to be the same object. A re-export that kept `config.product_version`
+# resolving would leave these five sites green and wrong — the warning would come from a function
+# nobody patched, and the assertions would be about a string the product never emitted.
 
 
 def root_with_stamp(tmp_path, *, constraint=None, schema_version=None) -> Path:
@@ -83,7 +89,7 @@ def test_one_schema_step_behind_is_accepted_because_the_window_is_the_rule():
 def test_a_version_string_outside_the_range_warns_once_and_continues():
     root = root_with_stamp(Path("/tmp/unused") / "x", constraint=">=0.4,<2")
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(config, "product_version", lambda: OUTSIDE_RANGE)
+        patch.setattr(versions, "product_version", lambda: OUTSIDE_RANGE)
         warnings = config.check_configuration_stamp(root)
     assert len(warnings) == 1, "warn once is the requirement, and one warning is what must come back"
     assert OUTSIDE_RANGE in warnings[0]
@@ -94,7 +100,7 @@ def test_a_version_string_outside_the_range_warns_once_and_continues():
 def test_a_version_inside_the_range_says_nothing_at_all():
     root = root_with_stamp(Path("/tmp/unused") / "x", constraint=">=0.4,<2")
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(config, "product_version", lambda: IN_RANGE)
+        patch.setattr(versions, "product_version", lambda: IN_RANGE)
         assert config.check_configuration_stamp(root) == []
 
 
@@ -102,7 +108,7 @@ def test_an_unknown_product_version_warns_rather_than_asking_a_question_it_canno
     # If the build cannot name itself, silently reporting "no problems" would be the false sentence.
     root = root_with_stamp(Path("/tmp/unused") / "x")
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(config, "product_version", lambda: None)
+        patch.setattr(versions, "product_version", lambda: None)
         warnings = config.check_configuration_stamp(root)
     assert len(warnings) == 1 and "could not determine" in warnings[0]
 
@@ -139,13 +145,13 @@ def test_a_stamp_that_is_there_but_wrong_is_refused_with_a_sentence_about_itself
     ("0.3.9", False), ("3.0.0", False), ("2.0.0", False), ("0.4.0rc1", True),
 ])
 def test_the_constraint_range_answers_without_the_packaging_library(version, inside):
-    assert config.satisfies_version_constraint(">=0.4,<2", version) is inside
+    assert versions.satisfies_version_constraint(">=0.4,<2", version) is inside
 
 
 def test_an_unsupported_operator_is_refused_and_not_read_as_a_pass():
     # A parser that met a clause it did not understand and returned True is a gate that is open.
     with pytest.raises(ValueError):
-        config.satisfies_version_constraint("~=0.4", "0.4.0")
+        versions.satisfies_version_constraint("~=0.4", "0.4.0")
 
 
 def test_the_stamp_is_asked_before_a_verb_reaches_a_cluster(tmp_path, monkeypatch):
@@ -162,7 +168,7 @@ def test_the_stamp_is_asked_before_a_verb_reaches_a_cluster(tmp_path, monkeypatc
     monkeypatch.setenv("KUBEMENTAT_PLATFORM_CONFIG_DIR", str(root / "platform_config"))
     monkeypatch.setenv("CLUSTER_KUBE_CONTEXT", "")
     monkeypatch.delenv("KUBEMENTAT_HOME", raising=False)
-    monkeypatch.setattr(config, "product_version", lambda: IN_RANGE)
+    monkeypatch.setattr(versions, "product_version", lambda: IN_RANGE)
 
     # `routing status` takes an environment and no team -- discovery reads nothing under a team
     # layer -- so the invocation is one argument and not the flag pair a writing verb takes.

@@ -1,5 +1,31 @@
 # Unreleased
 
+- **The version answers and the root answers left `config.py`, and the five tests that patch a version
+  had to move with them.** This is Phase 2's first split inside `core/config/`:
+  `default_kubementat_main_dir`, `default_platform_config_dir`, `resolve_platform_config_dir`,
+  `_directory_from_environment` and the two environment-variable names now live in
+  `core/config/paths.py`, and `product_version`, `satisfies_version_constraint`, `_version_parts`,
+  `_compare_versions` and the two operator tables in `core/config/versions.py`. `Config` and
+  `ConfigurationStamp` stay, so nothing about what kubementat answers changes, but `from
+  kubementat.core.config.config import resolve_platform_config_dir` is now `...paths`. **The interesting
+  part of the move is a test hazard rather than a path.** Five tests patch `product_version` with
+  `setattr(config, ...)`: `test_a_prepared_tree_says_which_product_it_was_made_for.py:86,97,105,165` and
+  `test_the_configuration_validator_is_strict_about_the_version_window.py:172`. The code that answers —
+  `ConfigurationStamp.running_version` — now asks `versions.product_version()`, so a patch left on
+  `config.py` would have landed on a binding nothing reads while the stamp answered from the real
+  function. Had `config.py` re-imported the name to keep those five sites resolving, every one of them
+  would have stayed green while asserting a warning the product no longer emits. They patch `versions`
+  now, `config.py` calls the moved names through their module instead of importing them, and no
+  compatibility import exists: `kubementat.core.config.config.product_version` raises `AttributeError`,
+  as does every other moved name. Proved the way this ticket had to be proved: the eight moved
+  functions are byte-identical to their old source, `paths.py` and `versions.py` import no part of
+  `kubementat` and so cannot reach back into the module that stays, and `default_kubementat_main_dir()`
+  still answers the checkout's root — its `parents[4]` arithmetic is only correct while the function
+  sits one directory below the package root, which is where `paths.py` sits. 15 files
+  (2 import statements in the CLI, 4 internal call sites routed, 5 patch sites, 3 module-attribute
+  reads, 1 `(file, function)` table row, 5 prose lines). Suite unchanged: **1775 passed, 1 skipped**,
+  cycles none, layer violations none.
+
 - **The four configuration modules moved under `kubementat.core.config`.** Phase 2's second pure
   move, so the dotted path is what changes and nothing else is: `kubementat.config` is now
   `kubementat.core.config.config`, `kubementat.config_derived` is `kubementat.core.config.derived`,

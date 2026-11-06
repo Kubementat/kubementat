@@ -33,7 +33,8 @@ from pathlib import Path
 import pytest
 from click.exceptions import ClickException
 
-from kubementat.core.config.config import Config, default_kubementat_main_dir
+from kubementat.core.config.config import Config
+from kubementat.core.config.paths import default_kubementat_main_dir
 from kubementat.config_init import init_configuration
 from asset_paths import asset_path
 

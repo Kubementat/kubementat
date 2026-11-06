@@ -199,7 +199,7 @@ PROCESS_ENVIRONMENT_USES = {
                "and nothing else — asserted against the module's own table, not against this row.",
         "mode": "read",
     },
-    ("src/kubementat/core/config/config.py", "_directory_from_environment"): {
+    ("src/kubementat/core/config/paths.py", "_directory_from_environment"): {
         "names": ("KUBEMENTAT_HOME", "KUBEMENTAT_PLATFORM_CONFIG_DIR"),
         "constants": ("KUBEMENTAT_HOME_ENV_VAR", "KUBEMENTAT_PLATFORM_CONFIG_DIR_ENV_VAR"),
         "why": "the two directory overrides; they name a root, not an answer.",

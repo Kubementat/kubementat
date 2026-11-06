@@ -26,7 +26,7 @@ from kubementat.cluster import (
     STATIC_SOURCE_PREFIX,
     EnvironmentRegistry,
 )
-from kubementat.core.config.config import resolve_platform_config_dir
+from kubementat.core.config.paths import resolve_platform_config_dir
 
 TABLE_HEADERS = ("ENVIRONMENT", "CLUSTER_ADDRESS", "CONTEXT", "SOURCE", "CHECK")
 
@@ -58,7 +58,7 @@ def environments_list(config_dir=None):
     # The flag is threaded to the registry rather than consulted beside it, for the reason the
     # module docstring gives: a listing that resolved its own root while the check read another is
     # the second answer this command exists not to have. `None` is "the operator named no root",
-    # and the rule for that case is `config.resolve_platform_config_dir`'s — the same function a
+    # and the rule for that case is `paths.resolve_platform_config_dir`'s — the same function a
     # `Config` answers with, so the listing and the 1:1 check cannot spell the precedence two
     # ways. It used to be spelled here: same rule, same outcome, but a second owner of it
     # in `src/`, and agreement is not the same thing as one rule.

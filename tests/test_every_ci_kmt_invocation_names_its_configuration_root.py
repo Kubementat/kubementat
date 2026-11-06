@@ -1,7 +1,7 @@
 """A `kmt` command that names no configuration root dies at the first step, in CI like anywhere else.
 
 The defect is measured and not inferred. A root is *named, never located*:
-`default_platform_config_dir()` (`config.py:260-300`) reads `KUBEMENTAT_PLATFORM_CONFIG_DIR` and
+`default_platform_config_dir()` (`kubementat/core/config/paths.py`) reads `KUBEMENTAT_PLATFORM_CONFIG_DIR` and
 nothing else, and raises when it is unset. `KUBEMENTAT_HOME` is not the other spelling — it names the
 tree a checkout hangs its *output* off, which is why both shipped Tasks can set it and still hand their
 command no root. Measured on this checkout:

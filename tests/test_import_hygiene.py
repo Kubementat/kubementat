@@ -19,7 +19,7 @@ import re
 import sys
 from pathlib import Path
 
-from kubementat.core.config.config import default_kubementat_main_dir
+from kubementat.core.config.paths import default_kubementat_main_dir
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

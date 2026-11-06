@@ -2,8 +2,8 @@
 
 The plumbing: `--config-dir` arrives on every command that carries `@kmt_context`, beside
 `--context`/`--kubeconfig`, and its one job is to reach `Config(platform_config_dir=...)`. The
-precedence it lands in is `config.py`'s, unchanged — and it is spelled **once**, in
-`config.resolve_platform_config_dir`, which `kmt environments list` calls too:
+precedence it lands in is `paths.py`'s, unchanged — and it is spelled **once**, in
+`paths.resolve_platform_config_dir`, which `kmt environments list` calls too:
 
 ```
 1. --config-dir                       this ticket's addition, so it is the operator speaking now
@@ -154,7 +154,7 @@ def test_the_listing_and_a_command_answer_one_root_because_they_read_one_rule(tm
     `default_platform_config_dir() if config_dir is None else Path(config_dir).resolve()`. That
     agreed with `Config`, so nothing failed and the duplication had no symptom — which is exactly
     the shape two owners of one rule take: they are correct right up until one of them is edited.
-    One consolidation moved the spelling into `config.resolve_platform_config_dir` and had both call
+    One consolidation moved the spelling into `paths.resolve_platform_config_dir` and had both call
     it, so the
     check here is not "do they agree today" (they always did) but *how* they agree: the same value
     on the two dials, and — the tell of a shared owner — byte-identical sentences on the layer

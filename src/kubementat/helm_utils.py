@@ -891,7 +891,7 @@ def export_configuration_coordinates(config, environment: str) -> dict:
     `_export_component_namespaces` gives for the namespaces: helmfile evaluates its templates with
     the environment it is handed, and an argument that only reaches the child's `argv` never reaches
     the template. They are also not the operator's own `$KUBEMENTAT_PLATFORM_CONFIG_DIR`: that
-    variable is the *input* to the root's one resolution (`config.resolve_platform_config_dir`) and
+    variable is the *input* to the root's one resolution (`paths.resolve_platform_config_dir`) and
     writing the resolved answer back into it would make the process environment a second place that
     claims to know which root this run was given.
 

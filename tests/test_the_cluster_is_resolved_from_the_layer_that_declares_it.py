@@ -155,7 +155,7 @@ def test_the_context_a_command_tells_answers_for_an_environment_that_declares_no
 def test_a_process_variable_that_is_set_but_empty_is_refused_rather_than_read_as_unset(tmp_path, monkeypatch):
     """An empty `CLUSTER_KUBE_CONTEXT` is a mistake, not a way to say "skip this layer".
 
-    The same position `config.py:_directory_from_environment` takes for `KUBEMENTAT_HOME`:
+    The same position `paths.py:_directory_from_environment` takes for `KUBEMENTAT_HOME`:
     silently falling back on an empty variable is how a pipeline that forgot to export a value
     ends up installing into the cluster that happens to be in the tree.
     """
