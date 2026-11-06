@@ -36,7 +36,7 @@ from cluster_parity import (ClusterOperation, ParityError, cluster_identity, clu
 from conftest import ApiRecorder, RecordedCall
 
 from kubementat.core.identity.target import ClusterTarget
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 NAMESPACE = "team-a"
 RELEASE = "web"

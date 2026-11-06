@@ -24,7 +24,7 @@ from kubernetes.client import (V1Container, V1Node, V1NodeStatus, V1ObjectMeta, 
 from kubernetes.client.exceptions import ApiException
 
 from kubementat.errors import NamespaceNotFoundError
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 from cluster_fixture import TARGET_DEV
 
 NAMESPACE = "analyze-me"

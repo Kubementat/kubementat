@@ -2,13 +2,13 @@
 
 Two of the three names here convert a quantity string the way the API server reads one, and the
 third says what a kind is called in an API path. All three are pure: no cluster, no filesystem, no
-subprocess, no configuration. They came out of `kubernetes_utils.py` for P2-4 because a decision
-about *what a number means* does not belong in the module that is left holding the calls, and
+subprocess, no configuration. They came out of the module that held the kubernetes calls because a
+decision about *what a number means* does not belong in the module that is left holding them, and
 because the module that asks the question is not always the one that ends up answering it —
 `src/cli/commands/kubernetes.py` reads `parse_memory` without ever building a `KubernetesUtils`.
 
 The rule this file keeps is the one it was written under: it imports the standard library and
-`kubementat.errors` and nothing above it. No `kubernetes_utils`, no `automations`, no
+`kubementat.errors` and nothing above it. No kubernetes module, no `automations`, no
 `infrastructure`, so nothing that reaches up can reach down through it, and no cycle can be made
 here by construction.
 """

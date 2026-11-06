@@ -126,7 +126,7 @@ def test_opening_a_shell_runs_the_same_exec_and_reads_the_same_pods(
     namespace_exists(recorded_api)
     pod_lookup_answers(recorded_api)
     pod_lookup_answers(recorded_api)
-    from kubementat.kubernetes_utils import KubernetesUtils
+    from kubementat.infrastructure.kubernetes import KubernetesUtils
 
     KubernetesUtils(FIXTURE_TARGET, api_client=recorded_api.for_target(FIXTURE_TARGET)).open_deployment_shell(NAMESPACE, DEPLOYMENT)
     python_ops = operations_from_calls(fake_binaries.take_calls()) + recorded_api.operations()
@@ -165,7 +165,7 @@ def test_the_shell_the_script_opened_is_the_one_handed_over(tmp_path, fixture_re
     namespace_exists(recorded_api)
     pod_lookup_answers(recorded_api)
     pod_lookup_answers(recorded_api)
-    from kubementat.kubernetes_utils import KubernetesUtils
+    from kubementat.infrastructure.kubernetes import KubernetesUtils
 
     KubernetesUtils(FIXTURE_TARGET, api_client=recorded_api.for_target(FIXTURE_TARGET)).open_deployment_shell(NAMESPACE, DEPLOYMENT)
     python_exec = [call for call in fake_binaries.take_calls() if call.program == "kubectl"
@@ -196,7 +196,7 @@ def test_following_the_logs_makes_the_same_read_of_the_same_pods(
     namespace_exists(recorded_api)
     pod_lookup_answers(recorded_api)
     pod_lookup_answers(recorded_api)
-    from kubementat.kubernetes_utils import KubernetesUtils
+    from kubementat.infrastructure.kubernetes import KubernetesUtils
 
     KubernetesUtils(FIXTURE_TARGET, api_client=recorded_api.for_target(FIXTURE_TARGET)).stream_deployment_logs(NAMESPACE, DEPLOYMENT)
     python_ops = operations_from_calls(fake_binaries.take_calls()) + recorded_api.operations()

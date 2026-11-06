@@ -32,7 +32,7 @@ import pytest
 from kubementat import user_management
 from kubementat.automation import Automation
 from kubementat.errors import ServiceAccountTokenNotFoundError
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 from cluster_fixture import TARGET_DEV, UNREAD_ROOT, configuration_only_context
 
 NAMESPACE = "ops-deployments"

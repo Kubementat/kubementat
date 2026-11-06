@@ -26,7 +26,7 @@ import json
 import pytest
 
 from kubementat.automation import Automation
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 
 class RecordingKubernetes:

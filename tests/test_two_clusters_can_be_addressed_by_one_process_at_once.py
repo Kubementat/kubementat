@@ -1,8 +1,8 @@
 """Measured: two clusters in one process, and the constructor that never asks.
 
 The design buys this property here rather than paying for it later, because the future library API
-is the thing that needs two clusters alive at once and the alternative — sweeping
-`kubernetes_utils.py` later — is a worse ticket. So these tests are not a survey of the constructor;
+is the thing that needs two clusters alive at once and the alternative — sweeping every
+module that holds a kubernetes read later — is a worse ticket. So these tests are not a survey of the constructor;
 they are the two claims the design rests on, each asserted once and each with its opposite shown to
 be true of the shape it replaces.
 
@@ -31,7 +31,7 @@ from cluster_fixture import UNREAD_ROOT, DEV_SERVER, PROD_SERVER, write_kubeconf
 from kubementat.core.identity.context import Context
 from kubementat.core.identity.target import ClusterTarget
 from kubementat.errors import ClusterNotConfiguredError
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 
 @pytest.fixture

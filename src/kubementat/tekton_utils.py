@@ -1,7 +1,6 @@
 from kubementat import errors
-from kubementat import k8s_apply
 from kubementat import shell
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils, apply
 import base64
 import click
 import logging
@@ -1426,7 +1425,7 @@ class TektonUtils:
         # The primitive walks the directory and answers for every document in it; the object it
         # hands the cluster is built here, which is why no `Automation` is needed to reach it.
         logging.info(f"Setting up configured triggers for team {self.team} ...")
-        k8s_apply.apply_resources(KubernetesUtils(self.ctx), trigger_dir, namespace, kind=None,
+        apply.apply_resources(KubernetesUtils(self.ctx), trigger_dir, namespace, kind=None,
                                   group=self.config.TRIGGERS_API_GROUP,
                                   version=self.config.TRIGGERS_API_VERSION)
 

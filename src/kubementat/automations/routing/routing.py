@@ -482,7 +482,7 @@ def _kubectl_args(ctx) -> list:
     """
     if ctx is None:
         return []
-    from kubementat.kubernetes_utils import KubernetesUtils
+    from kubementat.infrastructure.kubernetes import KubernetesUtils
 
     return KubernetesUtils(ctx).kubectl_args
 
@@ -582,7 +582,7 @@ def _warn_when_nothing_serves_the_class(ctx, ingress_class: str) -> None:
     cluster is the `KubernetesUtils`'s own rather than a flag that could be missing. What the
     check warns about is unchanged; only how it asks moved.
     """
-    from kubementat.kubernetes_utils import KubernetesUtils
+    from kubementat.infrastructure.kubernetes import KubernetesUtils
 
     try:
         classes = KubernetesUtils(ctx).list_ingress_classes()

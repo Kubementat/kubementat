@@ -31,7 +31,7 @@ from kubernetes.client import V1Node, V1ObjectMeta
 from kubernetes.client.exceptions import ApiException
 
 from cli.commands import kubernetes
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 from cluster_fixture import TARGET_DEV
 
 # The endpoint, spelled out here rather than imported from the library: a test that reads the
@@ -94,7 +94,7 @@ def test_a_two_node_cluster_answers_one_row_per_claim_without_starting_anything(
     volume looks like through this read and what the script's flat column hid.
     """
     started = []
-    monkeypatch.setattr("kubementat.kubernetes_utils.shell.run",
+    monkeypatch.setattr("kubementat.infrastructure.kubernetes.exec.shell.run",
                         lambda argv, **kwargs: started.append(list(argv)))
     recorded_api.answer("list_node", lambda **kwargs: node("node-b", "node-a"))
     kubelet_answers(recorded_api, {

@@ -11,7 +11,7 @@ from kubementat.core.config import release_index as config_reads_index
 from kubementat.core import constants
 from kubementat.core.identity.target import ClusterTarget, helm_target_args
 from kubementat.core.config.keys import component_config_key
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 from pathlib import Path
 
 # `helm list`'s read for "what releases live here", with the statuses named instead of left to a

@@ -251,7 +251,7 @@ def test_a_target_binds_a_client_without_editing_the_libraries_default_configura
 
     Two things are being pinned: the client is bound to the address and the context that were read,
     and the library's process-wide default `Configuration` is left alone — the side effect
-    `kubernetes_utils.py:210` still has, and the reason two targets in one process can otherwise
+    `kubernetes.config.load_kube_config` has, and the reason two targets in one process can otherwise
     overwrite each other's cluster.
     """
     from kubernetes.client import Configuration

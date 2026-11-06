@@ -274,7 +274,7 @@ def test_a_namespace_that_cannot_be_deleted_is_not_mistaken_for_success(
     """
     from kubernetes import client
 
-    from kubementat.kubernetes_utils import KubernetesUtils
+    from kubementat.infrastructure.kubernetes import KubernetesUtils
 
     class StuckNamespaceCoreApi:
         """`delete namespace`, refused — the finaliser case, and every permission case."""

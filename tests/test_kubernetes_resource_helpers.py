@@ -24,7 +24,7 @@ from kubernetes import client
 
 from kubementat import shell
 from kubementat.errors import ServiceAccountTokenNotFoundError
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 from cluster_fixture import TARGET_DEV
 
 # A status that is not 409/404: neither "exists" nor "already gone", so it has to reach
@@ -212,9 +212,17 @@ def test_reading_a_role_binding_that_does_not_exist_raises_rather_than_answering
     assert excinfo.value.status == 404
 
 
+def _kubernetes_source() -> str:
+    """The whole of `KubernetesUtils`, read where it is written: one body per area it is assembled
+    from. A method that was defined twice in one file would still show up twice here, and a method
+    the class answers without owning would not show up at all."""
+    return "\n".join(inspect.getsource(area) for area in KubernetesUtils.__mro__
+                     if area.__module__ != "builtins")
+
+
 def test_role_binding_lookup_is_defined_once_so_the_documented_return_is_the_real_one():
     """D5: two definitions meant the second, undocumented one answered for callers."""
-    assert inspect.getsource(KubernetesUtils).count("def get_role_binding") == 1
+    assert _kubernetes_source().count("def get_role_binding") == 1
 
 
 # The generated client is the one part of a call this file's fakes cannot check: a method
@@ -242,7 +250,7 @@ def test_every_generated_client_method_the_helpers_ask_for_is_a_real_one():
 
 def _client_methods_called_on_self():
     """Every `self.<api>.<method>` in the source of KubernetesUtils."""
-    tree = ast.parse(inspect.getsource(KubernetesUtils))
+    tree = ast.parse(_kubernetes_source())
     return {
         (node.value.attr, node.attr)
         for node in ast.walk(tree)

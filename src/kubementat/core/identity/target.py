@@ -276,10 +276,10 @@ class ClusterTarget:
 # The address spelled for the two binaries that still run. Both are here and not in a
 # generic kubectl helper for the reason the bodies give: they read `ClusterTarget` fields
 # and refuse when the target names neither a context nor a file, so which class answers
-# the question is what the answer is made of. Moved whole out of `kubernetes_utils.py`
-# (P2-4), bodies verbatim, so that the module which says what a cluster is also says how
-# it is addressed -- and so that `kubernetes_utils.py`, which is being left to be split,
-# stops being the place a decision about addressing lives.
+# the question is what the answer is made of. Moved whole out of the module that held the
+# kubernetes calls, bodies verbatim, so that the module which says what a cluster is also says how
+# it is addressed -- and so that a decision about addressing does not live in whichever module the
+# code that needs it happens to be reaching.
 # --------------------------------------------------------------------------
 
 def kubectl_target_args(target) -> list:

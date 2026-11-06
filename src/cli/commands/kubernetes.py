@@ -28,7 +28,7 @@ from kubementat import errors
 from kubementat.errors import (NamespaceNotFoundError,
                                PodNotFoundError, ServiceAccountTokenNotFoundError)
 from kubementat.core.quantities import parse_memory
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 from cli.context import kmt_context
 
 

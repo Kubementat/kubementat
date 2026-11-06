@@ -1557,7 +1557,7 @@ def test_a_namespace_the_cluster_has_not_finished_deleting_is_residue_and_not_a_
     present = set(constants.DEFAULT_NAMESPACES.values()) | CLUSTER_ADDONS
     namespaces_that_are_still_deleting(recorded_api, present, stuck={"grafana"})
     # The real ceiling is three minutes of polling; a unit test asserts the decision, not the clock.
-    monkeypatch.setattr("kubementat.kubernetes_utils.NAMESPACE_GONE_WAIT_S", 0)
+    monkeypatch.setattr("kubementat.infrastructure.kubernetes.namespaces.NAMESPACE_GONE_WAIT_S", 0)
 
     with caplog.at_level(logging.INFO), pytest.raises(UninstallIncompleteError) as raised:
         uninstaller.uninstall_kubementat(assume_yes=True)
@@ -1593,8 +1593,8 @@ def test_a_deletion_the_cluster_finishes_is_not_reported_as_residue(
     recorded_api.answer("delete_namespace", delete)
     recorded_api.answer("list_namespace", listing)
     # Poll rather than sleep, and with no ceiling that matters: the assertion is the poll, not the clock.
-    monkeypatch.setattr("kubementat.kubernetes_utils.NAMESPACE_GONE_WAIT_S", 2)
-    monkeypatch.setattr("kubementat.kubernetes_utils.NAMESPACE_POLL_INTERVAL_S", 0)
+    monkeypatch.setattr("kubementat.infrastructure.kubernetes.namespaces.NAMESPACE_GONE_WAIT_S", 2)
+    monkeypatch.setattr("kubementat.infrastructure.kubernetes.namespaces.NAMESPACE_POLL_INTERVAL_S", 0)
 
     with caplog.at_level(logging.INFO):
         uninstaller.uninstall_kubementat(assume_yes=True)

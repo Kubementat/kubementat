@@ -32,7 +32,7 @@ from kubementat.core.identity.target import kubectl_target_args
 from kubementat import shell
 from cluster_fixture import TARGET_DEV
 from kubementat.errors import NamespaceNotFoundError, PodNotFoundError
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 NAMESPACE = "deploy-me"
 DEPLOYMENT = "web"

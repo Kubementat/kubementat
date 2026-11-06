@@ -1,5 +1,30 @@
 # Unreleased
 
+- **`kubernetes_utils.py` is split: nine areas, one assembled class, the old file gone.** The file
+  was 1 977 lines after the five pure helpers left it, and the census (`docs/census-kubernetes-split.md`)
+  read it as 81 methods that all answered to one class name. The split keeps what the census proved is
+  load-bearing — the name `KubernetesUtils`, the constructor shape `(ctx_or_target, api_client=…)`, the
+  `ClusterTarget.client` seam the recorder injects through, and every method under its own name — and
+  changes what the census proved was only volume: the method bodies now live one area per file
+  (`clients`, `namespaces`, `rbac`, `secrets`, `serviceaccounts`, `customresources`, `workloads`, `exec`,
+  `tunnel`, plus `constants.py` and `apply.py`), assembled in `infrastructure/kubernetes/__init__.py` by
+  an area class per file. `k8s_apply.py` moved into the package as `apply.py`. The census found two
+  decisions and they were made as it directed: `workloads` ⇄ `exec` resolves by inheritance —
+  `KubernetesExec` descends from `KubernetesWorkloads` so the streaming family reuses the single
+  `get_pod_logs`, and the `DEPLOYMENT_LABEL` selector rule has exactly one owner (`constants.py`) — and
+  the three shared constants (`DEPLOYMENT_LABEL`, `SERVICE_ACCOUNT_TOKEN_SECRET_TYPE`,
+  `SERVICE_ACCOUNT_NAME_ANNOTATION`) got one home rather than a copy per importer. No duplicates, no
+  missing methods, zero references to the old paths.
+  **The honest half: 23 of the 77 public methods are named in no test file** (census §6; re-verified),
+  which means a mis-targeted method in those 23 would be invisible to `pytest`. The consumer side was
+  proved by hand for each one — every method is reached from `automation.py`, `tekton_utils.py`,
+  `helm_utils.py` or `user_management.py` through the class, and each call site resolves. The worst case
+  on the list was `delete_persistent_volume_claim`: 28 lines, two consumers, zero direct test contact.
+  This is the entry an e2e lane should close, and it is tracked as such rather than claimed here.
+  (13 source files, 36 test files retargeted; the 5 monkeypatch string paths now name the new files;
+  the 13 `grafana_accounts` class-binding patches keep working because the binding is the same name from
+  a new import line, which is exactly the failure mode the census named.)
+
 - **The last three exceptions that were `click.ClickException` subclasses descend from
   `KubementatError` now.** `LockedConfigFileError`, `DeployerKeyMissingError` and
   `ObsoleteTriggerDirectoryError` were the whole remainder of the errors move: every other refusal

@@ -14,7 +14,7 @@ import pytest
 from kubernetes import client
 
 from kubementat.errors import ServiceAccountTokenNotFoundError
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 from cluster_fixture import TARGET_DEV
 
 SERVICE_ACCOUNT = "kubernetes-dashboard-read-only-cluster-user"

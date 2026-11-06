@@ -131,7 +131,7 @@ def test_the_primitives_that_answer_for_the_surface_are_still_in_the_library():
     -- which is what a migration that deleted the scripts and dropped the reads with them would
     break: the commands would keep existing and report nothing about a cluster that is there.
     """
-    from kubementat.kubernetes_utils import KubernetesUtils
+    from kubementat.infrastructure.kubernetes import KubernetesUtils
 
     for primitive in ("get_nodes", "get_api_resources"):
         assert callable(getattr(KubernetesUtils, primitive, None)), \

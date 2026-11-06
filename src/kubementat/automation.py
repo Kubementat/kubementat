@@ -14,11 +14,13 @@ from kubementat import errors
 from kubementat.core import constants
 from kubementat import config_bootstrap, config_keys
 from kubementat.core.config.config import Config
-# `helm_target_args` is one of the helpers P2-4 moved out of `kubernetes_utils.py` down to the
-# class whose address it spells, so it is imported from there and not from the god-object.
+# `helm_target_args` came out of the kubernetes module and sits now with the class whose address
+# it spells, so it is read from there and not from the object that used to hold the calls.
 from kubementat.core.identity.target import helm_target_args
-from kubementat.kubernetes_utils import (DEPLOYMENT_LABEL, MANAGED_BY_KUBEMENTAT, MANAGED_BY_LABEL,
-                                         KubernetesUtils)
+from kubementat.infrastructure.kubernetes import KubernetesUtils, apply
+from kubementat.infrastructure.kubernetes.constants import (DEPLOYMENT_LABEL,
+                                                            MANAGED_BY_KUBEMENTAT,
+                                                            MANAGED_BY_LABEL)
 from kubementat.helm_utils import HelmUtils, helm_list_releases_argv
 from kubementat.tekton_utils import (
     HELM_DEPLOYER_CLUSTER_ROLE_NAME,
@@ -26,7 +28,6 @@ from kubementat.tekton_utils import (
     preflight_installed_tekton_api_versions,
     preflight_tekton_api_version,
 )
-from kubementat import k8s_apply
 from kubementat import user_management
 
 
@@ -632,7 +633,7 @@ class Automation:
                          f"in this namespace.")
             return 0
 
-        applied = k8s_apply.apply_resources(self.kubernetes_utils, str(directory),
+        applied = apply.apply_resources(self.kubernetes_utils, str(directory),
                                             target_namespace, kind=kind,
                                             group=group, version=version)
         logging.info(f"{layer} layer: applied {applied} {kind} document(s) from {directory} — the "
@@ -2156,7 +2157,7 @@ class Automation:
         doomed = []
         bound_to = set()
         for item in bindings:
-            name = k8s_apply._metadata_name(item)
+            name = apply._metadata_name(item)
             if not name:
                 continue
             if (self._rbac_is_claimed_by_kubementat(item)
@@ -2164,7 +2165,7 @@ class Automation:
                 doomed.append(("clusterrolebinding", name))
                 bound_to.add(((item.get("role_ref") or {}).get("name")) or "")
         for item in roles:
-            name = k8s_apply._metadata_name(item)
+            name = apply._metadata_name(item)
             if not name:
                 continue
             if self._rbac_is_claimed_by_kubementat(item) or name in bound_to:

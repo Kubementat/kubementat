@@ -31,7 +31,7 @@ import click
 import yaml
 
 from kubementat import shell
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 # How long the token controller gets to fill in a Secret it was just told about. The Secret
 # is created empty and the controller writes the token into it, so reading immediately can

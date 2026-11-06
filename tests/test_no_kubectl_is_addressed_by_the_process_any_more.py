@@ -39,7 +39,11 @@ KUBECONFIG_VERBS = {"config"}
 # not a permission: each entry names the module, the verb and the read, and an entry disappears
 # when the read does. `get_pod_status` was already converted; these three are the rest.
 PENDING_KUBECTL_READS = {
-    "kubementat/kubernetes_utils.py": 0,
+    # The session calls that stayed `kubectl` when the kubernetes module was split: `port-forward`
+    # in one file, `logs` and `exec` in another. Neither is unconverted work; both are listed so a
+    # `kubectl get` reappearing beside them is still counted as debt.
+    "kubementat/infrastructure/kubernetes/tunnel.py": 0,
+    "kubementat/infrastructure/kubernetes/exec.py": 0,
     "kubementat/ci_utils.py": 0,
     "kubementat/automation.py": 0,
     "kubementat/helm_utils.py": 0,

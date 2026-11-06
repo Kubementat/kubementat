@@ -1,4 +1,4 @@
-"""The directory-to-cluster primitive: `kubementat.k8s_apply.apply_resources()`.
+"""The directory-to-cluster primitive: `kubementat.infrastructure.kubernetes.apply.apply_resources()`.
 
 Everything Wave 1 and Wave 2 apply from a directory goes through this function — today the global
 Tasks and Pipelines under `tekton_ci/` and the team's own two directories, tomorrow the generated
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from kubementat import k8s_apply
+from kubementat.infrastructure.kubernetes import apply
 from kubementat.errors import ResourceWithoutNameError
 from asset_paths import tekton_ci_path
 
@@ -59,7 +59,7 @@ class RecordingKubernetesUtils:
 
 def an_apply(directory):
     recorder = RecordingKubernetesUtils()
-    k8s_apply.apply_resources(recorder, str(directory), "pipelines", "Task", "tekton.dev", "v1")
+    apply.apply_resources(recorder, str(directory), "pipelines", "Task", "tekton.dev", "v1")
     return recorder
 
 
@@ -213,7 +213,7 @@ def test_the_nameless_document_does_not_stop_an_earlier_resource_from_reaching_t
     recorder = RecordingKubernetesUtils()
 
     with pytest.raises(ResourceWithoutNameError):
-        k8s_apply.apply_resources(recorder, str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
+        apply.apply_resources(recorder, str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
 
     assert recorder.names() == ["good"]
 
@@ -249,11 +249,11 @@ def test_the_shipped_asset_roots_have_no_template_inside_a_resource_root_it_is_a
     """
     for root in ("tasks", "pipelines"):
         directory = tekton_ci_path(root)
-        found = k8s_apply._resource_files(directory)
+        found = apply._resource_files(directory)
         flat = sorted(directory.glob("*.yml")) + sorted(directory.glob("*.yaml"))
 
         assert found == sorted(found), f"{root}: the walk is not ordered"
-        assert all(part != k8s_apply.GENERATOR_TEMPLATE_DIRECTORY
+        assert all(part != apply.GENERATOR_TEMPLATE_DIRECTORY
                    for path in found for part in path.relative_to(directory).parts[:-1]), \
             f"{root}: a template inside a resource root would be applied"
         assert set(flat) <= set(found), f"{root}: the flat glob found files the walk missed"
@@ -284,13 +284,13 @@ def test_a_resource_applied_twice_is_a_replacement_and_not_an_error(tmp_path):
     write(tmp_path / "task.yml", TASK.format(name="once"))
     recorder = RecordingKubernetesUtils()
 
-    k8s_apply.apply_resources(recorder, str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
-    k8s_apply.apply_resources(recorder, str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
+    apply.apply_resources(recorder, str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
+    apply.apply_resources(recorder, str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
 
     assert recorder.names() == ["once", "once"]
 
 
 def test_the_primitive_keeps_reading_both_suffixes_it_was_offered(tmp_path):
     """The suffix set is a constant now, so a future `.YAML` is a decision and not an accident."""
-    assert k8s_apply.RESOURCE_FILE_SUFFIXES == (".yml", ".yaml")
-    assert k8s_apply.GENERATOR_TEMPLATE_DIRECTORY == "templates"
+    assert apply.RESOURCE_FILE_SUFFIXES == (".yml", ".yaml")
+    assert apply.GENERATOR_TEMPLATE_DIRECTORY == "templates"

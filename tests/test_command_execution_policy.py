@@ -35,7 +35,7 @@ from asset_paths import values_path
 from kubementat.helm_utils import HelmUtils
 from kubementat.errors import PodNotFoundError
 from kubementat.core.identity.target import kubectl_target_args
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -373,7 +373,7 @@ def test_helmfile_interactive_flag_is_still_only_there_when_asked_for(tmp_path, 
 
 
 # ---------------------------------------------------------------------------
-# 3. kubectl port-forward and pod lookup (kubernetes_utils.py)
+# 3. kubectl port-forward and pod lookup (`tunnel.py`, `workloads.py`)
 # ---------------------------------------------------------------------------
 @pytest.fixture
 def kubernetes_utils(monkeypatch):

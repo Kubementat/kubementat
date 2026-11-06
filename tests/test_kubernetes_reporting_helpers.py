@@ -20,7 +20,7 @@ from types import SimpleNamespace
 import pytest
 
 from kubementat import shell
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 from cluster_fixture import TARGET_DEV
 from kubementat.core.identity.target import kubectl_target_args
 
@@ -52,7 +52,7 @@ def make_utils(monkeypatch, **replacements):
     """
     utils = KubernetesUtils(TARGET_DEV)
     if "run" in replacements:
-        monkeypatch.setattr("kubementat.kubernetes_utils.shell.run", replacements["run"])
+        monkeypatch.setattr("kubementat.infrastructure.kubernetes.exec.shell.run", replacements["run"])
     for attribute, api in replacements.items():
         if attribute != "run":
             setattr(utils, attribute, api)

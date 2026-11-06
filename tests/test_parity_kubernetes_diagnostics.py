@@ -132,7 +132,7 @@ def test_the_deployment_analysis_asks_the_cluster_for_the_pods_and_their_logs(
     recorder.answer("read_namespaced_deployment", lambda **kwargs: object())
     recorder.answer("read_namespaced_pod_log", "starting up\nlistening on 8080\n")
 
-    from kubementat.kubernetes_utils import KubernetesUtils
+    from kubementat.infrastructure.kubernetes import KubernetesUtils
 
     result = KubernetesUtils(FIXTURE_TARGET,
                                api_client=recorded_api.for_target(FIXTURE_TARGET))\
@@ -183,7 +183,7 @@ def test_reading_the_used_images_reads_the_pods_of_the_namespace_once(
         pod("web-1", images=("example.test/web:1.0",)),
         pod("web-2", images=("example.test/web:1.1", "example.test/side:2.2"))))
 
-    from kubementat.kubernetes_utils import KubernetesUtils
+    from kubementat.infrastructure.kubernetes import KubernetesUtils
 
     result = KubernetesUtils(FIXTURE_TARGET,
                                 api_client=recorded_api.for_target(FIXTURE_TARGET)).list_pod_images(NAMESPACE)
@@ -246,7 +246,7 @@ def test_the_capacity_report_reads_the_nodes_and_the_pods_that_ask_for_them(
                                                  "containers": [{"usage": {"cpu": "1",
                                                                            "memory": "3Gi"}}]}]})
 
-    from kubementat.kubernetes_utils import KubernetesUtils
+    from kubementat.infrastructure.kubernetes import KubernetesUtils
 
     result = KubernetesUtils(FIXTURE_TARGET,
                                 api_client=recorded_api.for_target(FIXTURE_TARGET)).cluster_capacity()

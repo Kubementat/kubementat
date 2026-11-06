@@ -50,7 +50,7 @@ import pytest
 from cluster_parity import (ClusterOperation, cluster_named, compare,
                             operations_from_calls)
 from conftest import FIXTURE_KUBE_CONTEXT, FIXTURE_TARGET, run_bash
-from kubementat.kubernetes_utils import KubernetesUtils
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 # The cluster both sides of the comparisons here address: the fixture's, named by the context its
 # `static.json` declares and by the `current-context` of the kubeconfig it points at. The
