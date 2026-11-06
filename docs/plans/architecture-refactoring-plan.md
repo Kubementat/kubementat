@@ -138,7 +138,7 @@ src/kubementat/
 │   │   └── release_index.py     # pure helmfile-manifest index reader (see P0-2) — HelmUtils will call it
 │   ├── identity/
 │   │   ├── context.py           # Context (from cluster.py)
-│   │   ├── target.py            # ClusterTarget, _normalise_address
+│   │   ├── target.py            # ClusterTarget (`_normalise_address` lives in kubeconfig.py — see below)
 │   │   ├── kubeconfig.py        # kubeconfig reading/parsing, service-account material
 │   │   ├── registry.py          # EnvironmentRegistry, EnvironmentResolution, ClusterComparison
 │   │   └── comparison.py        # running_cluster_address + the 1:1 check primitives
@@ -265,6 +265,17 @@ dotted paths. Suggested task split (each is independently green-able):
   `ClusterTarget` to `target.py`. Module-level helpers (`default_kubeconfig_path`,
   `in_tree_kubeconfig`, `running_cluster_address`, `environment_file_missing`) land in the file
   whose subject they name.
+
+  Two assignments in this table are wrong and the census of `cluster.py` shows why; they were corrected
+  before the split was dispatched rather than discovered mid-move. `_normalise_address` goes to
+  `kubeconfig.py`: two of its three callers are there, and putting it in `target.py` adds
+  `kubeconfig → target` beside the existing `target → kubeconfig`, which is the split's only two-file
+  cycle. And the seven key and source-label constants go to `core/constants.py` below all five files —
+  `CLUSTER_KUBE_CONTEXT_KEY` in `context.py` because it answers "which kube context" makes
+  `target.py` and `registry.py` read upward and produces fourteen cycles, so a key that three files
+  name cannot live in one of them. With both corrected the graph is acyclic and `kubeconfig.py` is the
+  leaf, which decides the order: leaf first, bottom-up, so no commit needs a back-edge into the module
+  that still holds the rest.
 - **P2-4** pure helpers: `parse_cpu`, `parse_memory`, `plural_for_kind` →
   `core/quantities.py`; `kubectl_target_args`, `helm_target_args` → `core/identity/target.py`
   (they build argv from a `ClusterTarget`; that is target behaviour).
