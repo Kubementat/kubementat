@@ -24,6 +24,15 @@
   `ingress_generator.py`'s manifest, warnings, and read order are unchanged, and
   `DEFAULT_INGRESS_CLASSES["traefik"]` is `"traefik"` exactly as it was before the move.
 
+- **`helm_utils` gave up its fourth spelling of the same component name.** It carried its own
+  `INGRESS_CLASS_COMPONENT = "traefik"` with a comment that the duplicate was forced: routing owned the
+  name, and routing imports `helm_utils`, so importing it back would be a cycle. That reason died with
+  this change — every routing module now reads `constants.COMPONENT` — and a duplicate that justifies
+  itself with a cycle that no longer exists is a bug waiting to be believed. `export_ingress_class`
+  builds its key from `constants.COMPONENT` now, and the registry row in the environment-variable test
+  says so the way its two sibling rows already did, naming the provenance rather than folding a
+  constant that is no longer in the file.
+
 - **Reading the shipped manifest is a configuration read, and `config_answers` no longer imports
   `helm_utils` to make it.** `kubementat.config_reads_index` answers three questions about the
   packaged helmfile with nothing but a `Config` and the filesystem: which directory the manifest

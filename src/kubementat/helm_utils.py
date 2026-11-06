@@ -971,11 +971,11 @@ def export_component_release_knobs(config, index) -> dict:
     return exported
 
 
-# The component whose class the routing release names. The name it carries under
-# `automations/routing/routing.py` is `COMPONENT`, and this file cannot import it: routing imports
-# `HelmUtils`, so an import back the other way is a cycle. The pair is pinned by a test that reads both
-# files, so the name cannot drift with nobody noticing.
-INGRESS_CLASS_COMPONENT = "traefik"
+# The component whose class the routing release names is `constants.COMPONENT` — spelled once for the
+# whole package since the routing modules started importing it from there. It used to be spelled again
+# here, because `routing.py` owned the name and this file could not import it without a cycle: routing
+# imports `HelmUtils`. That reason is gone, and a duplicate that is justified by a cycle which no
+# longer exists is a bug waiting to be believed.
 
 
 def export_ingress_class(config) -> dict:
@@ -1015,8 +1015,8 @@ def export_ingress_class(config) -> dict:
         knows it is never empty; the `KeyError` above is the only other shape, and it says which table
         to fix.
     '''
-    key = component_config_key(INGRESS_CLASS_COMPONENT, "INGRESS_CLASS")
-    answer = config.component_ingress_class(INGRESS_CLASS_COMPONENT)
+    key = component_config_key(constants.COMPONENT, "INGRESS_CLASS")
+    answer = config.component_ingress_class(constants.COMPONENT)
     exported = {key: str(answer)}
     os.environ[key] = str(answer)
     return exported

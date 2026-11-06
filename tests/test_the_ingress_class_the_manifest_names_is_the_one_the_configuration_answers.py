@@ -45,9 +45,9 @@ from asset_paths import values_path
 from cluster_fixture import DEV_SERVER, write_environment, write_kubeconfig
 from kubementat import config_answers, constants, helm_utils
 from kubementat.config import Config, component_config_key
-from kubementat.helm_utils import INGRESS_CLASS_COMPONENT, HelmUtils, export_ingress_class
+from kubementat.helm_utils import HelmUtils, export_ingress_class
 
-KEY = component_config_key(INGRESS_CLASS_COMPONENT, "INGRESS_CLASS")
+KEY = component_config_key(constants.COMPONENT, "INGRESS_CLASS")
 RELEASE = "traefik"
 MANIFEST = values_path("helmfile.yaml.gotmpl")
 
@@ -343,7 +343,7 @@ def test_the_answer_is_read_through_config_and_not_from_a_literal(tmp_path):
         exported = export_ingress_class(config)
         answer = _answered(config, KEY)
         assert exported == {KEY: answer.value}, (exported, answer)
-        assert exported == {KEY: config.component_ingress_class(INGRESS_CLASS_COMPONENT)}
+        assert exported == {KEY: config.component_ingress_class(constants.COMPONENT)}
         assert answer.value == exported[KEY]
 
     assert export_ingress_class(declared) == {KEY: DECLARED}
@@ -352,15 +352,18 @@ def test_the_answer_is_read_through_config_and_not_from_a_literal(tmp_path):
 
 
 def test_the_component_the_export_names_is_the_component_the_routing_code_names():
-    """`helm_utils` cannot import `routing.COMPONENT` -- routing imports `helm_utils` -- so the pair is pinned.
+    """One component name, so the export and the routing read cannot mean different components.
 
-    A name that drifted here would export a variable for a component no release configures, which is
-    an export that succeeds and changes nothing. Both sides are read from the files and not asserted
-    from memory.
+    `helm_utils` used to keep its own spelling of this name because it could not import
+    `routing.COMPONENT` without a cycle -- routing imports `helm_utils`. Both sides read
+    `constants.COMPONENT` now, so a drift between them is no longer something a rename has to avoid;
+    what is still pinned here is the failure that mattered, namely exporting a variable keyed to a
+    component no release configures, which is an export that succeeds and changes nothing. Both sides
+    are read from the sources and not asserted from memory.
     """
     from kubementat.automations.routing import routing
 
-    assert INGRESS_CLASS_COMPONENT == routing.COMPONENT
+    assert constants.COMPONENT == routing.COMPONENT
     assert KEY == component_config_key(routing.COMPONENT, "INGRESS_CLASS")
     assert KEY in constants.DEFAULT_STATIC_ANSWERS, (
         "the answer this export hands to helmfile is no longer L0, which is the fact its whole "

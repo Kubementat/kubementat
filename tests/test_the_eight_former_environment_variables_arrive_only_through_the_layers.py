@@ -231,10 +231,13 @@ PROCESS_ENVIRONMENT_USES = {
         "mode": "write",
     },
     ("src/kubementat/helm_utils.py", "export_ingress_class"): {
-        "names": ("TRAEFIK_INGRESS_CLASS",),
+        "names": ("<component>_INGRESS_CLASS, one component: constants.COMPONENT",),
         "derived": "component-config-key",
         "why": "the ingress class the configuration answers, exported so the manifest's `env` sees "
-               "it. One answer, one export, one read path.",
+               "it. One answer, one export, one read path. The component is named by `constants` and "
+               "not by this file, which is why the key is spelled here instead of folded from a "
+               "constant in it: `helm_utils` used to keep its own spelling of the name, and that copy "
+               "went away with the routing modules' copies.",
         "mode": "write",
     },
 }
