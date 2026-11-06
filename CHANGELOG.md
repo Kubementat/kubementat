@@ -1,5 +1,40 @@
 # Unreleased
 
+- **The 1:1 check primitives left `cluster.py` for `core/identity/comparison.py`** —
+  `running_cluster_address`, `_addresses_the_running_cluster`, and `_report_line`, 64 LOC, and
+  `cluster.py` down to 893 lines from 953. `_report_line` is the interesting one because the plan has no
+  row for it: it is not a primitive by name, but its subject is the 1:1 check (it formats the line that
+  says which sibling was held back and why, it reads `ClusterTarget` and the predicate, and its only caller
+  is `Context.build`), and the plan's own wording covers it. That is the census's own judgement rather than
+  a table row, and the census said so in prose before the split forced the question.
+  **Two names needed a qualifier after all.** The report asserted all three definitions byte-identical and
+  that no qualifiers were needed in the moved bodies. The AST says otherwise: `running_cluster_address`
+  now calls `_kubeconfig._service_account_address()` and `_report_line`'s signature takes
+  `_target.ClusterTarget`. Two lines of the entire diff, but the claim was the *only* evidence offered for
+  verbatimness, so it gets said: a check that returns "identical" is not the same as a check that returns
+  "identical apart from what the move required", and the second sentence is the true one. What the
+  difference does show is the split working — the bodies reach across modules, exactly as they should.
+  **A reader that moved is not a repoint.** The census lists two readers for
+  `_addresses_the_running_cluster`: `collision_check`, which stays in `cluster.py`, and `_report_line`,
+  which moved to `comparison.py` beside it. The second needed no call-site change, so three repoints —
+  all module-bound as `_comparison.<name>` so `kubementat.cluster.running_cluster_address` raises
+  `AttributeError` for all three while `cluster._comparison is comparison` stays `True` — cover two
+  readers plus the one `Context.build` call.
+  **The guard that needed no change, and why it still bites.**
+  `test_the_collision_check_is_called_once_and_written_once.py` asserts
+  `len(call_sites("running_cluster_address")) == 1` over all shipped code, so its sweep just grew to
+  include `comparison.py`: a second probe added inside the new module fails it. Its other two assertions —
+  `running_cluster_address` and `_addresses_the_running_cluster` must not appear in `Context.build`'s
+  called names — are close to vacuous now that the inlined filter has left the module; the load-bearing
+  half was always the count, and the count got wider rather than weaker.
+  **The census row was right this time.** 3 names, 64 LOC, matching the tree exactly. The two rows that
+  kept contradicting §6 were `kubeconfig.py`'s, which is worth stating so the correction above is not read
+  as a blanket verdict on the document.
+  One stale import stays: `cluster.py` still imports `ClusterContextNotFoundError` to name it in a
+  `Raises:` block, though the raising moved to `kubeconfig.py` in P2-3a. It predates this ticket, it is
+  documentation rather than a code path, and it is not this ticket's business.
+  Suite unchanged: **1775 passed, 1 skipped**, cycles none, layer violations none.
+
 - **`ClusterTarget` left `cluster.py` and became `core/identity/target.py`.** The class moves whole —
   223 lines, all 10 members and the decorators — and the only lines that differ from its source at the
   previous commit are the 16 pairs that had to gain a qualifier: `SOURCE_FLAG` becomes

@@ -16,6 +16,10 @@ is asking.
   that contain a `static.json`) and resolves each one's own claim.
 * `Context` — the pair of `(config, target)` plus the team and environment they belong to,
   built in one place so a command either has a cluster it can name or does not run.
+* The 1:1 check's primitives — the running cluster's own address, the address equality the check and
+  the report line must agree on, and the report line — are read from `core/identity/comparison.py`.
+  Only the check that combines them stays here, and `ClusterComparison` goes wherever the registry
+  that enumerates what it lists goes, because it is that registry's answer and not this file's.
 
 Two decisions that are load-bearing and not obvious from the shape of the code:
 
@@ -37,9 +41,10 @@ Two decisions that are load-bearing and not obvious from the shape of the code:
   `$KUBECONFIG` list names, the merge rule that decides which context wins, the server string read
   out of the YAML, and the material a pod is mounted with. That module is below this one and reads
   nothing in it, which is the direction the whole identity split runs in. `target.py` stands on the
-  same leaf, so what this module imports reaches `cluster → target → kubeconfig` with every edge
-  pointing down. It is imported as
-  `_kubeconfig` because `Context.build` already names a parameter `kubeconfig`: bound under its own
+  same leaf, and `comparison.py` — the 1:1 check's primitives, which this module held until now —
+  stands on `target.py`, so what this module imports reaches
+  `cluster → comparison → target → kubeconfig` with every edge pointing down. `kubeconfig` is imported
+  as `_kubeconfig` because `Context.build` already names a parameter `kubeconfig`: bound under its own
   name, the module would be shadowed by that parameter — usually by `None` — on every path that was
   handed no flag, and the failure would be an `AttributeError` about a `NoneType` inside a resolution
   that had nothing wrong with it.
@@ -56,11 +61,17 @@ from typing import Any, Dict, Optional, Tuple
 from kubementat.core import constants
 from kubementat.core.config.config import Config
 from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
+# The 1:1 check primitives are bound as the module and not by their three names, for the same
+# reason `target` is bound that way below: all three are reached from inside this file today, and a
+# name import would leave `kubementat.cluster.running_cluster_address` standing beside the function
+# itself — a second binding for one function object, which is what a patch aimed at the module nobody
+# runs then misses. The same rule kept them out of this file's namespace.
+from kubementat.core.identity import comparison as _comparison
 from kubementat.core.identity import kubeconfig as _kubeconfig
 # `ClusterTarget` is bound here as the module and not the name on purpose: a name import
 # would answer `kubementat.cluster.ClusterTarget`, and a second door to one class object is
-# what a `monkeypatch.setattr` on the class then misses. The eleven readers below reach the
-# class through the module that owns it.
+# what a `monkeypatch.setattr` on the class then misses. The ten readers left below reach the
+# class through the module that owns it; the eleventh went with `_report_line`.
 from kubementat.core.identity import target as _target
 from kubementat.errors import (
     ClusterContextNotFoundError,
@@ -68,7 +79,6 @@ from kubementat.errors import (
     ClusterIdentityCollisionError,
     ClusterNotConfiguredError,
     ClusterResolutionError,
-    ServiceAccountNotMountedError,
     StatedClusterMismatchError,
     TeamNotSuppliedError,
 )
@@ -82,35 +92,6 @@ from kubementat.errors import (
 # `platform_config/{environment}/<team>/` — and kmt does not guess what a command means, so the object
 # says so rather than letting a service read a path built out of a name nobody gave it. That both
 # call sites raise it is the reason the refusal has one home instead of one per service.
-
-
-def running_cluster_address() -> Optional[str]:
-    """This process's own cluster address, or `None` when it is not inside one.
-
-    The question is asked for one reason: in-cluster is the only resolution path
-    where the target is the cluster the code is running on, and a 1:1 check that compares against
-    *itself* would refuse kubementat's own install. The answer is used only to *subtract*, never to
-    choose — no resolution path here consults it as a candidate, and a command that addresses no
-    cluster still gets the error that names the file and the key rather than this one.
-
-    `None` is the normal answer everywhere except inside a pod, and the probe is the two file stats
-    and two variable reads that keep the check cheap on reads.
-    """
-    try:
-        return _kubeconfig._service_account_address()
-    except ServiceAccountNotMountedError:
-        return None
-
-
-def _addresses_the_running_cluster(record, self_address: Optional[str]) -> bool:
-    """Whether `record` is the cluster this command is already standing on.
-
-    Spelled once because both halves of the answer have to agree: the comparison that may refuse,
-    and the report line that has to say it was held back. An address equality is the only test —
-    the identity being compared is the server string, and the running cluster is identified that
-    way.
-    """
-    return bool(self_address) and record.target is not None and record.target.address == self_address
 
 
 @dataclass(frozen=True)
@@ -257,14 +238,14 @@ class EnvironmentRegistry:
         """
         # One pass over the root, because the cost of local reads is acceptable but the cost of
         # doing it twice for the sake of a report line is not.
-        self_address = running_cluster_address()
+        self_address = _comparison.running_cluster_address()
         others = tuple(record for record in self.all() if record.environment != target.environment)
         collisions = tuple(
             record
             for record in others
             if record.target is not None
             and record.target.address == target.address
-            and not _addresses_the_running_cluster(record, self_address)
+            and not _comparison._addresses_the_running_cluster(record, self_address)
         )
         return ClusterComparison(target=target, others=others, collisions=collisions,
                                  self_address=self_address)
@@ -654,8 +635,8 @@ class Context:
             config=config,
             target=target,
             resolution_report=(
-                _report_line(target, resolved_label, comparison.others,
-                             self_address=comparison.self_address),
+                _comparison._report_line(target, resolved_label, comparison.others,
+                                         self_address=comparison.self_address),
             ),
         )
 
@@ -910,44 +891,3 @@ class Context:
             f"let a command decide which of them it meant. Run kmt environments list to see "
             f"which environment claims which cluster, then point one of them somewhere else."
         )
-
-
-def _report_line(target: _target.ClusterTarget, label: str, others, *,
-                 self_address: Optional[str] = None) -> str:
-    """One of the resolution report's two shapes, and only ever one of them.
-
-    `others` is every other environment in the root, the unresolved ones included — the line has
-    to be able to say who was compared and who could not be.
-
-    *verified* is said about the environments that were actually compared, so the number is in
-    the line: "verified against 1 other environment" says what was checked and against how many.
-    An environment that could not be read is named with the reason instead, and the word
-    *verified* does not appear, because the comparison the line would be claiming did not happen.
-
-    `self_address` is the running cluster's exclusion made visible. An environment that resolves to
-    the cluster
-    this command is standing on is not a second claim, so it is not compared — and the line may
-    not say *verified* about a comparison that held itself back, which is why the exclusion is
-    reported as *not verified: <reason>* and never as a silent subtraction. A command
-    that is not in a cluster passes `None` here and gets exactly the line it got before.
-    """
-    header = f"cluster {target.environment}: {target.address} ({label})"
-    unresolved = tuple(record for record in others if record.target is None)
-    held_back = tuple(
-        record for record in others
-        if record.target is not None and _addresses_the_running_cluster(record, self_address)
-    )
-    if unresolved or held_back:
-        notes = [
-            f"{record.environment} could not be resolved ({record.reason})" for record in unresolved
-        ]
-        notes += [
-            f"{record.environment} is the cluster this command is running on ({record.target.address})"
-            for record in held_back
-        ]
-        return f"{header} — not verified: {'; '.join(notes)}"
-    compared = tuple(record for record in others if record.target is not None)
-    if not compared:
-        return f"{header} — not verified: no other environment in this root declares a cluster"
-    plural = "environment" if len(compared) == 1 else "environments"
-    return f"{header} — verified against {len(compared)} other {plural}"
