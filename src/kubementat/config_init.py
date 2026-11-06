@@ -87,9 +87,8 @@ import click
 
 from kubementat.core import constants
 from kubementat.core.config.config import Config
-from kubementat.cluster import (CLUSTER_KUBECONFIG_PATH_KEY, CLUSTER_KUBE_CONTEXT_KEY,
-                                IN_TREE_KUBECONFIG_FILENAME)
 from kubementat.core.config.reads import read_decrypted
+from kubementat.core.identity.kubeconfig import IN_TREE_KUBECONFIG_FILENAME
 
 # Step actions. `existed` is the one that belongs to foreign material: `force=True` accepts it and
 # touches nothing of it, so recording it as `created` or `skipped` would both be false.
@@ -420,7 +419,7 @@ def init_configuration(root, environment, team=None, answers=(), encrypted_answe
     # The plan, before any write: five targets, each with the exact bytes it wants on disk. Building
     # it whole is what makes the idempotence claim checkable — a per-path write-as-you-decide loop
     # cannot promise that a refusal halfway through has not already changed the tree.
-    environment_static: dict = {CLUSTER_KUBE_CONTEXT_KEY: None, CLUSTER_KUBECONFIG_PATH_KEY: None}
+    environment_static: dict = {constants.CLUSTER_KUBE_CONTEXT_KEY: None, constants.CLUSTER_KUBECONFIG_PATH_KEY: None}
     environment_static.update(_answers_to_document(answers))
     # The encrypted document is seeded first and answered second, in that order and for a reason: a key
     # an operator named with `--encrypted-set` has to win over the table, and reversing the two lines
@@ -682,7 +681,7 @@ def add_environment(root, environment) -> tuple[InitStep, ...]:
     # The two cluster keys go in with the empty document, exactly where init puts them: a new
     # environment addresses nothing until a human names a context, and a file without the keys is a
     # different file from the one init would write, which the next `config init` would refuse.
-    environment_static = {CLUSTER_KUBE_CONTEXT_KEY: None, CLUSTER_KUBECONFIG_PATH_KEY: None}
+    environment_static = {constants.CLUSTER_KUBE_CONTEXT_KEY: None, constants.CLUSTER_KUBECONFIG_PATH_KEY: None}
     steps = _apply_layer_plan([
         (ENVIRONMENT_STATIC_STEP, config.env_static_config_path, _json_bytes(environment_static)),
         (ENVIRONMENT_ENCRYPTED_STEP, config.env_static_encrypted_config_path, _json_bytes({})),
@@ -863,7 +862,7 @@ def _require_keyable_team_layer(key: str, team, root: Path, environment: str) ->
     the read verbs rather than in a write verb, so no table of "keys a team reader actually
     consults" appears in this module and none is needed.
     """
-    if team is None or key not in (CLUSTER_KUBE_CONTEXT_KEY, CLUSTER_KUBECONFIG_PATH_KEY):
+    if team is None or key not in (constants.CLUSTER_KUBE_CONTEXT_KEY, constants.CLUSTER_KUBECONFIG_PATH_KEY):
         return
     raise click.ClickException(
         f"{key} on --team is refused. One directory is exactly one cluster: what resolves a "
@@ -1138,7 +1137,7 @@ def cluster_is_unaddressed(static_json_path) -> bool:
         return True
     if not isinstance(document, dict):
         return True
-    value = document.get(CLUSTER_KUBE_CONTEXT_KEY)
+    value = document.get(constants.CLUSTER_KUBE_CONTEXT_KEY)
     return value is None or (isinstance(value, str) and not value.strip())
 
 

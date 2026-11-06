@@ -350,3 +350,33 @@ CONFIG_SCHEMA_VERSION = 1
 # whether anything else about the tree may be trusted. Naming it twice would be the ordinary way for
 # the reader to keep answering about a path the writer stopped writing.
 CONFIG_MANIFEST_FILENAME = "kubementat.yaml"
+
+
+# ---------------------------------------------------------------------------------------------
+# The vocabulary a cluster claim is answered with: the two keys a tree declares a cluster in, and the
+# labels that say which layer answered.
+#
+# They live here rather than in `core/identity/` because three of that split's five modules name
+# them. `CLUSTER_KUBE_CONTEXT_KEY` alone is read by a target's constructor to write its refusal, by
+# the registry's declaration reads to state what was declared, and by `Context`'s four resolution
+# layers to say which of them answered — and a key that three files name cannot live in one of the
+# three, because the two that are not it would have to read upward to ask. Duplicating a shared value
+# downward is the layering rule's own answer, and this file is what "downward" means: it is the one
+# module in the tree that imports nothing.
+#
+# The two keys arrived from `kubementat/cluster.py`, where the comment beside them argued that a
+# constant nobody reads from the resolution order is a constant that goes stale. That argument was
+# about staleness, not about placement: what goes stale is a key nobody reads, not a key spelled in a
+# module that does not resolve clusters, and every reader is told to import it.
+# ---------------------------------------------------------------------------------------------
+CLUSTER_KUBE_CONTEXT_KEY = "CLUSTER_KUBE_CONTEXT"
+CLUSTER_KUBECONFIG_PATH_KEY = "CLUSTER_KUBECONFIG_PATH"
+
+# The `source` values a target can carry. `static.json:<path>` is a prefix plus the path rather
+# than a
+# bare label, because "which file said this" is the answer a debugging session is looking for.
+SOURCE_FLAG = "flag"
+SOURCE_ENV = "env"
+SOURCE_CONNECTION = "connection"
+SOURCE_SERVICE_ACCOUNT = "service-account"
+STATIC_SOURCE_PREFIX = "static.json:"

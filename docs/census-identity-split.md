@@ -66,7 +66,11 @@ Members: `environment:282`, `context:283`, `kubeconfig_path:284`, `address:285`,
 The plan also assigns `_normalise_address:148-156` here; §5 shows that exact assignment is what makes
 the split circular, so this census puts it in `kubeconfig.py` instead and says why.
 
-### `kubeconfig.py` — 17 names, 255 LOC
+### `kubeconfig.py` — 21 names, 310 LOC
+
+This row was first written as 17 names and 255 LOC, which contradicted the same census's own
+home assignments for the service-account and library-config half; the split proved the larger number.
+The four names the table had left out are marked below.
 
 | name | kind | span | LOC | read by / reads |
 |---|---|---|---|---|
@@ -87,14 +91,18 @@ the split circular, so this census puts it in `kubeconfig.py` instead and says w
 | `_files_label` | module function | 184-185 | 2 | `_address_in_kubeconfig:250,251,258,260,265,266` |
 | `_read_kubeconfig` | module function | 188-230 | 43 | `_address_in_kubeconfig:244`, `Context._check_stated_cluster:1313`; imported by 1 test |
 | `_address_in_kubeconfig` | module function | 233-268 | 36 | `ClusterTarget.from_kubeconfig:322` |
+| `_CONNECTION_DOCUMENT_CONTEXT` | module const | 497 | 1 | `ClusterTarget.from_connection:266,332,335` — the document the loader is built from |
+| `_service_account_files` | module function | 548-557 | 10 | `ClusterTarget.from_service_account:379`, `_service_account_address:561` |
+| `_service_account_address` | module function | 560-593 | 34 | `ClusterTarget.from_service_account:222,415`, `running_cluster_address:609` |
+| `_library_config_file` | module function | 625-634 | 10 | `ClusterTarget.client:278`; reads `default_kubeconfig_path` |
 
-The two halves of this list are not the same subject. Nine of the 17 are kubeconfig-file reading
-(`_kubeconfig_files`, `_read_kubeconfig`, `_address_in_kubeconfig`, `_files_label`,
-`_library_config_file` as a target-side resident, the two path rules, and three env-var names); the
-other eight are service-account material (`_service_account_files`, `_service_account_address`, the
-four SA/`KUBERNETES_SERVICE_*` names) plus the connection document the loader is built from. If the
-split is one file too many, the service-account half is the one that would come out; the plan does not
-ask for that and this census does not propose it.
+The two halves of this list are not the same subject. Eleven of the 21 are kubeconfig-file reading
+(`_kubeconfig_files`, `_read_kubeconfig`, `_address_in_kubeconfig`, `_files_label`, `_library_config_file`,
+the connection document and its field, the two path rules, and two env-var names); the other ten are
+service-account material (`_service_account_files`, `_service_account_address`, the four
+SA/`KUBERNETES_SERVICE_*` names and `SERVICE_ACCOUNT_ROOT`) plus the two in-tree names. If the split is
+one file too many, the service-account half is the one that would come out; the plan does not ask for
+that and this census does not propose it.
 
 ### `registry.py` — 9 names + 12 members, 275 LOC
 

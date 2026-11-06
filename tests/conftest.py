@@ -179,7 +179,8 @@ def _fixture_target():
     `tmp_path`. The identity the record compares is the context, and the address is a value
     nothing in these tests contacts.
     """
-    from kubementat.cluster import STATIC_SOURCE_PREFIX, ClusterTarget
+    from kubementat.cluster import ClusterTarget
+    from kubementat.core.constants import STATIC_SOURCE_PREFIX
 
     return ClusterTarget(environment=FIXTURE_ENVIRONMENT, context=FIXTURE_KUBE_CONTEXT,
                          kubeconfig_path=None, address=FIXTURE_SERVER,
@@ -596,11 +597,17 @@ def no_cluster_is_running_this_process(monkeypatch):
     injects are cleared. A test that wants to be a pod fabricates the mount itself — see
     `cluster_fixture.mounted_service_account` — and does it inside the test body, after this
     fixture has run, which is the whole of the ordering rule.
-    """
-    from kubementat import cluster as _cluster_module
 
-    monkeypatch.setattr(_cluster_module, "SERVICE_ACCOUNT_ROOT",
-                        Path("/no-pod-runs-tests-here"), raising=False)
+    The patch lands on `kubementat.core.identity.kubeconfig`, the module that owns
+    `SERVICE_ACCOUNT_ROOT` and that `cluster.py` reads it through, and `raising=True` is what makes
+    that home an assertion rather than a hope: this fixture used to patch `kubementat.cluster` with
+    `raising=False`, which is the shape of failure that stays green after the name moves, because
+    the miss is silent and the layer under test reads the machine's real mount.
+    """
+    from kubementat.core.identity import kubeconfig as _kubeconfig_module
+
+    monkeypatch.setattr(_kubeconfig_module, "SERVICE_ACCOUNT_ROOT",
+                        Path("/no-pod-runs-tests-here"), raising=True)
     monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
     monkeypatch.delenv("KUBERNETES_SERVICE_PORT", raising=False)
 

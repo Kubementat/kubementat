@@ -24,8 +24,8 @@ import os
 
 import pytest
 
-from kubementat.cluster import (
-    ClusterTarget,
+from kubementat.cluster import ClusterTarget
+from kubementat.core.constants import (
     SOURCE_CONNECTION,
     SOURCE_ENV,
     SOURCE_FLAG,

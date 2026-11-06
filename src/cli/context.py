@@ -45,7 +45,8 @@ import os
 
 import click
 
-from kubementat.cluster import CLUSTER_KUBE_CONTEXT_KEY, Context
+from kubementat.cluster import Context
+from kubementat.core.constants import CLUSTER_KUBE_CONTEXT_KEY
 from kubementat.core.config.paths import resolve_platform_config_dir
 from kubementat.core.config.stamp import check_configuration_stamp
 from kubementat.errors import (

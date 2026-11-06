@@ -20,11 +20,13 @@ answer comes from the mounted files, so every test here fabricates them under `t
 
 import pytest
 
-from kubementat import cluster as cluster_module
+from kubementat.core.identity import kubeconfig as kubeconfig_module
 from kubementat.cluster import (
     ClusterTarget,
     Context,
     EnvironmentRegistry,
+)
+from kubementat.core.constants import (
     SOURCE_FLAG,
     SOURCE_SERVICE_ACCOUNT,
     STATIC_SOURCE_PREFIX,
@@ -298,7 +300,8 @@ def test_a_command_on_a_machine_that_is_not_a_pod_still_gets_the_configuration_s
     write_environment(root, "dev", context=None)
     static_path = root / "platform_config" / "dev" / "static.json"
     # Not a pod, in the only sense the code can check: no material where the kubelet would have put it.
-    monkeypatch.setattr(cluster_module, "SERVICE_ACCOUNT_ROOT", tmp_path / "not-a-pod")
+    # Patched on the module that owns the root, which is where the code that reads it looks.
+    monkeypatch.setattr(kubeconfig_module, "SERVICE_ACCOUNT_ROOT", tmp_path / "not-a-pod")
 
     with pytest.raises(ClusterNotConfiguredError) as refused:
         Context.build("dev", "the-team")

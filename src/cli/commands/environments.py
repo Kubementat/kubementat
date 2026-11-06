@@ -22,10 +22,8 @@ import click
 from pathlib import Path
 
 from cli.context import CONFIG_DIR_OPTION, CONFIG_DIR_PARAMETER
-from kubementat.cluster import (
-    STATIC_SOURCE_PREFIX,
-    EnvironmentRegistry,
-)
+from kubementat.cluster import EnvironmentRegistry
+from kubementat.core.constants import STATIC_SOURCE_PREFIX
 from kubementat.core.config.paths import resolve_platform_config_dir
 
 TABLE_HEADERS = ("ENVIRONMENT", "CLUSTER_ADDRESS", "CONTEXT", "SOURCE", "CHECK")

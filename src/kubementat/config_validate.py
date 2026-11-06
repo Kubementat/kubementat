@@ -59,6 +59,7 @@ import yaml
 
 from kubementat import cluster as _cluster
 from kubementat import config_init
+from kubementat.core.constants import CLUSTER_KUBECONFIG_PATH_KEY, CLUSTER_KUBE_CONTEXT_KEY
 from kubementat.core.config.config import Config
 from kubementat.core.config.stamp import ConfigurationStamp
 from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
@@ -545,11 +546,11 @@ def _absolute_kubeconfig_findings(path: Path, document: dict, findings: list[Fin
     be right about the machine either, which is why it belongs on the warning side. It is a
     portable-by-declaration file path that has been pinned to one laptop.
     """
-    value = document.get(_cluster.CLUSTER_KUBECONFIG_PATH_KEY)
+    value = document.get(CLUSTER_KUBECONFIG_PATH_KEY)
     if isinstance(value, str) and value.strip() and os.path.isabs(value.strip()):
         findings.append(Finding(
             WARNING, "absolute-kubeconfig-path",
-            f"{_cluster.CLUSTER_KUBECONFIG_PATH_KEY} in {path} is the absolute path {value!r}. "
+            f"{CLUSTER_KUBECONFIG_PATH_KEY} in {path} is the absolute path {value!r}. "
             f"The configuration tree says which cluster this environment is and the machine "
             f"declares how to reach it, so a path that works on this laptop is a path that will "
             f"break the next one. Leave the key unset to let the kubeconfig on the machine answer.",
@@ -584,7 +585,7 @@ def _cluster_fact_finding(root: Path, environment: str, findings: list[Finding])
         findings.append(Finding(
             WARNING, "cluster-not-addressed",
             f"environment {environment!r} is configured, but it does not address a cluster yet: "
-            f"{_cluster.CLUSTER_KUBE_CONTEXT_KEY} is null in {path}. Name the context there, then "
+            f"{CLUSTER_KUBE_CONTEXT_KEY} is null in {path}. Name the context there, then "
             f"kmt environments list prints what every configured environment addresses.", path))
 
 

@@ -23,16 +23,14 @@ from pathlib import Path
 
 import yaml
 
-from kubementat import cluster as _cluster_module
-from kubementat.cluster import (
+from kubementat.cluster import ClusterTarget, Context
+from kubementat.core.config.config import Config
+from kubementat.core.constants import SOURCE_CONNECTION, STATIC_SOURCE_PREFIX
+from kubementat.core.identity import kubeconfig as _kubeconfig_module
+from kubementat.core.identity.kubeconfig import (
     KUBERNETES_SERVICE_HOST_ENV,
     KUBERNETES_SERVICE_PORT_ENV,
-    SOURCE_CONNECTION,
-    STATIC_SOURCE_PREFIX,
-    ClusterTarget,
-    Context,
 )
-from kubementat.core.config.config import Config
 
 # The credentials a fixture kubeconfig carries. They are never real, and one test's whole job is
 # to prove none of these strings ever reaches a `repr`.
@@ -255,9 +253,15 @@ def mounted_service_account(monkeypatch, root, *, host="10.0.0.1", port="6443",
 
     Returns the address a target built from it carries, so a test can compare a declared
     environment against the running cluster without spelling the string out twice.
+
+    The root is patched on `kubementat.core.identity.kubeconfig`, the module that owns the name and
+    that `cluster.py` therefore reads through, and not on `kubementat.cluster`. Patching the module
+    the constant left would leave this fixture believing it had unmounted the pod while the layer
+    under test read the real `/var/run/secrets/kubernetes.io/serviceaccount` off the machine — a
+    green run that proved nothing about the layer it was about.
     """
     mount = service_account_mount(root, token=token)
-    monkeypatch.setattr(_cluster_module, "SERVICE_ACCOUNT_ROOT", mount)
+    monkeypatch.setattr(_kubeconfig_module, "SERVICE_ACCOUNT_ROOT", mount)
     monkeypatch.setenv(KUBERNETES_SERVICE_HOST_ENV, host)
     monkeypatch.setenv(KUBERNETES_SERVICE_PORT_ENV, port)
     return f"https://{host}:{port}"
@@ -270,7 +274,7 @@ def outside_a_cluster(monkeypatch) -> Path:
     running on a real cluster and a suite running on a laptop agree.
     """
     mount = Path("/not-a-pod-this-process-has-no-service-account")
-    monkeypatch.setattr(_cluster_module, "SERVICE_ACCOUNT_ROOT", mount)
+    monkeypatch.setattr(_kubeconfig_module, "SERVICE_ACCOUNT_ROOT", mount)
     monkeypatch.delenv(KUBERNETES_SERVICE_HOST_ENV, raising=False)
     monkeypatch.delenv(KUBERNETES_SERVICE_PORT_ENV, raising=False)
     return mount

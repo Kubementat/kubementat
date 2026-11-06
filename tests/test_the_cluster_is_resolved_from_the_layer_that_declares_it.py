@@ -35,11 +35,8 @@ is written in it.
 
 import pytest
 
-from kubementat.cluster import (
-    Context,
-    SOURCE_FLAG,
-    STATIC_SOURCE_PREFIX,
-)
+from kubementat.cluster import Context
+from kubementat.core.constants import SOURCE_FLAG, STATIC_SOURCE_PREFIX
 from kubementat.errors import ClusterNotConfiguredError
 
 from cluster_fixture import (

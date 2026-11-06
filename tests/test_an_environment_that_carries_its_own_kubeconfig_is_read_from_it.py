@@ -24,8 +24,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from kubementat import cluster
 from kubementat.cluster import Context
+from kubementat.core.identity import kubeconfig as kubeconfig_module
 from kubementat.config_init import init_configuration
 from conftest import cluster_state
 
@@ -147,7 +147,7 @@ def test_the_filename_is_the_one_the_trees_git_crypt_filter_encodes():
     fail — git-crypt would simply stop touching the file. Asserting the spelling is the cheapest way
     to keep that from being a documentation-only bug.
     """
-    assert cluster.IN_TREE_KUBECONFIG_FILENAME == "kubeconfig.encrypted.yaml"
+    assert kubeconfig_module.IN_TREE_KUBECONFIG_FILENAME == "kubeconfig.encrypted.yaml"
     assert "*.encrypted.*" in (Path("src/kubementat/config_bootstrap.py").read_text())
 
 

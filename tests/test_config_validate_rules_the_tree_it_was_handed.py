@@ -48,9 +48,9 @@ from click.testing import CliRunner
 
 from cli.commands import config as config_module
 from kubementat import shell
-from kubementat.cluster import CLUSTER_KUBECONFIG_PATH_KEY, CLUSTER_KUBE_CONTEXT_KEY
 from kubementat.config_init import add_team, init_configuration
 from kubementat.config_validate import validate_tree
+from kubementat.core.constants import CLUSTER_KUBECONFIG_PATH_KEY, CLUSTER_KUBE_CONTEXT_KEY
 
 ENVIRONMENT = "prod"
 TEAM = "alpha"

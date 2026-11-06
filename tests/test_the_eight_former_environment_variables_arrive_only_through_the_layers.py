@@ -180,23 +180,28 @@ PROCESS_ENVIRONMENT_USES = {
         "why": "the current-environment variable a CLI argument overrides.",
         "mode": "read",
     },
-    ("src/kubementat/cluster.py", "default_kubeconfig_path"): {
+    ("src/kubementat/core/identity/kubeconfig.py", "default_kubeconfig_path"): {
         "names": ("KUBECONFIG",),
         "why": "kubeconfig discovery, which is a fact about the machine and not about a tree.",
         "mode": "read",
     },
-    ("src/kubementat/cluster.py", "_service_account_address"): {
+    ("src/kubementat/core/identity/kubeconfig.py", "_service_account_address"): {
         "names": ("KUBERNETES_SERVICE_HOST", "KUBERNETES_SERVICE_PORT"),
-        "why": "the in-cluster service account's own address, which is readable nowhere else.",
+        "why": "the in-cluster service account's own address, which is readable nowhere else. It "
+               "travelled to the module that owns the two variables it reads, so the fold here is "
+               "native and needs no home of its own.",
         "mode": "read",
     },
     ("src/kubementat/cluster.py", "_process_value"): {
         "names": ("CLUSTER_KUBE_CONTEXT", "CLUSTER_KUBECONFIG_PATH"),
         "constants": ("CLUSTER_KUBE_CONTEXT_KEY", "CLUSTER_KUBECONFIG_PATH_KEY"),
+        "constants_home": "src/kubementat/core/constants.py",
         "why": "layer 2 of the cluster dial (`--context`/`--kubeconfig`, then this, then "
                "static.json, then the in-cluster identity). The CLUSTER_* keys are kept out of this "
                "row for exactly this reason, and the loop is handed those two constants "
-               "and nothing else — asserted against the module's own table, not against this row.",
+               "and nothing else — asserted against the module's own table, not against this row. "
+               "Their module is now `core/constants.py`, which is spelled out below because three of "
+               "the identity modules name them.",
         "mode": "read",
     },
     ("src/kubementat/core/config/paths.py", "_directory_from_environment"): {
@@ -451,10 +456,14 @@ def test_no_former_environment_variable_arrives_from_the_process_environment():
             # table describes what the name is built out of. A blank here would be "I could not see
             # it" read as "it cannot be one of the eight".
             if entry.get("constants"):
-                module_constants = _module_string_constants(Path(REPO / site.path))
+                # A constant the loop is handed can live in a module the reader imports, so the table
+                # says whose constant it is and the fold happens there. Absent that key the constants
+                # are the reader's own, which is what every row but the two cluster ones needs.
+                home = entry.get("constants_home", site.path)
+                module_constants = _module_string_constants(Path(REPO / home))
                 declared = list(entry["constants"])
                 assert all(name in module_constants for name in declared), \
-                    f"{site.label()}: {declared} are not all module constants of {site.path} any more"
+                    f"{site.label()}: {declared} are not all module constants of {home} any more"
                 derived = {module_constants[name] for name in declared}
                 assert derived == set(entry["names"]), (
                     f"{site.label()} can carry {sorted(derived)} and the table says "

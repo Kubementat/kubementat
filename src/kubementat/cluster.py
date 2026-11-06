@@ -25,8 +25,18 @@ Two decisions that are load-bearing and not obvious from the shape of the code:
   `kubernetes.config.kube_config.KUBE_CONFIG_DEFAULT_LOCATION` is a module-level constant the
   library captured at import (the fixtures in `tests/conftest.py:547` exist because of this), so
   a default resolved through it would silently disagree with the environment the caller is in.
-  This module applies the same documented rule — `$KUBECONFIG`, then `~/.kube/config` — itself,
-  then hands the concrete path to the library so the address and the client cannot disagree.
+  `kubeconfig.default_kubeconfig_path` applies the same documented rule — `$KUBECONFIG`, then
+  `~/.kube/config` — at call time, and this module hands the concrete path it answers to the library
+  so the address and the client cannot disagree.
+
+  What reads a kubeconfig lives one level down, in `core/identity/kubeconfig.py`: the files a
+  `$KUBECONFIG` list names, the merge rule that decides which context wins, the server string read
+  out of the YAML, and the material a pod is mounted with. That module is below this one and reads
+  nothing in it, which is the direction the whole identity split runs in. It is imported as
+  `_kubeconfig` because `Context.build` already names a parameter `kubeconfig`: bound under its own
+  name, the module would be shadowed by that parameter — usually by `None` — on every path that was
+  handed no flag, and the failure would be an `AttributeError` about a `NoneType` inside a resolution
+  that had nothing wrong with it.
 """
 
 from __future__ import annotations
@@ -36,12 +46,12 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
-import yaml
-
+from kubementat.core import constants
 from kubementat.core.config.config import Config
 from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
+from kubementat.core.identity import kubeconfig as _kubeconfig
 from kubementat.errors import (
     ClusterContextNotFoundError,
     ClusterFileUnreadableError,
@@ -53,50 +63,6 @@ from kubementat.errors import (
     TeamNotSuppliedError,
 )
 
-# The two environment-level keys that decide which cluster a command means. They are here rather
-# than in `constants` because
-# they mean something only in this module's resolution order, and a constant nobody reads from
-# the resolution order is a constant that goes stale.
-CLUSTER_KUBE_CONTEXT_KEY = "CLUSTER_KUBE_CONTEXT"
-CLUSTER_KUBECONFIG_PATH_KEY = "CLUSTER_KUBECONFIG_PATH"
-
-# The `source` values a target can carry. `static.json:<path>` is a prefix plus the path rather
-# than a
-# bare label, because "which file said this" is the answer a debugging session is looking for.
-SOURCE_FLAG = "flag"
-SOURCE_ENV = "env"
-SOURCE_CONNECTION = "connection"
-SOURCE_SERVICE_ACCOUNT = "service-account"
-STATIC_SOURCE_PREFIX = "static.json:"
-
-KUBECONFIG_ENV_VAR = "KUBECONFIG"
-
-# Where an environment's own kubeconfig lives, and the one name that answers ahead of `$KUBECONFIG`.
-# Spelled once because it is read by the resolution order and written into the advice in three
-# places, and a filename a reader has to guess is a filename that stops matching the documentation.
-IN_TREE_KUBECONFIG_FILENAME = "kubeconfig.encrypted.yaml"
-
-# The mounted material that proves a process is running *on* a cluster rather than merely
-# interested in one. The path is not a configuration option: it is what the kubelet is
-# documented to write, and the only reason it is spelled as a constant here is so a test can
-# fabricate the three files under a temporary directory instead of pretending to be a pod.
-SERVICE_ACCOUNT_ROOT = Path("/var/run/secrets/kubernetes.io/serviceaccount")
-SERVICE_ACCOUNT_TOKEN_FILE = "token"
-SERVICE_ACCOUNT_CA_FILE = "ca.crt"
-KUBERNETES_SERVICE_HOST_ENV = "KUBERNETES_SERVICE_HOST"
-KUBERNETES_SERVICE_PORT_ENV = "KUBERNETES_SERVICE_PORT"
-# The port is not guessed at when the kubelet did not say: 443 is what the Service is created on.
-DEFAULT_KUBERNETES_SERVICE_PORT = "443"
-
-# The key an operator would edit, spelled once so a refusal about a missing kubeconfig names it
-# instead of paraphrasing it.
-KUBECONFIG_PATH_SOURCE_LABEL = "CLUSTER_KUBECONFIG_PATH"
-
-# Where the connection material a `from_connection` target was built from is kept. It is not a
-# dataclass field: the fields above are the whole of the object's public shape, and credential
-# material is not part of what gets compared or printed.
-_CONNECTION_FIELD = "_connection_material"
-
 
 # `TeamNotSuppliedError` is imported above rather than defined here, and it comes from
 # `kubementat.errors` rather than from this module's neighbourhood: the same refusal is raised by
@@ -106,166 +72,6 @@ _CONNECTION_FIELD = "_connection_material"
 # `platform_config/{environment}/<team>/` — and kmt does not guess what a command means, so the object
 # says so rather than letting a service read a path built out of a name nobody gave it. That both
 # call sites raise it is the reason the refusal has one home instead of one per service.
-
-
-def default_kubeconfig_path() -> str:
-    """The Kubernetes library's own rule, applied now rather than at import time.
-
-    `$KUBECONFIG` if it is set — which may be a path-separated list, which the library's own
-    merger understands — and `~/.kube/config` otherwise. This is the *last* answer: an environment
-    that carries its own kubeconfig answers first, and this rule is what runs when it does not.
-    """
-    declared = os.environ.get(KUBECONFIG_ENV_VAR)
-    if declared and declared.strip():
-        return declared.strip()
-    return str(Path.home() / ".kube" / "config")
-
-
-def in_tree_kubeconfig(platform_config_dir: Path,
-                       environment: str) -> Optional[Path]:
-    """The environment's own kubeconfig, when the tree has one.
-
-    `platform_config/<environment>/kubeconfig.encrypted.yaml`, and only when the file is there. It
-    answers ahead of `$KUBECONFIG` for one reason: a shell variable is something the machine happens
-    to have, and a command run against a named environment should read that environment. A stray
-    `export KUBECONFIG` in an operator's session silently re-pointing a deployment that named a
-different cluster is the defect this answers, and it is the same defect the configuration layers
-    were built to close everywhere else.
-
-    The name is not decoration. git-crypt's filter in a prepared tree is `*.encrypted.*`, so this
-    file is encrypted by the rule kubementat already installs there, and a kubeconfig that follows it
-    is protected where it lives instead of only in the `CLUSTER_KUBECONFIG_PATH` that names it. The
-    read itself is `read_decrypted`, so an operator working a locked checkout gets "this holds
-    ciphertext" rather than a YAML error from a file git-crypt never unlocked.
-
-    Returns the path, or None when the environment carries no kubeconfig of its own — which is the
-    ordinary case today, and the only case in which the library's rule is reached.
-    """
-    candidate = Path(platform_config_dir) / environment / IN_TREE_KUBECONFIG_FILENAME
-    return candidate if candidate.is_file() else None
-
-
-def _normalise_address(address: str) -> str:
-    """`address` with whitespace and one trailing slash removed.
-
-    The check compares the server string, so `https://host:6443/` and `https://host:6443` have to be
-    one address and not two. Only one slash is dropped, because a server that really does carry
-    a path (`https://host/api`) is not the same endpoint as one that does not.
-    """
-    trimmed = address.strip()
-    return trimmed[:-1] if trimmed.endswith("/") else trimmed
-
-
-def _kubeconfig_files(path: Optional[str]) -> Tuple[Path, ...]:
-    """The files `path` names, as a tuple, defaulting to the library's own rule.
-
-    A `None` path is not a guess about where the kubeconfig is; it is the statement "the
-    library's rule", and the rule is `$KUBECONFIG`, then `~/.kube/config`.
-    """
-    declared = path if path not in (None, "") else default_kubeconfig_path()
-    declared = str(declared)
-    files = tuple(Path(entry).expanduser() for entry in declared.split(os.pathsep) if entry)
-    if not files:
-        raise ClusterFileUnreadableError(
-            f"{KUBECONFIG_ENV_VAR} names no file.",
-            reason=f"{KUBECONFIG_ENV_VAR} is set but empty",
-        )
-    missing = [str(entry) for entry in files if not entry.is_file()]
-    if missing:
-        label = ", ".join(missing)
-        raise ClusterFileUnreadableError(
-            f"the kubeconfig {label} does not exist. Point {KUBECONFIG_PATH_SOURCE_LABEL} at the "
-            f"file the context lives in, or pass --kubeconfig.",
-            reason=f"no kubeconfig at {label}",
-        )
-    return files
-
-
-def _files_label(files: Iterable[Path]) -> str:
-    return ", ".join(str(entry) for entry in files)
-
-
-def _read_kubeconfig(files: Tuple[Path, ...]) -> Dict[str, Dict[str, Any]]:
-    """The contexts and clusters `files` declares, merged, with the first file winning.
-
-    Kubectl's own merge rule, which is what a `$KUBECONFIG` list means to every other tool an
-    operator has. Contexts are keyed by name and mapped to the cluster they name; clusters are
-    keyed by name and mapped to their dictionary, so the server is one lookup away and no
-    credential is ever touched.
-    """
-    contexts: Dict[str, Optional[str]] = {}
-    clusters: Dict[str, Dict[str, Any]] = {}
-    for entry in files:
-        try:
-            document = yaml.safe_load(read_decrypted(entry, what="kubeconfig"))
-        except (OSError, LockedConfigFileError) as exc:
-            # The seam's sentence goes inside this module's own error type and is not rewritten
-            # there: the file the operator has to look at is named by the read that failed,
-            # which used to describe a locked file as a codec failure and by an assumption in the
-            # comment that used to sit here.
-            raise ClusterFileUnreadableError(
-                f"{entry} could not be read: {exc}", reason=f"{entry} could not be read"
-            ) from exc
-        except yaml.YAMLError as exc:
-            raise ClusterFileUnreadableError(
-                f"{entry} is not a kubeconfig: {exc}", reason=f"{entry} cannot be parsed"
-            ) from exc
-        if document is None:
-            document = {}
-        if not isinstance(document, dict):
-            raise ClusterFileUnreadableError(
-                f"{entry} is not a kubeconfig: it is not a mapping.",
-                reason=f"{entry} is not a kubeconfig",
-            )
-        for context_entry in document.get("contexts") or []:
-            name = context_entry.get("name") if isinstance(context_entry, dict) else None
-            if name and name not in contexts:
-                body = context_entry.get("context") or {}
-                contexts[name] = body.get("cluster") if isinstance(body, dict) else None
-        for cluster_entry in document.get("clusters") or []:
-            name = cluster_entry.get("name") if isinstance(cluster_entry, dict) else None
-            if name and name not in clusters:
-                body = cluster_entry.get("cluster") or {}
-                clusters[name] = body if isinstance(body, dict) else {}
-    return {"contexts": contexts, "clusters": clusters}
-
-
-def _address_in_kubeconfig(files: Tuple[Path, ...], context: str) -> str:
-    """The server `context` reaches, read out of `files`.
-
-    Raises
-    ------
-    ClusterContextNotFoundError
-        If `context` is not one of the contexts these files declare. The message lists the ones
-        that are, which is the answer to a typo rather than a description of the symptom.
-    ClusterFileUnreadableError
-        If the context is there but the cluster it names, or that cluster's server, is not.
-    """
-    document = _read_kubeconfig(files)
-    contexts = document["contexts"]
-    if context not in contexts:
-        available = sorted(contexts)
-        listing = ", ".join(available) if available else "it declares none"
-        raise ClusterContextNotFoundError(
-            f"context '{context}' is not in {_files_label(files)}. Contexts it does have: {listing}.",
-            reason=f"no such context '{context}' in {_files_label(files)}",
-            available=available,
-        )
-    cluster_name = contexts[context]
-    cluster = document["clusters"].get(cluster_name) if cluster_name else None
-    if cluster is None:
-        raise ClusterFileUnreadableError(
-            f"context '{context}' in {_files_label(files)} names cluster '{cluster_name}', "
-            f"which the file does not declare.",
-            reason=f"context '{context}' has no cluster '{cluster_name}' in {_files_label(files)}",
-        )
-    server = cluster.get("server")
-    if not server or not str(server).strip():
-        raise ClusterFileUnreadableError(
-            f"cluster '{cluster_name}' in {_files_label(files)} declares no server.",
-            reason=f"cluster '{cluster_name}' in {_files_label(files)} declares no server",
-        )
-    return _normalise_address(str(server))
 
 
 @dataclass(frozen=True)
@@ -292,7 +98,7 @@ class ClusterTarget:
         context: Optional[str],
         environment: str,
         *,
-        source: str = SOURCE_FLAG,
+        source: str = constants.SOURCE_FLAG,
     ) -> "ClusterTarget":
         """A target read from a kubeconfig — the CLI path, and the only one the resolution order
         selects.
@@ -311,15 +117,15 @@ class ClusterTarget:
                 f"no context was declared for environment '{environment}'. "
                 f"There is no current-context fallback: name the context in "
                 f"platform_config/{environment}/static.json, pass --context, or set "
-                f"{CLUSTER_KUBE_CONTEXT_KEY}.",
-                reason=f"{CLUSTER_KUBE_CONTEXT_KEY} is not set for '{environment}'",
+                f"{constants.CLUSTER_KUBE_CONTEXT_KEY}.",
+                reason=f"{constants.CLUSTER_KUBE_CONTEXT_KEY} is not set for '{environment}'",
             )
-        files = _kubeconfig_files(None if path is None else str(path))
+        files = _kubeconfig._kubeconfig_files(None if path is None else str(path))
         target = cls(
             environment=environment,
             context=str(context).strip(),
             kubeconfig_path=None if path is None else Path(path).expanduser(),
-            address=_address_in_kubeconfig(files, str(context).strip()),
+            address=_kubeconfig._address_in_kubeconfig(files, str(context).strip()),
             source=source,
         )
         return target
@@ -332,7 +138,7 @@ class ClusterTarget:
         token_or_cert,
         environment: str,
         *,
-        source: str = SOURCE_CONNECTION,
+        source: str = constants.SOURCE_CONNECTION,
     ) -> "ClusterTarget":
         """A target built from credentials someone is already holding — the library path.
 
@@ -380,10 +186,10 @@ class ClusterTarget:
             environment=environment,
             context=None,
             kubeconfig_path=None,
-            address=_normalise_address(str(host)),
+            address=_kubeconfig._normalise_address(str(host)),
             source=source,
         )
-        object.__setattr__(target, _CONNECTION_FIELD, material)
+        object.__setattr__(target, _kubeconfig._CONNECTION_FIELD, material)
         return target
 
     @classmethod
@@ -413,8 +219,8 @@ class ClusterTarget:
             sentence names the path that is not there, because the answer to that failure is "you
             are not in a pod" and not "the file is broken".
         """
-        address = _service_account_address(mount_root)
-        token_path, ca_path = _service_account_files(mount_root)
+        address = _kubeconfig._service_account_address(mount_root)
+        token_path, ca_path = _kubeconfig._service_account_files(mount_root)
         try:
             token = token_path.read_text(encoding="utf-8").strip()
         except OSError as exc:
@@ -433,7 +239,7 @@ class ClusterTarget:
         # object must not be the thing that carries a cluster's private material further than it
         # needs to, and `client()` reads it from disk when it builds the transport.
         return cls.from_connection(
-            address, ca_path, token, environment, source=SOURCE_SERVICE_ACCOUNT
+            address, ca_path, token, environment, source=constants.SOURCE_SERVICE_ACCOUNT
         )
 
     def client(self):
@@ -452,12 +258,12 @@ class ClusterTarget:
         from kubernetes import client
         from kubernetes import config as kubernetes_config
 
-        material = getattr(self, _CONNECTION_FIELD, None)
+        material = getattr(self, _kubeconfig._CONNECTION_FIELD, None)
         if material is not None:
             configuration = client.Configuration()
             kubernetes_config.load_kube_config_from_dict(
                 _connection_document(self.address, material),
-                context=_CONNECTION_DOCUMENT_CONTEXT,
+                context=_kubeconfig._CONNECTION_DOCUMENT_CONTEXT,
                 client_configuration=configuration,
                 persist_config=False,
             )
@@ -469,7 +275,7 @@ class ClusterTarget:
         # `load_kube_config` here instead would be the same line the guard test exists to forbid,
         # for no behaviour this object needs.
         return kubernetes_config.new_client_from_config(
-            config_file=_library_config_file(self.kubeconfig_path),
+            config_file=_kubeconfig._library_config_file(self.kubeconfig_path),
             context=self.context,
             # persist_config=True is the library's default, and writing back would edit the
             # operator's kubeconfig while a command was only trying to read it.
@@ -484,7 +290,7 @@ class ClusterTarget:
         the address is what the 1:1 check compares, so both stay; what a connection target was built
         from does not.
         """
-        credentials = getattr(self, _CONNECTION_FIELD, None)
+        credentials = getattr(self, _kubeconfig._CONNECTION_FIELD, None)
         redacted = "" if credentials is None else ", credentials='<redacted>'"
         kubeconfig = "None" if self.kubeconfig_path is None else f"'{self.kubeconfig_path}'"
         return (
@@ -492,9 +298,6 @@ class ClusterTarget:
             f"kubeconfig_path={kubeconfig}, address={self.address!r}, source={self.source!r}"
             f"{redacted})"
         )
-
-
-_CONNECTION_DOCUMENT_CONTEXT = "connection"
 
 
 def _connection_document(address: str, material: Dict[str, Any]) -> Dict[str, Any]:
@@ -523,10 +326,10 @@ def _connection_document(address: str, material: Dict[str, Any]) -> Dict[str, An
     return {
         "apiVersion": "v1",
         "kind": "Config",
-        "current-context": _CONNECTION_DOCUMENT_CONTEXT,
+        "current-context": _kubeconfig._CONNECTION_DOCUMENT_CONTEXT,
         "clusters": [{"name": "connection", "cluster": cluster}],
         "contexts": [
-            {"name": _CONNECTION_DOCUMENT_CONTEXT, "context": {"cluster": "connection", "user": "connection"}}
+            {"name": _kubeconfig._CONNECTION_DOCUMENT_CONTEXT, "context": {"cluster": "connection", "user": "connection"}}
         ],
         "users": [{"name": "connection", "user": user}],
     }
@@ -545,54 +348,6 @@ def _as_pem_base64(value: str) -> str:
     return value
 
 
-def _service_account_files(mount_root=None) -> Tuple[Path, Path]:
-    """`(token, ca.crt)` under the mounted root, which a test may point somewhere else.
-
-    `mount_root` is an argument and not a monkeypatch: a test that fabricates the
-    kubelet's own files under a temporary directory should be able to hand their location to the
-    constructor instead of editing a module out from under itself. Nothing about the object changes
-    — it is still the same three files in the same order.
-    """
-    root = Path(mount_root) if mount_root is not None else SERVICE_ACCOUNT_ROOT
-    return root / SERVICE_ACCOUNT_TOKEN_FILE, root / SERVICE_ACCOUNT_CA_FILE
-
-
-def _service_account_address(mount_root=None) -> str:
-    """The address of the cluster this process is running *on*, or the named reason it is not.
-
-    The probe is deliberately cheap and deliberately uninformative: it stats the two mounted files
-    and reads the two variables the kubelet injects, and it does not open the token, build a client,
-    or ask the API server anything. That is what lets the 1:1 check consult it on every command —
-    the same arithmetic the check does for kubeconfig reads — and it is why a machine that is not a pod
-    answers `ServiceAccountNotMountedError` in microseconds rather than hanging on a dial.
-
-    The scheme is `https` and nothing else. The in-cluster Service is served on TLS in every
-    supported cluster, and a target that guessed `http` would send a bearer token in the clear
-    before anything could notice.
-    """
-    token_path, ca_path = _service_account_files(mount_root)
-    host = (os.environ.get(KUBERNETES_SERVICE_HOST_ENV) or "").strip()
-    port = (os.environ.get(KUBERNETES_SERVICE_PORT_ENV) or "").strip() or DEFAULT_KUBERNETES_SERVICE_PORT
-
-    problems = []
-    if not token_path.is_file():
-        problems.append(f"no service-account token at {token_path}")
-    if not ca_path.is_file():
-        problems.append(f"no certificate authority at {ca_path}")
-    if not host:
-        problems.append(f"{KUBERNETES_SERVICE_HOST_ENV} is not set, so there is no API server to name")
-    if problems:
-        raise ServiceAccountNotMountedError(
-            f"this process is not running inside a cluster: {'; '.join(problems)}.",
-            reason=problems[0],
-        )
-    # An IPv6 API server has to be bracketed or the port reads as part of the address; an IPv4 one
-    # is untouched. `KUBERNETES_SERVICE_HOST` is whatever the kubelet wrote, which is one or the other.
-    if ":" in host and not host.startswith("["):
-        host = f"[{host}]"
-    return _normalise_address(f"https://{host}:{port}")
-
-
 def running_cluster_address() -> Optional[str]:
     """This process's own cluster address, or `None` when it is not inside one.
 
@@ -606,7 +361,7 @@ def running_cluster_address() -> Optional[str]:
     and two variable reads that keep the check cheap on reads.
     """
     try:
-        return _service_account_address()
+        return _kubeconfig._service_account_address()
     except ServiceAccountNotMountedError:
         return None
 
@@ -620,18 +375,6 @@ def _addresses_the_running_cluster(record, self_address: Optional[str]) -> bool:
     way.
     """
     return bool(self_address) and record.target is not None and record.target.address == self_address
-
-
-def _library_config_file(kubeconfig_path: Optional[Path]) -> str:
-    """The concrete file to hand the Kubernetes loader for `kubeconfig_path`.
-
-    Explicit, always: the library's own default is a constant it captured from the environment at
-    import, so leaving it out would let a process that changed `$KUBECONFIG` after import bind to
-    one file while its address came from another.
-    """
-    if kubeconfig_path is not None:
-        return str(kubeconfig_path)
-    return default_kubeconfig_path()
 
 
 @dataclass(frozen=True)
@@ -743,15 +486,15 @@ class EnvironmentRegistry:
             return EnvironmentResolution(
                 environment,
                 None,
-                reason=f"{CLUSTER_KUBE_CONTEXT_KEY} {declared['context_state']} in {static_path}",
+                reason=f"{constants.CLUSTER_KUBE_CONTEXT_KEY} {declared['context_state']} in {static_path}",
                 declared_context=context,
             )
         try:
             target = ClusterTarget.from_kubeconfig(
-                declared["path_value"] or in_tree_kubeconfig(self.platform_config_dir, environment),
+                declared["path_value"] or _kubeconfig.in_tree_kubeconfig(self.platform_config_dir, environment),
                 context,
                 environment,
-                source=f"{STATIC_SOURCE_PREFIX}{static_path}",
+                source=f"{constants.STATIC_SOURCE_PREFIX}{static_path}",
             )
         except ClusterResolutionError as exc:
             return EnvironmentResolution(
@@ -821,11 +564,11 @@ def _static_declaration(static_path: Path) -> Dict[str, Any]:
             reason=f"{static_path} is not an object",
         )
 
-    raw_context = document.get(CLUSTER_KUBE_CONTEXT_KEY)
-    raw_path = document.get(CLUSTER_KUBECONFIG_PATH_KEY)
+    raw_context = document.get(constants.CLUSTER_KUBE_CONTEXT_KEY)
+    raw_path = document.get(constants.CLUSTER_KUBECONFIG_PATH_KEY)
     return {
         "context_value": _declared_value(raw_context),
-        "context_state": _declaration_state(raw_context, CLUSTER_KUBE_CONTEXT_KEY in document),
+        "context_state": _declaration_state(raw_context, constants.CLUSTER_KUBE_CONTEXT_KEY in document),
         "path_value": _declared_value(raw_path),
     }
 
@@ -865,7 +608,7 @@ def environment_file_missing(environment: str, static_path: Path) -> str:
     """
     return (
         f"environment '{environment}' does not address a cluster: {static_path} does not exist, "
-        f"so {CLUSTER_KUBE_CONTEXT_KEY} cannot be read from it. There is no current-context "
+        f"so {constants.CLUSTER_KUBE_CONTEXT_KEY} cannot be read from it. There is no current-context "
         f"fallback — run kmt config init <dir> --environment {environment}, or name the context "
         f"in that file."
     )
@@ -901,7 +644,7 @@ def _environment_declaration(environment: str,
     if not static_path.is_file():
         raise ClusterNotConfiguredError(
             environment_file_missing(environment, static_path),
-            reason=f"{CLUSTER_KUBE_CONTEXT_KEY} cannot be read, {static_path} does not exist",
+            reason=f"{constants.CLUSTER_KUBE_CONTEXT_KEY} cannot be read, {static_path} does not exist",
         )
     return config, static_path, _static_declaration(static_path)
 
@@ -1015,7 +758,7 @@ class Context:
             raise ClusterNotConfiguredError(
                 f"{what_is_missing} needs the cluster environment '{self.environment}' addresses, "
                 f"and this Context was built to write configuration without ever addressing one. "
-                f"{CLUSTER_KUBE_CONTEXT_KEY} is what names it: set it in "
+                f"{constants.CLUSTER_KUBE_CONTEXT_KEY} is what names it: set it in "
                 f"platform_config/{self.environment}/static.json, or run the command that resolves "
                 f"one instead of the one that configures.",
                 reason=f"no ClusterTarget was resolved for environment '{self.environment}'",
@@ -1142,7 +885,7 @@ class Context:
         # an environment that carries a kubeconfig is read from that file, and `$KUBECONFIG` is not
         # consulted. A path somebody declared is a different matter and has already won above.
         if resolved_path is None:
-            resolved_path = in_tree_kubeconfig(config.platform_config_dir, environment)
+            resolved_path = _kubeconfig.in_tree_kubeconfig(config.platform_config_dir, environment)
 
         if resolved_context is None:
             # Layer 5, and the only reason it is last: an environment that declared a context
@@ -1197,7 +940,7 @@ class Context:
             return None, None, exc.reason
         return (
             target,
-            f"{SOURCE_SERVICE_ACCOUNT} {SERVICE_ACCOUNT_ROOT}",
+            f"{constants.SOURCE_SERVICE_ACCOUNT} {_kubeconfig.SERVICE_ACCOUNT_ROOT}",
             None,
         )
 
@@ -1222,22 +965,22 @@ class Context:
             (
                 Context._flag_value(context),
                 Context._flag_value(kubeconfig),
-                SOURCE_FLAG,
+                constants.SOURCE_FLAG,
                 {"context": "flag --context", "kubeconfig": "flag --kubeconfig"},
             ),
             (
-                Context._process_value(CLUSTER_KUBE_CONTEXT_KEY),
-                Context._process_value(CLUSTER_KUBECONFIG_PATH_KEY),
-                SOURCE_ENV,
+                Context._process_value(constants.CLUSTER_KUBE_CONTEXT_KEY),
+                Context._process_value(constants.CLUSTER_KUBECONFIG_PATH_KEY),
+                constants.SOURCE_ENV,
                 {
-                    "context": f"env {CLUSTER_KUBE_CONTEXT_KEY}",
-                    "kubeconfig": f"env {CLUSTER_KUBECONFIG_PATH_KEY}",
+                    "context": f"env {constants.CLUSTER_KUBE_CONTEXT_KEY}",
+                    "kubeconfig": f"env {constants.CLUSTER_KUBECONFIG_PATH_KEY}",
                 },
             ),
             (
                 declared["context_value"],
                 declared["path_value"],
-                f"{STATIC_SOURCE_PREFIX}{static_path}",
+                f"{constants.STATIC_SOURCE_PREFIX}{static_path}",
                 {"context": str(static_path), "kubeconfig": str(static_path)},
             ),
         )
@@ -1299,18 +1042,18 @@ class Context:
             raise cls._stated_cluster_mismatch(
                 environment,
                 stated=f"{stated['context']} (stated by {stated['context_source']})",
-                declared=f"{declared_context} (declared in {static_path} as {CLUSTER_KUBE_CONTEXT_KEY})",
+                declared=f"{declared_context} (declared in {static_path} as {constants.CLUSTER_KUBE_CONTEXT_KEY})",
                 declared_source=declared_source,
                 fix=(f"state {declared_context}, which is what the environment says, or write "
                      f"{stated['context']} into the environment: kmt config set <configuration-root> "
-                     f"{environment} {CLUSTER_KUBE_CONTEXT_KEY}={stated['context']}"),
+                     f"{environment} {constants.CLUSTER_KUBE_CONTEXT_KEY}={stated['context']}"),
             )
 
         # Only the file was stated. Its claim about the cluster is the set of contexts it declares,
         # so the declared context has to be one of them — the same test reading the file would make,
         # made here so the two claims are named instead of one file being blamed for the other.
-        declared_files = _kubeconfig_files(stated["kubeconfig"])
-        available = _read_kubeconfig(declared_files)["contexts"]
+        declared_files = _kubeconfig._kubeconfig_files(stated["kubeconfig"])
+        available = _kubeconfig._read_kubeconfig(declared_files)["contexts"]
         if declared_context in available:
             return
         listing = ", ".join(sorted(available)) if available else "it declares none"
@@ -1318,11 +1061,11 @@ class Context:
             environment,
             stated=(f"the kubeconfig {stated['kubeconfig']} (stated by "
                     f"{stated['kubeconfig_source']}), whose contexts are: {listing}"),
-            declared=f"{declared_context} (declared in {static_path} as {CLUSTER_KUBE_CONTEXT_KEY})",
+            declared=f"{declared_context} (declared in {static_path} as {constants.CLUSTER_KUBE_CONTEXT_KEY})",
             declared_source=declared_source,
             fix=(f"state a context this file has, mount the kubeconfig that has {declared_context}, "
                  f"or write the run's context into the environment: kmt config set "
-                 f"<configuration-root> {environment} {CLUSTER_KUBE_CONTEXT_KEY}=<the-context>"),
+                 f"<configuration-root> {environment} {constants.CLUSTER_KUBE_CONTEXT_KEY}=<the-context>"),
         )
 
     @staticmethod
@@ -1362,7 +1105,7 @@ class Context:
         if not value.strip():
             raise ClusterNotConfiguredError(
                 f"{key} is set but empty. Give it the context it names, or unset it to read "
-                f"{CLUSTER_KUBE_CONTEXT_KEY} from the environment's static.json.",
+                f"{constants.CLUSTER_KUBE_CONTEXT_KEY} from the environment's static.json.",
                 reason=f"{key} is set but empty in the process environment",
             )
         return value.strip()
@@ -1396,10 +1139,10 @@ class Context:
             pass
         sentence = (
             f"environment '{environment}' does not address a cluster: "
-            f"{CLUSTER_KUBE_CONTEXT_KEY} {state} in {static_path}. There is no current-context "
+            f"{constants.CLUSTER_KUBE_CONTEXT_KEY} {state} in {static_path}. There is no current-context "
             f"fallback — kubementat installs into what the environment declares, not into what "
             f"kubectl is pointed at. Name the context in {static_path}, pass --context, or set "
-            f"{CLUSTER_KUBE_CONTEXT_KEY}."
+            f"{constants.CLUSTER_KUBE_CONTEXT_KEY}."
         )
         if in_cluster:
             sentence += (
@@ -1408,7 +1151,7 @@ class Context:
             )
         return ClusterNotConfiguredError(
             sentence,
-            reason=f"{CLUSTER_KUBE_CONTEXT_KEY} {state} in {static_path}",
+            reason=f"{constants.CLUSTER_KUBE_CONTEXT_KEY} {state} in {static_path}",
         )
 
     @staticmethod

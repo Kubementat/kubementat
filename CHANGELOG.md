@@ -1,5 +1,30 @@
 # Unreleased
 
+- **The kubeconfig half of the cluster module became the leaf of `core/identity/`, and the leaf turned
+  out to be four names bigger than the map said.** `core/identity/kubeconfig.py` is 301 lines and holds
+  21 module-level names — 11 constants and 10 functions, each byte-identical to its source at the
+  previous commit — and `cluster.py` drops from 1 474 lines to 1 217. The census's table said 17, and the
+  same census assigned `_service_account_files`, `_service_account_address`, `_library_config_file` and
+  `_CONNECTION_DOCUMENT_CONTEXT` here elsewhere, so the worker was handed two answers for four names.
+  It stopped and asked rather than picking one, and this is the answer it was given: move them down,
+  because the leaf is only worth having first if it is the real leaf — leaving them behind means the
+  next ticket arrives to a `kubeconfig.py` that some other module still has to descend into, and the
+  edge list the census computed (`target → kubeconfig`, `comparison → kubeconfig`) is only true once
+  they actually live there. **Seven shared key and source-label constants also went below all five
+  files**, into `core/constants.py`, which keeps zero import lines by construction and so sits under
+  everything: a key that three files name cannot live in one of them. `kubementat.cluster` answers
+  `AttributeError` for every moved name. Of the 13 test couplings the census counted, **10 needed a
+  change and 3 were already right**: the 6 attribute reads off a module alias became imports of the
+  constants that now live in `constants.py` (5 in `config_validate.py`) or of the new home (1), and the 4
+  `monkeypatch.setattr` on the module moved to `kubeconfig_module`. The 3 `monkeypatch.setattr` calls on
+  `ClusterTarget` stayed exactly where they were, because that class did not move — a fact worth stating
+  plainly, since moving a patch that tracks a name that stayed is the mistake this class of ticket makes.
+  Zero patch-target strings named `kubementat.cluster`. The `(file, function)` table in
+  `test_the_eight_former_environment_variables_arrive_only_through_the_layers.py:188` follows the path,
+  and `core/identity/kubeconfig.py` imports stdlib, `yaml`, `core.config.reads` and `errors` —
+  `kubementat.cluster` is not one of them. Suite unchanged: **1775 passed, 1 skipped**, import cycles
+  none, layer violations none.
+
 - **The layering moved out of `config.py`, and this is the split the other three were ordered for.**
   `LAYER_TEAM`, `LAYER_ENVIRONMENT`, the two pairs, `CATEGORY_LAYERS`, `COMPONENT_LAYERS`,
   `_NOTHING_DECLARED`, `_answers_from_a_team_layer`, `_declare_in_layers`, `_layered_view` and
