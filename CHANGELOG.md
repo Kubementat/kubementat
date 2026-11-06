@@ -1,5 +1,23 @@
 # Unreleased
 
+- **The tree's stamp moved out of `config.py`, and the module that stayed does not need it.**
+  `ConfigurationStamp` and its ten members, `read_configuration_stamp`, `check_configuration_stamp` and
+  `SCHEMA_VERSION_WINDOW` now live in `src/kubementat/core/config/stamp.py`, and they are the four
+  definitions of that file — 192 lines, 149 of them moved, each one byte-identical to its source at the
+  previous commit. What the move proved about `config.py` is the part worth reading: `config.py` imports
+  nothing from `stamp`, because every caller of those four names was inside the block that moved, and it
+  lost four imports the move left behind. `ConfigurationStamp` reads the version comparison through
+  `versions` exactly as before, so the five patches that P2-2b moved to `versions` still land where the
+  stamp reads, and `kubementat.core.config.config.ConfigurationStamp` now raises `AttributeError`
+  instead of quietly agreeing with the wrong copy. **One constant could not be proved by the suite:**
+  `SCHEMA_VERSION_WINDOW` is read by exactly one line in `src/` — `stamp.py:111`, inside
+  `ConfigurationStamp.window` — and no test covers it, so the proof is that its assignment
+  (`SCHEMA_VERSION_WINDOW = 1`) is byte-identical to the one that was there, that the window answers
+  from nothing else, and that nothing outside reads it. 6 product files and
+  2 test files, 9 of them attribute reads on the module object; the tests bind the module as
+  `stamp_module` because two tests in the same file bind a local and a parameter named `stamp`, which
+  shadowed the module. Suite unchanged: **1775 passed, 1 skipped**, cycles none, layer violations none.
+
 - **The version answers and the root answers left `config.py`, and the five tests that patch a version
   had to move with them.** This is Phase 2's first split inside `core/config/`:
   `default_kubementat_main_dir`, `default_platform_config_dir`, `resolve_platform_config_dir`,

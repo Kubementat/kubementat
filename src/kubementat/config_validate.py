@@ -59,7 +59,8 @@ import yaml
 
 from kubementat import cluster as _cluster
 from kubementat import config_init
-from kubementat.core.config.config import ConfigurationStamp, Config
+from kubementat.core.config.config import Config
+from kubementat.core.config.stamp import ConfigurationStamp
 from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
 
 # The finding kinds. Exactly two, because the exit code is decided by their presence and nothing
@@ -260,7 +261,7 @@ def _manifest_findings(root: Path, findings: list[Finding]) -> None:
 def _stamp_findings(root: Path, findings: list[Finding]) -> None:
     """The version window, which is this verb's job and not every cluster command's.
 
-    Two facts, and they come from `config.ConfigurationStamp` rather than from a comparison written
+    Two facts, and they come from `stamp.ConfigurationStamp` rather than from a comparison written
     beside it: the same object answers every cluster command, and two readers that disagree about a
     window they were given from the same two keys is not a report, it is a lottery. A cluster verb
     may warn and continue, on the ground that a version string must not brick a running

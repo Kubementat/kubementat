@@ -17,7 +17,7 @@ So the rule this file keeps is:
 * the window is collected **with** every other fault, in one pass, and the exit code is the only
   verdict — the same idiom the rest of the verb uses, and the reason the old `validate` could say
   "clean" and be wrong;
-* the two facts it reports are read from `config.ConfigurationStamp`, the one object that owns the
+* the two facts it reports are read from `stamp.ConfigurationStamp`, the one object that owns the
   comparison, because a cluster command and this verb that measure one window twice leave a tree with
   a verdict that depends on which one was asked;
 * the severities stay split the same way. A cluster command warns and continues about a version string; this verb
@@ -38,7 +38,7 @@ from cli.commands import config as config_command
 # `versions` and not the module the function used to be defined in.
 from kubementat.core.config import versions
 from kubementat.core import constants
-from kubementat.core.config.config import check_configuration_stamp
+from kubementat.core.config.stamp import check_configuration_stamp
 from kubementat.config_init import init_configuration
 from kubementat.config_validate import validate_tree
 

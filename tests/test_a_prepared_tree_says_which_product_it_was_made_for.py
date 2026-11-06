@@ -25,7 +25,11 @@ from click.testing import CliRunner
 
 from cluster_fixture import stamp_tree, write_environment
 from cli.commands import routing
+# The stamp module is `stamp_module` and not `stamp` because two tests below bind a local named
+# `stamp` -- the text of the stamp file -- and a parameter of that name, which would shadow the
+# module on the very line that asks it.
 from kubementat.core.config import config, versions
+from kubementat.core.config import stamp as stamp_module
 from kubementat.core import constants
 
 # What the running build is told to be, for the tests that must not depend on whatever version this
@@ -64,14 +68,14 @@ def test_the_stamp_answers_both_questions_and_nobody_else_reads_them():
     root = root_with_stamp(Path("/tmp/unused") / "x", constraint=None, schema_version=None)
     # `read_configuration_stamp` is the only reader; nothing in src/ reads `kubementat.yaml` any other
     # way, and this asserts the pair it returns is the pair `config init` wrote.
-    assert config.read_configuration_stamp(root) == (constants.CONFIG_KUBEMENTAT_CONSTRAINT,
+    assert stamp_module.read_configuration_stamp(root) == (constants.CONFIG_KUBEMENTAT_CONSTRAINT,
                                                      constants.CONFIG_SCHEMA_VERSION)
 
 
 def test_a_tree_two_schemas_behind_is_refused_and_the_refusal_names_both_numbers():
     root = root_with_stamp(Path("/tmp/unused") / "x", schema_version=constants.CONFIG_SCHEMA_VERSION - 2)
     with pytest.raises(config.click.ClickException) as refusal:
-        config.check_configuration_stamp(root)
+        stamp_module.check_configuration_stamp(root)
     said = str(refusal.value)
     assert str(constants.CONFIG_SCHEMA_VERSION - 2) in said and str(constants.CONFIG_SCHEMA_VERSION) in said
     # The remedy is named, because a refusal without one is a dead end the operator has to research.
@@ -83,25 +87,25 @@ def test_a_tree_two_schemas_behind_is_refused_and_the_refusal_names_both_numbers
 def test_one_schema_step_behind_is_accepted_because_the_window_is_the_rule():
     # This build reads its own schema and the one before. Two or more is a refusal.
     root = root_with_stamp(Path("/tmp/unused") / "x", schema_version=constants.CONFIG_SCHEMA_VERSION - 1)
-    assert config.check_configuration_stamp(root) == []
+    assert stamp_module.check_configuration_stamp(root) == []
 
 
 def test_a_version_string_outside_the_range_warns_once_and_continues():
     root = root_with_stamp(Path("/tmp/unused") / "x", constraint=">=0.4,<2")
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(versions, "product_version", lambda: OUTSIDE_RANGE)
-        warnings = config.check_configuration_stamp(root)
+        warnings = stamp_module.check_configuration_stamp(root)
     assert len(warnings) == 1, "warn once is the requirement, and one warning is what must come back"
     assert OUTSIDE_RANGE in warnings[0]
     # It continued: a warning is returned and not raised, so the refusal path is untouched.
-    assert config.check_configuration_stamp.__name__ == "check_configuration_stamp"
+    assert stamp_module.check_configuration_stamp.__name__ == "check_configuration_stamp"
 
 
 def test_a_version_inside_the_range_says_nothing_at_all():
     root = root_with_stamp(Path("/tmp/unused") / "x", constraint=">=0.4,<2")
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(versions, "product_version", lambda: IN_RANGE)
-        assert config.check_configuration_stamp(root) == []
+        assert stamp_module.check_configuration_stamp(root) == []
 
 
 def test_an_unknown_product_version_warns_rather_than_asking_a_question_it_cannot_answer():
@@ -109,7 +113,7 @@ def test_an_unknown_product_version_warns_rather_than_asking_a_question_it_canno
     root = root_with_stamp(Path("/tmp/unused") / "x")
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(versions, "product_version", lambda: None)
-        warnings = config.check_configuration_stamp(root)
+        warnings = stamp_module.check_configuration_stamp(root)
     assert len(warnings) == 1 and "could not determine" in warnings[0]
 
 
@@ -117,7 +121,7 @@ def test_a_tree_with_no_stamp_is_refused_and_names_the_verb_that_writes_it():
     root = Path("/tmp/unused") / "unstamped"
     (root / "platform_config").mkdir(parents=True, exist_ok=True)
     with pytest.raises(config.click.ClickException) as refusal:
-        config.check_configuration_stamp(root)
+        stamp_module.check_configuration_stamp(root)
     assert constants.CONFIG_MANIFEST_FILENAME in str(refusal.value)
     assert "config init" in str(refusal.value)
 
@@ -134,7 +138,7 @@ def test_a_stamp_that_is_there_but_wrong_is_refused_with_a_sentence_about_itself
     path.parent.mkdir(parents=True)
     path.write_text(stamp)
     with pytest.raises(config.click.ClickException) as refusal:
-        config.check_configuration_stamp(path.parent)
+        stamp_module.check_configuration_stamp(path.parent)
     assert expected in str(refusal.value)
 
 

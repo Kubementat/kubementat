@@ -100,7 +100,7 @@ EXISTED = "existed"
 # The manifest's filename, spelled once here. `Config` names no property for it (census G found
 # nothing in `src/` that reads `kubementat.yaml` at all), and inventing one would be a property
 # without a reader. Phase 9's stamp reader is the ticket that adds it, and this comment is the note
-# it will need. That reader landed: `config.check_configuration_stamp` is what asks these two
+# it will need. That reader landed: `stamp.check_configuration_stamp` is what asks these two
 # questions, and the name of the file is `constants.CONFIG_MANIFEST_FILENAME` now because both
 # writers and readers touch it. This is the alias that keeps `config_validate`'s spelling working.
 CONFIG_MANIFEST_FILENAME = constants.CONFIG_MANIFEST_FILENAME
