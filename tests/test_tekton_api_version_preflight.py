@@ -20,8 +20,8 @@ from kubementat import config as config_module
 from kubementat import config_keys
 from kubementat import k8s_apply
 from kubementat.automation import Automation
+from kubementat.errors import TektonControllerWithoutConfiguredApiError
 from kubementat.tekton_utils import (
-    TektonControllerWithoutConfiguredApiError,
     TektonUtils,
     preflight_tekton_api_version,
 )

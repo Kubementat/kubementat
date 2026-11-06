@@ -26,7 +26,7 @@ import base64
 import pytest
 from kubernetes import client
 
-from kubementat.errors import ResourceWithoutNameError
+from kubementat.errors import PipelineNamespaceNotConfiguredError, ResourceWithoutNameError
 from kubementat.tekton_utils import (
     BINDINGS_AND_INTERCEPTORS_CLUSTER_ROLE_NAME,
     TRIGGER_CONTROLLER_ROLE_BINDING_NAME,
@@ -35,7 +35,6 @@ from kubementat.tekton_utils import (
     TRIGGER_WEBHOOK_JOB_ROLE_BINDING_NAME,
     TRIGGER_WEBHOOK_JOB_ROLE_NAME,
     TRIGGER_WEBHOOK_JOB_SERVICE_ACCOUNT_NAME,
-    PipelineNamespaceNotConfiguredError,
     TektonUtils,
     webhook_job_cluster_role_binding_name,
 )

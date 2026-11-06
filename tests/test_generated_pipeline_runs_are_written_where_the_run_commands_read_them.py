@@ -367,7 +367,7 @@ def test_an_existing_run_is_not_written_over(checkout):
     written into it for whoever generated it to fill in, so a rerun that overwrote them would delete a
     team's work without a word — which is why this generator's refusal rule is the one bash had.
     """
-    from kubementat.tekton_utils import GenerationTargetExistsError
+    from kubementat.errors import GenerationTargetExistsError
 
     generated_pipeline_run(checkout, PIPELINE)
     target = written_run(checkout, PIPELINE)
@@ -381,7 +381,7 @@ def test_an_existing_run_is_not_written_over(checkout):
 
 
 def test_a_pipeline_file_that_is_not_there_names_the_path_it_reached_for(checkout):
-    from kubementat.tekton_utils import GenerationInputNotFoundError
+    from kubementat.errors import GenerationInputNotFoundError
 
     missing = checkout.root / "tekton_ci/pipelines/no-such-pipeline.yml"
 
@@ -405,7 +405,7 @@ def test_a_file_that_is_not_one_pipeline_is_refused_by_name(checkout, body, what
     something that cannot be started as a pipeline and a multi-document file produced a run of its
     first document, silently. Both wrote the file; both printed a success line.
     """
-    from kubementat.tekton_utils import GenerationInputNotUsableError
+    from kubementat.errors import GenerationInputNotUsableError
 
     source = checkout.root / "tekton_ci/pipelines/not-a-pipeline.yml"
     source.write_text(body)
@@ -423,7 +423,7 @@ def test_a_pipeline_with_no_name_is_refused(checkout):
     The run's own name and its `pipelineRef.name` both said `null`, the file was written, and the
     command printed its success line. Here the file at fault is named instead.
     """
-    from kubementat.tekton_utils import GenerationInputNotUsableError
+    from kubementat.errors import GenerationInputNotUsableError
 
     source = checkout.root / "tekton_ci/pipelines/nameless.yml"
     source.write_text("apiVersion: tekton.dev/v1\nkind: Pipeline\n"
@@ -444,7 +444,7 @@ def test_a_configuration_key_that_is_gone_is_an_error_naming_it_and_writes_nothi
     been renamed left a run that `run_pipeline` applied with the token still intact. Nothing is written
     here, and the message carries the key and the file it is read from.
     """
-    from kubementat.tekton_utils import GenerationPlaceholderNotConfiguredError
+    from kubementat.errors import GenerationPlaceholderNotConfiguredError
 
     checkout.environment_static(TEKTON_KUBERNETES_STORAGE_CLASS=None)
 
@@ -464,7 +464,7 @@ def test_a_parameter_declared_with_no_name_is_refused(checkout):
     the success line anyway. What makes this the harder of the two `null`s is that nothing downstream
     could have caught it — the run is otherwise well formed, and its file looks finished.
     """
-    from kubementat.tekton_utils import GenerationInputNotUsableError
+    from kubementat.errors import GenerationInputNotUsableError
 
     source = checkout.root / "tekton_ci/pipelines/nameless-parameter.yml"
     source.write_text("apiVersion: tekton.dev/v1\nkind: Pipeline\n"
@@ -634,7 +634,7 @@ def _difference_the_api_version_is_read_and_not_written(checkout):
 
 
 def _difference_a_file_that_is_not_a_pipeline_is_refused(checkout):
-    from kubementat.tekton_utils import GenerationInputNotUsableError
+    from kubementat.errors import GenerationInputNotUsableError
 
     source = checkout.root / "tekton_ci/pipelines/a-task.yml"
     source.write_text("apiVersion: tekton.dev/v1\nkind: Task\n"

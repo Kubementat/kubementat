@@ -1,3 +1,4 @@
+from kubementat import errors
 from kubementat import k8s_apply
 from kubementat import shell
 from kubementat.kubernetes_utils import KubernetesUtils
@@ -11,15 +12,6 @@ import random
 import string
 import time
 import yaml
-
-
-class TektonControllerWithoutConfiguredApiError(Exception):
-    """The cluster does not serve the `tekton.dev` API version kubementat speaks.
-
-    This is raised before any resource is sent, so that a controller that is too old (or
-    not installed at all) produces one explanation instead of a 404 for every Task,
-    Pipeline and PipelineRun it would otherwise be asked to create.
-    """
 
 
 # Where upstream serves the release manifests kubementat installs, spelled once because the
@@ -59,47 +51,12 @@ HELM_DEPLOYER_RULE_API_GROUPS = ("", "rbac.authorization.k8s.io", "networking.k8
                                  "resolution.tekton.dev")
 
 
-class PipelineNamespaceNotConfiguredError(Exception):
-    """`PIPELINE_NAMESPACE` is not in the team's `static.json`.
-
-    bash read it with `jq -r`, so an absent key answered `null` and every RBAC object went to a
-    namespace with that literal name — where `kubectl` answered "not found", several times over,
-    for a reason that named neither the file nor the key. Eight operations need one namespace,
-    so this is asked for once, before any of them run.
-    """
-
-
 # What `--wait` asks the cluster, and for how long. The interval is the same number the Tekton
 # Task's `polling-sleep-time` param carries, so the two are one knob and not two; the bound is the
 # owner's thirty minutes, because the bash loop this replaces asked the same question forever, with
 # no exit condition at all, which holds a pod open for a run that is never going to finish.
 PIPELINE_RUN_POLL_INTERVAL_SECONDS = 3
 PIPELINE_RUN_TIMEOUT_SECONDS = 1800
-
-
-class TektonReleaseVersionNotConfiguredError(Exception):
-    """A `TEKTON_VERSION_*` key the release URL is built from is not configured.
-
-    bash read the same keys with `jq -r`, and a key that was not there printed `null` straight
-    into the URL, so the install fetched a 404 and reported a non-zero exit. The missing thing
-    is a line in `static.json`, so that is what the message names.
-    """
-
-
-class TektonWebhookNotReachableError(Exception):
-    """The Pipelines webhook could not be reached before the next release was applied.
-
-    The shape this replaces is the one the E2E suite caught: the apply of the *Triggers* release
-    dies on `failed calling webhook "config.webhook.pipeline.tekton.dev": ... no endpoints
-    available for service "tekton-pipelines-webhook"`, because the webhook that validates the
-    Triggers objects was registered by the apply three seconds earlier and its pod is not yet
-    serving. The failure lands in the middle of a list of `kubectl apply` calls, names a webhook
-    the operator never chose, and points at a release that is not the one at fault.
-
-    So the wait raises instead of letting that happen: it names the Service, the namespace, and
-    the bound that expired, and it says which knob to turn. Nothing is half-applied to make this
-    nicer to read -- the install stops where it is, and the message says so.
-    """
 
 
 def _release_manifest_url(component, version, filename) -> str:
@@ -124,7 +81,7 @@ def release_manifests_to_apply(env_static) -> list:
         two land inside the tekton namespace.
 
     Raises:
-        TektonReleaseVersionNotConfiguredError: If a pinned version is absent or empty.
+        kubementat.errors.TektonReleaseVersionNotConfiguredError: If a pinned version is absent or empty.
     """
     manifests = []
     for component, version_key, filenames in RELEASE_MANIFESTS:
@@ -133,7 +90,7 @@ def release_manifests_to_apply(env_static) -> list:
         # that contains it is still a 404 — so an unset key and a blank one are the same failure.
         version = value.strip() if isinstance(value, str) else value
         if not version:
-            raise TektonReleaseVersionNotConfiguredError(
+            raise errors.TektonReleaseVersionNotConfiguredError(
                 f"{version_key} is not set in the environment's static.json, so kubementat cannot "
                 f"build the URL for the {component} release. Add \"{version_key}\": "
                 f"\"<version>\" to platform_config/<environment>/static.json. What is refused here is "
@@ -183,13 +140,13 @@ def preflight_tekton_api_version(kubernetes_utils, config) -> None:
         config: The configuration supplying TEKTON_API_GROUP/TEKTON_API_VERSION.
 
     Raises:
-        TektonControllerWithoutConfiguredApiError: If the cluster serves nothing under
+        kubementat.errors.TektonControllerWithoutConfiguredApiError: If the cluster serves nothing under
             that group/version.
     """
     if kubernetes_utils.api_version_is_served(config.TEKTON_API_GROUP, config.TEKTON_API_VERSION):
         return
 
-    raise TektonControllerWithoutConfiguredApiError(
+    raise errors.TektonControllerWithoutConfiguredApiError(
         f"The cluster serves no resources under {config.TEKTON_API_GROUP}/{config.TEKTON_API_VERSION}, "
         "and kubementat speaks only that API version. Nothing was applied. Install or upgrade "
         f"Tekton Pipelines with `kmt install <environment> <team>`, or set "
@@ -264,7 +221,7 @@ def preflight_installed_tekton_api_versions(kubernetes_utils, config,
         delay_seconds: Seconds between attempts.
 
     Raises:
-        TektonControllerWithoutConfiguredApiError: If the cluster serves nothing under a group/
+        kubementat.errors.TektonControllerWithoutConfiguredApiError: If the cluster serves nothing under a group/
             version kubementat needs, once the bounded wait has run out.
     """
     env_static = config.get('env_static')
@@ -298,7 +255,7 @@ def preflight_installed_tekton_api_versions(kubernetes_utils, config,
 
         pinned = f"{entry['component']} {entry['pin']}" if entry["pin"] else \
             f"{entry['component']} at the version pinned in {entry['pin_key']}"
-        raise TektonControllerWithoutConfiguredApiError(
+        raise errors.TektonControllerWithoutConfiguredApiError(
             f"The cluster serves no resources under {group_version} after installing "
             f"{pinned}, and kubementat {entry['what_we_speak']}. Nothing was configured. "
             f"Either the install did not land its manifests for {entry['component']}, or that "
@@ -523,16 +480,6 @@ PIPELINE_RUN_NAME_SUFFIX = "-run"
 PIPELINE_RUN_FILE_SUFFIX = ".yml"
 
 
-class CleanupJobImageNotConfiguredError(Exception):
-    """A `static.json` key the cleanup job's container image is built from is not configured.
-
-    bash read these three keys with `jq -r`, so an absent one printed the four characters `null`
-    into the image reference and the CronJob was created happily — with a pod that never started,
-    because `ImagePullBackOff` is reported by the job and not by the apply that wrote it. The
-    failure arrived days later, as an empty cronjob history.
-    """
-
-
 # Which component's namespace the cleanup job lands in is spelled at the call site and nowhere
 # else, because `src/` may not bind a namespace to a literal (the guard that says so is
 # `test_no_module_under_src_binds_a_namespace_to_a_literal`, and it cannot tell a component name
@@ -640,7 +587,7 @@ def cleanup_job_image(env_static) -> str:
         str: `<registry>/<ci image>:<tag>`, exactly what `kubectl` was handed before.
 
     Raises:
-        CleanupJobImageNotConfiguredError: If any of the three keys is declared and answers nothing,
+        kubementat.errors.CleanupJobImageNotConfiguredError: If any of the three keys is declared and answers nothing,
             or if the registry is not configured. The name and the tag are also answered
             by `constants.DEFAULT_STATIC_ANSWERS` for a tree that declares nothing, so an *absent*
             key no longer reaches this — a mapping that is missing one is the same fact as an
@@ -652,7 +599,7 @@ def cleanup_job_image(env_static) -> str:
         if not (isinstance(value, str) and value.strip()):
             missing.append(key)
     if missing:
-        raise CleanupJobImageNotConfiguredError(
+        raise errors.CleanupJobImageNotConfiguredError(
             f"{' and '.join(missing)} {'are' if len(missing) > 1 else 'is'} not answered in the "
             f"environment's static.json, so kubementat cannot name the image the cleanup job runs "
             f"in. Add them to platform_config/<environment>/static.json. What is refused here is a "
@@ -779,72 +726,6 @@ TRIGGER_CONFIG_PLACEHOLDER_SOURCES = {
 }
 
 
-class GenerationTemplateNotFoundError(Exception):
-    """A generator template is not in the installed package.
-
-    bash ran `cat` on a `../../../`-relative path, so the answer depended on which directory the
-    operator happened to be standing in and the failure arrived as `sed: No such file or
-    directory` — after which a redirect wrote an empty file and the command said it had finished.
-    This is raised before anything is written, and it names the path that was read. The templates are
-    package data now, so the honest reading of a miss is "this installation lost them",
-    not "this checkout is incomplete".
-    """
-
-
-class GenerationPlaceholderNotConfiguredError(Exception):
-    """A template asked for something kubementat has no value for.
-
-    The rule this class exists to keep: an unsubstituted placeholder never reaches a manifest. bash
-    substituted what it had and echoed what was left, so a typo in a template key left
-    `TEAM_PLACEHOLDER-pipelines` in a namespace name that some cluster then happily created, and a
-    `jq` miss left the word `null` standing in for an image tag.
-    """
-
-
-class GenerationArgumentNotSuppliedError(Exception):
-    """A generator input that is not read from configuration was not supplied.
-
-    The deploy pipeline's app-repository coordinates belong to the app, not to the platform, so no
-    `static.json` key holds them and the script required them as exports. Requiring them is the
-    honest shape of the same rule; the difference is that the answer says what to pass.
-    """
-
-
-class GenerationInputNotFoundError(Exception):
-    """The file a generator was pointed at is not in this checkout.
-
-    `generate_pipeline_run.sh` took the pipeline file as an argument and `cat`ed it after a
-    `../../../` prefix, so the answer depended on which directory the operator stood in and a miss
-    surfaced as `cat: No such file or directory` - which is easy to read as "the pipeline is empty"
-    rather than "I read the wrong file". This is raised before anything is written, and it names the
-    path it actually tried.
-    """
-
-
-class GenerationInputNotUsableError(Exception):
-    """The input file is here, but it is not a Pipeline a run can be generated from.
-
-    bash read `metadata.name` out of the file and used it for two things at once: the name of the
-    run, and the `pipelineRef.name` the run starts. A file that declares no name therefore wrote a
-    resource called `null-run` that pointed at a pipeline called `null`, and a file that is not a
-    Pipeline at all - a Task, or the multi-document example files under `examples/` - wrote a run of
-    something that cannot run. Both were silent. Both are refused here, with the file named.
-    """
-
-
-class GenerationTargetExistsError(Exception):
-    """Generated output is already where this generator would write it.
-
-    The two generators that write deploy pipelines and their runs overwrite, and they were right to:
-    what those two write is a pure function of
-    a tracked template and the configuration, so rerunning is the review loop. A generated pipeline
-    *run* is not that. Its parameters are written as placeholders for whoever generated it to fill
-    in, so a rerun over a file a team had already adjusted would delete their work without a word,
-    and the script's `check_target_file_exists` is the only thing that stopped it. That refusal is
-    kept here, and it is the one part of the port that is deliberately stricter than its siblings.
-    """
-
-
 def _stamp_tekton_api_version(node, api_group: str, api_version: str) -> None:
     """Set the `tekton.dev` apiVersion every document holds to the configured one, in place.
 
@@ -956,10 +837,10 @@ def _safe_name_component(value: str, description: str) -> str:
     rather than the CLI because the generator is what builds the path.
     """
     if not isinstance(value, str) or not value.strip():
-        raise GenerationArgumentNotSuppliedError(f"{description} was not supplied.")
+        raise errors.GenerationArgumentNotSuppliedError(f"{description} was not supplied.")
     value = value.strip()
     if value in (".", "..") or "/" in value or "\\" in value:
-        raise GenerationArgumentNotSuppliedError(
+        raise errors.GenerationArgumentNotSuppliedError(
             f"{description} is {value!r}, which is not something a file name is allowed to be built "
             f"from: it would write outside the directory the generated configuration belongs in.")
     return value
@@ -1115,7 +996,7 @@ class TektonUtils:
           object whether the cluster was empty or not.
 
         Raises:
-            TektonReleaseVersionNotConfiguredError: If a pinned release version is not configured.
+            kubementat.errors.TektonReleaseVersionNotConfiguredError: If a pinned release version is not configured.
             kubementat.errors.CommandExecutionError: If `kubectl` refuses a manifest.
             kubernetes.client.exceptions.ApiException: If the ClusterRole cannot be written.
         """
@@ -1191,7 +1072,7 @@ class TektonUtils:
             namespace: The namespace the control plane was just applied into.
 
         Raises:
-            TektonWebhookNotReachableError: If no endpoint is reachable within
+            kubementat.errors.TektonWebhookNotReachableError: If no endpoint is reachable within
                 WEBHOOK_READY_TIMEOUT_SECONDS.
         """
         deadline = time.time() + WEBHOOK_READY_TIMEOUT_SECONDS
@@ -1204,7 +1085,7 @@ class TektonUtils:
                     f"{len(addresses)} endpoint(s); applying the releases that call its webhook")
                 return
             if time.time() >= deadline:
-                raise TektonWebhookNotReachableError(
+                raise errors.TektonWebhookNotReachableError(
                     f"{PIPELINE_WEBHOOK_SERVICE_NAME} in namespace {namespace} served no endpoints "
                     f"for {WEBHOOK_READY_TIMEOUT_SECONDS}s, so the releases that are validated through "
                     "it were not applied. The Pipelines control plane is installed but not serving: "
@@ -1244,7 +1125,7 @@ class TektonUtils:
           `Config.tekton_trigger_template_dir`.
 
         Raises:
-            PipelineNamespaceNotConfiguredError: If the team's static config has no namespace.
+            kubementat.errors.PipelineNamespaceNotConfiguredError: If the team's static config has no namespace.
             kubementat.errors.ResourceWithoutNameError: If a trigger manifest has no name.
             kubementat.errors.CommandExecutionError: Never, by this method itself — it calls no
                 `kubectl`, which is what the RBAC primitives made unnecessary.
@@ -1252,7 +1133,7 @@ class TektonUtils:
         """
         namespace = self.config.get('team_static').get('PIPELINE_NAMESPACE')
         if not (isinstance(namespace, str) and namespace.strip()):
-            raise PipelineNamespaceNotConfiguredError(
+            raise errors.PipelineNamespaceNotConfiguredError(
                 f"PIPELINE_NAMESPACE is not set in "
                 f"{self.config.team_static_config_path}, so kubementat has no namespace to put "
                 f"the trigger ServiceAccounts, Roles and bindings in. Set it to the namespace the "
@@ -1385,7 +1266,7 @@ class TektonUtils:
         field is the string `null`.
 
         Raises:
-            CleanupJobImageNotConfiguredError: If the CI image cannot be named from configuration.
+            kubementat.errors.CleanupJobImageNotConfiguredError: If the CI image cannot be named from configuration.
             KeyError: If `cluster-cronjobs` is not a kubementat component (a typo, not a rename).
             kubementat.errors.CommandExecutionError: Never by this method itself — it calls no
                 `kubectl`.
@@ -1589,10 +1470,10 @@ class TektonUtils:
         arguments, so it has no reason to be that fragile.
 
         Raises:
-            GenerationArgumentNotSuppliedError: If the app name or any of the five git coordinates
+            kubementat.errors.GenerationArgumentNotSuppliedError: If the app name or any of the five git coordinates
                 is missing. None of them is read from configuration, so none can be looked up here.
-            GenerationTemplateNotFoundError: If the template is not in the installed package.
-            GenerationPlaceholderNotConfiguredError: If the template holds a placeholder with no
+            kubementat.errors.GenerationTemplateNotFoundError: If the template is not in the installed package.
+            kubementat.errors.GenerationPlaceholderNotConfiguredError: If the template holds a placeholder with no
                 configured value, naming the key and the file it would have been read from.
             click.ClickException: From an unreadable `static.json`.
 
@@ -1615,7 +1496,7 @@ class TektonUtils:
                     "APP_GIT_SERVER_SSH_USER": git_server_ssh_user}
         missing = sorted(key for key, value in supplied.items() if not _is_supplied(value))
         if missing:
-            raise GenerationArgumentNotSuppliedError(
+            raise errors.GenerationArgumentNotSuppliedError(
                 f"Generating a deploy pipeline for {app_name} needs a value for "
                 f"{', '.join(f'`{option_names[key]}`' for key in missing)}. Those belong to the app "
                 f"repository rather than to the platform, kubementat reads no configuration key for "
@@ -1674,12 +1555,12 @@ class TektonUtils:
         twice got a directory holding two kinds of manifest and an error that named neither.
 
         Raises:
-            GenerationArgumentNotSuppliedError: If the app name or the pipeline name is missing, or
+            kubementat.errors.GenerationArgumentNotSuppliedError: If the app name or the pipeline name is missing, or
                 if either would escape the directory the output goes into.
-            GenerationTemplateNotFoundError: If `trigger_type` names no template directory, or that
+            kubementat.errors.GenerationTemplateNotFoundError: If `trigger_type` names no template directory, or that
                 directory is empty. The trigger types the installed package can generate for are
                 listed.
-            GenerationPlaceholderNotConfiguredError: If a template holds a placeholder with no
+            kubementat.errors.GenerationPlaceholderNotConfiguredError: If a template holds a placeholder with no
                 configured value, naming the key and the file it would have been read from.
             click.ClickException: From an unreadable `static.json`.
             ObsoleteTriggerDirectoryError: If the tree still has the old `<team>/triggers/`
@@ -1692,7 +1573,7 @@ class TektonUtils:
         _refuse_obsolete_team_trigger_dir(self.config)
         app_name = _safe_name_component(app_name, "The app name")
         if not _is_supplied(pipeline_name):
-            raise GenerationArgumentNotSuppliedError(
+            raise errors.GenerationArgumentNotSuppliedError(
                 f"Generating the trigger configuration for {app_name} needs a pipeline name: a "
                 f"TriggerTemplate that does not know which PipelineRun it may start is a listener "
                 f"that answers a webhook and does nothing. Pass `--pipeline-name`, for example "
@@ -1703,7 +1584,7 @@ class TektonUtils:
         if not template_dir.is_dir():
             available = sorted(p.name for p in self.config.tekton_trigger_template_dir.iterdir()
                                if p.is_dir()) if self.config.tekton_trigger_template_dir.is_dir() else []
-            raise GenerationTemplateNotFoundError(
+            raise errors.GenerationTemplateNotFoundError(
                 f"There are no {trigger_type!r} trigger templates to generate from. "
                 f"The trigger type is the directory that is read, and the layer it comes from is the "
                 f"trigger templates this kmt was installed with — "
@@ -1714,7 +1595,7 @@ class TektonUtils:
         templates = sorted(set(template_dir.glob(f"{TRIGGER_TEMPLATE_FILE_PREFIX}*.yml"))
                            | set(template_dir.glob(f"{TRIGGER_TEMPLATE_FILE_PREFIX}*.yaml")))
         if not templates:
-            raise GenerationTemplateNotFoundError(
+            raise errors.GenerationTemplateNotFoundError(
                 f"{template_dir} holds no {TRIGGER_TEMPLATE_FILE_PREFIX}*.yml files, so there is "
                 f"nothing to generate a {trigger_type!r} trigger set from. A template directory "
                 f"that is empty is not a team that has configured its own templates; it is an "
@@ -1808,10 +1689,10 @@ class TektonUtils:
                 not there.
 
         Raises:
-            GenerationInputNotFoundError: If `pipeline_file` is not a file.
-            GenerationInputNotUsableError: If it is not a single Pipeline document, declares no
+            kubementat.errors.GenerationInputNotFoundError: If `pipeline_file` is not a file.
+            kubementat.errors.GenerationInputNotUsableError: If it is not a single Pipeline document, declares no
                 `metadata.name`, or declares a parameter with no name.
-            GenerationTargetExistsError: If the file this would write already exists.
+            kubementat.errors.GenerationTargetExistsError: If the file this would write already exists.
             click.ClickException: From an unreadable `static.json`.
 
         Returns:
@@ -1819,7 +1700,7 @@ class TektonUtils:
         """
         source = Path(pipeline_file)
         if not source.is_file():
-            raise GenerationInputNotFoundError(
+            raise errors.GenerationInputNotFoundError(
                 f"{source} is not a file, so there is no pipeline to generate a run for. The script "
                 f"resolved this argument against the directory it was run from, which is why the "
                 f"answer here is the path rather than a suggestion: run "
@@ -1829,28 +1710,28 @@ class TektonUtils:
         documents = [document for document in yaml.safe_load_all(source.read_text())
                      if document is not None]
         if not documents:
-            raise GenerationInputNotUsableError(
+            raise errors.GenerationInputNotUsableError(
                 f"{source} holds no YAML document, so there is no pipeline in it to generate a run "
                 f"of. Nothing was written.")
         if len(documents) > 1:
-            raise GenerationInputNotUsableError(
+            raise errors.GenerationInputNotUsableError(
                 f"{source} holds {len(documents)} documents, and a run is generated from exactly one "
                 f"Pipeline. Split the file or point the command at one of them. Nothing was written.")
         pipeline = documents[0]
         if not isinstance(pipeline, dict):
-            raise GenerationInputNotUsableError(
+            raise errors.GenerationInputNotUsableError(
                 f"{source} is a {type(pipeline).__name__}, not a mapping, so it declares no pipeline "
                 f"to run. Nothing was written.")
 
         kind = pipeline.get("kind")
         if kind != "Pipeline":
-            raise GenerationInputNotUsableError(
+            raise errors.GenerationInputNotUsableError(
                 f"{source} is a {kind}, not a Pipeline, so the run would start something that cannot "
                 f"be started as a pipeline. Nothing was written.")
         metadata = pipeline.get("metadata")
         pipeline_name = metadata.get("name") if isinstance(metadata, dict) else None
         if not _is_supplied(pipeline_name):
-            raise GenerationInputNotUsableError(
+            raise errors.GenerationInputNotUsableError(
                 f"{source} declares no metadata.name. bash wrote `null` into both the run's name and "
                 f"its `pipelineRef.name` and printed a success line; this names the file instead, "
                 f"because a run of a pipeline called `null` is not a thing to review. "
@@ -1865,7 +1746,7 @@ class TektonUtils:
         run_name = f"{pipeline_name}{PIPELINE_RUN_NAME_SUFFIX}"
         target_file = Path(self.config.tekton_team_pipeline_run_dir) / f"{run_name}{PIPELINE_RUN_FILE_SUFFIX}"
         if target_file.exists():
-            raise GenerationTargetExistsError(
+            raise errors.GenerationTargetExistsError(
                 f"{target_file} already exists, and kubementat will not overwrite it. A generated "
                 f"run is the starting point a team edits - the parameters kubementat cannot know are "
                 f"written there for whoever generated it to fill in - so a rerun would delete those "
@@ -1923,18 +1804,18 @@ class TektonUtils:
         if params is None:
             return declared
         if not isinstance(params, list):
-            raise GenerationInputNotUsableError(
+            raise errors.GenerationInputNotUsableError(
                 f"{source} declares spec.params as a {type(params).__name__}, not a list, so "
                 f"kubementat cannot tell what the pipeline accepts. Nothing was written.")
         for entry in params:
             if not isinstance(entry, dict):
-                raise GenerationInputNotUsableError(
+                raise errors.GenerationInputNotUsableError(
                     f"{source} holds a parameter written as {entry!r}, which is not a mapping with a "
                     f"name, so a run generated from it would name a parameter `None`. "
                     f"Nothing was written.")
             name = entry.get("name")
             if not _is_supplied(name):
-                raise GenerationInputNotUsableError(
+                raise errors.GenerationInputNotUsableError(
                     f"{source} declares a parameter with no name. A run that passes a parameter named "
                     f"`null` is a run the pipeline rejects; nothing was written.")
             name = str(name)
@@ -1971,14 +1852,14 @@ class TektonUtils:
         if workspaces is None:
             return []
         if not isinstance(workspaces, list):
-            raise GenerationInputNotUsableError(
+            raise errors.GenerationInputNotUsableError(
                 f"{source} declares spec.workspaces as a {type(workspaces).__name__}, not a list, so "
                 f"kubementat cannot tell what the pipeline needs mounted. Nothing was written.")
         names = []
         for entry in workspaces:
             name = entry.get("name") if isinstance(entry, dict) else None
             if not _is_supplied(name):
-                raise GenerationInputNotUsableError(
+                raise errors.GenerationInputNotUsableError(
                     f"{source} declares a workspace with no name, so a generated run could not bind "
                     f"it. Nothing was written.")
             names.append(str(name))
@@ -2049,7 +1930,7 @@ class TektonUtils:
         existence check and a parse error that quotes itself make each of those states say what it is.
         """
         if not template_path.is_file():
-            raise GenerationTemplateNotFoundError(
+            raise errors.GenerationTemplateNotFoundError(
                 f"{template_path} is not here, so there is nothing to generate from. A template that "
                 f"is not in the installed package is an installation problem, not a configuration "
                 f"problem: the generator templates are product files, not team files.")
@@ -2057,11 +1938,11 @@ class TektonUtils:
             documents = [document for document in
                          yaml.safe_load_all(template_path.read_text()) if document is not None]
         except yaml.YAMLError as error:
-            raise GenerationTemplateNotFoundError(
+            raise errors.GenerationTemplateNotFoundError(
                 f"{template_path} is not valid YAML, so kubementat cannot substitute into it: "
                 f"{error}") from error
         if not documents:
-            raise GenerationTemplateNotFoundError(f"{template_path} holds no YAML document at all.")
+            raise errors.GenerationTemplateNotFoundError(f"{template_path} holds no YAML document at all.")
         return documents
 
     def _substitute_generation_placeholders(self, documents, supplied_values, supplied_sources,
@@ -2082,7 +1963,7 @@ class TektonUtils:
             if unfilled:
                 named = ", ".join(_unfilled_source_description(placeholder, sources)
                                   for placeholder in unfilled)
-                raise GenerationPlaceholderNotConfiguredError(
+                raise errors.GenerationPlaceholderNotConfiguredError(
                     f"{template_path.name} holds {named}, and kubementat has no value for "
                     f"{'it' if len(unfilled) == 1 else 'them'}. Nothing was written, because a "
                     f"manifest with a placeholder in it is a resource that carries the placeholder's "

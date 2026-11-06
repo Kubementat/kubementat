@@ -25,10 +25,10 @@ from kubernetes.client.exceptions import ApiException
 
 from cluster_parity import ClusterOperation, cluster_named, compare, operations_from_calls
 from conftest import FIXTURE_ENVIRONMENT, RecordedCall
+from kubementat.errors import CleanupJobImageNotConfiguredError
 from kubementat.tekton_utils import (CLEANUP_JOB_CLUSTER_ROLE_BINDING_NAME,
                                      CLEANUP_JOB_CLUSTER_ROLE_NAME, CLEANUP_JOB_NAME,
-                                     CLEANUP_JOB_SERVICE_ACCOUNT_NAME,
-                                     CleanupJobImageNotConfiguredError, cleanup_job_image)
+                                     CLEANUP_JOB_SERVICE_ACCOUNT_NAME, cleanup_job_image)
 from cluster_fixture import configuration_only_cluster, configuration_only_context
 
 # The cluster both sides of this comparison address. The Python side gets it from the `Context` it

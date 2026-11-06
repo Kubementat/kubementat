@@ -26,9 +26,9 @@ import pytest
 
 from kubementat import config as config_module
 from kubementat.automation import Automation
+from kubementat.errors import TektonControllerWithoutConfiguredApiError
 from kubementat.tekton_utils import (
     TEKTON_RELEASE_BASE_URL,
-    TektonControllerWithoutConfiguredApiError,
     TektonUtils,
     preflight_installed_tekton_api_versions,
 )

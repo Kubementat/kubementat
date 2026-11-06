@@ -18,10 +18,10 @@ than to report that the operator is doing something twice.
 import pytest
 
 from kubementat import errors, shell
+from kubementat.errors import TektonReleaseVersionNotConfiguredError
 from kubementat.tekton_utils import (
     HELM_DEPLOYER_CLUSTER_ROLE_NAME,
     TEKTON_RELEASE_BASE_URL,
-    TektonReleaseVersionNotConfiguredError,
     TektonUtils,
 )
 from conftest import is_apply

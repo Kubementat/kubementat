@@ -254,7 +254,7 @@ def test_generating_the_same_pipeline_twice_writes_the_same_bytes(checkout):
 
 
 def test_a_deploy_pipeline_template_that_is_not_there_says_where_it_reached_for(checkout):
-    from kubementat.tekton_utils import GenerationTemplateNotFoundError
+    from kubementat.errors import GenerationTemplateNotFoundError
 
     with pytest.raises(GenerationTemplateNotFoundError) as error:
         generated_deploy_pipeline(checkout, template_file="no-such-template.yml")
@@ -301,7 +301,7 @@ def test_a_missing_git_coordinate_is_refused_by_name_and_writes_nothing(checkout
     every one that is missing at once, because an operator who forgot two should not have to
     discover them one run at a time.
     """
-    from kubementat.tekton_utils import GenerationArgumentNotSuppliedError
+    from kubementat.errors import GenerationArgumentNotSuppliedError
 
     with pytest.raises(GenerationArgumentNotSuppliedError) as error:
         utils(checkout).generate_deploy_pipeline(
@@ -314,7 +314,7 @@ def test_a_missing_git_coordinate_is_refused_by_name_and_writes_nothing(checkout
 
 def test_an_app_name_that_would_escape_the_directory_is_refused(checkout):
     """`../other-team` as an app name wrote another team's files, with no rule against it."""
-    from kubementat.tekton_utils import GenerationArgumentNotSuppliedError
+    from kubementat.errors import GenerationArgumentNotSuppliedError
 
     with pytest.raises(GenerationArgumentNotSuppliedError) as error:
         utils(checkout).generate_deploy_pipeline("../other-team", **PYTHON_GIT)
@@ -387,7 +387,7 @@ def test_a_trigger_type_with_no_templates_names_the_resource_and_the_layer_it_ca
     replace it — the resource that was looked for, and the layer it would have come from — and the
     listing stays, because "which trigger types exist" is the question that actually gets asked.
     """
-    from kubementat.tekton_utils import GenerationTemplateNotFoundError
+    from kubementat.errors import GenerationTemplateNotFoundError
 
     with pytest.raises(GenerationTemplateNotFoundError) as error:
         generated_trigger_files(checkout, "azure")

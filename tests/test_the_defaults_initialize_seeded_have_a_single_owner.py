@@ -497,7 +497,7 @@ def test_an_absent_key_falls_to_kubementats_value_and_a_declared_null_still_refu
     `unset`), so the state is reachable only by editing a file, which is the case the guard exists for
     and not a reason to skip it.
     """
-    from kubementat import tekton_utils
+    from kubementat import errors, tekton_utils
 
     omitted = seed(tmp_path / "omitted")
     assert tekton_utils.release_manifests_to_apply(omitted.get("env_static")), \
@@ -505,5 +505,5 @@ def test_an_absent_key_falls_to_kubementats_value_and_a_declared_null_still_refu
 
     declared_null = seed(tmp_path / "declared",
                          environment_static={"TEKTON_VERSION_PIPELINE": None})
-    with pytest.raises(tekton_utils.TektonReleaseVersionNotConfiguredError):
+    with pytest.raises(errors.TektonReleaseVersionNotConfiguredError):
         tekton_utils.release_manifests_to_apply(declared_null.get("env_static"))

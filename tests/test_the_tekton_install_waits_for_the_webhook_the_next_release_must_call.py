@@ -32,9 +32,9 @@ import pytest
 from kubernetes.client import V1EndpointAddress, V1EndpointSubset, V1Endpoints, V1ObjectMeta
 
 from kubementat import tekton_utils
+from kubementat.errors import TektonWebhookNotReachableError
 from kubementat.tekton_utils import (HELM_DEPLOYER_CLUSTER_ROLE_NAME, PIPELINE_WEBHOOK_SERVICE_NAME,
-                                     TEKTON_RELEASE_BASE_URL, TektonUtils,
-                                     TektonWebhookNotReachableError)
+                                     TEKTON_RELEASE_BASE_URL, TektonUtils)
 from conftest import is_apply
 from cluster_fixture import configuration_only_context
 

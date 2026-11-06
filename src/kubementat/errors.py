@@ -380,6 +380,176 @@ class MysqlNotConfiguredError(KubementatError):
 
 
 # ---------------------------------------------------------------------------
+# What the Tekton install refuses to start with.
+#
+# Five answers from `tekton_utils.py`'s install path, and they used to be five bare `Exception`
+# classes with no parent, which is the whole content of this group's edit: the classes, their
+# messages and their reasons are unchanged, and each now answers to `KubementatError`, so a caller
+# that asks "did kubementat refuse me, or did Python break" can tell.
+#
+# Three of the five are the `jq -r` shape, and it is worth naming once instead of three times: bash
+# read a `static.json` key with `jq -r`, a key that was not there printed the four characters
+# `null`, and the next line put that string into a URL (`TektonReleaseVersionNotConfiguredError`),
+# into the namespace name eight RBAC objects were addressed to (`PipelineNamespaceNotConfiguredError`),
+# or into the image reference of a CronJob that reported success and then failed on its schedule
+# (`CleanupJobImageNotConfiguredError`). `kubectl` failed some way later, and the failure named
+# neither the file nor the key. That is the sentence `CiImageNotConfiguredError` above already says
+# about two of these very keys, told from the other side of the same file, and
+# `CleanupJobImageNotConfiguredError` is deliberately not folded into it: same keys, two different
+# images, and the advice an operator acts on is not the same advice.
+#
+# The other two are not about a key. `TektonControllerWithoutConfiguredApiError` refuses before a
+# single manifest is sent, and it is refused in this group rather than the cluster group above
+# because the question it answers is not *which cluster does this command mean* — that question
+# resolved perfectly well, and then the cluster was refused for what it does not serve.
+# `TektonWebhookNotReachableError` is a timing question about a Service name that is a constant in
+# `tekton_utils.py` and not something the operator picked; it is the answer the E2E suite was
+# missing when an apply died on a webhook nobody had chosen.
+# ---------------------------------------------------------------------------
+
+
+class TektonControllerWithoutConfiguredApiError(KubementatError):
+    """The cluster does not serve the `tekton.dev` API version kubementat speaks.
+
+    This is raised before any resource is sent, so that a controller that is too old (or
+    not installed at all) produces one explanation instead of a 404 for every Task,
+    Pipeline and PipelineRun it would otherwise be asked to create.
+    """
+
+
+class PipelineNamespaceNotConfiguredError(KubementatError):
+    """`PIPELINE_NAMESPACE` is not in the team's `static.json`.
+
+    bash read it with `jq -r`, so an absent key answered `null` and every RBAC object went to a
+    namespace with that literal name — where `kubectl` answered "not found", several times over,
+    for a reason that named neither the file nor the key. Eight operations need one namespace,
+    so this is asked for once, before any of them run.
+    """
+
+
+class TektonReleaseVersionNotConfiguredError(KubementatError):
+    """A `TEKTON_VERSION_*` key the release URL is built from is not configured.
+
+    bash read the same keys with `jq -r`, and a key that was not there printed `null` straight
+    into the URL, so the install fetched a 404 and reported a non-zero exit. The missing thing
+    is a line in `static.json`, so that is what the message names.
+    """
+
+
+class TektonWebhookNotReachableError(KubementatError):
+    """The Pipelines webhook could not be reached before the next release was applied.
+
+    The shape this replaces is the one the E2E suite caught: the apply of the *Triggers* release
+    dies on `failed calling webhook "config.webhook.pipeline.tekton.dev": ... no endpoints
+    available for service "tekton-pipelines-webhook"`, because the webhook that validates the
+    Triggers objects was registered by the apply three seconds earlier and its pod is not yet
+    serving. The failure lands in the middle of a list of `kubectl apply` calls, names a webhook
+    the operator never chose, and points at a release that is not the one at fault.
+
+    So the wait raises instead of letting that happen: it names the Service, the namespace, and
+    the bound that expired, and it says which knob to turn. Nothing is half-applied to make this
+    nicer to read -- the install stops where it is, and the message says so.
+    """
+
+
+class CleanupJobImageNotConfiguredError(KubementatError):
+    """A `static.json` key the cleanup job's container image is built from is not configured.
+
+    bash read these three keys with `jq -r`, so an absent one printed the four characters `null`
+    into the image reference and the CronJob was created happily — with a pod that never started,
+    because `ImagePullBackOff` is reported by the job and not by the apply that wrote it. The
+    failure arrived days later, as an empty cronjob history.
+    """
+
+
+# ---------------------------------------------------------------------------
+# What the Tekton generators refuse to write.
+#
+# The six classes the generators raise instead of writing a file — `generate_deploy_pipeline`,
+# `generate_trigger_configs`, `generate_pipeline_run` — and, like the Ingress group above, all six
+# used to be bare `Exception`s with no parent. The Ingress group is the same three questions about
+# one command's three arguments: the target already exists, an argument came in empty, a value is
+# unusable. This group is those three, plus what a template is, what it asked for, and what the
+# input file turned out to be, told about the directory a generated pipeline lives in.
+#
+# No `GenerationError` base was added here, and the reason is the census and not the taste. The
+# name would cover the six exactly, and it reads well. But nothing in the tree catches this family
+# as a family: not one `except` in `src` or in `tests` names any of these eleven, and the CLI lets
+# them travel untouched to the one place that prints a domain error. A base nobody catches is a
+# promise about behaviour that does not exist, and each of the six already answers to
+# `KubementatError`, so `except KubementatError` reaches all six today. The day a caller wants to
+# say "the generators, and not the rest", that day adds the base, and adding it then is a one-line
+# change with no call site to repoint.
+# ---------------------------------------------------------------------------
+
+
+class GenerationTemplateNotFoundError(KubementatError):
+    """A generator template is not in the installed package.
+
+    bash ran `cat` on a `../../../`-relative path, so the answer depended on which directory the
+    operator happened to be standing in and the failure arrived as `sed: No such file or
+    directory` — after which a redirect wrote an empty file and the command said it had finished.
+    This is raised before anything is written, and it names the path that was read. The templates are
+    package data now, so the honest reading of a miss is "this installation lost them",
+    not "this checkout is incomplete".
+    """
+
+
+class GenerationPlaceholderNotConfiguredError(KubementatError):
+    """A template asked for something kubementat has no value for.
+
+    The rule this class exists to keep: an unsubstituted placeholder never reaches a manifest. bash
+    substituted what it had and echoed what was left, so a typo in a template key left
+    `TEAM_PLACEHOLDER-pipelines` in a namespace name that some cluster then happily created, and a
+    `jq` miss left the word `null` standing in for an image tag.
+    """
+
+
+class GenerationArgumentNotSuppliedError(KubementatError):
+    """A generator input that is not read from configuration was not supplied.
+
+    The deploy pipeline's app-repository coordinates belong to the app, not to the platform, so no
+    `static.json` key holds them and the script required them as exports. Requiring them is the
+    honest shape of the same rule; the difference is that the answer says what to pass.
+    """
+
+
+class GenerationInputNotFoundError(KubementatError):
+    """The file a generator was pointed at is not in this checkout.
+
+    `generate_pipeline_run.sh` took the pipeline file as an argument and `cat`ed it after a
+    `../../../` prefix, so the answer depended on which directory the operator stood in and a miss
+    surfaced as `cat: No such file or directory` - which is easy to read as "the pipeline is empty"
+    rather than "I read the wrong file". This is raised before anything is written, and it names the
+    path it actually tried.
+    """
+
+
+class GenerationInputNotUsableError(KubementatError):
+    """The input file is here, but it is not a Pipeline a run can be generated from.
+
+    bash read `metadata.name` out of the file and used it for two things at once: the name of the
+    run, and the `pipelineRef.name` the run starts. A file that declares no name therefore wrote a
+    resource called `null-run` that pointed at a pipeline called `null`, and a file that is not a
+    Pipeline at all - a Task, or the multi-document example files under `examples/` - wrote a run of
+    something that cannot run. Both were silent. Both are refused here, with the file named.
+    """
+
+
+class GenerationTargetExistsError(KubementatError):
+    """Generated output is already where this generator would write it.
+
+    The two generators that write deploy pipelines and their runs overwrite, and they were right to:
+    what those two write is a pure function of
+    a tracked template and the configuration, so rerunning is the review loop. A generated pipeline
+    *run* is not that. Its parameters are written as placeholders for whoever generated it to fill
+    in, so a rerun over a file a team had already adjusted would delete their work without a word,
+    and the script's `check_target_file_exists` is the only thing that stopped it. That refusal is
+    kept here, and it is the one part of the port that is deliberately stricter than its siblings.
+    """
+
+
+# ---------------------------------------------------------------------------
 # The refusal that says the work is not finished.
 #
 # `UninstallIncompleteError` is not about a key or an argument: the command ran, and something

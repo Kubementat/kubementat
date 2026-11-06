@@ -1,5 +1,57 @@
 # Unreleased
 
+- **The eleven refusals `tekton_utils.py` raises moved to `kubementat.errors`.**
+  `TektonControllerWithoutConfiguredApiError`, `PipelineNamespaceNotConfiguredError`,
+  `TektonReleaseVersionNotConfiguredError`, `TektonWebhookNotReachableError` and
+  `CleanupJobImageNotConfiguredError` were written in that module's install path, and
+  `GenerationTemplateNotFoundError`, `GenerationPlaceholderNotConfiguredError`,
+  `GenerationArgumentNotSuppliedError`, `GenerationInputNotFoundError`,
+  `GenerationInputNotUsableError` and `GenerationTargetExistsError` in the generators that live
+  below it. All eleven were bare `Exception` classes with no parent, which is the whole content of
+  this ticket's edit: the classes, their messages and their reasons are unchanged, and each now
+  answers to `KubementatError`.
+
+  **The hierarchy, as decided and not re-opened.** Every one of the eleven descends from
+  `KubementatError`, in two commented sections that say what each group has in common — five
+  refusals to install without a value in a file, six refusals to write a generated file. No
+  `GenerationError` base was invented, and the census is the reason rather than the taste: not one
+  `except` clause in `src` or in `tests` names any of the eleven, so nothing catches the generation
+  family as a family, and a base nobody catches is a promise about behaviour that does not exist.
+  Each of the six already answers to `KubementatError`, so `except KubementatError` reaches them
+  today, and adding the base later is a one-line change with no call site to repoint.
+
+  **What did not change.** No message, no raise, no catch, no assertion text. 17 import statements,
+  24 `pytest.raises` sites and one `module.ClassName` attribute reference
+  (`tekton_utils.TektonReleaseVersionNotConfiguredError`, in a test) were repointed across
+  `tekton_utils.py` and 9 of the 10 test files that mention them, and the 28 raise sites there now
+  write
+  `raise errors.X(...)`, the way `shell.py`, `ci_utils.py` and `ingress_generator.py` already do, so
+  no old address is reachable. Seventeen docstring `Raises:` lines were qualified to
+  `kubementat.errors.X` while they were being repointed; none of them spelled the old module address
+  the way the plan expected, which is the only place the plan and the tree disagreed. The two
+  assertions that compare `type(error.value).__name__` to `"GenerationPlaceholderNotConfiguredError"`
+  were left alone: they read the class name, and the class name is unchanged.
+
+  **What stayed put.** `ObsoleteTriggerDirectoryError`, which is Phase 1's standing decision and
+  descends from `click.ClickException` rather than from anything here, and `tekton_utils.py`
+  itself — no function body, no split, no `infrastructure/`, no new `click` import under `src/`.
+
+  **The census said 102 rows for these eleven, and the split it offered was not needed.** 57 were
+  in `tekton_utils.py` — 11 definitions, 28 raises, 17 docstring lines and one comment — and 45 were
+  spread over 10 test files. Under the 150 the plan set as the point where the generation family
+  would become its own ticket, so this is one change and not two.
+
+  **One thing the census did not say, and it changed nothing.** `CleanupJobImageNotConfiguredError`
+  names the same three `static.json` keys as `CiImageNotConfiguredError`, which this module already
+  owned. They are not folded together: two different images, and the sentence an operator acts on is
+  not the same sentence.
+
+  **Evidence.** `uv run pytest -q` reports 1775 passed, 1 skipped (54 s);
+  `git grep -n "^class \(Tekton\|Pipeline\|CleanupJob\|Generation\)[A-Za-z]*Error" -- src/kubementat`
+  answers only `src/kubementat/errors.py`, and the same search for any
+  `kubementat.tekton_utils.XError` reference answers nothing; `python3 .agent-work/import_graph.py
+  src` prints `none` under both cycles and layer violations.
+
 - **The nine refusals the grafana, Ingress, CI-image and uninstall commands raise moved to
   `kubementat.errors`.** `GrafanaError`, `GrafanaConfigurationError` and `GrafanaUnauthorizedError`
   were written in `grafana_client.py`, `IngressTargetExistsError`, `IngressArgumentNotSuppliedError`
