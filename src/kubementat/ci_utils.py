@@ -24,7 +24,7 @@ names itself and its file before a pod is created.
 import logging
 
 from kubementat import errors
-from kubementat import shell
+from kubementat.infrastructure import shell
 from kubementat.core.identity.target import kubectl_target_args
 
 # The pod the script always ran, under the name it always used. kubementat has never had more
@@ -88,7 +88,7 @@ class CiUtils:
         Start the CI container in the given environment and team namespace, attached to the terminal.
 
         Returns:
-            kubementat.shell.CommandResult: Whatever `kubectl run` did once the session ended.
+            kubementat.infrastructure.shell.CommandResult: Whatever `kubectl run` did once the session ended.
 
         Raises:
             kubementat.errors.CiImageNotConfiguredError: If the image is not configured, before any pod is created.

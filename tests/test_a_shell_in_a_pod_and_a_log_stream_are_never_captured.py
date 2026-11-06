@@ -29,7 +29,7 @@ from kubernetes.client.exceptions import ApiException
 from cli.commands import kubernetes
 from conftest import FIXTURE_ENVIRONMENT
 from kubementat.core.identity.target import kubectl_target_args
-from kubementat import shell
+from kubementat.infrastructure import shell
 from cluster_fixture import TARGET_DEV
 from kubementat.errors import NamespaceNotFoundError, PodNotFoundError
 from kubementat.infrastructure.kubernetes import KubernetesUtils

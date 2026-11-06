@@ -22,7 +22,7 @@ import inspect
 import pytest
 from kubernetes import client
 
-from kubementat import shell
+from kubementat.infrastructure import shell
 from kubementat.errors import ServiceAccountTokenNotFoundError
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 from cluster_fixture import TARGET_DEV

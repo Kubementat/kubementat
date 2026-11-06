@@ -130,7 +130,8 @@ from pathlib import Path
 import click
 import gnupg
 
-from kubementat import config_init, config_keys, shell
+from kubementat import config_init, config_keys
+from kubementat.infrastructure import shell
 # The same keyring `config_keys` asks its own two gpg questions against: created for the call,
 # thrown away in the same `finally`. Rule 1 adds a third question of exactly that shape -- what
 # fingerprint is in this file? -- and a second implementation of the ring would be a second owner

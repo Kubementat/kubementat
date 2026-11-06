@@ -1,7 +1,7 @@
 """Nothing a user runs may take a script path and execute it, on the CLI or behind it.
 
 `kmt run-script <path> --args ...` was the last command of that shape. It took a path from the
-command line, resolved it against the checkout, ran it with `kubementat.shell.run` and passed
+command line, resolved it against the checkout, ran it with `kubementat.infrastructure.shell.run` and passed
 every later `--args` on to it verbatim. The CI half of the same idea is already gone: the Task
 that took `path-to-automation-script` and the script it existed to run are both deleted, so this
 file closes the second door and keeps it shut.
@@ -378,7 +378,7 @@ def test_no_src_module_starts_a_program_from_a_path_a_caller_supplied():
     """Every `shell.run` in `src/` names its program, wherever its argv was assembled.
 
     This is the rule `test_command_execution_policy.py` already states for `shell=True`,
-    `subprocess` and `os.chdir`, aimed at one call shape: what `kubementat.shell.run` is handed is
+    `subprocess` and `os.chdir`, aimed at one call shape: what `kubementat.infrastructure.shell.run` is handed is
     a program to exec and not a file to open. The call sites it walks answer with `"kubectl"`,
     `"helm"`, `"helmfile"`, `"git-crypt"` — the names of programs the CLI needs — and the day one
     of them answers with a path, this fails.
@@ -479,7 +479,7 @@ def test_the_guard_refuses_a_planted_module_that_starts_a_script_by_path(tmp_pat
     guard catches the shape end to end and not just in one branch of its recursion.
     """
     (tmp_path / "planted.py").write_text(
-        "import kubementat.shell as shell\n"
+        "import kubementat.infrastructure.shell as shell\n"
         "\n"
         "def run(*args):\n"
         "    shell.run([\"/srv/scripts/thing.sh\", *args])\n",

@@ -8,7 +8,7 @@ belongs to `--update` alone.
 
 No cluster is needed to read this file, and none is used: the three discovery reads are answered the
 way a cluster answers them (`tests/shims/` on `PATH`, the same recorder the uninstall sweep is judged
-against), and the real `Config`, `HelmUtils` and `kubementat.shell` run on top of them.
+against), and the real `Config`, `HelmUtils` and `kubementat.infrastructure.shell` run on top of them.
 """
 
 import json
@@ -20,7 +20,8 @@ import pytest
 import yaml
 
 from conftest import as_k8s_object, cluster_state
-from kubementat import helm_utils, shell
+from kubementat import helm_utils
+from kubementat.infrastructure import shell
 from kubementat.core.identity.context import Context
 from kubementat.automations.routing import routing
 

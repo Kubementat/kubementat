@@ -17,7 +17,8 @@ than to report that the operator is doing something twice.
 
 import pytest
 
-from kubementat import errors, shell
+from kubementat import errors
+from kubementat.infrastructure import shell
 from kubementat.errors import TektonReleaseVersionNotConfiguredError
 from kubementat.tekton_utils import (
     HELM_DEPLOYER_CLUSTER_ROLE_NAME,

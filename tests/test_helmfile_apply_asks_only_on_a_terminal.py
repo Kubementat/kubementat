@@ -36,7 +36,7 @@ TEAM = "routing-team"
 
 
 class RecordingShell:
-    """Stands in for `kubementat.shell`: remembers the argv it was handed."""
+    """Stands in for `kubementat.infrastructure.shell`: remembers the argv it was handed."""
 
     def __init__(self):
         self.calls = []

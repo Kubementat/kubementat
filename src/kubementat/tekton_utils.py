@@ -1,5 +1,5 @@
 from kubementat import errors
-from kubementat import shell
+from kubementat.infrastructure import shell
 from kubementat.infrastructure.kubernetes import KubernetesUtils, apply
 import base64
 import click

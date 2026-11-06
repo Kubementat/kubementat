@@ -119,7 +119,7 @@ def main():
     # utilities
     cli.add_command(utilities.run_ci_container)
     # There is no command here that takes a script path from the operator and execs it.
-    # Nothing replaces it: the CLI's own work goes through `kubementat.shell`, and what an operator
+    # Nothing replaces it: the CLI's own work goes through `kubementat.infrastructure.shell`, and what an operator
     # gets is a command and not a path to run. The guard that keeps it out is
     # `tests/test_no_cli_command_starts_a_script_by_path.py`.
     # The Ingress manifest generator that replaces `create_ingress_yml.sh`,

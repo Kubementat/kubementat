@@ -45,7 +45,7 @@ from conftest import as_k8s_object
 
 import kubementat.automation
 
-from kubementat import shell
+from kubementat.infrastructure import shell
 from kubementat.core import constants
 from kubementat.automation import Automation
 from kubementat.errors import UninstallIncompleteError

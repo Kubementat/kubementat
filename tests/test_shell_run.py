@@ -1,4 +1,4 @@
-"""Tests for `kubementat.shell.run` — the one command-execution primitive.
+"""Tests for `kubementat.infrastructure.shell.run` — the one command-execution primitive.
 
 These pin the behaviour the primitive exists to guarantee: command lines are argv, the
 working directory is an argument, output is either streamed or captured by choice, and a
@@ -22,7 +22,8 @@ import sys
 
 import pytest
 
-from kubementat import errors, shell
+from kubementat import errors
+from kubementat.infrastructure import shell
 
 # A program that prints what it was handed, so argv corruption is visible as a diff.
 PRINT_ARGV = "import json,sys; print(json.dumps(sys.argv[1:]))"

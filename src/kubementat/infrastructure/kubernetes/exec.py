@@ -15,7 +15,7 @@ import logging
 from kubernetes import client
 
 from kubementat import errors
-from kubementat import shell
+from kubementat.infrastructure import shell
 from kubementat.errors import NamespaceNotFoundError
 from kubementat.infrastructure.kubernetes.constants import DEPLOYMENT_LABEL
 from kubementat.infrastructure.kubernetes.workloads import KubernetesWorkloads

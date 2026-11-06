@@ -41,7 +41,7 @@ import yaml
 from kubernetes import client
 
 from kubementat import errors
-from kubementat import shell
+from kubementat.infrastructure import shell
 from kubementat.automations.routing import traefik_presence
 from kubementat.core.config.config import Config
 from kubementat.core.constants import COMPONENT, DEFAULT_INGRESS_CLASSES, TRAEFIK_CHART
@@ -76,7 +76,7 @@ SKIP_LABEL_FILTER = "group=routing,component_name!=traefik"
 
 # How `--update` takes the definitions, verbatim from the chart README's upgrade instruction
 # (`helm show crds traefik/traefik | kubectl apply --server-side --force-conflicts -f -`). The pipe
-# is gone rather than worked around: `kubementat.shell` runs argv lists and refuses command strings,
+# is gone rather than worked around: `kubementat.infrastructure.shell` runs argv lists and refuses command strings,
 # so the text is captured and handed over on stdin.
 # The CRD apply's shape, spelled where it runs (this one stays `kubectl`, so the cluster is inserted
 # after the verb there). It is not a constant any more because the one thing that may not travel on

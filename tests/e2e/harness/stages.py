@@ -973,7 +973,7 @@ class LaneRunner:
     # guest answers its own question and this stage only compares what it says.
     PINNED_TOOL_PROBE = """
 import json
-from kubementat import shell
+from kubementat.infrastructure import shell
 from kubementat.core import constants
 from kubementat.automation import BINARY_VERSION_ARGV, first_binary_version
 

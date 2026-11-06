@@ -115,7 +115,7 @@ def test_the_two_teardown_reads_ask_that_argv_and_not_an_equal_one(monkeypatch):
 
     def recording_run(argv, **kwargs):
         asked.append(list(argv))
-        return kubementat.shell.CommandResult(argv, 0, stdout=traefik, stderr="")
+        return kubementat.infrastructure.shell.CommandResult(argv, 0, stdout=traefik, stderr="")
 
     monkeypatch.setattr(kubementat.automation.shell, "run", recording_run)
     gate = Automation.__new__(Automation)

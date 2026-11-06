@@ -31,7 +31,7 @@ from kubementat.core import constants
 from kubementat import automation
 from kubementat.automation import Automation
 from kubementat.errors import CommandExecutionError
-from kubementat.shell import CommandResult
+from kubementat.infrastructure.shell import CommandResult
 
 # What the fake answers when a test does not say otherwise: the shapes measured here for the pinned
 # versions, so a test that is not about the version is not accidentally about the version too.

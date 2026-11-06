@@ -29,7 +29,8 @@ from kubernetes.client.exceptions import ApiException
 
 from cluster_fixture import TARGET_DEV
 from conftest import as_k8s_object
-from kubementat import helm_utils, shell
+from kubementat import helm_utils
+from kubementat.infrastructure import shell
 from kubementat.automations.routing import traefik_presence
 from kubementat.core.identity.context import Context
 from kubementat.core.identity.target import ClusterTarget
@@ -90,7 +91,7 @@ class Cluster:
     """The cluster under the three reads, answered over the two channels a read can travel.
 
     The release read is a command, so this answers it with `run`, the real
-    :class:`kubementat.shell.CommandResult`, the same exit codes and the same JSON. The class and
+    :class:`kubementat.infrastructure.shell.CommandResult`, the same exit codes and the same JSON. The class and
     pod reads are API calls, so this answers them with methods, and the objects they hand back are
     the shape the deserialised models have. That asymmetry is not the fixture being untidy: it is
     what discovery now is, and a fake that answered all three as commands would keep testing a

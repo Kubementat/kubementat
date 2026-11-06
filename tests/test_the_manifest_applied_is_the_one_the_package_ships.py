@@ -57,7 +57,7 @@ releases:
 
 
 class RecordingShell:
-    """`kubementat.shell` reduced to what a helmfile run needs: argv, and the environment it saw.
+    """`kubementat.infrastructure.shell` reduced to what a helmfile run needs: argv, and the environment it saw.
 
     The environment is read at call time, because that is the only way to tell "exported before the
     child started" apart from "exported at some point during it" -- helmfile's templating looks at
@@ -103,7 +103,7 @@ def seeded_config(tmp_path, monkeypatch, team=TEAM):
 
 
 def apply_helmfile(utils, monkeypatch, recorder=None):
-    """One `helmfile apply`, with the recorder installed as `kubementat.shell`.
+    """One `helmfile apply`, with the recorder installed as `kubementat.infrastructure.shell`.
 
     Every cluster read the apply makes on its way to the apply goes through the same recorder and is
     answered as a cluster holding no releases, which is what this scratch root is: nothing on it has

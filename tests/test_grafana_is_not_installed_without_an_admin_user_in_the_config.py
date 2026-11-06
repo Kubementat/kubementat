@@ -31,7 +31,7 @@ CONFIGURED_USER = "grafadmin"
 
 
 class RecordingShell:
-    """`kubementat.shell` for these tests: remembers argv, runs nothing."""
+    """`kubementat.infrastructure.shell` for these tests: remembers argv, runs nothing."""
 
     def __init__(self):
         self.calls = []

@@ -1,5 +1,12 @@
 # Unreleased
 
+- **`shell.py` moved to `infrastructure/shell.py` and is now reached under that path everywhere.**
+  It is the only code in kubementat that starts a process, which is what puts it below the cluster
+  layer and not beside it: ten modules and twenty-odd test files retargeted (including the
+  monkeypatch string paths that name `shell.run` — a string that silently stops patching is the
+  silent-failure mode this plan names). Nothing else about the module changed; the split into
+  `infrastructure/` is proceeding from the bottom of the dependency rule upward.
+
 - **`kubernetes_utils.py` is split: nine areas, one assembled class, the old file gone.** The file
   was 1 977 lines after the five pure helpers left it, and the census (`docs/census-kubernetes-split.md`)
   read it as 81 methods that all answered to one class name. The split keeps what the census proved is

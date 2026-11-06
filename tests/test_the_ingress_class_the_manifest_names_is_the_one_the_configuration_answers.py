@@ -264,7 +264,7 @@ def test_helmfile_apply_hands_the_class_over_before_it_runs_helmfile(tmp_path, m
     seen = {}
 
     class RecordingShell:
-        """`kubementat.shell.run`, recording what the child was handed and what it could read."""
+        """`kubementat.infrastructure.shell.run`, recording what the child was handed and what it could read."""
 
         def __init__(self):
             self.calls = []

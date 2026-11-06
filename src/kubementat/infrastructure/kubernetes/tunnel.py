@@ -6,7 +6,8 @@ the person it failed for is standing at a terminal and not reading a stack.
 
 import logging
 
-from kubementat import errors, shell
+from kubementat import errors
+from kubementat.infrastructure import shell
 from kubementat.infrastructure.kubernetes.clients import KubernetesClients
 
 

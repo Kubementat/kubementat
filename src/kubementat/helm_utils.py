@@ -6,7 +6,7 @@ import re
 import click
 from kubernetes import client
 
-from kubementat import shell
+from kubementat.infrastructure import shell
 from kubementat.core.config import release_index as config_reads_index
 from kubementat.core import constants
 from kubementat.core.identity.target import ClusterTarget, helm_target_args

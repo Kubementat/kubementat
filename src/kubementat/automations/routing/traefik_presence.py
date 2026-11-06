@@ -48,7 +48,7 @@ from typing import Optional
 
 from kubernetes import client
 
-from kubementat import shell
+from kubementat.infrastructure import shell
 from kubementat.core.config.keys import component_config_key
 from kubementat.core.constants import COMPONENT, TRAEFIK_CHART, TRAEFIK_CONTROLLER_NAME
 from kubementat.helm_utils import helm_list_releases_argv
@@ -415,10 +415,10 @@ def discover(ctx, namespace: Optional[str] = None, reader=None,
         is the configuration's answer and not this module's.
     reader:
         Who answers the *command* read -- one call, `capture=True, check=False`. Defaults to
-        `kubementat.shell.run`; a caller that already knows how its cluster answers -- a test
+        `kubementat.infrastructure.shell.run`; a caller that already knows how its cluster answers -- a test
         holding a fixture cluster, or a tool reading a recorded transcript -- can hand that over
         instead. The seam is a parameter rather than a swapped module attribute because `shell` is
-        imported here as the shared `kubementat.shell` module: patching
+        imported here as the shared `kubementat.infrastructure.shell` module: patching
         `traefik_presence.shell.run` patches it for everything else in the process, which is how a
         test ends up green while the rest of the suite reads a machine nobody intended.
     cluster:

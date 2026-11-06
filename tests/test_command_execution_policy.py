@@ -1,6 +1,6 @@
 """Tests for the command-execution rule: argv everywhere, one module doing the executing.
 
-`kubementat.shell.run` is the only way kubementat starts a program
+`kubementat.infrastructure.shell.run` is the only way kubementat starts a program
 (`test_shell_run.py` is its contract). This file proves two things about everywhere else.
 
 Two kinds of test live here on purpose:
@@ -26,7 +26,8 @@ from pathlib import Path
 
 import pytest
 
-from kubementat import errors, shell
+from kubementat import errors
+from kubementat.infrastructure import shell
 from kubementat.core import constants
 from kubementat.automation import Automation
 from kubementat.core.config.keys import component_config_key

@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from kubernetes import client
 import click
-from kubementat import shell
+from kubementat.infrastructure import shell
 from kubementat import errors
 from kubementat.core import constants
 from kubementat import config_bootstrap, config_keys
@@ -1153,7 +1153,7 @@ class Automation:
     #   `kubementat.core.constants` declares, plus every team the environment configures;
     # * what is actually installed comes from the cluster (`helm list`, `kubectl get crd`), so
     #   a component or a CRD nobody remembered is still swept;
-    # * every program kubementat starts goes through `kubementat.shell.run` as an argv list,
+    # * every program kubementat starts goes through `kubementat.infrastructure.shell.run` as an argv list,
     #   and every cluster mutation the generated client can express goes through
     #   `KubernetesUtils`.
 

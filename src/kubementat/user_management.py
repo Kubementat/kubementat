@@ -30,7 +30,7 @@ import time
 import click
 import yaml
 
-from kubementat import shell
+from kubementat.infrastructure import shell
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 # How long the token controller gets to fill in a Secret it was just told about. The Secret
