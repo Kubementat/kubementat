@@ -45,10 +45,9 @@ import pytest
 from click.testing import CliRunner
 
 from cli.commands import config as config_module
-from kubementat import config_answers, constants, shell
+from kubementat import config_answers, config_reads_index, constants, shell
 from kubementat.config import Config, component_config_key
 from kubementat.config_init import add_team, init_configuration
-from kubementat.helm_utils import HelmUtils
 
 ENVIRONMENT = "prod"
 TEAM = "alpha"
@@ -282,10 +281,10 @@ def test_the_hardcoded_component_lists_match_their_sources(tmp_path):
     """
     assert set(NAMESPACE_COMPONENTS) == set(constants.DEFAULT_NAMESPACES)
     assert set(SELECTOR_COMPONENTS) == set(constants.DEFAULT_SERVICE_SELECTORS)
-    reader = HelmUtils.__new__(HelmUtils)
-    reader.config = Config(ENVIRONMENT, None, platform_config_dir=a_tree(tmp_path),
-                           preload_configs=False)
-    assert set(RELEASE_COMPONENTS) == set(reader.component_release_index())
+    # Read the way the report reads it: the index is a filesystem answer, so no `HelmUtils` and no
+    # `__new__` bypass of a constructor that addresses a cluster this check never addresses.
+    assert set(RELEASE_COMPONENTS) == set(config_reads_index.read_release_index(
+        Config(ENVIRONMENT, None, platform_config_dir=a_tree(tmp_path), preload_configs=False)))
 
 
 # ---------------------------------------------------------------------------------------------

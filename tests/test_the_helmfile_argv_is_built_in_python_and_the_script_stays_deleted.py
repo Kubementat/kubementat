@@ -34,7 +34,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from kubementat import helm_utils
+from kubementat import config_reads_index, helm_utils
 from kubementat.config import Config
 from cluster_fixture import configuration_only_context
 from kubementat.helm_utils import HelmUtils
@@ -161,8 +161,13 @@ def test_no_code_root_names_a_script_that_is_not_there():
 
 
 def test_the_sentence_about_where_the_manifest_comes_from_names_the_package():
-    """`helmfile_paths`' docstring is the sentence a reader trusts, and the packaged manifest is what it
-    now says.
+    """The docstring is the sentence a reader trusts, and the packaged manifest is what it says.
+
+    The sentence moved to `config_reads_index.helmfile_paths_for` when the read lost its `Context`:
+    which manifest the product ships is a fact about a configuration and a filesystem, not about a
+    cluster, so that is where the words have to live. `HelmUtils.helmfile_paths` is the call that
+    reads them, and a guard pointed at the caller would still pass with nothing behind it. So the
+    guard is pointed at the function that owns the answer.
 
     It used to say that `kmt initialize` copies
     `templates/environment/kubementat_components/helmfile.yaml.gotmpl` into the environment's
@@ -173,7 +178,7 @@ def test_the_sentence_about_where_the_manifest_comes_from_names_the_package():
     nothing writes a manifest into a configuration tree, and that a copy left there is not part
     of it.
     """
-    doc = inspect.getdoc(helm_utils.HelmUtils.helmfile_paths)
+    doc = inspect.getdoc(config_reads_index.helmfile_paths_for)
 
     assert "helmfile_asset_dir" in doc, \
         "it has to name the one accessor that resolves the manifest, or the next reader re-derives " \

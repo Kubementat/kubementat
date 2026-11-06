@@ -1,5 +1,32 @@
 # Unreleased
 
+- **Reading the shipped manifest is a configuration read, and `config_answers` no longer imports
+  `helm_utils` to make it.** `kubementat.config_reads_index` answers three questions about the
+  packaged helmfile with nothing but a `Config` and the filesystem: which directory the manifest
+  sits in (`helmfile_paths_for`), which file it is (`helmfile_state_path_for`), and which releases
+  it labels (`read_release_index`). `HelmUtils.helmfile_paths`, `helmfile_state_path` and
+  `component_release_index` keep their signatures and call it, so the class the CLI and `helmfile_apply`
+  use is unchanged — the delegation is not a shim, because every method still does its own work of
+  handing those paths to the apply and to the cluster-side checks that follow.
+
+  **What this removes.** `class _ManifestReader(HelmUtils)` in `config_answers.py` is gone. It existed
+  only to inherit a filesystem read through a class that builds a Kubernetes client, and its
+  docstring claimed the helm layer was what made the release index true. It is not: the index is
+  parsed out of the manifest the product ships, and the only reason the config layer needed
+  `HelmUtils` was that this file had not been written yet. The parser is one function now, reached
+  from both layers, so a release added to the manifest appears in `kmt component install` and in
+  `kmt config show`'s universe from the same one read and no list in between.
+
+  **What did not move, and why.** Anything a binary answers stays in `helm_utils.py`: the
+  `helm list` behind `_installed_release_names` and `_cluster_release_locations`, `helm show chart`
+  behind `get_latest_chart_version`, the apply itself, and `refuse_renaming_a_deployed_release`,
+  which needs the manifest *and* the cluster and so needs both halves. The split line is "needs a
+  subprocess or a `Context`" versus "needs a `Config` and the files" — nothing was moved across it,
+  and the same dicts, keys, order and warnings come back either way. A missing manifest still raises
+  `FileNotFoundError`, which is still what `refuse_renaming_a_deployed_release` catches and the CLI
+  turns into a sentence. The module's eventual home is `core/config/`; that directory does not exist
+  yet and is a later phase's move, so this landed flat.
+
 - **`kubementat.errors` is the module that names what kubementat refuses with, and
   `TeamNotSuppliedError` moved into it.** `class KubementatError(Exception)` is the base every domain
   error descends from, so one catch can mean "a kubementat refusal" instead of one type at a time. It

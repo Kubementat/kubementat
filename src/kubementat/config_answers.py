@@ -30,7 +30,7 @@ inferred from a listing. It is the union of five sources:
    default.
 2. **`constants.DEFAULT_NAMESPACES`** — `<NAME>_DEPLOYMENT_NAMESPACE` for each entry.
 3. **`constants.DEFAULT_SERVICE_SELECTORS`** — `<NAME>_SERVICE_SELECTOR` for each entry.
-4. **`HelmUtils.component_release_index()`** — `<NAME>_ENABLED` and `<NAME>_VERSION` for each
+4. **`config_reads_index.read_release_index()`** — `<NAME>_ENABLED` and `<NAME>_VERSION` for each
    component the shipped manifest labels, whose L0 is that manifest's own `default` for the knob.
    This is the split between the two owners spelled out: the index is the manifest half, `constants.py` is the namespace
    half, and a default that lives in a chart-version literal is not copied into a code table where
@@ -55,9 +55,8 @@ from pathlib import Path
 from typing import Any
 
 
-from kubementat import config_derived, config_init, constants
+from kubementat import config_derived, config_init, config_reads_index, constants
 from kubementat.config import Config, _NOTHING_DECLARED, component_config_key
-from kubementat.helm_utils import HelmUtils
 
 # The three tags `config show` prints. They name the *layer that answers*, which is why a key that
 # falls through from the environment is tagged `environment` even in a team-scoped run, and why a
@@ -185,20 +184,12 @@ def default_source(key: str) -> str:
     return RELEASE_INDEX_DEFAULT_SOURCE if release_knob else CONSTANTS_DEFAULT_SOURCE
 
 
-class _ManifestReader(HelmUtils):
-    """The index half of `HelmUtils`, reached without a `Context`.
-
-    `HelmUtils.__init__` takes a `Context` and builds a Kubernetes client beside it; this module
-    addresses no cluster (`show` is read-only and touches nothing), so the subclass
-    replaces only the constructor and inherits `helmfile_paths`, `helmfile_state_path` and
-    `component_release_index` verbatim. Subclassing rather than a hand-rolled scan of the manifest is
-    deliberate: the releases this universe names are the ones `kmt component install` can apply, and
-    both answers have to come from the one parser that reads the one manifest helmfile is applied
-    from.
-    """
-
-    def __init__(self, config: Config):
-        self.config = config
+# The config layer reads the release index out of the filesystem, and the helm layer is not what
+# makes that true. The releases this universe names are the ones `kmt component install` can apply,
+# so the answer and that command's answer have to come from the one parser that reads the one
+# manifest helmfile is applied from; the parser is `config_reads_index.read_release_index`, it needs
+# a `Config` and a file and nothing else, and `HelmUtils.component_release_index` calls the same
+# function. What this module does *not* read is the cluster.
 
 
 def _open_for_reading(root, environment, team) -> Config:
@@ -301,15 +292,15 @@ def _release_knob_keys(config: Config, answers: dict) -> None:
 
     Both halves of the split between the two owners, and neither is invented: the components come from the index, the
     defaults come from the manifest's own `default` for that key, and the answers come from the two
-    accessors helmfile's variables are exported from (`helm_utils.export_component_release_knobs`),
-    so a report and an apply cannot disagree about what is installed.
+    accessors `helmfile_apply` exports its variables from
+    (`Config.component_release_enabled`, `Config.component_release_version`), so a report and an
+    apply cannot disagree about what is installed.
     """
-    manifest = _ManifestReader(config)
-    # One path, asked of the one method that says which manifest this product applies: the index and
-    # its defaults are read out of that file and no other, so a release added to the manifest gets
-    # both halves of its row here for free.
-    path = manifest.helmfile_state_path()
-    index = manifest.component_release_index(path)
+    # One path, asked of the one function that says which manifest this product applies: the index
+    # and its defaults are read out of that file and no other, so a release added to the manifest
+    # gets both halves of its row here for free.
+    path = config_reads_index.helmfile_state_path_for(config)
+    index = config_reads_index.read_release_index(config, path)
     defaults = _release_knob_defaults(path)
     layers = config._component_layers()
     for component in index:
@@ -426,7 +417,7 @@ def _is_answer(value) -> bool:
 def _release_knob_defaults(path: Path) -> dict[str, str]:
     """The manifest's own `default` for every release knob key.
 
-    Read from the file `helmfile_state_path` says this product applies, so the default the report
+    Read from the file `helmfile_state_path_for` says this product applies, so the default the report
     names is the default helmfile would resolve — and not a copy of a chart version moved into
     `constants.py`, which is the second owner the split refuses.
     """

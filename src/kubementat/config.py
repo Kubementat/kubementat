@@ -720,7 +720,9 @@ class Config:
         # the manifest it was handed, so the manifest and the ten values files it names travel
         # together or a release installs with chart defaults. Nothing writes under it and nothing
         # reads it out of a checkout: this is the manifest `helmfile_apply` applies, and
-        # `helm_utils.helmfile_paths` is its only reader in `src/`.
+        # `config_reads_index.helmfile_paths_for` is its only reader in `src/` -- reached from
+        # `HelmUtils.helmfile_paths` and from the config report alike, which is the one reason a
+        # read of this attribute cannot end up pointed at two files.
         self.helmfile_asset_dir = asset_path("values")
 
         # The two roots a global `setup_pipelines` applies, as accessors for the same reason the
