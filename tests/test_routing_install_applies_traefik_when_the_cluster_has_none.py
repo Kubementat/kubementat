@@ -20,7 +20,7 @@ import pytest
 import yaml
 
 from conftest import as_k8s_object, cluster_state
-from kubementat import helm_utils
+from kubementat.infrastructure import helm as helm_utils
 from kubementat.infrastructure import shell
 from kubementat.core.identity.context import Context
 from kubementat.automations.routing import routing
@@ -105,7 +105,7 @@ def helm_list_read():
     compared to *something*, and comparing it to a bare `helm list` would quietly assert that the
     address flags are not on it.
     """
-    from kubementat.helm_utils import helm_list_releases_argv
+    from kubementat.infrastructure.helm import helm_list_releases_argv
     return helm_list_releases_argv(Context.build("dev", "fixture").target)
 
 

@@ -469,7 +469,7 @@ def validate_command(directory, environment, team):
     """The verdict, in the order it costs the reader something.
 
     The shape is the one the census and this verb agree on, and no CLI command spelled it before this one
-    (collect-then-choose is a library idiom: `helm_utils.py:303` says *all* of the failures rather
+    (collect-then-choose is a library idiom: `HelmUtils.uninstall_release` says *all* of the failures rather
     than the first, and validate keeps that promise with a list instead of one message):
 
     * warnings go to **stderr** first, one per line, in `WARNING: …`'s shape (`utilities.py:66`) —

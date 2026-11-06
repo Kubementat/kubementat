@@ -29,7 +29,7 @@ import pytest
 from click.testing import CliRunner
 
 from cli.commands import helm
-from kubementat.helm_utils import HelmUtils
+from kubementat.infrastructure.helm import HelmUtils
 from kubementat.core.identity.context import Context
 
 REPO = "prometheus-community"

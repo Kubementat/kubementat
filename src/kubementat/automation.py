@@ -21,7 +21,7 @@ from kubementat.infrastructure.kubernetes import KubernetesUtils, apply
 from kubementat.infrastructure.kubernetes.constants import (DEPLOYMENT_LABEL,
                                                             MANAGED_BY_KUBEMENTAT,
                                                             MANAGED_BY_LABEL)
-from kubementat.helm_utils import HelmUtils, helm_list_releases_argv
+from kubementat.infrastructure.helm import HelmUtils, helm_list_releases_argv
 from kubementat.tekton_utils import (
     HELM_DEPLOYER_CLUSTER_ROLE_NAME,
     TektonUtils,

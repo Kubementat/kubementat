@@ -29,13 +29,13 @@ from kubernetes.client.exceptions import ApiException
 
 from cluster_fixture import TARGET_DEV
 from conftest import as_k8s_object
-from kubementat import helm_utils
+from kubementat.infrastructure import helm as helm_utils
 from kubementat.infrastructure import shell
 from kubementat.automations.routing import traefik_presence
 from kubementat.core.identity.context import Context
 from kubementat.core.identity.target import ClusterTarget
 from kubementat.core.config.config import Config
-from kubementat.helm_utils import helm_list_releases_argv
+from kubementat.infrastructure.helm import helm_list_releases_argv
 
 CONFIGURED = "traefik"
 TRAEFIK_CHART_VERSION = "traefik-27.0.0"

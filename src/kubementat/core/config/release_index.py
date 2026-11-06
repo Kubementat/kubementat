@@ -7,7 +7,7 @@ calls them directly -- the layer that reports what a configuration tree answers 
 release index too, and reading it is not a helm question. It is a `Config` and a file.
 
 The split line these functions sit on is "needs only a `Config` and the filesystem" versus "needs a
-subprocess or a `Context`". Everything a binary answers stays in `helm_utils.py`: the `helm list`
+subprocess or a `Context`". Everything a binary answers stays in `helm.py`: the `helm list`
 that says where a release is deployed, `helm show chart`, the apply itself. Nothing here reaches
 any of that, which is what lets this module -- and the config layer that imports it -- stay off the
 helm layer. The final home is `core/config/`; until that move lands this is a flat module, and it

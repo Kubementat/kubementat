@@ -3,7 +3,7 @@
 `helm list --all-namespaces --all` used to be that question. helm 4 deleted `--all`, and this host
 runs `helm v4.3.1`, where asking for it exits 1 with `Error: unknown flag: --all` — the read that
 `HelmUtils._installed_release_names` makes before it uninstalls anything, so a component someone
-wanted to remove was never even looked up. The defect is `src/kubementat/helm_utils.py`; the
+wanted to remove was never even looked up. The defect is `src/kubementat/infrastructure/helm.py`; the
 harness's `Cluster.helm_list` and the routing lane's `HELM_LIST_ARGV` had already dropped the flag
 and left this call site behind.
 
@@ -28,10 +28,10 @@ import subprocess
 import pytest
 
 from cluster_fixture import TARGET_DEV
-from kubementat import helm_utils
+from kubementat.infrastructure import helm as helm_utils
 from kubementat.automation import Automation
 from kubementat.core.identity.context import Context
-from kubementat.helm_utils import HelmUtils, helm_list_releases_argv
+from kubementat.infrastructure.helm import HelmUtils, helm_list_releases_argv
 from kubementat.core.identity.target import helm_target_args
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 

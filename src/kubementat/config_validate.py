@@ -3,7 +3,7 @@
 One question, answered by one function: **is the tree this command was handed usable, and if not,
 in how many places?** The answer is a tuple of findings and never a raised sentence per fault,
 because the established idiom when there is more than one problem is the library's own — collect
-them all, then say all of them rather than the first (`helm_utils.py:303`, and `Context.build`, which
+them all, then say all of them rather than the first (`HelmUtils.uninstall_release`, and `Context.build`, which
 reports every collision it resolved instead of refusing at the first match).
 CLI turns the collected errors into one `click.ClickException` and prints the warnings itself with
 `err=True` (`utilities.py:66`'s shape); this module raises nothing over a verdict except the two

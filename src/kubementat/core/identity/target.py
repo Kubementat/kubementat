@@ -317,7 +317,7 @@ def helm_target_args(target) -> list:
     The same sentence as :func:`kubectl_target_args`, in helm's spelling: `--kubeconfig` for the
     file and `--kube-context` for the context (helm does not accept kubectl's `--context`), and
     both binaries take them wherever the subcommand goes. Refusing a target that names neither is
-    the point, not a nicety: `helm_utils.py` used to hand the cluster over in the environment
+    the point, not a nicety: `helm.py` used to hand the cluster over in the environment
     (`os.environ["KUBECONFIG"]`), which is how a helm run could land on a cluster the operator had
     not named and leave no trace of the choice in the argv it logged.
     """

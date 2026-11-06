@@ -50,7 +50,7 @@ import click
 from cli.context import kmt_context
 from kubementat.core import constants
 from kubementat.automations.routing import traefik_presence
-from kubementat.helm_utils import HelmUtils
+from kubementat.infrastructure.helm import HelmUtils
 
 # Traefik is a component like any other *and* a controller like no other one, so it gets the one
 # branch this command has. The name is a constant rather than a literal because

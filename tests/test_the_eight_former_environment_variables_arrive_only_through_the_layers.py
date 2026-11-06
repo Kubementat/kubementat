@@ -22,7 +22,7 @@ added to this row, which is the eight variables and no more.
 Two things this file does *not* do, and both matter. It adds no required-key list and no validator to
 `Config`: most of the trees this suite opens are fixtures and not prepared directories, and a rule
 phrased as "the tree must answer every key" is how the version-stamp gate broke 227 tests before it
-moved to the CLI boundary. And it does not touch the `helm_utils.py` exports of `os.environ`: those are
+moved to the CLI boundary. And it does not touch the `helm.py` exports of `os.environ`: those are
 how an answer reaches the helmfile subprocess, they are writes and not reads, and the check below says
 so by classifying every access in the tree rather than banning the pattern.
 """
@@ -173,7 +173,7 @@ def test_the_substitution_tables_and_the_read_path_agree_on_the_category(tmp_pat
 # the eight — which is the difference between an exemption and a blind spot.
 #
 # `read`: the access can answer a value. `write`: it hands an answer to a subprocess, which is the
-# shape of every `helm_utils.py` line and is why the exports stay.
+# shape of every `helm.py` line and is why the exports stay.
 PROCESS_ENVIRONMENT_USES = {
     ("src/cli/context.py", "_environment_of"): {
         "names": ("ENVIRONMENT",),
@@ -210,34 +210,34 @@ PROCESS_ENVIRONMENT_USES = {
         "why": "the two directory overrides; they name a root, not an answer.",
         "mode": "read",
     },
-    ("src/kubementat/helm_utils.py", "helmfile_apply"): {
+    ("src/kubementat/infrastructure/helm.py", "helmfile_apply"): {
         "names": ("GRAFANA_ADMIN_USER", "GRAFANA_ADMIN_PASSWORD"),
         "why": "the Grafana pair exported for the values template. It is read out of "
                "`static.encrypted.json` by `_grafana_admin_credentials` and written here so the "
                "template sees it; the operator's shell is never consulted.",
         "mode": "write",
     },
-    ("src/kubementat/helm_utils.py", "_export_component_namespaces"): {
+    ("src/kubementat/infrastructure/helm.py", "_export_component_namespaces"): {
         "names": ("<component>_DEPLOYMENT_NAMESPACE, from constants.DEFAULT_NAMESPACES",),
         "why": "the namespace answers exported for the gotmpl; every key is built by "
                "`component_config_key` over `constants.DEFAULT_NAMESPACES`, so its universe is the "
                "components and not this row.",
         "mode": "write",
     },
-    ("src/kubementat/helm_utils.py", "export_configuration_coordinates"): {
+    ("src/kubementat/infrastructure/helm.py", "export_configuration_coordinates"): {
         "names": ("KUBEMENTAT_CONFIG_ROOT", "KUBEMENTAT_ENVIRONMENT", "KUBEMENTAT_TEAM"),
         "derived": "literal-keys",
         "why": "the coordinates of the run, so a nested kmt finds the same root. Names of "
                "places and identities, none of them an answer from this row.",
         "mode": "write",
     },
-    ("src/kubementat/helm_utils.py", "export_component_release_knobs"): {
+    ("src/kubementat/infrastructure/helm.py", "export_component_release_knobs"): {
         "names": ("<component>_ENABLED / <component>_VERSION, from the release index",),
         "why": "the release knobs helmfile evaluates, keyed by `component_config_key` over the "
                "shipped manifest.",
         "mode": "write",
     },
-    ("src/kubementat/helm_utils.py", "export_ingress_class"): {
+    ("src/kubementat/infrastructure/helm.py", "export_ingress_class"): {
         "names": ("<component>_INGRESS_CLASS, one component: constants.COMPONENT",),
         "derived": "component-config-key",
         "why": "the ingress class the configuration answers, exported so the manifest's `env` sees "
@@ -340,7 +340,7 @@ def _env_access_sites(path: Path) -> list:
     """Every place *path* touches `os.environ`, with what it reads or writes and which symbol.
 
     AST and not a line regex, for two reasons: a comment that says `os.environ` is not an access, and
-    a name that reaches the environment through a variable — which is what every `helm_utils.py`
+    a name that reaches the environment through a variable — which is what every `helm.py`
     export does — has to be found by its subscript and not by its text.
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))

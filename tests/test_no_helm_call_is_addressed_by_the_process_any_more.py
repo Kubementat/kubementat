@@ -10,7 +10,7 @@ data is not where the release is. The helm guard is the same sentence the parity
 helm's flag spellings, and this guard is what makes it a test failure rather than a production
 surprise.
 
-The rule is argv and never the environment, and that half is not stylistic. `helm_utils.py` still
+The rule is argv and never the environment, and that half is not stylistic. `helm.py` still
 writes Grafana's credentials into `os.environ` for helmfile's template, so the environment route is
 right there and inviting -- and it is the same disease `load_kube_config` had: process-wide state
 that makes two clusters in one process impossible, which is what the library contract leaves a door for.
@@ -316,7 +316,7 @@ def test_the_guard_catches_a_call_site_that_thinks_the_default_is_enough(tmp_pat
     copied = _src_copy(tmp_path)
     assert offenders(copied) == [], "the copy was already offending, so the mutation proves nothing"
 
-    _swap(copied / "kubementat/helm_utils.py",
+    _swap(copied / "kubementat/infrastructure/helm.py",
           '["helmfile", "apply", *helm_target_args(self.target), "--color"',
           '["helmfile", "apply", "--color"')
 
@@ -324,7 +324,7 @@ def test_the_guard_catches_a_call_site_that_thinks_the_default_is_enough(tmp_pat
     assert len(caught) == 1, (
         "removing the cluster from one helm call site was not caught, so the guard checks the tree "
         f"as decoration: {caught}")
-    assert "helm_utils.py" in caught[0] and "helmfile" in caught[0], caught
+    assert "helm.py" in caught[0] and "helmfile" in caught[0], caught
 
 
 def test_the_guard_catches_a_release_read_that_dropped_its_builder(tmp_path):
@@ -377,7 +377,7 @@ def test_the_release_read_is_the_same_read_whether_it_is_addressed_or_not():
     assert then claims.
     """
     from kubementat.core.identity.target import ClusterTarget
-    from kubementat.helm_utils import HELM_LIST_RELEASES_ARGV, helm_list_releases_argv
+    from kubementat.infrastructure.helm import HELM_LIST_RELEASES_ARGV, helm_list_releases_argv
 
     addressed_argv = helm_list_releases_argv(
         ClusterTarget(environment="dev", context="dev", kubeconfig_path=None,

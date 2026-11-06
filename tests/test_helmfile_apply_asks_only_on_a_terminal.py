@@ -20,11 +20,11 @@ from click.testing import CliRunner
 from cli.commands import helm
 from cluster_fixture import DEV_SERVER, stamp_tree, write_environment, write_kubeconfig
 from asset_paths import values_path
-from kubementat import helm_utils
+from kubementat.infrastructure import helm as helm_utils
 from kubementat.core import constants
 from kubementat.core.identity.context import Context
 from kubementat.core.config.keys import component_config_key
-from kubementat.helm_utils import HelmUtils
+from kubementat.infrastructure.helm import HelmUtils
 
 LABEL_FILTER = "group=routing"
 # The team this scratch tree is written for. `kmt helm apply` takes no `--team` any more, and the

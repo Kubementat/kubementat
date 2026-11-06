@@ -36,7 +36,7 @@ from kubementat.ci_utils import CiUtils
 from kubementat.errors import CiImageNotConfiguredError
 from kubementat.core.config.config import Config
 from kubementat.automations.routing import routing
-from kubementat.helm_utils import HelmUtils
+from kubementat.infrastructure.helm import HelmUtils
 
 ENVIRONMENT = "layerenv"
 TEAM = "layerteam"

@@ -35,7 +35,7 @@ from kubementat import errors
 from kubementat.core import constants
 from kubementat.core.config.config import Config
 from kubementat.core.identity.context import Context
-from kubementat.helm_utils import HelmUtils
+from kubementat.infrastructure.helm import HelmUtils
 from conftest import run_kmt
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

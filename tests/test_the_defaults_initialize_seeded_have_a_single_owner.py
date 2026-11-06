@@ -363,7 +363,7 @@ def _code_lines(text: str) -> list:
 def test_no_key_on_this_list_is_answered_from_the_process_environment(tmp_path, monkeypatch):
     """Nothing in this list may be answered by something somebody exported first.
 
-    `helm_utils.py` does export configuration into the environment the **manifest** reads — that is
+    `helm.py` does export configuration into the environment the **manifest** reads — that is
     how helmfile's templates get their variables — and every one of those exports is of a namespace
     or a release knob, both of which the exporting function reads out of the layers itself. These ten
     keys are not exported, and they must not become answers by way of the environment either: the
@@ -474,7 +474,7 @@ def test_no_layer_of_the_read_path_looks_at_the_environment_for_any_of_the_ten()
     """The static half of the same claim: no line in `src/` opens `os.environ` for these keys.
 
     The dynamic test above proves the answer does not come from the environment in a running process;
-    this one says why it cannot, by reading the tree. `helm_utils.py`'s exports are assignment and not
+    this one says why it cannot, by reading the tree. `helm.py`'s exports are assignment and not
     reads, and they address namespaces and release knobs, so the scan finds nothing — and if someone
     starts exporting one of these ten, the other half of this pair starts failing.
     """

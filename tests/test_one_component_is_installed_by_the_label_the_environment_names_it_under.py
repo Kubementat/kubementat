@@ -38,7 +38,7 @@ from kubementat.core import constants
 from kubementat.automations.routing import traefik_presence
 from cluster_fixture import UNREAD_ROOT, configuration_only_context
 from kubementat.core.config.config import Config
-from kubementat.helm_utils import HelmUtils
+from kubementat.infrastructure.helm import HelmUtils
 from conftest import run_kmt
 from asset_paths import relocate_asset_root, values_path
 

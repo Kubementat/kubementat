@@ -22,7 +22,7 @@ import sys
 
 import click
 
-from kubementat.helm_utils import HelmUtils
+from kubementat.infrastructure.helm import HelmUtils
 from cli.context import kmt_context
 
 
@@ -68,7 +68,7 @@ def helm_version(ctx, environment, chart_path):
 
 # No `--team` here either: everything `helmfile_apply` asks of configuration is environment-level
 # -- `env_static_encrypted` for grafana's admin pair, `component_namespace` for every release
-# namespace, and the packaged manifest `helmfile_paths` names for the releases themselves. `grep -n team_static src/kubementat/helm_utils.py` returns nothing, so the option had
+# namespace, and the packaged manifest `helmfile_paths` names for the releases themselves. `grep -n team_static src/kubementat/infrastructure/helm.py` returns nothing, so the option had
 # no code behind it, and a `require_team` that used to stand in `HelmUtils.__init__` made
 # `kmt helm apply dev` refuse a release it was about to apply from one file. What the operator is
 # told instead is the environment and the filter, both of which are what this command decides.

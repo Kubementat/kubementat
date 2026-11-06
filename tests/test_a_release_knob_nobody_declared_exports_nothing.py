@@ -30,7 +30,7 @@ from cluster_fixture import UNREAD_ROOT, configuration_only_context
 from kubementat.core import constants
 from kubementat.core.config.config import Config
 from kubementat.core.config.keys import component_config_key
-from kubementat.helm_utils import HelmUtils, export_component_release_knobs
+from kubementat.infrastructure.helm import HelmUtils, export_component_release_knobs
 
 ENVIRONMENT = "knobenv"
 TEAM = "knobteam"

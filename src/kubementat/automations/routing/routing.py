@@ -45,7 +45,7 @@ from kubementat.infrastructure import shell
 from kubementat.automations.routing import traefik_presence
 from kubementat.core.config.config import Config
 from kubementat.core.constants import COMPONENT, DEFAULT_INGRESS_CLASSES, TRAEFIK_CHART
-from kubementat.helm_utils import HelmUtils
+from kubementat.infrastructure.helm import HelmUtils
 
 # What `install_routing` decided. One of these three is what the CLI and any later caller reads, and
 # the string is the one that has to survive being pasted into a bug report.

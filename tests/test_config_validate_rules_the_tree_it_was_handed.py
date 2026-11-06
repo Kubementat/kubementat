@@ -5,7 +5,7 @@ run, warnings cannot fail the run, and the exit code is the only verdict.** No C
 findings and *then* chose an exit code before this verb (census Q3 said so plainly), so the
 convention has to be asserted rather than inherited: warnings print with `err=True` and exit 0,
 and errors come back as one `ClickException` that lists all of them rather than the first — the
-library's own `helm_utils.py:303` idiom, now spelled on the surface.
+library's own `HelmUtils.uninstall_release` idiom, now spelled on the surface.
 
 Six claims, and which half of each is load-bearing:
 

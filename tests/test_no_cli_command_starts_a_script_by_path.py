@@ -154,7 +154,7 @@ def _definitions_returning(tree, module=None):
 
     Each entry carries the assignments of the module that wrote the function, because that is where
     the function's own list is spelled: `automation.py` calls a builder whose argv lives in
-    `helm_utils.py`, and following the call without following the names would resolve nothing.
+    `helm.py`, and following the call without following the names would resolve nothing.
     """
     written = {}
     local = _assignments_by_name(tree)
@@ -279,7 +279,7 @@ def _starts_with_a_named_program(node, assignments, seen, defined=None):
         # An argv assembled by a function rather than spelled out, which is how a cluster's address
         # gets onto a cluster command: `helm_list_releases_argv(target)` builds what is run. The program is
         # whatever that builder returns, read across the import the way constants are read, because
-        # `automation.py` and `helm_utils.py` ask one question and a guard that could not follow the
+        # `automation.py` and `helm.py` ask one question and a guard that could not follow the
         # call would ask each of them to spell it again. Anything the builder does not answer about is
         # refused, so the shape stays checked and not merely assumed.
         name = node.func.id if isinstance(node.func, ast.Name) else node.func.attr

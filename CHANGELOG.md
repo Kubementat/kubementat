@@ -1,5 +1,12 @@
 # Unreleased
 
+- **`helm_utils.py` moved to `infrastructure/helm.py` unchanged inside, which is the one deviation
+  from the plan's tree worth saying out loud.** The plan sketches a split into `helmfile.py` and
+  `cli.py`, but unlike the god object that split is an internal question — a census of this file has
+  not been written, and guessing at its seams is how a shared rule gets two owners. So the file moved
+  whole: importers and the five guard tests that read the tree by path were retargeted, and a
+  census-driven internal split is welcome as a later ticket rather than smuggled in under a `mv`.
+
 - **`shell.py` moved to `infrastructure/shell.py` and is now reached under that path everywhere.**
   It is the only code in kubementat that starts a process, which is what puts it below the cluster
   layer and not beside it: ten modules and twenty-odd test files retargeted (including the

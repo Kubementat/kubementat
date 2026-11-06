@@ -51,7 +51,7 @@ from kubernetes import client
 from kubementat.infrastructure import shell
 from kubementat.core.config.keys import component_config_key
 from kubementat.core.constants import COMPONENT, TRAEFIK_CHART, TRAEFIK_CONTROLLER_NAME
-from kubementat.helm_utils import helm_list_releases_argv
+from kubementat.infrastructure.helm import helm_list_releases_argv
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 # The only three answers `classification` can take.

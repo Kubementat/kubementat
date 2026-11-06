@@ -178,7 +178,7 @@ def test_the_two_classes_that_had_false_guards_no_longer_carry_the_half_they_nev
     -- `CiUtils` for an argv namespace, `TektonUtils` for a configuration read -- are covered by the
     census above, which is the file that decides whether the attribute is dead.
     """
-    for path in ("src/kubementat/helm_utils.py", "src/kubementat/ingress_generator.py"):
+    for path in ("src/kubementat/infrastructure/helm.py", "src/kubementat/ingress_generator.py"):
         tree = ast.parse((REPO_ROOT / path).read_text(encoding="utf-8"), filename=str(path))
         stored = [node for node in ast.walk(tree)
                   if isinstance(node, ast.Assign) and any(

@@ -244,7 +244,7 @@ def test_the_version_of_a_chart_is_the_version_the_script_printed(tmp_path, fixt
 
     def python_answer_for(rows):
         fake_binaries.respond("helm", json.dumps(rows), subcommand="search")
-        from kubementat.helm_utils import HelmUtils
+        from kubementat.infrastructure.helm import HelmUtils
         from kubementat.core.identity.context import Context
 
         return HelmUtils(Context.build(fixture_repo.environment,

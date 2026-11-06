@@ -33,7 +33,7 @@ from kubementat.infrastructure import shell
 from kubementat.automations.routing import traefik_presence
 from kubementat.core.identity.context import Context
 from kubementat.core.identity.target import ClusterTarget
-from kubementat.helm_utils import helm_list_releases_argv
+from kubementat.infrastructure.helm import helm_list_releases_argv
 
 ENVIRONMENT = "dev"
 TEAM = "dev1"

@@ -97,7 +97,7 @@ class HelmUtils:
         configuration is environment-level: `env_static_encrypted` for grafana's credentials,
         `component_namespace` -- which is `env_static` -- for every release namespace, and
         `Config.helmfile_asset_dir` -- the packaged manifest -- for the releases helmfile evaluates.
-        `grep -n team_static src/kubementat/helm_utils.py` returns nothing, and that is the point.
+        `grep -n team_static src/kubementat/infrastructure/helm.py` returns nothing, and that is the point.
         The guard that used to be here claimed a `Config` without a team interpolates `None` into
         the paths this class derives; `Config._team_scoped_path` moved that refusal to the read,
         so an unguarded read of a team-scoped path is already answered there, and a constructor that

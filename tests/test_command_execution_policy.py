@@ -33,7 +33,7 @@ from kubementat.automation import Automation
 from kubementat.core.config.keys import component_config_key
 from cluster_fixture import TARGET_DEV, configuration_only_context
 from asset_paths import values_path
-from kubementat.helm_utils import HelmUtils
+from kubementat.infrastructure.helm import HelmUtils
 from kubementat.errors import PodNotFoundError
 from kubementat.core.identity.target import kubectl_target_args
 from kubementat.infrastructure.kubernetes import KubernetesUtils
@@ -268,7 +268,7 @@ def test_every_script_the_source_names_still_exists_in_the_checkout():
 # and nothing that is left takes a path from a human and runs it.
 
 # ---------------------------------------------------------------------------
-# 2. helmfile apply (helm_utils.py)
+# 2. helmfile apply (helm.py)
 # ---------------------------------------------------------------------------
 def apply_helmfile(tmp_path, monkeypatch, shims, **kwargs):
     add, logs = shims

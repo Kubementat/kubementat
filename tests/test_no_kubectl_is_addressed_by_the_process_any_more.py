@@ -46,7 +46,7 @@ PENDING_KUBECTL_READS = {
     "kubementat/infrastructure/kubernetes/exec.py": 0,
     "kubementat/ci_utils.py": 0,
     "kubementat/automation.py": 0,
-    "kubementat/helm_utils.py": 0,
+    "kubementat/infrastructure/helm.py": 0,
     "kubementat/user_management.py": 0,
     "kubementat/grafana_accounts.py": 0,
     "kubementat/tekton_utils.py": 0,

@@ -31,7 +31,7 @@ from click.testing import CliRunner
 from cli.commands import config as config_command
 from kubementat.core import constants
 from kubementat.core.identity.context import Context
-from kubementat.helm_utils import HelmUtils
+from kubementat.infrastructure.helm import HelmUtils
 
 ENVIRONMENT = "dev"
 TEAM = "dev1"

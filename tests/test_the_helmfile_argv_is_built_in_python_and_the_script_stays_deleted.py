@@ -6,7 +6,7 @@ the Grafana pair out of `static.encrypted.json` with `jq`, and ran
 
     helmfile apply --color -f helmfile.yaml.gotmpl -l "$HELMFILE_LABEL_FILTER"
 
-all of which `HelmUtils.helmfile_apply` (`src/kubementat/helm_utils.py:31`) already does for
+all of which `HelmUtils.helmfile_apply` (`src/kubementat/infrastructure/helm.py:31`) already does for
 every path that could have reached the script:
 
 * `kmt install` -- `Automation.install_kubementat` (`src/kubementat/automation.py:543`)
@@ -34,11 +34,11 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from kubementat import helm_utils
+from kubementat.infrastructure import helm as helm_utils
 from kubementat.core.config import release_index as config_reads_index
 from kubementat.core.config.config import Config
 from cluster_fixture import configuration_only_context
-from kubementat.helm_utils import HelmUtils
+from kubementat.infrastructure.helm import HelmUtils
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = "scripts/automation/components/helmfile_apply.sh"
