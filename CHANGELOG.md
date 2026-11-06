@@ -1,5 +1,12 @@
 # Unreleased
 
+- **The grafana modules took their homes under `infrastructure/grafana/`.** `grafana_client.py` is
+  now `client.py` and `grafana_accounts.py` is `accounts.py`; both reached their new paths with
+  their contents unchanged, because this half of the move is a placement question and no seam is
+  visible from inside either file. Nine files retargeted, including the thirteen `monkeypatch`
+  object patches that replace the `KubernetesUtils` binding inside the accounts module — they keep
+  working because the binding is still a name in a module and the patch names the module.
+
 - **`helm_utils.py` moved to `infrastructure/helm.py` unchanged inside, which is the one deviation
   from the plan's tree worth saying out loud.** The plan sketches a split into `helmfile.py` and
   `cli.py`, but unlike the god object that split is an internal question — a census of this file has

@@ -26,8 +26,8 @@ import requests
 from click.testing import CliRunner
 
 from cli.commands import users
-from kubementat import grafana_accounts
-from kubementat import grafana_client
+import kubementat.infrastructure.grafana.accounts as grafana_accounts
+import kubementat.infrastructure.grafana.client as grafana_client
 from kubementat.core.config.config import Config
 
 TUNNELLED_URL = "http://127.0.0.1:3001"

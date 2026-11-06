@@ -47,7 +47,7 @@ from typing import Any, Optional
 
 from kubementat.core.config.config import Config
 from kubementat.errors import GrafanaConfigurationError
-from kubementat.grafana_client import GrafanaAccount, GrafanaClient
+from kubementat.infrastructure.grafana.client import GrafanaAccount, GrafanaClient
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 # The key whose rows this flow creates. Same file the admin credentials come from, because a

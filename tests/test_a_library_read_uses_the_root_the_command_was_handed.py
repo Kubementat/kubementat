@@ -31,7 +31,8 @@ from pathlib import Path
 import pytest
 
 from cluster_fixture import configuration_only_context, redirect_checkout
-from kubementat import grafana_accounts, grafana_client
+import kubementat.infrastructure.grafana.accounts as grafana_accounts
+import kubementat.infrastructure.grafana.client as grafana_client
 from kubementat.automations.routing import routing
 from kubementat.automation import Automation
 from kubementat.core.config.config import Config

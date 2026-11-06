@@ -18,11 +18,11 @@ import logging
 import pytest
 import requests
 
-from kubementat import grafana_client
+import kubementat.infrastructure.grafana.client as grafana_client
 from kubementat.core.config.config import Config
 from kubementat.errors import (GrafanaConfigurationError, GrafanaError,
                               GrafanaUnauthorizedError)
-from kubementat.grafana_client import GrafanaClient
+from kubementat.infrastructure.grafana.client import GrafanaClient
 
 BASE_URL = "http://grafana.test:3000"
 ADMIN = "grafadmin"

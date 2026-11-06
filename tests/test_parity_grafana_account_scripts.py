@@ -37,7 +37,7 @@ from cli.commands import users
 from cluster_fixture import stamp_tree, write_kubeconfig
 from conftest import (ENVIRONMENT_STATIC, FIXTURE_ENVIRONMENT, FIXTURE_KUBE_CONTEXT, FIXTURE_TEAM,
                       TEAM_STATIC, TEAM_STATIC_ENCRYPTED)
-from kubementat import grafana_client
+import kubementat.infrastructure.grafana.client as grafana_client
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

@@ -18,7 +18,7 @@ import click
 
 from cli.context import kmt_context
 from cli.helpers import team_option
-from kubementat import grafana_accounts
+import kubementat.infrastructure.grafana.accounts as grafana_accounts
 from kubementat.automation import Automation
 from kubementat.errors import GrafanaError
 
@@ -111,8 +111,8 @@ def delete_team_account(ctx, service_account_name, environment, team, yes):
 # `create_grafana_read_only_account.sh` and the `grafana_helpers.sh` library they sourced, run
 # by handing their paths to a runner. They are commands now for the reason the whole file exists: the
 # lane could only reach them by shell, and the row that came out was green while nothing was
-# created. The client that makes them answer is `kubementat.grafana_client`; the address it is
-# handed is resolved by `kubementat.grafana_accounts`, whose docstring is the precedence.
+# created. The client that makes them answer is `kubementat.infrastructure.grafana.client`; the address it is
+# handed is resolved by `kubementat.infrastructure.grafana.accounts`, whose docstring is the precedence.
 #
 # Neither takes `--team`, and it is not a symmetry choice: the rows, the credential the client
 # authenticates with and the address it connects to are all read out of the *environment's* own
