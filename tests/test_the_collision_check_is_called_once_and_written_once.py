@@ -28,13 +28,25 @@ import ast
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CLUSTER_PY = REPO_ROOT / "src" / "kubementat" / "cluster.py"
 
 # The roots that could reach the check. `templates` is not in this tuple: it moved inside the
 # package, so "src" sweeps it and naming the old root would sweep nothing.
 CALLER_ROOTS = ("src", "scripts", "tekton_ci", "examples", "tools")
 
 THE_CLUSTER_MODULE = "src/kubementat/cluster.py"
+THE_REGISTRY_MODULE = "src/kubementat/core/identity/registry.py"
+
+# The class these guards are about is defined in one of these two, and which one is the fact they
+# exist to notice: the check moved out of `cluster.py` with the registry that owns it, so a sweep of
+# one file would answer "not in the module" about a definition that is simply elsewhere. The file a
+# class was found in comes back with the node, which is what `inside` needs as well — counting the
+# single probe of the running cluster proves nothing about sharing unless it is counted against the
+# file the check is written in.
+DEFINITION_MODULES = (THE_CLUSTER_MODULE, THE_REGISTRY_MODULE)
+
+
+def definition_paths():
+    return [(REPO_ROOT / relative_path, relative_path) for relative_path in DEFINITION_MODULES]
 
 
 def relative(path):
@@ -84,25 +96,33 @@ def call_sites(name):
 
 
 def method(class_name, method_name):
-    """The function node for `class_name.method_name` in `cluster.py`, refusing to guess about it.
+    """`(node, module)` for `class_name.method_name`, refusing to guess about it.
 
     A structural guard fails loudest when the structure it asserted moved, so the absence of either
-    name is reported as the fact instead of as a `None` several assertions deep.
+    name is reported as the fact instead of as a `None` several assertions deep. The module comes
+    back beside the node because one of the two names below moved, and "which file" is the answer a
+    reader of a failure needs before "what line".
     """
-    for node in ast.walk(ast.parse(CLUSTER_PY.read_text(encoding="utf-8"))):
-        if isinstance(node, ast.ClassDef) and node.name == class_name:
-            for member in node.body:
-                if isinstance(member, ast.FunctionDef) and member.name == method_name:
-                    return member
+    for path, relative_path in definition_paths():
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ClassDef) and node.name == class_name:
+                for member in node.body:
+                    if isinstance(member, ast.FunctionDef) and member.name == method_name:
+                        return member, relative_path
     raise AssertionError(
-        f"{class_name}.{method_name} is not in {THE_CLUSTER_MODULE}. If it moved, this guard moves "
+        f"{class_name}.{method_name} is not in {DEFINITION_MODULES}. If it moved, this guard moves "
         f"with it — but the ticket it locks has to be re-read then, not re-passed.")
 
 
-def inside(node, sites):
-    """The subset of `sites` that fall within `node`, which is how "who probes it" is answered."""
+def inside(node, sites, module):
+    """The subset of `sites` that fall within `node`, which is how "who probes it" is answered.
+
+    `module` is the file `node` is in, and it has to be stated: `cluster.py` no longer holds the
+    check these sites are counted against, so filtering on one hard-coded path would report a
+    correct answer as a wrong one.
+    """
     return [site for site in sites
-            if site[0] == THE_CLUSTER_MODULE
+            if site[0] == module
             and node.lineno <= site[1] <= (node.end_lineno or node.lineno)]
 
 
@@ -111,15 +131,19 @@ def test_the_one_collision_check_is_called_and_not_left_behind():
 
     Two facts, because they fail differently: a method that exists but is never called is the seed
     of the next inline `any()`, and a method quietly replaced by a copy elsewhere would turn up here
-    as two definitions rather than as a passing test.
+    as two definitions rather than as a passing test. The file the one definition is expected in is
+    the registry's, not this module's, and that is a fact about the ticket that moved it rather than
+    about this guard — so the answer is taken from where the method actually is, and the assertion is
+    about there being exactly one of them.
     """
     assert len(call_sites("collision_check")) >= 1, \
         "collision_check is called by no shipped code: the duplication comes back"
+    check, check_module = method("EnvironmentRegistry", "collision_check")
     definitions = [f"{relative(path)}:{node.lineno}"
                    for path in shipped_python_files(*CALLER_ROOTS)
                    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
                    if isinstance(node, ast.FunctionDef) and node.name == "collision_check"]
-    assert definitions == [f"{THE_CLUSTER_MODULE}:{method('EnvironmentRegistry', 'collision_check').lineno}"], \
+    assert definitions == [f"{check_module}:{check.lineno}"], \
         f"there is more than one `collision_check` in the tree: {definitions}"
 
 
@@ -132,7 +156,7 @@ def test_context_build_asks_the_registry_and_does_not_write_the_filter():
     running-cluster probe is the exclusion, and `_addresses_the_running_cluster` is the predicate
     that applies it.
     """
-    body = called_names(method("Context", "build"))
+    body = called_names(method("Context", "build")[0])
 
     assert "collision_check" in body, "Context.build resolves a cluster and never checks it"
     assert "running_cluster_address" not in body
@@ -146,9 +170,9 @@ def test_the_running_cluster_is_asked_once_for_a_build_and_not_once_per_answer()
     guard exists to refuse: two functions applying one exclusion about one answer, which is what the
     docstring promised had stopped happening.
     """
-    check = method("EnvironmentRegistry", "collision_check")
+    check, check_module = method("EnvironmentRegistry", "collision_check")
     sites = call_sites("running_cluster_address")
 
     assert len(sites) == 1, f"the running cluster is probed from {sites}, not once"
-    assert inside(check, sites), \
+    assert inside(check, sites, check_module), \
         f"the single probe at {sites} is not inside the one collision check, so it is not shared"

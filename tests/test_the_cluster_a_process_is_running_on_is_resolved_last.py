@@ -21,10 +21,8 @@ answer comes from the mounted files, so every test here fabricates them under `t
 import pytest
 
 from kubementat.core.identity import kubeconfig as kubeconfig_module
-from kubementat.cluster import (
-    Context,
-    EnvironmentRegistry,
-)
+from kubementat.cluster import Context
+from kubementat.core.identity.registry import EnvironmentRegistry
 from kubementat.core.identity.target import ClusterTarget
 from kubementat.core.constants import (
     SOURCE_FLAG,

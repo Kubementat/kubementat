@@ -1,9 +1,10 @@
 """An environment addresses one cluster, and the address is the claim the 1:1 check compares.
 
-Two objects live here, and each of them exists to stop "which cluster" being answered six
-times by six different classes. The third name of that trio — `ClusterTarget`, the frozen value
-object that says *which* cluster and *where* that was declared — is one level down in
-`core/identity/target.py`, imported rather than duplicated: one class object is what makes
+One object lives here, and it exists to stop "which cluster" being answered six times by six
+different classes. Everything the object was made out of is elsewhere: `ClusterTarget`, the frozen
+value object that says *which* cluster and *where* that was declared, sits in
+`core/identity/target.py`, and the enumeration and resolution of the environments it asks about sit
+in `core/identity/registry.py`, imported rather than duplicated — one class object is what makes
 `isinstance(ctx_or_target, ClusterTarget)` answer the same way for every caller, and this module
 has no copy to be wrong about. Nothing in this module runs a command, opens a
 socket, or asks a cluster anything: every address is read out of a file before a service exists
@@ -12,14 +13,16 @@ is asking.
 
 * `ClusterTarget` — read from `core/identity/target.py` by every comparison, resolution and
   refusal below; it carries its own server address, so a comparison cannot forget to happen.
-* `EnvironmentRegistry` — enumerates environments (directories at depth 1 of `platform_config`
-  that contain a `static.json`) and resolves each one's own claim.
+* The registry — read from `core/identity/registry.py`: the environments under one root, each one's
+  own claim, the record of what the 1:1 check compared, and the single-file read a claim is made
+  from. `Context.build` is its caller and not its owner, which is why the module is bound here
+  rather than unpacked into this namespace.
 * `Context` — the pair of `(config, target)` plus the team and environment they belong to,
   built in one place so a command either has a cluster it can name or does not run.
 * The 1:1 check's primitives — the running cluster's own address, the address equality the check and
   the report line must agree on, and the report line — are read from `core/identity/comparison.py`.
-  Only the check that combines them stays here, and `ClusterComparison` goes wherever the registry
-  that enumerates what it lists goes, because it is that registry's answer and not this file's.
+  The check that combines them is the registry's method, and the record of its answer
+  (`ClusterComparison`) went with it, so nothing here holds either half of that pair.
 
 Two decisions that are load-bearing and not obvious from the shape of the code:
 
@@ -41,9 +44,13 @@ Two decisions that are load-bearing and not obvious from the shape of the code:
   `$KUBECONFIG` list names, the merge rule that decides which context wins, the server string read
   out of the YAML, and the material a pod is mounted with. That module is below this one and reads
   nothing in it, which is the direction the whole identity split runs in. `target.py` stands on the
-  same leaf, and `comparison.py` — the 1:1 check's primitives, which this module held until now —
-  stands on `target.py`, so what this module imports reaches
-  `cluster → comparison → target → kubeconfig` with every edge pointing down. `kubeconfig` is imported
+  same leaf, `comparison.py` — the 1:1 check's primitives, which this module held until now — stands
+  on `target.py`, and `registry.py` stands on both, so what this module imports reaches
+  `cluster → registry → comparison → target → kubeconfig` with every edge pointing down and the
+  longest chain ending where the files are read. This module is now the only one of the five that
+  stands above the whole of `core/identity/`, which is the shape Phase 2 was for: once `Context` is
+  the last name here, `cluster.py` is a shell that binds four modules and builds one object.
+  `kubeconfig` is imported
   as `_kubeconfig` because `Context.build` already names a parameter `kubeconfig`: bound under its own
   name, the module would be shadowed by that parameter — usually by `None` — on every path that was
   handed no flag, and the failure would be an `AttributeError` about a `NoneType` inside a resolution
@@ -52,15 +59,13 @@ Two decisions that are load-bearing and not obvious from the shape of the code:
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from kubementat.core import constants
 from kubementat.core.config.config import Config
-from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
 # The 1:1 check primitives are bound as the module and not by their three names, for the same
 # reason `target` is bound that way below: all three are reached from inside this file today, and a
 # name import would leave `kubementat.cluster.running_cluster_address` standing beside the function
@@ -68,6 +73,12 @@ from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
 # runs then misses. The same rule kept them out of this file's namespace.
 from kubementat.core.identity import comparison as _comparison
 from kubementat.core.identity import kubeconfig as _kubeconfig
+# The registry is bound as the module for the same reason `target` is, with one more fact on top of
+# it: `EnvironmentRegistry`, `_environment_declaration` and `_static_declaration` are all three read
+# from here, and a name import would leave `kubementat.cluster.EnvironmentRegistry` standing beside
+# the class the registry module owns. `AttributeError` is the point — a moved name that is still
+# reachable from the module that lost it is a name the next reader will grep for and find.
+from kubementat.core.identity import registry as _registry
 # `ClusterTarget` is bound here as the module and not the name on purpose: a name import
 # would answer `kubementat.cluster.ClusterTarget`, and a second door to one class object is
 # what a `monkeypatch.setattr` on the class then misses. The ten readers left below reach the
@@ -75,7 +86,6 @@ from kubementat.core.identity import kubeconfig as _kubeconfig
 from kubementat.core.identity import target as _target
 from kubementat.errors import (
     ClusterContextNotFoundError,
-    ClusterFileUnreadableError,
     ClusterIdentityCollisionError,
     ClusterNotConfiguredError,
     ClusterResolutionError,
@@ -92,301 +102,6 @@ from kubementat.errors import (
 # `platform_config/{environment}/<team>/` — and kmt does not guess what a command means, so the object
 # says so rather than letting a service read a path built out of a name nobody gave it. That both
 # call sites raise it is the reason the refusal has one home instead of one per service.
-
-
-@dataclass(frozen=True)
-class EnvironmentResolution:
-    """One environment's own claim on a cluster, or the reason it has none.
-
-    The unresolved half is not a `None` in a list: the 1:1 check wants the environment named with
-    the reason it could not be read, because a check that silently omits environments is a check
-    that lies about its coverage.
-
-    `declared_context` is what the environment's `static.json` said, whether or not it reached a
-    cluster. `kmt environments list` prints that column, and it has to come out of the same
-    read the check ran: an answer the command derived for itself is a second read of one key, and
-    two reads of one key are how a listing and a check start to disagree about what is configured.
-    """
-
-    environment: str
-    target: Optional[_target.ClusterTarget]
-    reason: Optional[str] = None
-    declared_context: Optional[str] = None
-
-    @property
-    def resolved(self) -> bool:
-        return self.target is not None
-
-
-@dataclass(frozen=True)
-class ClusterComparison:
-    """One 1:1 check, with everything the answer was built out of still attached to it.
-
-    It is a comparison and not a boolean because the same question feeds two sentences: the refusal,
-    which only needs the environments that overlapped, and the report line, which needs the whole
-    set that was compared and the half of it held back because it is the cluster the command is
-    running on. Returning only
-    the overlaps would leave the second sentence to go and work the answer out again — and that
-    second working is exactly the second implementation this object exists to delete.
-
-    * `others` is every *other* environment in the root, unresolved ones included, because a line
-      that says what was verified has to be able to name what could not be.
-    * `self_address` is the running cluster's exclusion made visible: the same value the check
-      subtracted with, so
-      the report can say *which* environments were held back and why.
-    * `collisions` is the only field that may refuse a command, and it is empty exactly when the
-      command may run.
-
-    `target` is what was asked about, kept so a reader of a log or a debugger can see the question
-    beside the answer instead of inferring it from the address.
-    """
-
-    target: _target.ClusterTarget
-    others: Tuple[EnvironmentResolution, ...]
-    collisions: Tuple[EnvironmentResolution, ...]
-    self_address: Optional[str] = None
-
-
-class EnvironmentRegistry:
-    """Every environment under one `platform_config` root, and the cluster each one declares.
-
-    Enumeration is directories at depth 1 of the root that contain a `static.json`, and nothing
-    more: that falls out of the existing shape — a team's `static.json` is depth 2, and
-    `kubementat_components/` carries no environment-level one — so there is no registry file and
-    no rule to keep in sync with the tree.
-    """
-
-    def __init__(self, platform_config_dir):
-        self.platform_config_dir = Path(platform_config_dir)
-
-    def environments(self) -> Tuple[str, ...]:
-        """Environment names, sorted, by what is on disk.
-
-        Reading a list out of the directory rather than out of code is the same decision that put
-        `Config.teams()` on a directory listing: a name someone remembered is a name someone
-        forgot.
-        """
-        if not self.platform_config_dir.is_dir():
-            return ()
-        return tuple(
-            sorted(
-                entry.name
-                for entry in self.platform_config_dir.iterdir()
-                if entry.is_dir() and (entry / "static.json").is_file()
-            )
-        )
-
-    def all(self) -> Tuple[EnvironmentResolution, ...]:
-        """Every environment's own claim, resolved or refused with a reason.
-
-        Nothing here consults the process environment or anyone's command line: a sibling is
-        asked what *it* declares, which is the only question that can be answered about a directory
-        the current command is not running.
-        """
-        return tuple(self.resolve(name) for name in self.environments())
-
-    def resolve(self, environment: str) -> EnvironmentResolution:
-        """One environment's target, read out of its own `static.json`."""
-        static_path = self.platform_config_dir / environment / "static.json"
-        if not static_path.is_file():
-            return EnvironmentResolution(
-                environment,
-                None,
-                reason=f"{static_path} does not exist",
-            )
-        try:
-            declared = _static_declaration(static_path)
-        except ClusterResolutionError as exc:
-            return EnvironmentResolution(environment, None, reason=exc.reason)
-        context = declared["context_value"]
-        if context is None:
-            return EnvironmentResolution(
-                environment,
-                None,
-                reason=f"{constants.CLUSTER_KUBE_CONTEXT_KEY} {declared['context_state']} in {static_path}",
-                declared_context=context,
-            )
-        try:
-            target = _target.ClusterTarget.from_kubeconfig(
-                declared["path_value"] or _kubeconfig.in_tree_kubeconfig(self.platform_config_dir, environment),
-                context,
-                environment,
-                source=f"{constants.STATIC_SOURCE_PREFIX}{static_path}",
-            )
-        except ClusterResolutionError as exc:
-            return EnvironmentResolution(
-                environment, None, reason=exc.reason, declared_context=context)
-        return EnvironmentResolution(environment, target, declared_context=context)
-
-    def collision_check(self, target: _target.ClusterTarget) -> ClusterComparison:
-        """The *other* environments that address the same cluster `target` does, and the comparison
-        that answer came out of.
-
-        An empty `collisions` is the only answer that lets a command run. The target's own
-        environment is excluded by name, not by address: it is allowed to be the environment that
-        declares this cluster, which is the whole point of 1:1.
-
-        So is the running cluster, by a rule that has to be stated rather than inferred: when this
-        process is inside one, an environment
-        that resolves to that same address is *here*, not a second cluster, and reporting it as a
-        collision would refuse kubementat's own install. The exclusion is applied once, here, and
-        returned inside the comparison instead of being recomputed by whoever reports the answer —
-        which is the reason this method exists rather than an inline `any()` somewhere else. Once
-        `Context.build` spelled this filter out beside the method and then probed the running
-        cluster a second time for its own report line: two spellings of one rule are how a refusal
-        and the sentence about it start to disagree, and one probe is what makes them share.
-        """
-        # One pass over the root, because the cost of local reads is acceptable but the cost of
-        # doing it twice for the sake of a report line is not.
-        self_address = _comparison.running_cluster_address()
-        others = tuple(record for record in self.all() if record.environment != target.environment)
-        collisions = tuple(
-            record
-            for record in others
-            if record.target is not None
-            and record.target.address == target.address
-            and not _comparison._addresses_the_running_cluster(record, self_address)
-        )
-        return ClusterComparison(target=target, others=others, collisions=collisions,
-                                 self_address=self_address)
-
-
-def _static_declaration(static_path: Path) -> Dict[str, Any]:
-    """The two cluster keys as they were declared in `static_path`.
-
-    Returns the value of each key (or `None` when it is absent, null, or blank — all three are
-    treated as not declared) plus a `context_state` phrase that says *which* of the three it was,
-    because the error has to name the value found and not just the key missing.
-    """
-    try:
-        document = json.loads(read_decrypted(static_path, "environment's static.json"))
-    except OSError as exc:
-        raise ClusterFileUnreadableError(
-            f"{static_path} could not be read: {exc}", reason=f"{static_path} could not be read"
-        ) from exc
-    except LockedConfigFileError as exc:
-        # The seam's sentence, this module's type. It used to be a `UnicodeDecodeError`
-        # that walked past the two handlers below and printed a codec traceback about a file whose
-        # only crime was being locked.
-        raise ClusterFileUnreadableError(
-            f"{static_path} could not be read: {exc}", reason=f"{static_path} could not be read"
-        ) from exc
-    except json.JSONDecodeError as exc:
-        raise ClusterFileUnreadableError(
-            f"{static_path} is not valid JSON: {exc}", reason=f"{static_path} is not valid JSON"
-        ) from exc
-    if not isinstance(document, dict):
-        raise ClusterFileUnreadableError(
-            f"{static_path} is not an environment static.json: it is not an object.",
-            reason=f"{static_path} is not an object",
-        )
-
-    raw_context = document.get(constants.CLUSTER_KUBE_CONTEXT_KEY)
-    raw_path = document.get(constants.CLUSTER_KUBECONFIG_PATH_KEY)
-    return {
-        "context_value": _declared_value(raw_context),
-        "context_state": _declaration_state(raw_context, constants.CLUSTER_KUBE_CONTEXT_KEY in document),
-        "path_value": _declared_value(raw_path),
-    }
-
-
-def _declared_value(value) -> Optional[str]:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
-def _declaration_state(value, present: bool) -> str:
-    """How the key reads in the file, for an error that has to name the value found.
-
-    Absent, null, and empty are the three ways a key reads as not declared, and
-    an operator reading the file sees three different files, so the sentence says which one it
-    found — `null` is what a freshly prepared environment ships, and "not set" is what a
-    hand-edited one that never had the key looks like.
-    """
-    if not present:
-        return "is not set"
-    if value is None:
-        return "is null"
-    if not str(value).strip():
-        return "is empty"
-    if str(value).strip().lower() == "null":
-        return "is the string 'null'"
-    return f"is set to {value!r}"
-
-
-def environment_file_missing(environment: str, static_path: Path) -> str:
-    """The refusal an operator acts on when an environment has no `static.json` to read a key out of.
-
-    Spelled once because both halves of `Context.build` need it: the team-bearing one fails inside
-    `Config`'s constructor, the team-less one in front of the file it was about to read. Same
-    file, same missing key, same instruction — which is the point of not writing it twice.
-    """
-    return (
-        f"environment '{environment}' does not address a cluster: {static_path} does not exist, "
-        f"so {constants.CLUSTER_KUBE_CONTEXT_KEY} cannot be read from it. There is no current-context "
-        f"fallback — run kmt config init <dir> --environment {environment}, or name the context "
-        f"in that file."
-    )
-
-
-def _environment_declaration(environment: str,
-                             team: Optional[str],
-                             platform_config_dir=None) -> Tuple[Config, Path, Dict[str, Any]]:
-    """`(config, static_path, declared)` for the environment one command means.
-
-    `platform_config_dir` is the root one command was given, and it is threaded into the one
-    `Config` this function builds rather than passed beside it. A root that stopped at this
-    signature would reach the registry below and not the file read here, and that is how one flag
-    ends up answering two questions.
-
-    The `Config` is built either way, and that is the whole of what a `Context` answers: `config`
-    says *what to deploy* and `target` says *where*, and a command that sweeps namespaces has to be
-    able to answer the first question even when it was never given a team. **With a team**,
-    this is the `Config` every service class used to build for itself. **Without one**, the
-    same two arguments reach `Config` with `team=None`, which is now a state that object supports
-    rather than a lie it is told: the environment-level files resolve, the team-scoped paths are not
-    built, and reading a team-scoped value raises `TeamNotSuppliedError` instead of interpolating
-    `None` — or, from an empty team, reading the environment's own file and calling it the team's.
-
-    What both paths do is read **one** file, and name it when it is not there. The environment's own
-    declaration is the only configuration a cluster claim depends on, so it is the only one read
-    here; every other file stays lazy, exactly as it was before the decorator, so that a broken
-    team-level file keeps arriving as the sentence `Config.get` writes about that file instead of as
-    a JSON error from a place that cannot say which of four files it opened.
-    """
-    config = _load_environment_config(environment, team, platform_config_dir)
-    static_path = config.env_static_config_path
-    if not static_path.is_file():
-        raise ClusterNotConfiguredError(
-            environment_file_missing(environment, static_path),
-            reason=f"{constants.CLUSTER_KUBE_CONTEXT_KEY} cannot be read, {static_path} does not exist",
-        )
-    return config, static_path, _static_declaration(static_path)
-
-
-def _load_environment_config(environment: str, team: Optional[str],
-                             platform_config_dir=None) -> Config:
-    """The one `Config` a Context carries, built the lazy way.
-
-    A root is passed through and never re-derived: `None` means "this command named none", and the
-    precedence rule for that case is `Config`'s, not a guess made here. The
-    flag that reaches this argument is the same spelling a `Config` keyword already has, so
-    plumbing it changes no rule.
-
-    `preload_configs=False` is not an optimisation. It is what keeps `Context.build` reading the
-    single file a cluster claim lives in: `Config`'s eager read opens four and fails on whichever is
-    wrong first, so a malformed *team* file would refuse a command whose cluster resolved perfectly,
-    with a message that cannot say which of the four it opened. A `Context` that loaded eagerly would
-    be a second, louder answer to a question one file already answers.
-
-    Nothing else about the object changes. `get()` loads what it is asked for on first use, so a read
-    of `team_static` still fails naming the file that was missing — and, for a Context given no team
-    at all, fails naming the team it was given no name for.
-    """
-    return Config(environment, team, platform_config_dir=platform_config_dir,
-                  preload_configs=False)
 
 
 @dataclass(frozen=True)
@@ -576,8 +291,8 @@ class Context:
         says so in the report line; a process that is not inside a cluster gets the error below
         rather than an in-cluster guess.
         """
-        config, static_path, declared = _environment_declaration(environment, team,
-                                                                 platform_config_dir)
+        config, static_path, declared = _registry._environment_declaration(
+            environment, team, platform_config_dir)
 
         layers = cls._declaration_layers(context, kubeconfig, static_path, declared)
         # The stated-versus-declared comparison, and it happens before anything resolves. Both
@@ -620,7 +335,7 @@ class Context:
         # The root is read off the `Config` rather than re-derived, so a root this method was handed
         # and a root the environment variable says are the same one object here — which is the whole
         # point of threading it through the `Config` instead of around it.
-        registry = EnvironmentRegistry(config.platform_config_dir)
+        registry = _registry.EnvironmentRegistry(config.platform_config_dir)
         # The one 1:1 check, asked of the one primitive that owns it. What used to be here is the
         # filter this method wrote beside the method — same file, same rule, computed twice — and
         # the half it computed twice was the half the report line read, which is how a
@@ -851,7 +566,7 @@ class Context:
         _, _, _, labels = layers[-1]
         state = "is not set"
         try:
-            state = _static_declaration(static_path)["context_state"]
+            state = _registry._static_declaration(static_path)["context_state"]
         except ClusterResolutionError:
             pass
         sentence = (

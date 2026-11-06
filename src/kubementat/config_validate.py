@@ -3,7 +3,8 @@
 One question, answered by one function: **is the tree this command was handed usable, and if not,
 in how many places?** The answer is a tuple of findings and never a raised sentence per fault,
 because the established idiom when there is more than one problem is the library's own — collect
-them all, then say all of them rather than the first (`helm_utils.py:303`, `cluster.py:594`). The
+them all, then say all of them rather than the first (`helm_utils.py:303`, and `Context.build`, which
+reports every collision it resolved instead of refusing at the first match).
 CLI turns the collected errors into one `click.ClickException` and prints the warnings itself with
 `err=True` (`utilities.py:66`'s shape); this module raises nothing over a verdict except the two
 refusals that mean "there is no tree to read".
@@ -11,8 +12,9 @@ refusals that mean "there is no tree to read".
 Two things a reader of this file should not have to hunt for.
 
 **Which rules here are decisions and which are restatements.** Most of what `validate` says is
-already said somewhere: the 1:1 collision refusal (`cluster.py:768-797`, reported through the
-registry and not re-decided), the environment file's shape (`cluster.py:800-830`), the missing
+already said somewhere: the 1:1 collision refusal (`EnvironmentRegistry.collision_check`, in
+`core/identity/registry.py`, reported through the registry and not re-decided), the environment
+file's shape (`registry._static_declaration`, beside it), the missing
 layer (`config_init._require_answerable_layer`), and the cluster-not-addressed fact
 (`config_init.cluster_is_unaddressed`). Where an owner exists, this module calls it and carries its
 sentence. Two rules have no owner anywhere in `src/` and are therefore decided here for the first
@@ -61,6 +63,12 @@ from kubementat import cluster as _cluster
 from kubementat import config_init
 from kubementat.core.constants import CLUSTER_KUBECONFIG_PATH_KEY, CLUSTER_KUBE_CONTEXT_KEY
 from kubementat.core.config.config import Config
+# The registry is bound as its own module here because the alias read below is the only thing in
+# this file that reaches it: `kubementat.cluster` used to carry the class, and reading it through
+# that alias after the move is an `AttributeError` rather than a wrong answer — which is the good
+# outcome, but it is still an outcome that never reaches the finding the rule owns. `_cluster` stays
+# imported beside it for `Context._collision`, which did not move.
+from kubementat.core.identity import registry as _registry
 from kubementat.core.config.stamp import ConfigurationStamp
 from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
 
@@ -83,7 +91,7 @@ _MANIFEST_KEYS = ("schema_version", "kubementat")
 _PLACEHOLDER_PREFIX = "REPLACEME"
 
 # How far from the root a layer file may sit: depth 1 is an environment, depth 2 under one is a
-# team. `EnvironmentRegistry.environments()` (`cluster.py:709-724`) and `Config.teams()`
+# team. `EnvironmentRegistry.environments()` (`core/identity/registry.py`) and `Config.teams()`
 # (`config.py:889-925`) already answer "what is there"; these checks only name the near-misses
 # neither of them can see because they do not enumerate what they filter out.
 _ENVIRONMENT_DEPTH = 1
@@ -410,14 +418,14 @@ def _layout_findings(root: Path, findings: list[Finding]) -> None:
 def _collision_findings(root: Path, findings: list[Finding]) -> None:
     """The 1:1 decision, carried and not re-decided.
 
-    `EnvironmentRegistry.collision_check` owns this rule (the census' strongest owner, refusing at
-    `cluster.py:1142`); what validate adds is only that it asks the question for every environment
+    `EnvironmentRegistry.collision_check` owns this rule, and it refuses rather than warning; what
+    validate adds is only that it asks the question for every environment
     in the root instead of for the one about to be installed into. Each refusal sentence is taken
     from `Context._collision` verbatim — the sentence that already sends operators to
     `kmt environments list` — and each unordered pair is reported once, because two environments
     that collide describe one fault and not two.
     """
-    registry = _cluster.EnvironmentRegistry(root)
+    registry = _registry.EnvironmentRegistry(root)
     reported: set[frozenset[str]] = set()
     for name in registry.environments():
         record = registry.resolve(name)
@@ -488,9 +496,9 @@ def _read_object_file(path: Path, label: str, findings: list[Finding]) -> Option
 
     This is the gap the census found: `Config._load_json_file` (`config.py:1025`) does `open` +
     `json.load` and no shape check, so a file holding `[1, 2]` passes straight through today and
-    fails later, somewhere else, in a place nobody is looking. `cluster.py:818` is the only existing
-    owner of "is an object", and it reads only the environment's plain file; the shape of the other
-    three files is decided here so that all four get the same verdict.
+    fails later, somewhere else, in a place nobody is looking. `registry._static_declaration` is the
+    only existing owner of "is an object", and it reads only the environment's plain file; the shape
+    of the other three files is decided here so that all four get the same verdict.
     """
     if not path.is_file():
         return None  # already reported as `missing-layer-file`

@@ -452,7 +452,8 @@ def init_configuration(root, environment, team=None, answers=(), encrypted_answe
             environment_encrypted[key] = secrets.token_urlsafe(GENERATED_ANSWER_BYTES)
     # The team's document is empty. Its two cluster keys stay in the environment's file: one directory
     # is exactly one cluster, and what resolves them reads
-    # `<root>/<environment>/static.json` and no other path (`cluster.py:737`, `cluster.py:898`), so
+    # `<root>/<environment>/static.json` and no other path (`EnvironmentRegistry.resolve` and
+    # `_environment_declaration`, both in `core/identity/registry.py`), so
     # writing them one layer down buys nothing today and teaches the next reader that a team can
     # address a cluster of its own.
     plan: list[tuple[str, Path, bytes]] = [
@@ -701,7 +702,8 @@ def add_team(root, environment, team) -> tuple[InitStep, ...]:
     `init_configuration` uses for `--team`. It writes nothing else: no answers, no values file, no
     template — a team layer with answers is `config set --team`'s job, and the cluster keys stay in
     the environment's file, because one directory is exactly one cluster and what resolves them reads
-    that file and no other (`cluster.py:737`, `cluster.py:898`).
+    that file and no other (`EnvironmentRegistry.resolve` and `_environment_declaration`, both in
+    `core/identity/registry.py`).
 
     Refuses when the environment's `static.json` is not there: a team is one layer under one
     environment, which is the same fact `init_configuration` refuses `--team` without `--environment`
@@ -854,7 +856,8 @@ def _require_keyable_team_layer(key: str, team, root: Path, environment: str) ->
 
     This is the only key a team-scoped answer is refused for, and the reason is not a
     classification table: **one directory is exactly one cluster.** What resolves a cluster reads the
-    environment's `static.json` and no other path (`cluster.py:737` and `cluster.py:898`), so a team
+    environment's `static.json` and no other path (`EnvironmentRegistry.resolve` and
+    `_environment_declaration`, both in `core/identity/registry.py`), so a team
     that answers `CLUSTER_KUBE_CONTEXT` writes a document no reader consults, and the tree now has
     two accounts of one null. Census H mapped this boundary. What answers "who reads this key, and
     from which file" is `config show`, which tags each key with its layer and its file; putting that

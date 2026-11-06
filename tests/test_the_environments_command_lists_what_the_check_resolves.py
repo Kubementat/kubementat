@@ -24,7 +24,7 @@ from click.testing import CliRunner
 from cli.commands import environments
 from cluster_fixture import (DEV_SERVER, PROD_SERVER, checkout, redirect_checkout,
                              write_environment, write_kubeconfig)
-from kubementat.cluster import EnvironmentRegistry
+from kubementat.core.identity.registry import EnvironmentRegistry
 
 
 def listed(root):

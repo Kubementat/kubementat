@@ -4648,7 +4648,7 @@ def _declaration_wording(present, value):
 
     Absent, null, empty and set are the four states a key can be in, and the harness has to describe
     them the same way the error does or an assert that quotes the file and an assert that quotes the
-    command start meaning different things. The phrasing mirrors `cluster._declaration_state` for
+    command start meaning different things. The phrasing mirrors `registry._declaration_state` for
     that reason, and for the same reason the harness spells it here rather than importing it: a lane
     that read the product's strings could not catch the product writing them differently.
     """

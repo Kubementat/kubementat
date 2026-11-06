@@ -26,10 +26,10 @@ Seven claims, one per read that the census measured, plus two about what the sea
    verdict command that raises early stops being a verdict.
 5. `config_validate._cluster_fact_finding` — silent about a file it could not read. It used to print
    "is null" over exactly that file, which is the same false sentence as row 3 wearing a warning.
-6. `cluster._static_declaration` and 7. `core/identity/kubeconfig._read_kubeconfig` — the
-   cluster-resolution reads. Both re-raise `ClusterFileUnreadableError`, the cluster layer's own
-   refusal type, with the seam's sentence inside it and neither rewriting it. The second of the two
-   lives one level below the resolver that calls it, which is why its row below carries that path.
+6. `core/identity/registry._static_declaration` and 7. `core/identity/kubeconfig._read_kubeconfig` —
+   the cluster-resolution reads. Both re-raise `ClusterFileUnreadableError`, the cluster layer's own
+   refusal type, with the seam's sentence inside it and neither rewriting it. Both now live one level
+   below the resolver that calls them, which is why both rows below carry their own path.
 8. **The seam does not route around `missing_team_config_files`.** A missing *optional* team file
    still degrades the way it did: a warning at load and a named refusal at read. This is the
    falsification of the seam's own boundary — `FileNotFoundError` propagates and nothing converts it.
@@ -53,7 +53,7 @@ from pathlib import Path
 import pytest
 
 from kubementat import config_init, config_validate
-from kubementat.cluster import _static_declaration
+from kubementat.core.identity.registry import _static_declaration
 from kubementat.core.identity.kubeconfig import _read_kubeconfig
 from kubementat.core.identity.target import ClusterTarget
 from kubementat.errors import ClusterFileUnreadableError
@@ -300,7 +300,7 @@ def test_the_predicate_says_nothing_about_a_locked_file_to_the_verdict_that_asks
 
 
 def test_a_locked_static_json_is_refused_by_the_reader_that_resolves_a_cluster(tmp_path):
-    """`cluster._static_declaration` keeps `ClusterFileUnreadableError` and borrows the sentence.
+    """`registry._static_declaration` keeps `ClusterFileUnreadableError` and borrows the sentence.
 
     One sentence, many error types: the type is what a machine-readable report needs, and the
     sentence is what
@@ -452,7 +452,7 @@ DOCUMENTED_SEAM_SITES = [
     ("kubementat/config_init.py", "cluster_is_unaddressed"),
     ("kubementat/config_validate.py", "_read_object_file"),
     ("kubementat/config_validate.py", "_cluster_fact_finding"),
-    ("kubementat/cluster.py", "_static_declaration"),
+    ("kubementat/core/identity/registry.py", "_static_declaration"),
     ("kubementat/core/identity/kubeconfig.py", "_read_kubeconfig"),
 ]
 

@@ -268,7 +268,8 @@ def add_team_command(directory, environment, team):
     """Add a team to one environment, then print the steps, and nothing else.
 
     No cluster sentence here, and its absence is the claim: the sentence belongs to the layer that is
-    a cluster, and one directory is exactly one cluster (`cluster.py:737`, `cluster.py:898` read the
+    a cluster, and one directory is exactly one cluster (`EnvironmentRegistry.resolve` and
+    `_environment_declaration`, both in `core/identity/registry.py`, read the
     environment's file and no other), so a team cannot address one and saying so would be a second,
     wrong answer about the same null.
     """

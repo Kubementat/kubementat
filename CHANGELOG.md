@@ -1,5 +1,62 @@
 # Unreleased
 
+- **The registry left `cluster.py` for `core/identity/registry.py`** — `EnvironmentRegistry`,
+  `EnvironmentResolution`, `ClusterComparison`, `_static_declaration`, `_declared_value`,
+  `_declaration_state`, `environment_file_missing`, `_environment_declaration` and
+  `_load_environment_config`: 9 names, 275 lines, and `cluster.py` down to **608 lines** from 893. Only
+  `Context` is left in it, so the file is now what Phase 2 was for — a shell that binds four modules
+  and builds one object, and the edge `cluster → registry → comparison → target → kubeconfig` points
+  down all the way through.
+  **Nine names that needed no qualifier at all.** The report this ticket's predecessor would have
+  written is "byte-identical", and the AST agrees here: all nine definitions are raw-identical to
+  their source at the previous commit, zero changed line-pairs. That is not a claim of identity — it
+  is what happens when the new module binds `target`, `kubeconfig` and `comparison` under the same
+  aliases the old one did, so nothing in a moved body has to reach further. What the move did require
+  is outside the definitions: the new module's import block, three read sites in `Context` rebound
+  through the module (`_registry.EnvironmentRegistry`, `_registry._environment_declaration`,
+  `_registry._static_declaration`), and no shim or re-export anywhere —
+  `kubementat.cluster.EnvironmentRegistry` and `kubementat.cluster._static_declaration` both raise
+  `AttributeError`, so the moved names have exactly one home to be found in.
+  **`ClusterComparison` went with the registry, as the census said it would.** The plan puts the
+  comparison *object* beside the object that enumerates what it lists, while `comparison.py` got the
+  comparison *primitives*, and the census flags that as a real split of one idea across two files. A
+  reader who looks for the record next to the primitives will look in the wrong file, so it is said
+  here and in the new module's docstring rather than hidden in a diff: the object's one reader is
+  `collision_check`, two lines above it, and the alternative would need an arrow in each direction.
+  **The binding an import scan does not show.** `config_validate.py:420` reached the class through a
+  module alias (`_cluster.EnvironmentRegistry`), which is the shape that breaks silently on a move.
+  Two alias reads exist in `src/` and both are in that one file: this one, which now reads
+  `_registry.EnvironmentRegistry`, and `_cluster.Context._collision`, which stayed because `Context`
+  stayed. That it resolves the same object is not inferred from the suite: with only
+  `core.identity.registry.EnvironmentRegistry` patched to a recording subclass, one run of
+  `Context.build` and one of `config_validate.validate_tree` over a tree with two colliding
+  environments both instantiate that subclass, which a copy in either file could not do.
+  **The keyed table followed the function.** `DOCUMENTED_SEAM_SITES` in
+  `test_a_locked_configuration_file_refuses_by_name_and_not_by_codec.py` is keyed by *file* and
+  *function*, so its `cluster.py::_static_declaration` row had to move with the read or it would have
+  gone on asserting about a file that no longer contains it — a passing rule that checks nothing.
+  The structural guard in `test_the_collision_check_is_called_once_and_written_once.py` had the same
+  problem in a different shape: it reads class definitions out of `cluster.py`, so both files are now
+  swept and the file a class was found in comes back with the node. What that costs is worth naming
+  beside what it saves: the guard's *uniqueness* claim is untouched — it still sweeps every shipped file
+  for a second `collision_check` — but its *location* claim is weaker, "defined in exactly one of
+  `cluster.py` and `registry.py`" where it used to name one file. A guard that pins a filename has to be
+  told when the thing it pins moves, and the telling should say what was traded, not just what was edited.
+  **Two citations this commit left false, fixed in the same commit that invalidated them.**
+  `config_validate.py` had rewritten a sentence to name `EnvironmentRegistry.collision_check` and kept the
+  line number that came with it — `cluster.py:1142`, in a file this commit made 608 lines long, so the
+  pointer names nothing. The module's header carried `cluster.py:594` the same way. Both now say the symbol
+  and what it does. Line-number citations survive elsewhere — at least ten in `tests/`, pointing into a
+  file that has lost more than half its length across Phase 2 — and sweeping those is a separate ticket,
+  because editing comments inside a commit that moves code is how unrelated changes end up together.
+  Four imports that would have gone stale are gone with the code that used them — `json`, `Any`,
+  `read_decrypted`/`LockedConfigFileError` and `ClusterFileUnreadableError` — and the one that matters
+  among them is `read_decrypted`: the seam census in the locked-file test reads a module as being in
+  the read graph by that name, so leaving it imported would have said `cluster.py` still opens
+  configuration material. `ClusterContextNotFoundError` stays imported and unused, exactly as
+  the last three tickets recorded it.
+  Suite unchanged: **1775 passed, 1 skipped**, cycles none, layer violations none.
+
 - **The 1:1 check primitives left `cluster.py` for `core/identity/comparison.py`** —
   `running_cluster_address`, `_addresses_the_running_cluster`, and `_report_line`, 64 LOC, and
   `cluster.py` down to 893 lines from 953. `_report_line` is the interesting one because the plan has no

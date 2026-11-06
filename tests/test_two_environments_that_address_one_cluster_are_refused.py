@@ -27,10 +27,8 @@ import pytest
 from click.testing import CliRunner
 
 from cli.commands import environments
-from kubementat.cluster import (
-    Context,
-    EnvironmentRegistry,
-)
+from kubementat.cluster import Context
+from kubementat.core.identity.registry import EnvironmentRegistry
 from kubementat.core.identity.target import ClusterTarget
 from kubementat.errors import (
     ClusterIdentityCollisionError,
