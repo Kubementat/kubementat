@@ -1,13 +1,17 @@
 """An environment addresses one cluster, and the address is the claim the 1:1 check compares.
 
-Three objects live here, and each of them exists to stop "which cluster" being answered six
-times by six different classes. Nothing in this module runs a command, opens a
+Two objects live here, and each of them exists to stop "which cluster" being answered six
+times by six different classes. The third name of that trio — `ClusterTarget`, the frozen value
+object that says *which* cluster and *where* that was declared — is one level down in
+`core/identity/target.py`, imported rather than duplicated: one class object is what makes
+`isinstance(ctx_or_target, ClusterTarget)` answer the same way for every caller, and this module
+has no copy to be wrong about. Nothing in this module runs a command, opens a
 socket, or asks a cluster anything: every address is read out of a file before a service exists
 — or, last of the layers that can answer, out of the material the kubelet mounted in the pod that
 is asking.
 
-* `ClusterTarget` — a frozen value object that says *which* cluster, *where* that was declared,
-  and carries its own server address so a comparison cannot forget to happen.
+* `ClusterTarget` — read from `core/identity/target.py` by every comparison, resolution and
+  refusal below; it carries its own server address, so a comparison cannot forget to happen.
 * `EnvironmentRegistry` — enumerates environments (directories at depth 1 of `platform_config`
   that contain a `static.json`) and resolves each one's own claim.
 * `Context` — the pair of `(config, target)` plus the team and environment they belong to,
@@ -26,13 +30,15 @@ Two decisions that are load-bearing and not obvious from the shape of the code:
   library captured at import (the fixtures in `tests/conftest.py:547` exist because of this), so
   a default resolved through it would silently disagree with the environment the caller is in.
   `kubeconfig.default_kubeconfig_path` applies the same documented rule — `$KUBECONFIG`, then
-  `~/.kube/config` — at call time, and this module hands the concrete path it answers to the library
-  so the address and the client cannot disagree.
+  `~/.kube/config` — at call time, and the target's `client()` hands the concrete path it answers
+  to the library so the address and the client cannot disagree.
 
   What reads a kubeconfig lives one level down, in `core/identity/kubeconfig.py`: the files a
   `$KUBECONFIG` list names, the merge rule that decides which context wins, the server string read
   out of the YAML, and the material a pod is mounted with. That module is below this one and reads
-  nothing in it, which is the direction the whole identity split runs in. It is imported as
+  nothing in it, which is the direction the whole identity split runs in. `target.py` stands on the
+  same leaf, so what this module imports reaches `cluster → target → kubeconfig` with every edge
+  pointing down. It is imported as
   `_kubeconfig` because `Context.build` already names a parameter `kubeconfig`: bound under its own
   name, the module would be shadowed by that parameter — usually by `None` — on every path that was
   handed no flag, and the failure would be an `AttributeError` about a `NoneType` inside a resolution
@@ -41,7 +47,6 @@ Two decisions that are load-bearing and not obvious from the shape of the code:
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 from dataclasses import dataclass, field
@@ -52,6 +57,11 @@ from kubementat.core import constants
 from kubementat.core.config.config import Config
 from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
 from kubementat.core.identity import kubeconfig as _kubeconfig
+# `ClusterTarget` is bound here as the module and not the name on purpose: a name import
+# would answer `kubementat.cluster.ClusterTarget`, and a second door to one class object is
+# what a `monkeypatch.setattr` on the class then misses. The eleven readers below reach the
+# class through the module that owns it.
+from kubementat.core.identity import target as _target
 from kubementat.errors import (
     ClusterContextNotFoundError,
     ClusterFileUnreadableError,
@@ -72,280 +82,6 @@ from kubementat.errors import (
 # `platform_config/{environment}/<team>/` — and kmt does not guess what a command means, so the object
 # says so rather than letting a service read a path built out of a name nobody gave it. That both
 # call sites raise it is the reason the refusal has one home instead of one per service.
-
-
-@dataclass(frozen=True)
-class ClusterTarget:
-    """One cluster, described once, with its own address and the path that led here.
-
-    `address` is a field rather than a property: a check that has to ask for the address is a check
-    that can be skipped by a call site, and a field is compared or
-    not compared by the same code that compares everything else. Two consequences worth stating:
-    the address is only as current as the file it came from, and building a target cannot make
-    a network call.
-    """
-
-    environment: str
-    context: Optional[str]
-    kubeconfig_path: Optional[Path]
-    address: str
-    source: str
-
-    @classmethod
-    def from_kubeconfig(
-        cls,
-        path: Optional[str],
-        context: Optional[str],
-        environment: str,
-        *,
-        source: str = constants.SOURCE_FLAG,
-    ) -> "ClusterTarget":
-        """A target read from a kubeconfig — the CLI path, and the only one the resolution order
-        selects.
-
-        `path=None` is the library's own rule (`$KUBECONFIG`, then `~/.kube/config`) and is
-        recorded as `None` rather than as the file that rule happened to resolve to, so the
-        object says what was declared and not what the machine had.
-
-        `source` is a keyword-only extra because the constructor cannot know which layer the
-        arguments came from, while the object's `source` has to: the same construction answers
-        `--context`, a process variable, and a `static.json`, and "which one" is the whole
-        difference when the wrong cluster is being blamed.
-        """
-        if not context or not str(context).strip():
-            raise ClusterNotConfiguredError(
-                f"no context was declared for environment '{environment}'. "
-                f"There is no current-context fallback: name the context in "
-                f"platform_config/{environment}/static.json, pass --context, or set "
-                f"{constants.CLUSTER_KUBE_CONTEXT_KEY}.",
-                reason=f"{constants.CLUSTER_KUBE_CONTEXT_KEY} is not set for '{environment}'",
-            )
-        files = _kubeconfig._kubeconfig_files(None if path is None else str(path))
-        target = cls(
-            environment=environment,
-            context=str(context).strip(),
-            kubeconfig_path=None if path is None else Path(path).expanduser(),
-            address=_kubeconfig._address_in_kubeconfig(files, str(context).strip()),
-            source=source,
-        )
-        return target
-
-    @classmethod
-    def from_connection(
-        cls,
-        host: str,
-        ca: Optional[str],
-        token_or_cert,
-        environment: str,
-        *,
-        source: str = constants.SOURCE_CONNECTION,
-    ) -> "ClusterTarget":
-        """A target built from credentials someone is already holding — the library path.
-
-        Nothing in the resolution order ever selects this, and that is the boundary that keeps
-        kubementat out of the credential business: the kubeconfig, and nothing kubementat writes,
-        is where a cluster's credentials live. Its limits belong to it: no exec
-        plugins, `kubeconfig_path` is `None` by definition, and `source` is `"connection"`.
-
-        `ca` is either the path of a CA file or its PEM contents. `token_or_cert` is a bearer
-        token, or a `(client certificate, client key)` pair — anything else is a programming
-        error rather than a configuration one, so it is a `ValueError`.
-
-        `source` is the keyword-only extra `from_kubeconfig` already carries, and `from_service_account`
-        needs the same argument for the same reason: the object's shape is identical in both cases
-        and only
-        provenance says which door the credentials came in through.
-        """
-        if not host or not str(host).strip():
-            raise ValueError("from_connection needs a host: an addressless target addresses nothing.")
-        material: Dict[str, Any] = {}
-        if isinstance(token_or_cert, (tuple, list)):
-            if len(token_or_cert) != 2:
-                raise ValueError("client-certificate authentication needs both the certificate and the key.")
-            material["client_certificate"], material["client_key"] = (
-                str(token_or_cert[0]),
-                str(token_or_cert[1]),
-            )
-        elif isinstance(token_or_cert, dict):
-            material.update(token_or_cert)
-        elif isinstance(token_or_cert, str) and token_or_cert.strip():
-            material["token"] = token_or_cert.strip()
-        else:
-            raise ValueError("from_connection needs a token or a client certificate and key.")
-        if "client_certificate" in material and not material.get("client_key"):
-            raise ValueError("a client certificate needs its key: nothing was passed for it.")
-        if not material.get("token") and not material.get("client_certificate"):
-            raise ValueError(
-                "from_connection needs a bearer token or a client certificate and key; "
-                "a certificate authority alone authenticates nothing."
-            )
-        if ca:
-            material["ca"] = str(ca)
-
-        target = cls(
-            environment=environment,
-            context=None,
-            kubeconfig_path=None,
-            address=_kubeconfig._normalise_address(str(host)),
-            source=source,
-        )
-        object.__setattr__(target, _kubeconfig._CONNECTION_FIELD, material)
-        return target
-
-    @classmethod
-    def from_service_account(
-        cls, environment: str, *, mount_root=None
-    ) -> "ClusterTarget":
-        """A target built from the material the kubelet mounts — the resolution order's last layer.
-
-        The token and the authority come from the mounted paths, the host from
-        `KUBERNETES_SERVICE_HOST` (plus `KUBERNETES_SERVICE_PORT`, defaulting to 443), and no
-        kubeconfig is consulted, read, or looked up: `context` and `kubeconfig_path` are both `None`
-        for the reason `from_connection` gives the same fields, and `source` is `"service-account"`
-        rather than
-        `"connection"` because "the pod's own credentials" and "credentials someone handed a library
-        caller" are two different claims to make in a debugging session.
-
-        It belongs **last** in the resolution order and this constructor makes no promise about
-        where it is
-        called from: nothing here looks at the layers above it, and an environment that declares
-        `CLUSTER_KUBE_CONTEXT` uses what it declares. That is what keeps in-cluster from being a
-        silent winner — this object is only ever reached when everything above it stayed quiet.
-
-        Raises
-        ------
-        ServiceAccountNotMountedError
-            If the token or the authority is not mounted, or the API server was never named. The
-            sentence names the path that is not there, because the answer to that failure is "you
-            are not in a pod" and not "the file is broken".
-        """
-        address = _kubeconfig._service_account_address(mount_root)
-        token_path, ca_path = _kubeconfig._service_account_files(mount_root)
-        try:
-            token = token_path.read_text(encoding="utf-8").strip()
-        except OSError as exc:
-            raise ServiceAccountNotMountedError(
-                f"this process is not running inside a cluster: the service-account token at "
-                f"{token_path} could not be read ({exc}).",
-                reason=f"the service-account token at {token_path} could not be read",
-            ) from exc
-        if not token:
-            raise ServiceAccountNotMountedError(
-                f"this process is not running inside a cluster: the service-account token at "
-                f"{token_path} is empty, which authenticates nothing.",
-                reason=f"the service-account token at {token_path} is empty",
-            )
-        # The authority is handed over as a path rather than as its contents: the
-        # object must not be the thing that carries a cluster's private material further than it
-        # needs to, and `client()` reads it from disk when it builds the transport.
-        return cls.from_connection(
-            address, ca_path, token, environment, source=constants.SOURCE_SERVICE_ACCOUNT
-        )
-
-    def client(self):
-        """An `ApiClient` bound to this target, and nothing else about this object does.
-
-        Building it is lazy on purpose: enumerating an environment root should not parse
-        credentials, write temporary files for inline certificate data, or run an exec plugin
-        that no command asked to run. The credentials reach the client here, from the file or the
-        material this target was built from, and the returned client is bound to a private
-        `Configuration` — the library's default one is never touched, so two targets in one
-        process cannot overwrite each other.
-        """
-        # Imported here rather than at module level so that importing this module — all a listing
-        # needs to do — does not pay for the generated client, and so that no resolution path can
-        # reach a credential loader by accident.
-        from kubernetes import client
-        from kubernetes import config as kubernetes_config
-
-        material = getattr(self, _kubeconfig._CONNECTION_FIELD, None)
-        if material is not None:
-            configuration = client.Configuration()
-            kubernetes_config.load_kube_config_from_dict(
-                _connection_document(self.address, material),
-                context=_kubeconfig._CONNECTION_DOCUMENT_CONTEXT,
-                client_configuration=configuration,
-                persist_config=False,
-            )
-            return client.ApiClient(configuration)
-        # `new_client_from_config` is the call that satisfies the rule that no client is built from
-        # the process-wide default, in the only sense that matters:
-        # it loads into a `Configuration` of its own, so the process-wide default is never written,
-        # and it still runs the exec plugins a managed-cluster kubeconfig depends on. Naming
-        # `load_kube_config` here instead would be the same line the guard test exists to forbid,
-        # for no behaviour this object needs.
-        return kubernetes_config.new_client_from_config(
-            config_file=_kubeconfig._library_config_file(self.kubeconfig_path),
-            context=self.context,
-            # persist_config=True is the library's default, and writing back would edit the
-            # operator's kubeconfig while a command was only trying to read it.
-            persist_config=False,
-        )
-
-    def __repr__(self) -> str:
-        """Every credential this target may carry, left out.
-
-        A `ClusterTarget` ends up in log lines and in failure messages, and one of those places
-        is a machine someone is debugging on. The kubeconfig path is a path, not a secret, and
-        the address is what the 1:1 check compares, so both stay; what a connection target was built
-        from does not.
-        """
-        credentials = getattr(self, _kubeconfig._CONNECTION_FIELD, None)
-        redacted = "" if credentials is None else ", credentials='<redacted>'"
-        kubeconfig = "None" if self.kubeconfig_path is None else f"'{self.kubeconfig_path}'"
-        return (
-            f"ClusterTarget(environment={self.environment!r}, context={self.context!r}, "
-            f"kubeconfig_path={kubeconfig}, address={self.address!r}, source={self.source!r}"
-            f"{redacted})"
-        )
-
-
-def _connection_document(address: str, material: Dict[str, Any]) -> Dict[str, Any]:
-    """The kubeconfig document `client()` hands the library for a connection target.
-
-    Built as a document rather than by poking `Configuration` fields because the library already
-    knows how to turn inline CA data and inline client certificates into the files its transport
-    needs, and knows how to clean them up. The shapes it accepts here are deliberately narrow:
-    token, or client certificate and key. There is no exec, no auth-provider, no `cmd-path` —
-    that is from_connection's one honest limit, stated before it is discovered.
-    """
-    cluster: Dict[str, Any] = {"server": address}
-    ca = material.get("ca")
-    if ca:
-        ca_path = Path(ca)
-        if ca_path.is_file():
-            cluster["certificate-authority"] = str(ca_path)
-        else:
-            cluster["certificate-authority-data"] = _as_pem_base64(ca)
-    user: Dict[str, Any] = {}
-    if material.get("token"):
-        user["token"] = material["token"]
-    if material.get("client_certificate"):
-        user["client-certificate-data"] = _as_pem_base64(material["client_certificate"])
-        user["client-key-data"] = _as_pem_base64(material["client_key"])
-    return {
-        "apiVersion": "v1",
-        "kind": "Config",
-        "current-context": _kubeconfig._CONNECTION_DOCUMENT_CONTEXT,
-        "clusters": [{"name": "connection", "cluster": cluster}],
-        "contexts": [
-            {"name": _kubeconfig._CONNECTION_DOCUMENT_CONTEXT, "context": {"cluster": "connection", "user": "connection"}}
-        ],
-        "users": [{"name": "connection", "user": user}],
-    }
-
-
-def _as_pem_base64(value: str) -> str:
-    """`value` as base64, whether it is already encoded or is the PEM itself.
-
-    `from_connection` is a public library door, so a caller may hand over either shape and both
-    arrive at the same document. Anything that is neither is left alone rather than mangled —
-    the library will refuse it in its own words, which is a better sentence than this one could
-    write about someone else's credential format.
-    """
-    if str(value).lstrip().startswith("-----BEGIN"):
-        return base64.b64encode(str(value).encode("utf-8")).decode("ascii")
-    return value
 
 
 def running_cluster_address() -> Optional[str]:
@@ -392,7 +128,7 @@ class EnvironmentResolution:
     """
 
     environment: str
-    target: Optional[ClusterTarget]
+    target: Optional[_target.ClusterTarget]
     reason: Optional[str] = None
     declared_context: Optional[str] = None
 
@@ -424,7 +160,7 @@ class ClusterComparison:
     beside the answer instead of inferring it from the address.
     """
 
-    target: ClusterTarget
+    target: _target.ClusterTarget
     others: Tuple[EnvironmentResolution, ...]
     collisions: Tuple[EnvironmentResolution, ...]
     self_address: Optional[str] = None
@@ -490,7 +226,7 @@ class EnvironmentRegistry:
                 declared_context=context,
             )
         try:
-            target = ClusterTarget.from_kubeconfig(
+            target = _target.ClusterTarget.from_kubeconfig(
                 declared["path_value"] or _kubeconfig.in_tree_kubeconfig(self.platform_config_dir, environment),
                 context,
                 environment,
@@ -501,7 +237,7 @@ class EnvironmentRegistry:
                 environment, None, reason=exc.reason, declared_context=context)
         return EnvironmentResolution(environment, target, declared_context=context)
 
-    def collision_check(self, target: ClusterTarget) -> ClusterComparison:
+    def collision_check(self, target: _target.ClusterTarget) -> ClusterComparison:
         """The *other* environments that address the same cluster `target` does, and the comparison
         that answer came out of.
 
@@ -701,7 +437,7 @@ class Context:
     environment: str
     team: Optional[str]
     config: Optional[Config]
-    target: Optional[ClusterTarget]
+    target: Optional[_target.ClusterTarget]
     resolution_report: Tuple[str, ...] = field(default=(), compare=False)
 
     # `target` is optional for exactly one shape: the `for_configuration` Context below, which is
@@ -739,7 +475,7 @@ class Context:
             )
         return self.team
 
-    def require_target(self, what_is_missing: str) -> ClusterTarget:
+    def require_target(self, what_is_missing: str) -> _target.ClusterTarget:
         """The cluster this command is about, or a refusal that says what it was needed for.
 
         The sibling of `require_team`, and for the same reason: this field is nullable in exactly
@@ -897,7 +633,7 @@ class Context:
             resolved_source = target.source
             resolved_label = label
         else:
-            target = ClusterTarget.from_kubeconfig(
+            target = _target.ClusterTarget.from_kubeconfig(
                 resolved_path, resolved_context, environment, source=resolved_source
             )
         # The root is read off the `Config` rather than re-derived, so a root this method was handed
@@ -924,7 +660,7 @@ class Context:
         )
 
     @classmethod
-    def _service_account_layer(cls, environment) -> Tuple[Optional[ClusterTarget], Optional[str], Optional[str]]:
+    def _service_account_layer(cls, environment) -> Tuple[Optional[_target.ClusterTarget], Optional[str], Optional[str]]:
         """The last layer as `(target, report label, reason it is not available)`.
 
         A refusal here is not an error: it is the fact that this process is not running inside a
@@ -935,7 +671,7 @@ class Context:
         asked to exist.
         """
         try:
-            target = ClusterTarget.from_service_account(environment)
+            target = _target.ClusterTarget.from_service_account(environment)
         except ClusterResolutionError as exc:
             return None, None, exc.reason
         return (
@@ -1155,7 +891,7 @@ class Context:
         )
 
     @staticmethod
-    def _collision(target: ClusterTarget, collisions) -> ClusterIdentityCollisionError:
+    def _collision(target: _target.ClusterTarget, collisions) -> ClusterIdentityCollisionError:
         """The collision refusal: both environments, both addresses, and where to see the whole
         picture.
 
@@ -1176,7 +912,7 @@ class Context:
         )
 
 
-def _report_line(target: ClusterTarget, label: str, others, *,
+def _report_line(target: _target.ClusterTarget, label: str, others, *,
                  self_address: Optional[str] = None) -> str:
     """One of the resolution report's two shapes, and only ever one of them.
 

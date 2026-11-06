@@ -25,8 +25,10 @@ The service-account half sits here for the same reason its callers do: the mount
 `_service_account_address` builds from it. The two concrete paths the loader needs are here for the
 same reason: `_library_config_file` is what a `client()` hands the library when a target carries no
 kubeconfig of its own, and `_CONNECTION_DOCUMENT_CONTEXT` is the name the document `client()` builds
-is read under. Neither is a `ClusterTarget` decision — they are the file and the key the loader asks
-for — which is why `target` and `comparison` read down to them and nothing reads up to them.
+is read under, and the document `client()` builds from the material is the function
+`_connection_document` below. None of it is a `ClusterTarget` decision — they are the file, the key,
+and the shape the loader asks for — which is why `target` and `comparison` read down to them and
+nothing reads up to them.
 
 Four tests patch `SERVICE_ACCOUNT_ROOT` to fake a pod, so a reader in another module reaches it
 through this module rather than through a binding of its own — otherwise the patch lands on a name
@@ -35,6 +37,7 @@ nobody reads and the test is green about a real `/var/run` mount.
 
 from __future__ import annotations
 
+import base64
 import os
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Tuple
@@ -299,3 +302,55 @@ def _library_config_file(kubeconfig_path: Optional[Path]) -> str:
     if kubeconfig_path is not None:
         return str(kubeconfig_path)
     return default_kubeconfig_path()
+
+
+# The document a connection target is loaded from. It sits here, beside the field its material
+# is stashed under, rather than beside `ClusterTarget`: the two names and the key they are read
+# under are one decision, and splitting them across the two files puts an edge in each direction
+# (census §6). `ClusterTarget.client()` reaches this across that edge.
+def _connection_document(address: str, material: Dict[str, Any]) -> Dict[str, Any]:
+    """The kubeconfig document `client()` hands the library for a connection target.
+
+    Built as a document rather than by poking `Configuration` fields because the library already
+    knows how to turn inline CA data and inline client certificates into the files its transport
+    needs, and knows how to clean them up. The shapes it accepts here are deliberately narrow:
+    token, or client certificate and key. There is no exec, no auth-provider, no `cmd-path` —
+    that is from_connection's one honest limit, stated before it is discovered.
+    """
+    cluster: Dict[str, Any] = {"server": address}
+    ca = material.get("ca")
+    if ca:
+        ca_path = Path(ca)
+        if ca_path.is_file():
+            cluster["certificate-authority"] = str(ca_path)
+        else:
+            cluster["certificate-authority-data"] = _as_pem_base64(ca)
+    user: Dict[str, Any] = {}
+    if material.get("token"):
+        user["token"] = material["token"]
+    if material.get("client_certificate"):
+        user["client-certificate-data"] = _as_pem_base64(material["client_certificate"])
+        user["client-key-data"] = _as_pem_base64(material["client_key"])
+    return {
+        "apiVersion": "v1",
+        "kind": "Config",
+        "current-context": _CONNECTION_DOCUMENT_CONTEXT,
+        "clusters": [{"name": "connection", "cluster": cluster}],
+        "contexts": [
+            {"name": _CONNECTION_DOCUMENT_CONTEXT, "context": {"cluster": "connection", "user": "connection"}}
+        ],
+        "users": [{"name": "connection", "user": user}],
+    }
+
+
+def _as_pem_base64(value: str) -> str:
+    """`value` as base64, whether it is already encoded or is the PEM itself.
+
+    `from_connection` is a public library door, so a caller may hand over either shape and both
+    arrive at the same document. Anything that is neither is left alone rather than mangled —
+    the library will refuse it in its own words, which is a better sentence than this one could
+    write about someone else's credential format.
+    """
+    if str(value).lstrip().startswith("-----BEGIN"):
+        return base64.b64encode(str(value).encode("utf-8")).decode("ascii")
+    return value

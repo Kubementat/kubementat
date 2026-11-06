@@ -164,7 +164,7 @@ def test_a_locked_in_tree_kubeconfig_says_it_is_ciphertext_and_not_broken(fixtur
     path = fixture_repo.platform_config / fixture_repo.environment / "kubeconfig.encrypted.yaml"
     path.write_bytes(b"\x83\x00\x01binary-ciphertext-not-utf8")
 
-    from kubementat.cluster import ClusterTarget
+    from kubementat.core.identity.target import ClusterTarget
     from kubementat.errors import ClusterFileUnreadableError
     with pytest.raises(ClusterFileUnreadableError) as refused:
         ClusterTarget.from_kubeconfig(str(path), CONTEXT, "dev")

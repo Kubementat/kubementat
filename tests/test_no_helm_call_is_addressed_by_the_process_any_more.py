@@ -352,7 +352,7 @@ def test_helm_target_args_refuses_a_target_that_cannot_be_addressed():
     nothing to carry. Saying "and then we read `~/.kube/config`" would be the report's failure arriving
     from the other side: a release applied to whichever cluster the running user last looked at.
     """
-    from kubementat.cluster import ClusterTarget
+    from kubementat.core.identity.target import ClusterTarget
     from kubementat.kubernetes_utils import helm_target_args
 
     with pytest.raises(Exception) as raised:
@@ -377,7 +377,7 @@ def test_the_release_read_is_the_same_read_whether_it_is_addressed_or_not():
     call site that reached that answer with a narrower read would uninstall less than the residue
     assert then claims.
     """
-    from kubementat.cluster import ClusterTarget
+    from kubementat.core.identity.target import ClusterTarget
     from kubementat.helm_utils import HELM_LIST_RELEASES_ARGV, helm_list_releases_argv
 
     addressed_argv = helm_list_releases_argv(

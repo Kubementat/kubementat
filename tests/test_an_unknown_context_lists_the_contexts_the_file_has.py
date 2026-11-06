@@ -13,10 +13,8 @@ file that is not a kubeconfig at all.
 
 import pytest
 
-from kubementat.cluster import (
-    Context,
-    ClusterTarget,
-)
+from kubementat.cluster import Context
+from kubementat.core.identity.target import ClusterTarget
 from kubementat.errors import (
     ClusterContextNotFoundError,
     ClusterFileUnreadableError,

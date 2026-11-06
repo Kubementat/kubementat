@@ -53,8 +53,9 @@ from pathlib import Path
 import pytest
 
 from kubementat import config_init, config_validate
-from kubementat.cluster import ClusterTarget, _static_declaration
+from kubementat.cluster import _static_declaration
 from kubementat.core.identity.kubeconfig import _read_kubeconfig
+from kubementat.core.identity.target import ClusterTarget
 from kubementat.errors import ClusterFileUnreadableError
 from kubementat.core.config.config import Config
 from kubementat.core.config.reads import LockedConfigFileError, read_decrypted
@@ -431,9 +432,10 @@ EXEMPT = {
     ("kubementat/config_validate.py", "_manifest_findings"):
         "`kubementat.yaml`, which is not encrypted material — a seam wrapped around it would promise "
         "coverage it does not need",
-    ("kubementat/cluster.py", "from_service_account"):
+    ("kubementat/core/identity/target.py", "from_service_account"):
         "the token the kubelet mounted for this pod, which is a credential the process is running "
-        "with and not a configuration file it was handed",
+        "with and not a configuration file it was handed — it moved with `ClusterTarget`, so the "
+        "read is here and not in `cluster.py`",
     ("kubementat/config_init.py", "_apply_layer_plan"):
         "the bytes-compare before a whole-document write; it reads a file it is about to write, not "
         "a file it is about to answer, and it never decodes (census R7)",

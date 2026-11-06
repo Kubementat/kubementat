@@ -11,7 +11,7 @@ assertion a reader can trust is "the token is not in there", not "somebody left 
 
 """
 
-from kubementat.cluster import ClusterTarget
+from kubementat.core.identity.target import ClusterTarget
 from cluster_fixture import DEV_SERVER, checkout, redirect_checkout, write_kubeconfig
 
 TOKEN = "the-token-that-must-not-be-printed"

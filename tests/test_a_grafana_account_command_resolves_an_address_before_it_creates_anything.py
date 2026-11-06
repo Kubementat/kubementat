@@ -175,7 +175,7 @@ def context_of(config):
     """
     from kubementat.cluster import Context
     from cluster_fixture import UNADDRESSED_SERVER
-    from kubementat.cluster import ClusterTarget
+    from kubementat.core.identity.target import ClusterTarget
     from kubementat.core.constants import SOURCE_CONNECTION
 
     return Context(environment=config.environment, team=config.team, config=config,

@@ -179,7 +179,7 @@ def _fixture_target():
     `tmp_path`. The identity the record compares is the context, and the address is a value
     nothing in these tests contacts.
     """
-    from kubementat.cluster import ClusterTarget
+    from kubementat.core.identity.target import ClusterTarget
     from kubementat.core.constants import STATIC_SOURCE_PREFIX
 
     return ClusterTarget(environment=FIXTURE_ENVIRONMENT, context=FIXTURE_KUBE_CONTEXT,
@@ -632,7 +632,7 @@ def recorded_api(monkeypatch):
     from kubernetes.client import (V1EndpointAddress, V1EndpointSubset, V1Endpoints, V1ObjectMeta,
                                    V1ServiceAccount)
 
-    from kubementat.cluster import ClusterTarget
+    from kubementat.core.identity.target import ClusterTarget
 
     recorder = ApiRecorder()
     recorder.answer("read_namespaced_service_account",

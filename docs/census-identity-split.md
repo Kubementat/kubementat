@@ -66,11 +66,14 @@ Members: `environment:282`, `context:283`, `kubeconfig_path:284`, `address:285`,
 The plan also assigns `_normalise_address:148-156` here; §5 shows that exact assignment is what makes
 the split circular, so this census puts it in `kubeconfig.py` instead and says why.
 
-### `kubeconfig.py` — 21 names, 310 LOC
+### `kubeconfig.py` — 23 names, 354 LOC
 
-This row was first written as 17 names and 255 LOC, which contradicted the same census's own
-home assignments for the service-account and library-config half; the split proved the larger number.
-The four names the table had left out are marked below.
+This row was first written as 17 names and 255 LOC, then as 21 and 310. Both times it contradicted the
+same census's own home assignments: the table omitted `_service_account_files`, `_service_account_address`,
+`_library_config_file` and `_CONNECTION_DOCUMENT_CONTEXT` (the first split proved those four), and then
+omitted `_connection_document` and `_as_pem_base64`, which this census's own "what cannot move" section
+puts with the connection field. The tree's number is the third and it holds: 23 names. If a table row and
+a home assignment disagree, the home assignment is the one that came from reading callers.
 
 | name | kind | span | LOC | read by / reads |
 |---|---|---|---|---|
@@ -95,6 +98,8 @@ The four names the table had left out are marked below.
 | `_service_account_files` | module function | 548-557 | 10 | `ClusterTarget.from_service_account:379`, `_service_account_address:561` |
 | `_service_account_address` | module function | 560-593 | 34 | `ClusterTarget.from_service_account:222,415`, `running_cluster_address:609` |
 | `_library_config_file` | module function | 625-634 | 10 | `ClusterTarget.client:278`; reads `default_kubeconfig_path` |
+| `_connection_document` | module function | 500-532 | 33 | `ClusterTarget.from_connection:264,266`; sits with the connection field, not beside the class |
+| `_as_pem_base64` | module function | 535-545 | 11 | `_connection_document` only |
 
 The two halves of this list are not the same subject. Eleven of the 21 are kubeconfig-file reading
 (`_kubeconfig_files`, `_read_kubeconfig`, `_address_in_kubeconfig`, `_files_label`, `_library_config_file`,

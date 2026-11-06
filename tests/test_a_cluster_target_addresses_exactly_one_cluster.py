@@ -24,7 +24,7 @@ import os
 
 import pytest
 
-from kubementat.cluster import ClusterTarget
+from kubementat.core.identity.target import ClusterTarget
 from kubementat.core.constants import (
     SOURCE_CONNECTION,
     SOURCE_ENV,

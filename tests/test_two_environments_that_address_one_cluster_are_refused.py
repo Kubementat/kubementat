@@ -30,8 +30,8 @@ from cli.commands import environments
 from kubementat.cluster import (
     Context,
     EnvironmentRegistry,
-    ClusterTarget,
 )
+from kubementat.core.identity.target import ClusterTarget
 from kubementat.errors import (
     ClusterIdentityCollisionError,
     ClusterResolutionError,

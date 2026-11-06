@@ -1,5 +1,30 @@
 # Unreleased
 
+- **`ClusterTarget` left `cluster.py` and became `core/identity/target.py`.** The class moves whole —
+  223 lines, all 10 members and the decorators — and the only lines that differ from its source at the
+  previous commit are the 16 pairs that had to gain a qualifier: `SOURCE_FLAG` becomes
+  `constants.SOURCE_FLAG`, `_kubeconfig_files(...)` becomes `_kubeconfig._kubeconfig_files(...)`. No
+  expression changed meaning; normalized for the added qualifiers, the two sources are line for line the
+  same, and that is the honest way to say "verbatim" when a body is allowed to reach across modules.
+  `cluster.py` falls from 1 217 lines to 953, `kubeconfig.py` grows from 301 to 356, and
+  `kubementat.cluster.ClusterTarget` raises `AttributeError`.
+  **One decision inside the move is worth knowing.** `cluster.py` still reads the class at 11 places, and
+  importing the *name* there would have kept `cluster.ClusterTarget` resolvable — a second binding of a
+  frozen class whose patches a test puts on the class object. So `cluster.py` binds the module and reads
+  `_target.ClusterTarget`, and `cluster._target.ClusterTarget is target.ClusterTarget` is `True`, which is
+  what keeps the three `setattr(ClusterTarget, "client", …)` sites load-bearing: removing one fails 14 of
+  29 tests across three files. The symptom that would have appeared otherwise — patching a copy and
+  watching the real transport get built anyway — was reproduced in a scratch file and then removed.
+  **Two things this ticket caught in the census, on top of the four P2-3a found:**
+  `_connection_document` and `_as_pem_base64` also live in `kubeconfig.py` (their own home assignment says
+  they sit with the connection field, not beside the class), so the row is 23 names and not 21; and one
+  coupling outside both the 21 import bindings and the 13 test couplings — the
+  `EXEMPT[("kubementat/cluster.py", "from_service_account")]` key in
+  `test_a_locked_configuration_file_refuses_by_name_and_not_by_codec.py:434` — is keyed by file and
+  function and had to follow the function, not the file.
+  21 import repoints: `kubernetes_utils.py:11`, `helm_utils.py:12`, and 19 test files, three of which are
+  the patch sites above. Suite unchanged: **1775 passed, 1 skipped**, cycles none, layer violations none.
+
 - **The kubeconfig half of the cluster module became the leaf of `core/identity/`, and the leaf turned
   out to be four names bigger than the map said.** `core/identity/kubeconfig.py` is 301 lines and holds
   21 module-level names — 11 constants and 10 functions, each byte-identical to its source at the

@@ -35,7 +35,7 @@ from cluster_parity import (ClusterOperation, ParityError, cluster_identity, clu
                             with_generated_run_name_normalized)
 from conftest import ApiRecorder, RecordedCall
 
-from kubementat.cluster import ClusterTarget
+from kubementat.core.identity.target import ClusterTarget
 from kubementat.kubernetes_utils import KubernetesUtils
 
 NAMESPACE = "team-a"

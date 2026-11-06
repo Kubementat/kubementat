@@ -22,10 +22,10 @@ import pytest
 
 from kubementat.core.identity import kubeconfig as kubeconfig_module
 from kubementat.cluster import (
-    ClusterTarget,
     Context,
     EnvironmentRegistry,
 )
+from kubementat.core.identity.target import ClusterTarget
 from kubementat.core.constants import (
     SOURCE_FLAG,
     SOURCE_SERVICE_ACCOUNT,

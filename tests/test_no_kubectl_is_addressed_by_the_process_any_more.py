@@ -234,7 +234,7 @@ def test_kubectl_target_args_refuses_a_target_that_cannot_be_addressed():
     deleted read used to make, arriving from the other side: a `port-forward` against a cluster the
     command was never pointed at.
     """
-    from kubementat.cluster import ClusterTarget
+    from kubementat.core.identity.target import ClusterTarget
     from kubementat.kubernetes_utils import kubectl_target_args
 
     with pytest.raises(Exception) as raised:

@@ -8,7 +8,8 @@ from typing import Optional
 
 from kubernetes import client, dynamic
 
-from kubementat.cluster import ClusterTarget, Context
+from kubementat.cluster import Context
+from kubementat.core.identity.target import ClusterTarget
 from kubementat.errors import (
     ClusterNotConfiguredError,
     NamespaceNotFoundError,

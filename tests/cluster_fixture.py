@@ -23,7 +23,7 @@ from pathlib import Path
 
 import yaml
 
-from kubementat.cluster import ClusterTarget, Context
+from kubementat.cluster import Context
 from kubementat.core.config.config import Config
 from kubementat.core.constants import SOURCE_CONNECTION, STATIC_SOURCE_PREFIX
 from kubementat.core.identity import kubeconfig as _kubeconfig_module
@@ -31,6 +31,7 @@ from kubementat.core.identity.kubeconfig import (
     KUBERNETES_SERVICE_HOST_ENV,
     KUBERNETES_SERVICE_PORT_ENV,
 )
+from kubementat.core.identity.target import ClusterTarget
 
 # The credentials a fixture kubeconfig carries. They are never real, and one test's whole job is
 # to prove none of these strings ever reaches a `repr`.
