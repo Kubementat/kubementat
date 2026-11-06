@@ -15,7 +15,7 @@ from cli.commands import environments
 from cli.commands import users
 from cli.commands import kubernetes
 from cli.commands import config
-from kubementat.version import get_version
+from kubementat.core.version import get_version
 
 
 # The library configures nothing when it is imported, so the CLI configures logging for

@@ -1,6 +1,6 @@
 """The ingress release and the image mirror have to agree, because each is the other's guarantee.
 
-`src/kubementat/assets/values/helmfile.yaml.gotmpl` decides which chart the routing group installs,
+`src/kubementat/core/assets/values/helmfile.yaml.gotmpl` decides which chart the routing group installs,
 and `templates/environment/mirrored_docker_images.json.template` decides which images reach the
 registry the cluster pulls from. Left unconnected, the two drift the way everything unlinked
 drifts: the chart is bumped, the mirrored tag is not, and the platform's answer to "does this work

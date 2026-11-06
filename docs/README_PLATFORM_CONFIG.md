@@ -145,7 +145,7 @@ in-cluster resolution, and it is what makes the answer verifiable — "resolved 
 ### Routing
 
 Four keys decide routing, all four answered by the environment's `static.json` (whose shipped
-defaults are `kubementat/assets/templates/environment/static.json.template`, inside the installed
+defaults are `kubementat/core/assets/templates/environment/static.json.template`, inside the installed
 `kmt`). Three of them
 (`TRAEFIK_DEPLOYMENT_NAMESPACE`, `TRAEFIK_INGRESS_CLASS`, `TRAEFIK_SERVICE_SELECTOR`) belong to the
 component and are named by deriving the component's name into the key (`component_config_key`,
@@ -154,7 +154,7 @@ an operator can lean on.
 
 | key | default | who reads it | what it decides |
 |---|---|---|---|
-| `TRAEFIK_DEPLOYMENT_NAMESPACE` | `traefik` (`constants.DEFAULT_NAMESPACES`, `constants.py:70`) | `kubementat/assets/values/helmfile.yaml.gotmpl:341` reads it as `env "TRAEFIK_DEPLOYMENT_NAMESPACE" \| default "traefik"`, exported there by `HelmUtils._export_component_namespaces` (`src/kubementat/helm_utils.py:393-397`); `Config.component_namespace("traefik")` reads the same key on the Python side, and it is one of the namespaces `kmt uninstall` deletes. | which namespace the controller release lands in — and, because "ours" is decided by reading the cluster, **whether kubementat recognises a Traefik as its own** (`traefik_presence.py`'s classification is a Traefik chart release *in this namespace*, nothing else). Rename it and a release the cluster still carries is reported as `foreign`. |
+| `TRAEFIK_DEPLOYMENT_NAMESPACE` | `traefik` (`constants.DEFAULT_NAMESPACES`, `constants.py:70`) | `kubementat/core/assets/values/helmfile.yaml.gotmpl:341` reads it as `env "TRAEFIK_DEPLOYMENT_NAMESPACE" \| default "traefik"`, exported there by `HelmUtils._export_component_namespaces` (`src/kubementat/helm_utils.py:393-397`); `Config.component_namespace("traefik")` reads the same key on the Python side, and it is one of the namespaces `kmt uninstall` deletes. | which namespace the controller release lands in — and, because "ours" is decided by reading the cluster, **whether kubementat recognises a Traefik as its own** (`traefik_presence.py`'s classification is a Traefik chart release *in this namespace*, nothing else). Rename it and a release the cluster still carries is reported as `foreign`. |
 | `TRAEFIK_INGRESS_CLASS` | `traefik` (`constants.DEFAULT_STATIC_ANSWERS`, which `routing.py`'s fallback table reads from) | `Config.component_ingress_class` (`config.py`) is the one read path, and the same answer reaches helmfile from `helm_utils.export_ingress_class` — the traefik release's inline `ingressClass.name` entry (`helmfile.yaml.gotmpl`, the block labelled `component_name: traefik`) reads `env "TRAEFIK_INGRESS_CLASS"` and names no class of its own. Also: the `ClusterIssuer` HTTP-01 solvers (`routing.py:280` → `routing.py:496`), the "nothing serves that class" warning (`routing.py:528-565`), and `src/kubementat/ingress_generator.py`, which reads it through `Config` when it writes an `Ingress` for `kmt create-ingress` — where the script that used to `jq` this file out of a path built from its own location used to answer it | the `IngressClass` the controller creates and the class every solver and every generated `Ingress` names. It is a config key and not a literal because a cluster that already runs a controller has to be able to rename this one without editing a template. Note what it does **not** do: it is not the cluster default. `ingressClass.isDefaultClass: true` is what makes an Ingress that names nothing routable, and that lives in the values file below. |
 | `TRAEFIK_SERVICE_SELECTOR` | `app.kubernetes.io/name=traefik,app.kubernetes.io/instance=traefik` (`constants.DEFAULT_SERVICE_SELECTORS`, `constants.py:87`) | `Config.component_service_selector` (`config.py:396-403`) — but no `src/` call site names `traefik` today: the selector-based pod lookups resolve `grafana`, `tekton`, `polaris` and `openbao` only (`automation.py:2349,2375,2398,2421`). | which pod a selector-based lookup would find. It is declared so that a rename is answered in `static.json` and not in code, exactly like the other components; **today it has no reader.** The pair only matches while the release is named `traefik`, which is why it is a key and not something built from the component name. |
 | `CLUSTER_MANAGER_EMAIL` | none, and nothing writes one. No shipped default answers it and no verb invents a value for it, so a fresh tree has the key absent | `routing.py:563-571`, when both `ClusterIssuer`s are applied | the ACME account contact. `kmt routing install` raises with this file's path when the value is missing or still a `REPLACEME_*` placeholder, because cert-manager registers the account with it and Let's Encrypt rejects a malformed contact — an issuance failure that stays invisible until a certificate expires. Set it before the first `routing install` with `kmt config set <dir> <env> CLUSTER_MANAGER_EMAIL=...`. |
@@ -181,14 +181,14 @@ reads and a report that says which Traefik the cluster is running, whose it is, 
 routing install` or not at all. See the routing entry under `# Unreleased` in `CHANGELOG.md` for the
 decision rules, and `docs/plans/traefik-integration.md` for the design they come from.
 
-## `kubementat/assets/values/traefik/values.yaml`
+## `kubementat/core/assets/values/traefik/values.yaml`
 
 `config init` writes nothing for it: since T-18 it is shipped data, applied from inside the package, and **the configuration holds the operator's overrides** rather than a copy of the product's defaults.
 Templates are laid out by subdirectory for a shape the old copy step depended on; that step is deleted, and
 the layout stays because it is what the directory of shipped values looks like, not because a verb reads it
 one subdirectory at a time. The subdirectory's name is what the release block's values path is relative to — the routing release block
 (`helmfile.yaml.gotmpl`, the block whose `component_name: traefik`) reads `traefik/values.yaml` from
-`src/kubementat/assets/values/`, which is helmfile's working directory. It is plain YAML shipped by the
+`src/kubementat/core/assets/values/`, which is helmfile's working directory. It is plain YAML shipped by the
 product: there is no git-crypt filter in this repository any more, so nothing here is encrypted and the
 operator's overrides live encrypted in the configuration directory instead.
 

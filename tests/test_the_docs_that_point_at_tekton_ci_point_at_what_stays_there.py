@@ -55,7 +55,7 @@ HISTORICAL = (
 # Spellings that are not a direction anywhere: the examples tree, the output directory, and the
 # correct post-move spelling of the asset root.
 EXCUSED = ("examples/tekton_ci", "tekton_ci/pipeline-runs", "assets/tekton_ci",
-           "assets/templates", "src/kubementat/assets")
+           "assets/templates", "src/kubementat/core/assets")
 
 MOVED_ASSET_SUBDIRECTORY = re.compile(r"tekton_ci/(?:tasks|pipelines|triggers)(?:[/{,]|\b)")
 
@@ -66,7 +66,7 @@ MOVED_TEMPLATE_ROOT = re.compile(r"(?<![\w/.])templates/")
 
 # A command that names the bare directory without a slash after it, which is the other way the
 # sentence fails: `find templates -type f | wc -l` does not print a stale path, it prints an error
-# nobody reads because the `wc` swallows it. `find src/kubementat/assets/templates ...` does not
+# nobody reads because the `wc` swallows it. `find src/kubementat/core/assets/templates ...` does not
 # match, because the path that follows the command is what the check is about.
 COMMAND_NAMING_A_MOVED_ROOT = re.compile(r"\b(?:cd|cat|cp|find|ls|rsync)\s+(?:-\S+\s+)*templates\b")
 

@@ -7,9 +7,9 @@ question a wheel cannot answer and which the product no longer asks at all. A gu
 template out of the checkout while the code reads it out of the package is a guard that passes by
 accident the moment the two trees disagree.
 
-So there is one way in, and it is the product's way: `kubementat.assets`, the same module
+So there is one way in, and it is the product's way: `kubementat.core.assets`, the same module
 `Config.templates_dir` calls. The asset root is whatever the installed `kubementat` package says
-it is — here, `src/kubementat/assets`, which is this checkout's own tree, so the bytes a guard
+it is — here, `src/kubementat/core/assets`, which is this checkout's own tree, so the bytes a guard
 reads are the bytes the writer opens.
 
 The shape of what is exposed:
@@ -20,7 +20,7 @@ The shape of what is exposed:
 * `values_path(...)` — the packaged helmfile and the default values it names, which are
   data and not templates and therefore have no copy anywhere;
 * `tekton_ci_path(...)` — the product's Tekton manifests and generator templates, spelled the way
-  `Config` spells them under `src/kubementat/assets/tekton_ci/`;
+  `Config` spells them under `src/kubementat/core/assets/tekton_ci/`;
 * `ASSET_ROOT` — the same thing as a name, for the module-level constants the guards were already
   writing.
 
@@ -34,8 +34,8 @@ asserting that a half-written manifest lives in site-packages.
 
 from pathlib import Path
 
-from kubementat.assets import asset_path as _resolver
-from kubementat.assets import assets_root
+from kubementat.core.assets import asset_path as _resolver
+from kubementat.core.assets import assets_root
 
 __all__ = ["ASSET_ROOT", "asset_path", "template_path", "values_path", "tekton_ci_path",
            "relocate_asset_root"]

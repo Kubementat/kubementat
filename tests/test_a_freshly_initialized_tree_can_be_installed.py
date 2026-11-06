@@ -29,7 +29,7 @@ from bootstrap_tools import EMAIL, tools  # noqa: F401  - the fixture is made av
 from click.testing import CliRunner
 
 from cli.commands import config as config_command
-from kubementat import constants
+from kubementat.core import constants
 from kubementat.cluster import Context
 from kubementat.helm_utils import HelmUtils
 

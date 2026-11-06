@@ -25,7 +25,7 @@ not warn -- it is an apply that stops before installing anything, which is why t
 check this file's keys against the recorded chart rather than against each other.
 
 The placement rule is the other half of the file, and it is a shipped path and not a
-copy: the values file sits under `src/kubementat/assets/values/traefik/` beside the manifest that
+copy: the values file sits under `src/kubementat/core/assets/values/traefik/` beside the manifest that
 names it, because that is the directory helmfile resolves a `values:` reference against. The wrong
 folder or a leftover `.template` suffix still gives the same silent failure -- a release that
 installs the chart's defaults while the operator believes their values are in use -- but it is now

@@ -34,7 +34,7 @@ from click.testing import CliRunner
 
 from cli.commands import config as config_command
 from kubementat import config as config_lib
-from kubementat import constants
+from kubementat.core import constants
 from kubementat.config import check_configuration_stamp
 from kubementat.config_init import init_configuration
 from kubementat.config_validate import validate_tree

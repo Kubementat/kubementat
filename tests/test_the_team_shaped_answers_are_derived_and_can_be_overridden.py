@@ -377,7 +377,7 @@ def test_the_placeholder_still_reaches_a_tree_from_the_templates():
     If `REPLACEME_TEAM` ever leaves the templates, this test is the one that says so — and the reader
     assertion would then pass for no reason anyone should trust.
     """
-    templates = sorted(Path(kubementat.__file__).resolve().parent.glob(f"assets/templates/**/*"))
+    templates = sorted(Path(kubementat.__file__).resolve().parent.glob(f"core/assets/templates/**/*"))
     with_placeholder = [t for t in templates if t.is_file() and PLACEHOLDER in t.read_text()]
     assert with_placeholder, "the templates this rule replaces carry no placeholder any more"
     assert any(t.name.endswith("static.encrypted.json.template") for t in with_placeholder)

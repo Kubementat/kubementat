@@ -26,7 +26,8 @@ from pathlib import Path
 
 import pytest
 
-from kubementat import constants, errors, shell
+from kubementat import errors, shell
+from kubementat.core import constants
 from kubementat.automation import Automation
 from kubementat.config import component_config_key
 from cluster_fixture import TARGET_DEV, configuration_only_context

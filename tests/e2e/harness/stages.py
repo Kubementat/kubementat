@@ -973,7 +973,8 @@ class LaneRunner:
     # guest answers its own question and this stage only compares what it says.
     PINNED_TOOL_PROBE = """
 import json
-from kubementat import constants, shell
+from kubementat import shell
+from kubementat.core import constants
 from kubementat.automation import BINARY_VERSION_ARGV, first_binary_version
 
 seen = {}
@@ -1617,7 +1618,7 @@ print(json.dumps({"declared": dict(constants.PINNED_BINARY_VERSIONS), "observed"
         # so the row was vacuous whenever it passed and reported "declare nothing" whenever the release
         # list it compared against came from somewhere else. The manifest lives in the package now, which
         # is the one place both the apply and this assert can point at without disagreeing.
-        path = posixpath.join(config.GUEST_TREE, "src", "kubementat", "assets", "values",
+        path = posixpath.join(config.GUEST_TREE, "src", "kubementat", "core", "assets", "values",
                               "helmfile.yaml.gotmpl")
         helmfile = self.guest.run(command="cat %s" % shlex.quote(path), timeout=30)
         releases = _releases_in_groups(helmfile.stdout, groups)

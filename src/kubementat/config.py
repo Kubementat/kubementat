@@ -9,8 +9,9 @@ from typing import Optional
 import click
 import yaml
 
-from kubementat import config_derived, constants
-from kubementat.assets import asset_path
+from kubementat import config_derived
+from kubementat.core import constants
+from kubementat.core.assets import asset_path
 from kubementat.config_reads import read_decrypted
 from kubementat.errors import TeamNotSuppliedError
 
@@ -697,7 +698,7 @@ class Config:
         # Pipeline runs are **output**: a run is written by whoever generated it and read back by
         # `kmt tekton run`, so it lives under the root it was generated under and never ships inside
         # the package. Do not "correct" this to `asset_path`: the asset side of `tekton_ci/` moved
-        # under `src/kubementat/assets/` and this line is the half that stayed.
+        # under `src/kubementat/core/assets/` and this line is the half that stayed.
         self.tekton_global_pipeline_run_dir = Path(f"{self.kubementat_main_dir}/tekton_ci/pipeline-runs").resolve()
         if tekton_global_pipeline_run_dir is not None:
             self.tekton_global_pipeline_run_dir = Path(tekton_global_pipeline_run_dir).resolve()
@@ -1086,7 +1087,7 @@ class Config:
         The namespace `component` is deployed into.
 
         Reads `<COMPONENT>_DEPLOYMENT_NAMESPACE` from the environment-level `static.json` and
-        falls back to `kubementat.constants.DEFAULT_NAMESPACES`, warning once per instance
+        falls back to `kubementat.core.constants.DEFAULT_NAMESPACES`, warning once per instance
         when it does. Earlier the answer lived in the code (`automation.py` had four
         `namespace = '...'` lines, `uninstall_kubementat.sh` had fifteen), so renaming one
         namespace meant finding every copy of it — which is exactly what the
@@ -1317,7 +1318,7 @@ class Config:
         if default is None:
             raise KeyError(
                 f"No default is defined for kubementat component '{component}' under {key}. Add it to"
-                f" kubementat.constants.DEFAULT_STATIC_ANSWERS, which is the table this read's"
+                f" kubementat.core.constants.DEFAULT_STATIC_ANSWERS, which is the table this read's"
                 f" resolution walk consults last, or answer it in the environment's static.json"
                 f" with kmt config set. Writing a value here instead would put a second owner on"
                 f" an answer that has one.")
@@ -1339,7 +1340,7 @@ class Config:
         except KeyError:
             raise KeyError(
                 f"No default is defined for kubementat component '{component}'. Add it to"
-                f" kubementat.constants, and answer {component_config_key(component, suffix)} in"
+                f" kubementat.core.constants, and answer {component_config_key(component, suffix)} in"
                 f" this environment's own static.json (which is what this read answers from)."
             )
 

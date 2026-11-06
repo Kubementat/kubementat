@@ -25,7 +25,8 @@ from click.testing import CliRunner
 
 from cluster_fixture import stamp_tree, write_environment
 from cli.commands import routing
-from kubementat import config, constants
+from kubementat import config
+from kubementat.core import constants
 
 # What the running build is told to be, for the tests that must not depend on whatever version this
 # checkout happens to report. `constants` is what the stamp is written from, so pinning it here means

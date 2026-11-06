@@ -7,9 +7,9 @@ sit at the repository root, and every reader reached it by walking *up* out of
 up to, so the same code answered `KUBEMENTAT_HOME` or failed. Resolving from inside the package
 answers all three installs with one line:
 
-* a **wheel** — the data unpacks into `site-packages/kubementat/assets/templates/`, and
+* a **wheel** — the data unpacks into `site-packages/kubementat/core/assets/templates/`, and
   `importlib.resources.files()` names it;
-* a **checkout** — `src/kubementat/assets/templates/` is a real directory there too, so the
+* a **checkout** — `src/kubementat/core/assets/templates/` is a real directory there too, so the
   bytes are the ones the developer is editing;
 * a **read-only install** — nothing is ever written under the asset root, so a directory the
   interpreter cannot write to is still readable.

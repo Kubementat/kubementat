@@ -863,7 +863,7 @@ class FixtureRepo:
         A test that wants an unstamped tree calls neither; one that wants a tree that disagrees
         passes the values it is checking. Both shapes are answers and neither is a default.
         """
-        from kubementat import constants
+        from kubementat.core import constants
         path = self.platform_config / constants.CONFIG_MANIFEST_FILENAME
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(

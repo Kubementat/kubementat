@@ -55,7 +55,8 @@ from pathlib import Path
 from typing import Any
 
 
-from kubementat import config_derived, config_init, config_reads_index, constants
+from kubementat import config_derived, config_init, config_reads_index
+from kubementat.core import constants
 from kubementat.config import Config, _NOTHING_DECLARED, component_config_key
 
 # The three tags `config show` prints. They name the *layer that answers*, which is why a key that

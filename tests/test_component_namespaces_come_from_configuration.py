@@ -25,7 +25,8 @@ from pathlib import Path
 import pytest
 
 from cluster_fixture import configuration_only_context
-from kubementat import constants, helm_utils
+from kubementat import helm_utils
+from kubementat.core import constants
 from kubementat.automation import Automation
 from kubementat.config import Config, component_config_key
 from kubementat.helm_utils import HelmUtils

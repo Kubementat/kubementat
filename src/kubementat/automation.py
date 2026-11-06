@@ -11,7 +11,7 @@ from kubernetes import client
 import click
 from kubementat import shell
 from kubementat import errors
-from kubementat import constants
+from kubementat.core import constants
 from kubementat import config_bootstrap, config_keys
 from kubementat.config import Config
 from kubementat.kubernetes_utils import (DEPLOYMENT_LABEL, MANAGED_BY_KUBEMENTAT, MANAGED_BY_LABEL,
@@ -1146,7 +1146,7 @@ class Automation:
     # down once, in one place:
     #
     # * namespaces come from `Config.component_namespace` over the components that
-    #   `kubementat.constants` declares, plus every team the environment configures;
+    #   `kubementat.core.constants` declares, plus every team the environment configures;
     # * what is actually installed comes from the cluster (`helm list`, `kubectl get crd`), so
     #   a component or a CRD nobody remembered is still swept;
     # * every program kubementat starts goes through `kubementat.shell.run` as an argv list,
@@ -1465,7 +1465,7 @@ class Automation:
           `dev1` and `smoke` were two names somebody wrote down, not the set of teams, and a
           third team's namespaces were left on the cluster by a script that carried its own
           TODO about exactly that.
-        * one namespace per component `kubementat.constants` declares, each read through
+        * one namespace per component `kubementat.core.constants` declares, each read through
           `Config.component_namespace` so a renamed namespace is honoured. `uninstall_kubementat.sh`
           read fourteen of them and missed `cert-manager`, whose release then outlived it, and
           `nginx-ingress`, which is not a component at all any more and is therefore swept by

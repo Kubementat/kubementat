@@ -1,5 +1,25 @@
 # Unreleased
 
+- **The declared values, the version and the shipped data moved under `kubementat.core`.** This is
+  the first of Phase 2's pure moves, so it can honestly say *nothing about kubementat changed*; what
+  changed is the dotted path you import from. `kubementat.constants` is `kubementat.core.constants`,
+  `kubementat.version` is `kubementat.core.version`, `kubementat.assets` is `kubementat.core.assets`.
+  Nothing is left at the old paths to catch you — no shim, no re-export, no alias — so a stale import
+  fails once, loudly, instead of quietly resolving against a copy that will be gone next release.
+  **Two things this could have broken in a way the test suite cannot see, and both were measured rather
+  than argued.** First, the data still ships: `assets/` is data and not code, and it travels inside the
+  wheel only because `core/assets/` is a *package*, which is what the `__init__.py` marker buys —
+  without it, `packages.find` would install code and no templates, and every one of those templates is
+  read from the installed tree, not from a checkout. Proved from the artifact: `uv build --wheel` then
+  reading the archive gives 57 entries under `kubementat/core/assets/`, 7 of them `templates/*.template`,
+  and 0 under `kubementat/assets/`; the resolver answers `src/kubementat/core/assets` from a checkout and
+  a `templates/` directory that exists. Second, `kmt --version` still gets its string: that module has
+  exactly one importer, `src/cli/kmt.py:18`. **What it cost:** 12 product files and 37 test files rewrote
+  a path in the same commit, and two of `config.py`'s `KeyError` sentences now name
+  `kubementat.core.constants.DEFAULT_STATIC_ANSWERS` because telling the operator to edit a table in a
+  module that no longer exists is how an error message turns into a wrong instruction. Suite unchanged:
+  **1775 passed, 1 skipped**, import cycles none, layer violations none.
+
 - **`config init`'s cluster warning is logged now, and the console shows it differently.** This is
   the first change in the epic that says *this changes what you see*, because the rest of it can
   honestly claim the opposite. `config_init.warn_cluster_not_addressed` — the sentence that fires

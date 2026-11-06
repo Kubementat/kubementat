@@ -42,8 +42,8 @@ Core library. `automation.py` is the largest module at 2,504 lines (`wc -l`), ha
 ### platform_config/ (2 environments, team-based hierarchy)
 JSON config files organized as `platform_config/{env}/{team}/`. Two levels: environment-level (`static.json`, `static.encrypted.json`) and team-level. Nothing in this tree is a copy of a shipped file: 11
 values files and one helmfile manifest ship inside the installed `kmt` under
-`src/kubementat/assets/values/` and are applied from there. The 7 `.template` files under
-`src/kubementat/assets/templates/` are **not copied into this tree by any verb** — that copy went with
+`src/kubementat/core/assets/values/` and are applied from there. The 7 `.template` files under
+`src/kubementat/core/assets/templates/` are **not copied into this tree by any verb** — that copy went with
 `kmt initialize`, so a file that differs here is the operator's answer and not a stale copy. They are
 not all doing the same thing, and the difference is measured rather than assumed:
 
@@ -160,8 +160,8 @@ which `cluster-config-v2.md` §15 listed as a known casualty — and the casualt
 with the rule instead: an environment is exactly one cluster, enforced, and `CLUSTER_KUBE_CONTEXT` is what
 makes it true. Read that paragraph before any other part of the operator docs; the rest of them assume it.
 
-### `tekton_ci/` — split two ways (10 pipelines, 20 tasks, 8 trigger templates, 4 pipeline runs — measured 2026-10-29 by directory: `pipelines/` 10, `tasks/` 19, `triggers/` 8, `pipeline-runs/` 4; re-measured 2026-11-02 with `find src/kubementat/assets/tekton_ci -name '*.yml'` → 37 plus `find tekton_ci -name '*.yml'` → 4; re-measured 2026-11-04 with the same two commands → 38 plus 4, the extra one being `tasks/git-crypt-unlock.yml`, which §10 R-10.3 added so a cloned configuration is opened by a step of its own and not by the clone)
-The counts held at 37 until §10 R-10.3. `src/kubementat/assets/tekton_ci/{tasks,pipelines,triggers}` is product data and ships inside the package (T-02b), while `tekton_ci/pipeline-runs/` stays here, under the checkout, because a pipeline run is output a command writes and reads back and a half-written manifest inside site-packages is the bug R-12.1 names. So `find tekton_ci -name '*.yml'` at the repository root answers 4 and not 42; the other 38 are found under `src/`.
+### `tekton_ci/` — split two ways (10 pipelines, 20 tasks, 8 trigger templates, 4 pipeline runs — measured 2026-10-29 by directory: `pipelines/` 10, `tasks/` 19, `triggers/` 8, `pipeline-runs/` 4; re-measured 2026-11-02 with `find src/kubementat/assets/tekton_ci -name '*.yml'` → 37 plus `find tekton_ci -name '*.yml'` → 4; re-measured 2026-11-04 with the same two commands → 38 plus 4 (both of those commands ran against `src/kubementat/assets/`, the path that held these files until `core/` moved them, so the same find under `src/kubementat/core/assets/tekton_ci` answers the same 38 today), the extra one being `tasks/git-crypt-unlock.yml`, which §10 R-10.3 added so a cloned configuration is opened by a step of its own and not by the clone)
+The counts held at 37 until §10 R-10.3. `src/kubementat/core/assets/tekton_ci/{tasks,pipelines,triggers}` is product data and ships inside the package (T-02b), while `tekton_ci/pipeline-runs/` stays here, under the checkout, because a pipeline run is output a command writes and reads back and a half-written manifest inside site-packages is the bug R-12.1 names. So `find tekton_ci -name '*.yml'` at the repository root answers 4 and not 42; the other 38 are found under `src/`.
 The **tasks** number moved because of this repo's own work: `run-automation-script-for-environment.yml`
 was deleted on 2026-10-29 and the directory held 20 until then
 (`git ls-tree HEAD~1 --name-only tekton_ci/tasks | wc -l` → 20). The `16 pipelines` in the old line never matched what is on disk — it reads
@@ -170,10 +170,10 @@ files of its own, which is where an inventory that counts both trees has to look
 The two counts that agree with `find` — 8 trigger templates and 4 pipeline runs — are left as they were.
 Complete Tekton CI/CD system. Tasks include git-clone (with SSH auth), Docker build/push, helmfile CLI, MySQL operations, skopeo image operations, terraform, and echo. Pipelines orchestrate Docker builds, Helm deployments, image sync, and a hello-world example. Trigger templates for GitHub and GitLab webhooks. Pipeline runs with placeholder replacement. (The MySQL/Redis setup pipelines went with the backing-service install automation, removed 2026-10-27; the two MySQL Tasks remain.)
 
-### `kubementat/assets/templates/` (7 template files, measured with `find src/kubementat/assets/templates -type f | wc -l`; 19 until T-18 moved the ten files under `values/` out, and 8 until `kubementat_components/` went)
+### `kubementat/core/assets/templates/` (7 template files, measured with `find src/kubementat/core/assets/templates -type f | wc -l`; 19 until T-18 moved the ten files under `values/` out, and 8 until `kubementat_components/` went)
 JSON/YAML templates for initialization, and **product data** since T-02a: they ship inside the installed `kmt`, so no checkout carries a directory of that name for a sentence to point at. `environment/static.json.template` and `static.encrypted.json.template` describe a layer's shape. `environment/team/` templates for team configs. `mirrored_docker_images.json.template`. What `kmt initialize` did with them was copy them into `platform_config/{environment}/` — the copy is the operator's working material, the template is what the package ships — **except** the helmfile manifest and its default values, which T-18 moved to `assets/values/` and took out of the copy altogether: they are applied and read from inside the package. The command is deleted and the copy with it, so no verb reads these files any more; deleting a template is a decision and not a side effect. `environment/kubementat_components/` is now absent, not empty: it held one file after T-18, `monitoring/grafana_node_service.yaml.template`, a `Service` that exposes Grafana's UI on a NodePort and was applied by hand with a `kubectl apply` comment. Nothing in `src/`, no manifest, no test and no pipeline ever read it, and `grafana_client.py:521` already names a NodePort of that shape as the address kubementat refuses to guess, so it was deleted on 2026-11-03 rather than shipped as an undocumented manual step. Exposing the UI is a port-forward or the service's ClusterIP.
 
-### `kubementat/assets/values/` (11 files, measured with `find src/kubementat/assets/values -type f | wc -l`)
+### `kubementat/core/assets/values/` (11 files, measured with `find src/kubementat/core/assets/values -type f | wc -l`)
 The product's helmfile entry point plus the ten `*.encrypted.yaml` defaults its releases name, one directory per component, and **data rather than templates**: there is no `.template` suffix here because nothing renders or copies these files. They sit together because helmfile resolves a release's relative `values:` path against the directory of the manifest it was handed. `HelmUtils.helmfile_paths()` returns this directory and its `helmfile.yaml.gotmpl`, `Config.helmfile_asset_dir` is the accessor, and `tests/test_the_values_files_the_manifest_names_are_the_ones_the_tree_ships.py` is the guard that keeps the reference list and the file list one set.
 
 ### tests/ (2 bash scripts, 81 Python test modules)
@@ -265,11 +265,11 @@ User → kmt CLI → src/kubementat/ → Kubernetes Cluster
               platform_config/{env}/{team}/
               (JSON configs, git-crypt encrypted)
                         ↓
-              kubementat/assets/templates/ → the shape of a layer (product data, read by nothing)
+              kubementat/core/assets/templates/ → the shape of a layer (product data, read by nothing)
                         ↓
               (no scripts/ — the last .sh files are deleted, everything is Python)
                         ↓
-              kubementat/assets/tekton_ci/ → CI/CD tasks & pipelines (product data)
+              kubementat/core/assets/tekton_ci/ → CI/CD tasks & pipelines (product data)
               tekton_ci/pipeline-runs/ → generated runs (output, checkout-relative)
 ```
 

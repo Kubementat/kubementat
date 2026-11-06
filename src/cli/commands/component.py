@@ -48,7 +48,7 @@ install <environment> prometheus` applies one. Say so here rather than in a bug 
 import click
 
 from cli.context import kmt_context
-from kubementat import constants
+from kubementat.core import constants
 from kubementat.automations.routing import traefik_presence
 from kubementat.helm_utils import HelmUtils
 

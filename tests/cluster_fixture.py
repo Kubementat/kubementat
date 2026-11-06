@@ -284,7 +284,7 @@ def stamp_tree(root: Path) -> Path:
     before it resolves anything, so an unstamped root is refused and the test fails on a sentence
     about the stamp instead of about its own subject.
     """
-    from kubementat import constants
+    from kubementat.core import constants
     path = Path(root) / "platform_config" / constants.CONFIG_MANIFEST_FILENAME
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f'kubementat: "{constants.CONFIG_KUBEMENTAT_CONSTRAINT}"\n'
@@ -300,7 +300,7 @@ def checkout(tmp_path: Path) -> Path:
     product it was made for. A verb that resolves a cluster asks that question first, so a root
     without it is refused rather than trusted.
     """
-    from kubementat import constants
+    from kubementat.core import constants
     root = tmp_path / "checkout"
     (root / "platform_config").mkdir(parents=True, exist_ok=True)
     (root / "platform_config" / constants.CONFIG_MANIFEST_FILENAME).write_text(

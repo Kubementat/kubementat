@@ -10,7 +10,7 @@ command no root. Measured on this checkout:
     → Error: no configuration root is named. … it has no default root to fall back to.
 
 So the CI lane's own `kmt` step could not run: `KUBEMENTAT_PLATFORM_CONFIG_DIR` appears in zero places
-under `src/kubementat/assets/`, and neither `run-tekton-pipeline` nor `create-secret-from-json` passed
+under `src/kubementat/core/assets/`, and neither `run-tekton-pipeline` nor `create-secret-from-json` passed
 `--config-dir`. This file says that *every* `kmt` invocation in a TaskRun names its root, enforced where
 the rule belongs: in the shipped YAML, read off the tree by a test.
 
@@ -268,7 +268,7 @@ def test_a_configuration_root_is_never_rescued_by_a_default_or_a_variable_the_st
     `KUBEMENTAT_HOME` is a step env entry in both Tasks, and it is a *different* noun — it puts the
     step inside the project. The other spelling, `KUBEMENTAT_PLATFORM_CONFIG_DIR`, is a container-level
     default of exactly the kind the no-default rule deleted, and this repo declares it nowhere on purpose
-    (`grep -rn KUBEMENTAT_PLATFORM_CONFIG_DIR src/kubementat/assets/` is empty). If it appeared on a
+    (`grep -rn KUBEMENTAT_PLATFORM_CONFIG_DIR src/kubementat/core/assets/` is empty). If it appeared on a
     step's env it would mean a Task that "passes" while its `--config-dir` is doing nothing, and the
     flag's whole meaning is that the operator/TaskRun named this run's root.
     """

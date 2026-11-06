@@ -38,14 +38,14 @@ Each of the given sub-directories contains additional README*.md files that docu
   it, and the example charts live under `examples/helm_charts/`.
 - __src/kubementat__: the Python library — automation, configuration, cluster resolution, everything  
   the CLI delegates to.
-- __src/kubementat/assets__: the **shipped data** — `assets/templates/` (7 files), `assets/values/`
+- __src/kubementat/core/assets__: the **shipped data** — `assets/templates/` (7 files), `assets/values/`
   (11 files: the helmfile manifest and the ten default values files it names) and
   `assets/tekton_ci/` without `pipeline-runs/` (37 manifests). It is read from inside the package, so an
   installed `kmt` needs no checkout to find it (R-12.1). Editing one of these files changes what the
   product does; no command ever writes here.
 - __tekton_ci__: `pipeline-runs/` only — the run manifests this checkout holds as **output**.
   The Tasks and Pipelines the cluster is given, and the generator templates they are built from, are
-  product data and ship inside the installed `kmt` (R-12.1, `kubementat/assets/tekton_ci/`).
+  product data and ship inside the installed `kmt` (R-12.1, `kubementat/core/assets/tekton_ci/`).
       - tunneling (also implemented into the kmt cli)
       - kubernetes helpers
       - helm helpers
@@ -404,7 +404,7 @@ old one is documented in the CHANGELOG rather than left as a second route to the
   ingress went out on 2026-10-28 and is swept from clusters that really had it. See the CHANGELOG and
   `docs/README_PLATFORM_CONFIG.md`.
 - Helmfile based component installation: The releases kubementat applies are declared in
-  `kubementat/assets/values/helmfile.yaml.gotmpl`, the manifest that ships inside the installed `kmt`
+  `kubementat/core/assets/values/helmfile.yaml.gotmpl`, the manifest that ships inside the installed `kmt`
   (R-12.1/T-18). That file is the entry point: `helmfile apply` runs it directly, `helm_utils.py`'s
   `helmfile_paths()` names it, and nothing copies it into `platform_config/` any more. The
   configuration contributes values, not a manifest, so editing the shipped file is editing what every

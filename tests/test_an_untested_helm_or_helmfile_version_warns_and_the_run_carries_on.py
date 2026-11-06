@@ -27,7 +27,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from kubementat import constants
+from kubementat.core import constants
 from kubementat import automation
 from kubementat.automation import Automation
 from kubementat.errors import CommandExecutionError

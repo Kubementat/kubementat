@@ -33,7 +33,8 @@ from pathlib import Path
 
 import pytest
 
-from kubementat import ci_utils, config_answers, constants, tekton_utils
+from kubementat import ci_utils, config_answers, tekton_utils
+from kubementat.core import constants
 from kubementat.ci_utils import CiUtils
 from kubementat.errors import CiImageNotConfiguredError
 from kubementat.config import Config

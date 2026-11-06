@@ -75,7 +75,7 @@ WARNING = "warning"
 _MANIFEST_KEYS = ("schema_version", "kubementat")
 
 # What a shipped template leaves behind when nobody answered the key. The spec's table spells the
-# family `SETME`; every template under `src/kubementat/assets/templates/` and every reader that
+# family `SETME`; every template under `src/kubementat/core/assets/templates/` and every reader that
 # recognises one (`routing.py:561`, `automation.py:475-477`) spells it `REPLACEME_`, and an honest
 # check matches the spelling that actually ships.
 _PLACEHOLDER_PREFIX = "REPLACEME"

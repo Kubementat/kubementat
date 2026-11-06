@@ -13,7 +13,7 @@
 #
 # There is no ssl-redirect annotation, because there is no per-Ingress redirect to configure: kubementat's
 # Traefik redirects its `web` entrypoint to `websecure` for the whole cluster, in
-# src/kubementat/assets/values/traefik/values.encrypted.yaml.
+# src/kubementat/core/assets/values/traefik/values.encrypted.yaml.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

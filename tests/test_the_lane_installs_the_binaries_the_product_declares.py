@@ -29,7 +29,7 @@ from pathlib import Path
 
 from e2e_probe_stub import Answer, FakeArtifacts, FakeGuest, Recording, load_harness
 
-from kubementat import constants
+from kubementat.core import constants
 
 stages = load_harness()
 

@@ -46,7 +46,7 @@ Enable it with `ingress.enabled: true`. Two things the example exists to teach:
   that names none. `ingress.className` is written anyway, because the example has to stay honest on a
   cluster that serves someone else's default too.
 - Nothing asks for an HTTPS redirect. kubementat's Traefik redirects the `web` entrypoint to `websecure`
-  cluster-wide (see `src/kubementat/assets/values/traefik/values.encrypted.yaml`),
+  cluster-wide (see `src/kubementat/core/assets/values/traefik/values.encrypted.yaml`),
   which is one setting owned by the platform instead of one annotation per Ingress.
 
 ## Deletion

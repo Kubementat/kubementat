@@ -34,7 +34,8 @@ from click.testing import CliRunner
 
 from asset_paths import asset_path
 from cli.commands import config as config_module
-from kubementat import config_init, constants
+from kubementat import config_init
+from kubementat.core import constants
 from kubementat.config import Config
 from kubementat.config_init import (CREATED, SKIPPED, TEAM_STATIC_STEP, add_environment, add_team,
                                     init_configuration)

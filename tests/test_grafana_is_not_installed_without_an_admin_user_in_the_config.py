@@ -20,7 +20,8 @@ from click.exceptions import ClickException
 
 from cluster_fixture import configuration_only_context
 from asset_paths import values_path
-from kubementat import constants, helm_utils
+from kubementat import helm_utils
+from kubementat.core import constants
 from kubementat.config import component_config_key
 from kubementat.config_init import init_configuration
 from kubementat.helm_utils import HelmUtils

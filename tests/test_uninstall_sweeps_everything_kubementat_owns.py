@@ -45,7 +45,8 @@ from conftest import as_k8s_object
 
 import kubementat.automation
 
-from kubementat import constants, shell
+from kubementat import shell
+from kubementat.core import constants
 from kubementat.automation import Automation
 from kubementat.errors import UninstallIncompleteError
 from cluster_fixture import configuration_only_context

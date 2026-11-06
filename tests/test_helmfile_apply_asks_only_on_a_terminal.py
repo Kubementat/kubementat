@@ -20,7 +20,8 @@ from click.testing import CliRunner
 from cli.commands import helm
 from cluster_fixture import DEV_SERVER, stamp_tree, write_environment, write_kubeconfig
 from asset_paths import values_path
-from kubementat import constants, helm_utils
+from kubementat import helm_utils
+from kubementat.core import constants
 from kubementat.cluster import Context
 from kubementat.config import component_config_key
 from kubementat.helm_utils import HelmUtils

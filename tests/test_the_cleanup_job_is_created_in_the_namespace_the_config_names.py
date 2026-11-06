@@ -317,7 +317,7 @@ def test_no_namespace_is_written_into_the_module_that_creates_the_job():
     # The same rule `test_no_module_under_src_binds_a_namespace_to_a_literal` applies over all of
     # `src/`, stated for the module that creates this job: a name bound to a namespace value is a
     # second answer, and a comment that quotes the old answer is not one.
-    from kubementat import constants
+    from kubementat.core import constants
 
     namespaces = set(constants.DEFAULT_NAMESPACES.values())
     bound = []

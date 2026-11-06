@@ -38,7 +38,8 @@ from pathlib import Path
 
 import pytest
 
-from kubementat import config_answers, config_derived, constants
+from kubementat import config_answers, config_derived
+from kubementat.core import constants
 from kubementat.config import Config, component_config_key
 
 ENVIRONMENT = "l0env"
@@ -48,9 +49,9 @@ TEAM = "cartographers"
 # line for each. The template is cited here rather than trusted: these files live apart and a value
 # that stopped matching the template is a different product, not a rounding error.
 TEMPLATE = (Path(__file__).resolve().parents[1]
-            / "src/kubementat/assets/templates/environment/static.json.template")
+            / "src/kubementat/core/assets/templates/environment/static.json.template")
 TEAM_TEMPLATE = (Path(__file__).resolve().parents[1]
-                 / "src/kubementat/assets/templates/environment/team/static.json.template")
+                 / "src/kubementat/core/assets/templates/environment/team/static.json.template")
 
 TEN_KEYS = ("TEKTON_VERSION_PIPELINE", "TEKTON_VERSION_DASHBOARD", "TEKTON_VERSION_TRIGGERS",
             "TEKTON_CI_IMAGE_NAME", "TEKTON_CI_IMAGE_TAG", "TEKTON_KUBERNETES_STORAGE_CLASS",

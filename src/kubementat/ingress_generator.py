@@ -47,7 +47,7 @@ from pathlib import Path
 
 import yaml
 
-from kubementat.constants import COMPONENT, DEFAULT_INGRESS_CLASSES
+from kubementat.core.constants import COMPONENT, DEFAULT_INGRESS_CLASSES
 from kubementat import errors
 
 # The Ingress this generates is a `networking.k8s.io/v1` object, which is what the script declared

@@ -20,7 +20,7 @@ import pytest
 
 from conftest import run_kmt
 
-from kubementat import version as version_module
+from kubementat.core import version as version_module
 
 
 def test_kmt_reports_a_version_and_exits_cleanly():

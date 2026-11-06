@@ -26,7 +26,7 @@ kmt = "cli.kmt:main"
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
-# `include-package-data` is what makes the templates travel: `kubementat.assets.templates` holds
+# `include-package-data` is what makes the templates travel: `kubementat.core.assets.templates` holds
 # no Python, so `packages.find` alone would ship the code and leave the asset directory behind.
 # Declaring the glob rather than a `MANIFEST.in` keeps the rule next to the package it describes.
 [tool.setuptools]
@@ -40,7 +40,7 @@ include = ["kubementat*","cli*"]
 # Everything the product ships and opens: the templates, and the Tekton Tasks/Pipelines plus the
 # generator templates they read (`tekton_ci/pipeline-runs` is output and is deliberately not here —
 # a half-written manifest inside site-packages is the bug R-12.1 names).
-"kubementat.assets" = ["templates/**/*", "values/**/*", "tekton_ci/**/*"]
+"kubementat.core.assets" = ["templates/**/*", "values/**/*", "tekton_ci/**/*"]
 
 # `integration` marks the tests that need something this suite is not allowed to need: a
 # running cluster, a real helmfile, a machine with the tools installed. They are skipped by

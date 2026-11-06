@@ -31,7 +31,7 @@ from pathlib import Path
 import click
 import pytest
 
-from kubementat import constants
+from kubementat.core import constants
 from kubementat.ci_utils import CiUtils
 from kubementat.errors import CiImageNotConfiguredError
 from kubementat.config import Config
@@ -277,7 +277,7 @@ def test_a_component_with_no_entry_in_the_code_default_table_is_refused(tmp_path
         config.component_namespace("grafanana")
 
     assert "grafanana" in str(error.value)
-    assert "kubementat.constants" in str(error.value)
+    assert "kubementat.core.constants" in str(error.value)
 
 
 # --- (c) a key with no default anywhere answers exactly as it did -------------------------

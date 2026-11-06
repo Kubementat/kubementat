@@ -481,13 +481,13 @@ kubectl get pods --namespace tekton-pipelines --watch
 >
 > - **What installs.** `kmt routing install <environment>` applies the `routing` group — the
 >   `traefik/traefik` chart (pinned `42.1.3` in
->   `kubementat/assets/values/helmfile.yaml.gotmpl`) and the `jetstack/cert-manager`
+>   `kubementat/core/assets/values/helmfile.yaml.gotmpl`) and the `jetstack/cert-manager`
 >   release that fronts it. Routing is **not** part of `kmt install`: it is applied here, or not at all.
 > - **Where it lands.** Release `traefik` in the namespace `TRAEFIK_DEPLOYMENT_NAMESPACE` (default
 >   `traefik`), labelled `component_name=traefik,group=routing`, and applied with the values file
 >   `helmfile.yaml.gotmpl` names as `traefik/values.encrypted.yaml` — that file is git-crypt'd, so what a
 >   reader can see in the tree is its template,
->   `kubementat/assets/values/traefik/values.encrypted.yaml`. Cert-manager
+>   `kubementat/core/assets/values/traefik/values.encrypted.yaml`. Cert-manager
 >   behaves the same way one key over: `CERT_MANAGER_DEPLOYMENT_NAMESPACE`, `component_name=cert-manager`.
 > - **Which class it serves.** `TRAEFIK_INGRESS_CLASS` (default `traefik`) names the `IngressClass` the
 >   controller creates, and the same key is what the two `ClusterIssuer` HTTP-01 solvers and every

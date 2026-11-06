@@ -22,7 +22,7 @@ from click.exceptions import UsageError
 from click.testing import CliRunner
 
 from cli.commands import kubementat
-from kubementat import constants
+from kubementat.core import constants
 
 CLUSTER_ADDONS = {"default", "kube-system", "kube-public", "kube-node-lease"}
 

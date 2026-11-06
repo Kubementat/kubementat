@@ -132,4 +132,4 @@ def test_the_declared_version_is_written_in_exactly_one_place():
 
     assert carriers == [], (
         f"{version!r} is declared in {len(carriers)} source file(s) besides pyproject.toml; it "
-        f"belongs in the metadata that `kubementat.version.get_version()` reads: {carriers}")
+        f"belongs in the metadata that `kubementat.core.version.get_version()` reads: {carriers}")

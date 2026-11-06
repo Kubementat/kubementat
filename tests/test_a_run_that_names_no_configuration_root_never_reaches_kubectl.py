@@ -109,7 +109,7 @@ def test_an_install_handed_a_root_that_holds_no_environment_refuses_it_and_not_t
     given_root.mkdir(parents=True)
     # A prepared root that simply has no environments. Without this the run refuses on the stamp
     # before it gets to the claim this test is about, which is true and would bury the point.
-    from kubementat import constants
+    from kubementat.core import constants
     (given_root / constants.CONFIG_MANIFEST_FILENAME).write_text(
         f'kubementat: "{constants.CONFIG_KUBEMENTAT_CONSTRAINT}"\n'
         f"schema_version: {constants.CONFIG_SCHEMA_VERSION}\n")

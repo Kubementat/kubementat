@@ -85,7 +85,7 @@ from typing import Any, Iterable
 
 import click
 
-from kubementat import constants
+from kubementat.core import constants
 from kubementat.config import Config
 from kubementat.cluster import (CLUSTER_KUBECONFIG_PATH_KEY, CLUSTER_KUBE_CONTEXT_KEY,
                                 IN_TREE_KUBECONFIG_FILENAME)

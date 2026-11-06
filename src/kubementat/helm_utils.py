@@ -6,7 +6,8 @@ import re
 import click
 from kubernetes import client
 
-from kubementat import config_reads_index, constants, shell
+from kubementat import config_reads_index, shell
+from kubementat.core import constants
 from kubementat.cluster import ClusterTarget
 from kubementat.config import component_config_key
 from kubementat.kubernetes_utils import KubernetesUtils, helm_target_args
@@ -267,7 +268,7 @@ class HelmUtils:
 
         Args:
             component (str): Component name, lower-case with hyphens, as
-                `kubementat.constants.DEFAULT_NAMESPACES` is keyed.
+                `kubementat.core.constants.DEFAULT_NAMESPACES` is keyed.
 
         Returns:
             dict: ``{"component", "namespace", "releases", "claims"}`` -- what was addressed,

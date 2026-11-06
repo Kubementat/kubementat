@@ -25,7 +25,7 @@ from click.testing import CliRunner
 from cli.commands import kubernetes, kubementat
 from cluster_fixture import DEV_SERVER, checkout, redirect_checkout, write_environment, write_kubeconfig
 from kubementat.cluster import Context
-from kubementat.constants import DEFAULT_NAMESPACES
+from kubementat.core.constants import DEFAULT_NAMESPACES
 from kubementat.errors import TeamNotSuppliedError
 
 ENVIRONMENT = "dev"

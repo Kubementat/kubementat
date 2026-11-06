@@ -84,7 +84,7 @@ fi
 pin() {
   env PYTHONPATH="$PIN_SOURCE/src" python3 -c '
 import sys
-from kubementat import constants
+from kubementat.core import constants
 try:
     print(constants.PINNED_BINARY_VERSIONS[sys.argv[1]])
 except KeyError:

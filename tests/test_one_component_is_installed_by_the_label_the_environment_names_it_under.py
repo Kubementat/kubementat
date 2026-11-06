@@ -34,7 +34,7 @@ import pytest
 from click.testing import CliRunner
 
 from cli.commands import component as component_cli
-from kubementat import constants
+from kubementat.core import constants
 from kubementat.automations.routing import traefik_presence
 from cluster_fixture import UNREAD_ROOT, configuration_only_context
 from kubementat.config import Config

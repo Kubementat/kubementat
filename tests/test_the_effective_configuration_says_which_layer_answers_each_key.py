@@ -45,7 +45,8 @@ import pytest
 from click.testing import CliRunner
 
 from cli.commands import config as config_module
-from kubementat import config_answers, config_reads_index, constants, shell
+from kubementat import config_answers, config_reads_index, shell
+from kubementat.core import constants
 from kubementat.config import Config, component_config_key
 from kubementat.config_init import add_team, init_configuration
 
