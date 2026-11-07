@@ -23,10 +23,10 @@ from kubementat.infrastructure.kubernetes import apply
 from kubementat.automations.install import pipelines
 from kubementat.automations.install.pipelines import setup_pipelines
 from kubementat.errors import TektonControllerWithoutConfiguredApiError
-from kubementat.tekton_utils import (
-    TektonUtils,
-    preflight_tekton_api_version,
-)
+from kubementat.tekton_utils import TektonUtils
+# The preflight moved to its own module (P4-2) and `tekton_utils.py` keeps no copy of the name, so
+# the call here reaches it the way every tekton call is reached: through the module object.
+from kubementat.infrastructure.tekton import preflight
 
 
 class RecordingCluster:
@@ -201,7 +201,7 @@ def test_a_cluster_that_does_not_serve_the_written_version_names_the_knob_that_c
     cluster = RecordingCluster(served_versions=["v1beta1"])
 
     with pytest.raises(TektonControllerWithoutConfiguredApiError) as error:
-        preflight_tekton_api_version(cluster, FakeConfig())
+        preflight.preflight_tekton_api_version(cluster, FakeConfig())
 
     message = str(error.value)
     assert "tekton.dev/v1" in message
@@ -239,7 +239,7 @@ def test_a_discovery_failure_that_is_not_a_missing_version_is_still_its_own_erro
     cluster = RecordingCluster(discovery_error=ApiException(status=401, reason="Unauthorized"))
 
     with pytest.raises(ApiException) as error:
-        preflight_tekton_api_version(cluster, FakeConfig())
+        preflight.preflight_tekton_api_version(cluster, FakeConfig())
 
     assert not isinstance(error.value, TektonControllerWithoutConfiguredApiError)
     assert error.value.status == 401

@@ -21,10 +21,11 @@ from kubementat import errors
 from kubementat.infrastructure import shell
 from kubementat.infrastructure.helm import HelmUtils
 from kubementat.infrastructure.kubernetes import KubernetesUtils
-from kubementat.tekton_utils import (
-    TektonUtils,
-    preflight_installed_tekton_api_versions,
-)
+# The preflight assertion moved out of `tekton_utils.py` (P4-2). The name it goes by is unchanged;
+# what changed is the module it is read from, and it is read from that module rather than bound
+# here because every tekton seam is patched by module object.
+from kubementat.infrastructure.tekton import preflight
+from kubementat.tekton_utils import TektonUtils
 
 from kubementat.automations.install.dependencies import (
     KUBEMENTAT_DEPENDENCIES,
@@ -88,7 +89,7 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
     # pin that moved without the URL scheme, or an apply that landed against an old
     # controller, both leave the install green and the first pipeline run full of 404s. Ask
     # the discovery question for both groups before helmfile and before pipeline setup.
-    preflight_installed_tekton_api_versions(kubernetes_utils, config)
+    preflight.preflight_installed_tekton_api_versions(kubernetes_utils, config)
 
     # helmfile apply
     # The install path applies without asking, exactly as before: `kmt install` has its own

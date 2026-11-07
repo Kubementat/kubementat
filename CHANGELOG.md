@@ -1,5 +1,86 @@
 # Unreleased
 
+- **The preflight leaves `tekton_utils.py`: `src/kubementat/infrastructure/tekton/preflight.py` is the
+  second module of the Tekton split, and the cached answer it carries is keyed by cluster.** Four
+  names — `preflight_tekton_api_version`, `preflight_installed_tekton_api_versions`,
+  `_served_within_a_bounded_wait` (its own bounded-discovery loop) and `_preflight_tekton_api_version`,
+  which stops being a method and takes `kubernetes_utils` and `config` the way a function takes what
+  a `self` used to read — plus the two constants that are the defaults of the function that moves,
+  `DISCOVERY_ATTEMPTS` and `DISCOVERY_DELAY_SECONDS`. A default argument is read at definition time
+  from the module that defines it, so those two had to travel with `preflight_installed_tekton_api_versions`
+  or the signature would have had to stop naming them; `tekton_utils.py` keeps `grep -n "def
+  <moved name>"` answering nothing for all four.
+
+  **The cache is the change, and it is a change under a reader's hands.** The DAG measured the
+  census's claim wrong and the tree is the correction: the answer was read off a class attribute
+  (`tekton_api_verified = False`) and written through `self.`, so every object got its own answer —
+  per object, not per process. The census's "shared mutable state on the class" describes the
+  attribute and not the behaviour, and a module-level `bool` written by the moved function would
+  have been the wider failure: it would have said "some cluster was verified", and a second cluster
+  addressed by the same command would then have skipped a check it never made and applied manifests
+  against a controller that answers nothing. So the answer is held in a `set` keyed by
+  `ClusterTarget.address` — the field the client is built from and the field a wrong-cluster report
+  names, and the only field that says *which cluster* rather than *which object* — and a cluster that
+  is keyed by itself is what anything that is not a `KubernetesUtils` (a recorder, a stand-in) gets,
+  which is exactly the semantics the attribute had.
+
+  Two observable consequences, both now asserted and both worth naming before a reader finds them.
+  **Two clusters in one command are both asked** — the per-object attribute already did that, and a
+  flat flag would not have. **The same cluster reached through a second object is not asked twice** —
+  the per-object attribute asked it once per object, and this asks once per cluster. That is the
+  looser of the two: a `kmt install` followed by a `tekton-run-pipeline` inside one long-lived
+  library process now verifies that cluster once, so a controller upgraded between the two is not
+  re-verified by the following read. Nothing is refreshed and there is no override. A refused answer
+  is never cached: the write sits after the check, so a cluster that said no is asked again.
+
+  **What a downstream reader repoints to.** `preflight.<name>` for all four, and nothing else:
+  no re-export from `infrastructure/tekton/__init__.py`, no compatibility import in
+  `tekton_utils.py`, and no class method standing behind the function. The two production importers
+  are the reason preflight moves before `runs.py`.
+
+  | you were reaching for | it is now |
+  |---|---|
+  | `tekton_utils.preflight_tekton_api_version(kubernetes_utils, config)` | `infrastructure.tekton.preflight.preflight_tekton_api_version(...)` — same spelling, new module |
+  | `tekton_utils.preflight_installed_tekton_api_versions(kubernetes_utils, config, …)` | `infrastructure.tekton.preflight.preflight_installed_tekton_api_versions(...)` |
+  | `tekton_utils._served_within_a_bounded_wait`, `.DISCOVERY_ATTEMPTS`, `.DISCOVERY_DELAY_SECONDS` | `infrastructure.tekton.preflight.<same name>` |
+  | `TektonUtils._preflight_tekton_api_version()` | `preflight._preflight_tekton_api_version(utils.kubernetes_utils, utils.config)` — the object no longer carries the answer |
+
+  Consumers repointed, per file: `src/kubementat/automations/install/pipelines.py` (one import, one
+  call at `:84`); `src/kubementat/automations/install/kubementat.py` (the class it still builds stays
+  imported from `tekton_utils`, the assertion comes from `preflight`); `src/kubementat/tekton_utils.py`
+  (the import, the two call sites in `_list_tekton_resource` and `run_pipeline`, and the class
+  attribute and method removed); `tests/test_tekton_api_version_preflight.py` and
+  `tests/test_tekton_install_asserts_the_served_api_versions.py` (import lines and call sites; no
+  assertion in either was touched). Both call through the *module* rather than importing the name,
+  which is what makes a `monkeypatch` on the owner land — the reason §5 keeps the package's
+  `__init__.py` empty of names.
+
+  **What the DAG got wrong, and what it is worth.** Its P4-2 row names `_replace_placeholders_in_dict`
+  and `_refuse_obsolete_team_trigger_dir` as this ticket's names. P4-1 took both, into `generation.py`,
+  where the DAG also homes them; they are not moved again and `grep -n "def _replace_placeholders"` now
+  answers once, in `generation.py`. The row also carries the two `DISCOVERY_*` constants into P4-4;
+  where they are, they cannot go there, because the only consumer of the pair is the signature of the
+  function P4-2 moves and `preflight.py` must not import `install.py` — the edge would point the wrong
+  way for the DAG's own sink. And the two line numbers the DAG quotes for the cache, `:921` and `:944`,
+  were already `:639` (the read) and `:662` (the write) at the parent commit: `7fa006d`'s file ran 826
+  lines longer than this HEAD's, so anyone repeating those numbers from the DAG lands somewhere in
+  the generation half.
+
+  Why the direction is proved and not asserted: `tekton_utils.py` is an unranked root module to the
+  checker, so the layer rule cannot see the edge into `preflight.py` at all — but the cycle test can,
+  and now that both `tekton_utils.py` and the two `automations/install` slices import the module,
+  any edge back out of it would close a cycle. `python3 .agent-work/import_graph.py src` prints
+  `CYCLES: none`, and `preflight.py`'s own outgoing edges are the only two it has —
+  `kubementat.infrastructure.tekton.preflight -> kubementat.errors` and
+  `-> kubementat.infrastructure.kubernetes` — so nothing points back at `tekton_utils`,
+  `generation`, `runs`, `install` or `triggers`, and the checker does rank those two as legal.
+
+  `uv run pytest -q` → **1779 passed, 1 skipped**, up two from 1777 on
+  `test_a_process_that_addresses_two_clusters_asks_each_the_version_question.py`, which is the
+  two-cluster case above: it asks one cluster, then the other, and names the address each answer
+  came from, so a flag that means "some cluster" fails the assertion rather than passing quietly.
+  `python3 .agent-work/import_graph.py src` → exit 0. No file deleted, the three module-level bodies
+  are byte for byte what they were, and the fourth is where this ticket's whole change sits.
 - **The generation half leaves `tekton_utils.py`: `src/kubementat/infrastructure/tekton/generation.py`
   is the first module of the Tekton split.** Twenty-three names — the generation group's 21 (11
   ex-methods and 9 module-level functions, plus `generate_random_postfix`, which hoists rather than

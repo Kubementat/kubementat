@@ -1,10 +1,11 @@
 from kubementat import errors
 from kubementat.infrastructure import shell
 from kubementat.infrastructure.kubernetes import KubernetesUtils, apply
-# The generation group moved out (P4-1), so the calls that still belong to this file's remaining
-# work reach it through the module. Never `from … import`: the suite patches by module object and a
-# name imported here is a frozen second binding nobody runs.
-from kubementat.infrastructure.tekton import generation
+# The generation group moved out (P4-1) and the preflight group with it (P4-2), so the calls that
+# still belong to this file's remaining work reach them through the modules. Never `from … import`
+# a function: the suite patches by module object and a name imported here is a frozen second binding
+# nobody runs.
+from kubementat.infrastructure.tekton import generation, preflight
 import base64
 import click
 import logging
@@ -126,45 +127,6 @@ def helm_deployer_cluster_role():
     )
 
 
-def preflight_tekton_api_version(kubernetes_utils, config) -> None:
-    """Stop here if this cluster does not serve the `tekton.dev` version kubementat uses.
-
-    A cluster whose Tekton controller only serves `tekton.dev/v1beta1` is the failure this
-    guards: every manifest would be rejected one by one, and the forty-first 404 reads
-    nothing like the one-line answer. Nothing falls back - kubementat writes `v1`, so an
-    older controller is simply not supported here, and the message says which knob turns
-    into a supported cluster.
-
-    Args:
-        kubernetes_utils: The utilities that own the API client doing the discovery.
-        config: The configuration supplying TEKTON_API_GROUP/TEKTON_API_VERSION.
-
-    Raises:
-        kubementat.errors.TektonControllerWithoutConfiguredApiError: If the cluster serves nothing under
-            that group/version.
-    """
-    if kubernetes_utils.api_version_is_served(config.TEKTON_API_GROUP, config.TEKTON_API_VERSION):
-        return
-
-    raise errors.TektonControllerWithoutConfiguredApiError(
-        f"The cluster serves no resources under {config.TEKTON_API_GROUP}/{config.TEKTON_API_VERSION}, "
-        "and kubementat speaks only that API version. Nothing was applied. Install or upgrade "
-        f"Tekton Pipelines with `kmt install <environment> <team>`, or set "
-        f"TEKTON_VERSION_PIPELINE in platform_config/<environment>/static.json to a version that "
-        f"serves {config.TEKTON_API_GROUP}/{config.TEKTON_API_VERSION} (Pipelines 1.0 and newer). "
-        f"The manifests kubementat ships, and the ones under examples/tekton_ci/, are written for "
-        f"it, and so is this code."
-    )
-
-
-# How many times, and how far apart, the post-install assertion asks the discovery question.
-# `kubectl apply` returns when the object is accepted, not when the API server has opened the
-# `/apis/<group>/<version>` path in front of it, so the first request straight after an install
-# can answer 404 on a cluster that is about to serve it. Waiting is not a fallback: the same
-# answer is demanded at the end of the wait as at the start of it.
-DISCOVERY_ATTEMPTS = 6
-DISCOVERY_DELAY_SECONDS = 5.0
-
 # How long an install may take for the Pipelines webhook to become reachable, and how often it is
 # asked. `kubectl apply` has returned by the time the next manifest goes in, and the webhook is
 # already registered as a control-plane hook by then -- so a controller pod that is not yet
@@ -180,90 +142,6 @@ DISCOVERY_DELAY_SECONDS = 5.0
 # asking faster spends API reads for nothing.
 WEBHOOK_READY_TIMEOUT_SECONDS = 120.0
 WEBHOOK_READY_POLL_SECONDS = 2.0
-
-
-def _served_within_a_bounded_wait(kubernetes_utils, group, version, attempts, delay_seconds) -> bool:
-    """Ask the discovery question until it says yes or the attempts run out."""
-    for attempt in range(attempts):
-        if kubernetes_utils.api_version_is_served(group, version):
-            return True
-        if attempt + 1 < attempts:
-            logging.info(
-                f"No {group}/{version} on this cluster yet, retrying discovery "
-                f"in {delay_seconds}s (attempt {attempt + 1} of {attempts})"
-            )
-            time.sleep(delay_seconds)
-    return False
-
-
-def preflight_installed_tekton_api_versions(kubernetes_utils, config,
-                                           attempts=DISCOVERY_ATTEMPTS,
-                                           delay_seconds=DISCOVERY_DELAY_SECONDS) -> None:
-    """Stop the install if what was just applied does not serve what kubementat speaks.
-
-    The install ends with `kubectl apply` having exited 0, which is a claim about the manifests
-    it sent and not about the controller that is now running. A pin that is wrong, a release URL
-    that 404s partway through, or an image that never rolls out all leave the install printing
-    success and the first pipeline run printing 404s. So this asks the discovery question for both
-    groups the install is supposed to have brought up, once per group, before anything else in the
-    install runs.
-
-    The message names the version the install tried to apply, because that is the half the
-    operator cannot see from the cluster: the install builds its release URLs from the
-    `TEKTON_VERSION_*` keys, so a mismatch is always either that pin or that controller.
-    Nothing here falls back to another API version, and there is no environment variable that
-    turns the assertion off.
-
-    Args:
-        kubernetes_utils: The utilities that own the API client doing the discovery.
-        config: The configuration supplying the groups/versions and the pinned component versions.
-        attempts: How many times to ask before believing the answer.
-        delay_seconds: Seconds between attempts.
-
-    Raises:
-        kubementat.errors.TektonControllerWithoutConfiguredApiError: If the cluster serves nothing under a group/
-            version kubementat needs, once the bounded wait has run out.
-    """
-    env_static = config.get('env_static')
-    checked = [
-        {
-            "component": "Tekton Pipelines",
-            "group": config.TEKTON_API_GROUP,
-            "version": config.TEKTON_API_VERSION,
-            "pin_key": "TEKTON_VERSION_PIPELINE",
-            "pin": env_static.get("TEKTON_VERSION_PIPELINE"),
-            "what_we_speak": "writes and reads only that API version",
-            "supported": "Pipelines 1.0 and newer serve tekton.dev/v1",
-        },
-        {
-            "component": "Tekton Triggers",
-            "group": config.TRIGGERS_API_GROUP,
-            "version": config.TRIGGERS_API_VERSION,
-            "pin_key": "TEKTON_VERSION_TRIGGERS",
-            "pin": env_static.get("TEKTON_VERSION_TRIGGERS"),
-            "what_we_speak": "writes every trigger resource in that API version",
-            "supported": "Triggers 0.37 serves triggers.tekton.dev/v1alpha1 and v1beta1 and no v1",
-        },
-    ]
-
-    for entry in checked:
-        group_version = f"{entry['group']}/{entry['version']}"
-        if _served_within_a_bounded_wait(kubernetes_utils, entry['group'], entry['version'],
-                                         attempts, delay_seconds):
-            logging.info(f"The cluster serves {group_version}, as {entry['component']} should.")
-            continue
-
-        pinned = f"{entry['component']} {entry['pin']}" if entry["pin"] else \
-            f"{entry['component']} at the version pinned in {entry['pin_key']}"
-        raise errors.TektonControllerWithoutConfiguredApiError(
-            f"The cluster serves no resources under {group_version} after installing "
-            f"{pinned}, and kubementat {entry['what_we_speak']}. Nothing was configured. "
-            f"Either the install did not land its manifests for {entry['component']}, or that "
-            f"release does not serve {group_version} ({entry['supported']}). Install or upgrade "
-            f"with `kmt install <environment> <team>`, or set {entry['pin_key']} in "
-            f"platform_config/<environment>/static.json to a version that serves {group_version}, "
-            f"then run the install again. There is no fallback API version and no override."
-        )
 
 
 # The names the trigger controller and its webhook-setup job run as, and the RBAC they are
@@ -633,11 +511,6 @@ def _first_status_condition(resource) -> dict:
 
 
 class TektonUtils:
-    # Whether this process already knows the cluster serves the version it is about to use.
-    # A class attribute so an instance built without the constructor still answers for
-    # itself, and an instance writes its own copy the first time the check passes.
-    tekton_api_verified = False
-
     def __init__(self, ctx):
         # One `Context` and nothing else, the shape the other service classes have.
         # `self.ctx` is kept because it is what a second KubernetesUtils object is built from --
@@ -653,13 +526,6 @@ class TektonUtils:
         self.team = ctx.require_team("the namespace the Tekton objects live in")
         self.config = ctx.config
         self.pipeline_namespace = self.config.get('team_static').get('PIPELINE_NAMESPACE')
-
-    def _preflight_tekton_api_version(self):
-        """Check once per process that the controller serves what this class is about to use."""
-        if self.tekton_api_verified:
-            return
-        preflight_tekton_api_version(self.kubernetes_utils, self.config)
-        self.tekton_api_verified = True
 
     def list_pipelines(self):
         return self._list_tekton_resource(self.pipeline_namespace, "pipelines")
@@ -1148,7 +1014,7 @@ class TektonUtils:
                                   version=self.config.TRIGGERS_API_VERSION)
 
     def _list_tekton_resource(self, namespace, plural_identifier):
-        self._preflight_tekton_api_version()
+        preflight._preflight_tekton_api_version(self.kubernetes_utils, self.config)
         objects = self.kubernetes_utils.list_custom_resources(
             namespace=namespace,
             group=self.config.TEKTON_API_GROUP,
@@ -1357,7 +1223,7 @@ class TektonUtils:
 
         # Fail here, once, if this cluster cannot speak v1 at all, rather than after the
         # YAML has been loaded and printed for it.
-        self._preflight_tekton_api_version()
+        preflight._preflight_tekton_api_version(self.kubernetes_utils, self.config)
 
         # Apply the pipeline run using KubernetesUtils
         try:

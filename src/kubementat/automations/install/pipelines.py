@@ -22,7 +22,10 @@ from kubernetes import client
 
 from kubementat import config_bootstrap, config_keys
 from kubementat.infrastructure.kubernetes import KubernetesUtils, apply
-from kubementat.tekton_utils import preflight_tekton_api_version
+# The preflight moved out of `tekton_utils.py` (P4-2), so the call here reaches it through the
+# module: the seam is patched by module object, and a name imported past its home is a second
+# binding a patch on the module nobody runs would miss.
+from kubementat.infrastructure.tekton import preflight
 
 
 def _base64_encode_file(path) -> str:
@@ -78,7 +81,7 @@ def setup_pipelines(ctx):
     # setup_pipelines applies the product's Tasks and Pipelines and the team's own two
     # directories one by one, which is the shape a too-old controller answers in: a 404
     # per resource and no sentence saying why. Ask the cluster once, before that starts.
-    preflight_tekton_api_version(kubernetes_utils, config)
+    preflight.preflight_tekton_api_version(kubernetes_utils, config)
 
     helm_deployer_sa = config.get('team_static').get('HELM_DEPLOYER_SERVICE_ACCOUNT_NAME')
     pipeline_ns = config.get('team_static').get('PIPELINE_NAMESPACE')

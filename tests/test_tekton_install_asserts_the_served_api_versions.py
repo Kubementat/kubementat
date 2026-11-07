@@ -27,11 +27,10 @@ import pytest
 from kubementat.core.config import config as config_module
 from kubementat.automations.install import kubementat as install_slice
 from kubementat.errors import TektonControllerWithoutConfiguredApiError
-from kubementat.tekton_utils import (
-    TEKTON_RELEASE_BASE_URL,
-    TektonUtils,
-    preflight_installed_tekton_api_versions,
-)
+from kubementat.tekton_utils import TEKTON_RELEASE_BASE_URL, TektonUtils
+# The post-install assertion moved to `preflight.py` (P4-2) and is read from there, module-qualified:
+# `tekton_utils.py` holds no copy of the name to import.
+from kubementat.infrastructure.tekton import preflight
 from cluster_fixture import configuration_only_context
 from asset_paths import template_path
 
@@ -108,8 +107,8 @@ def the_pinned_config():
 
 def an_install_assertion_on(cluster, attempts=6):
     """Ask the question with no waiting, because a test should not sleep for a controller that exists."""
-    return preflight_installed_tekton_api_versions(cluster, the_pinned_config(),
-                                                   attempts=attempts, delay_seconds=0)
+    return preflight.preflight_installed_tekton_api_versions(cluster, the_pinned_config(),
+                                                             attempts=attempts, delay_seconds=0)
 
 
 def test_a_cluster_that_serves_both_installed_groups_passes_without_a_second_look():
@@ -168,8 +167,8 @@ def test_the_wait_is_bounded_so_a_control_plane_that_arrives_never_makes_an_inst
     cluster = ClusterAnsweringDiscovery(served=[])
 
     with pytest.raises(TektonControllerWithoutConfiguredApiError):
-        preflight_installed_tekton_api_versions(cluster, the_pinned_config(),
-                                                attempts=3, delay_seconds=0)
+        preflight.preflight_installed_tekton_api_versions(cluster, the_pinned_config(),
+                                                         attempts=3, delay_seconds=0)
 
     assert len(cluster.asked) == 3, "each group gets its bounded wait, not an unbounded one"
 
