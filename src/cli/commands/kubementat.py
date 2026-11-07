@@ -3,7 +3,10 @@ import sys
 import click
 
 from cli.context import kmt_context
-from kubementat.automation import Automation
+from kubementat.automations.install import kubementat as install_slice
+from kubementat.automations.install import registry as registry_slice
+from kubementat.automations.install import secrets as secrets_slice
+from kubementat.automations.uninstall import kubementat as uninstall_slice
 
 # Install kubementat
 @click.command(name='install', help='Install kubementat on a k8s cluster')
@@ -14,10 +17,10 @@ from kubementat.automation import Automation
 @click.option('--yes', '-y', is_flag=True, help="Do not ask for user input. For scripting purposes.")
 @kmt_context
 def install(ctx, environment, team, configure_tekton_pipelines, helmfile_installation_group, yes):
-    automation = Automation(ctx)
     click.echo(f"Helmfile installation group: {helmfile_installation_group}")
     click.echo(f"Configure tekton pipelines: {configure_tekton_pipelines}")
-    automation.install_kubementat(
+    install_slice.install_kubementat(
+        ctx,
         configure_tekton_pipelines=configure_tekton_pipelines,
         helmfile_installation_group=helmfile_installation_group,
         assume_yes=yes
@@ -41,7 +44,7 @@ def uninstall(ctx, environment, yes):
     # so passing one team along would be a claim about the install that is not true. The `Context`
     # the decorator resolved is all this command hands `Automation`: a cluster to sweep, and no
     # team, whose shape is decided by the command and not defaulted from the caller's context.
-    Automation(ctx).uninstall_kubementat(assume_yes=yes)
+    uninstall_slice.uninstall_kubementat(ctx, assume_yes=yes)
 
 
 # --------------------------------------------
@@ -51,8 +54,7 @@ def uninstall(ctx, environment, yes):
 @click.argument('team',envvar='TEAM')
 @kmt_context
 def setup_secrets(ctx, environment, team):
-    automation = Automation(ctx)
-    automation.setup_secrets()
+    secrets_slice.setup_secrets(ctx)
 
 # --------------------------------------------
 # SETUP DOCKER REGISTRY ACCESS
@@ -61,5 +63,4 @@ def setup_secrets(ctx, environment, team):
 @click.argument('team',envvar='TEAM')
 @kmt_context
 def setup_docker_registry_access(ctx, environment, team):
-    automation = Automation(ctx)
-    automation.setup_docker_registry_access()
+    registry_slice.setup_docker_registry_access(ctx)

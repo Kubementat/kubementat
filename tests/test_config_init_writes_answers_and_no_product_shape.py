@@ -34,7 +34,7 @@ from pathlib import Path
 import click
 import pytest
 
-from kubementat import automation, config_init
+from kubementat import automations as automations_layer, config_init
 from kubementat.core import constants
 from kubementat.core.config.config import Config
 from kubementat.config_init import (CREATED, EXISTED, SKIPPED, InitStep, init_configuration,
@@ -399,7 +399,10 @@ def test_the_cluster_is_not_addressed_sentence_has_one_owner(tmp_path, caplog):
     assert str(path) in printed, "the file to edit was not named as a path"
     assert "kmt environments list" in printed
 
-    # The sentence's one owner: it is in `config_init`'s source, and `automation` — the module the
-    # second caller lived in — no longer carries an implementation of it.
+    # The sentence's one owner: it is in `config_init`'s source, and the layer `Automation`'s body
+    # was split across no longer carries an implementation of it. The claim is now over the whole
+    # layer rather than the one module, because the split is exactly what could have scattered it.
     assert "does not address a cluster" in inspect.getsource(warn_cluster_not_addressed)
-    assert "does not address a cluster" not in inspect.getsource(automation)
+    scattered = [p for p in Path(automations_layer.__file__).parent.rglob("*.py")
+                 if "does not address a cluster" in p.read_text(encoding="utf-8")]
+    assert not scattered, f"a second copy of the sentence, in {scattered}"

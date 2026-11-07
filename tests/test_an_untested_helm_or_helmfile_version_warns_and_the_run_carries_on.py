@@ -28,8 +28,9 @@ from types import SimpleNamespace
 import pytest
 
 from kubementat.core import constants
-from kubementat import automation
-from kubementat.automation import Automation
+from kubementat.automations.install import dependencies as dependencies_slice
+from kubementat.automations.install.dependencies import check_dependencies_are_installed
+
 from kubementat.errors import CommandExecutionError
 from kubementat.infrastructure.shell import CommandResult
 
@@ -77,14 +78,14 @@ class FakeInstalledTools:
 def tools(monkeypatch):
     """Patch the two seams in the module that decides, rather than in a copy of it."""
     installed = FakeInstalledTools()
-    monkeypatch.setattr("kubementat.automation.shell.run", installed.run)
-    monkeypatch.setattr("kubementat.automation.shutil.which", installed.which)
+    monkeypatch.setattr("kubementat.automations.install.dependencies.shell.run", installed.run)
+    monkeypatch.setattr("kubementat.automations.install.dependencies.shutil.which", installed.which)
     return installed
 
 
 def check_dependencies(installed):
     """Run the gate the way `kmt initialize` and `kmt install` do, without running either command."""
-    return Automation.check_dependencies_are_installed(Automation.__new__(Automation), list(DEPENDENCIES))
+    return check_dependencies_are_installed(list(DEPENDENCIES))
 
 
 def warnings_about(records, binary):
@@ -118,12 +119,12 @@ def test_the_pinned_version_is_declared_once_and_the_served_range_is_that_number
     # (`unknown flag`), so a check written against it would be blind on exactly the major this product
     # ships, while `helm version --short` reads the same on 3 and 4. That was measured here before the
     # parser was written, not guessed.
-    assert set(automation.BINARY_VERSION_ARGV) == set(constants.PINNED_BINARY_VERSIONS), (
+    assert set(dependencies_slice.BINARY_VERSION_ARGV) == set(constants.PINNED_BINARY_VERSIONS), (
         "the check must ask about exactly what is pinned, or a pinned tool goes unchecked and an "
         "unpinned one gets a verdict nothing declared")
-    assert automation.BINARY_VERSION_ARGV["helm"] == ["helm", "version", "--short"]
-    assert automation.BINARY_VERSION_ARGV["helmfile"] == ["helmfile", "--version"]
-    for binary, argv in automation.BINARY_VERSION_ARGV.items():
+    assert dependencies_slice.BINARY_VERSION_ARGV["helm"] == ["helm", "version", "--short"]
+    assert dependencies_slice.BINARY_VERSION_ARGV["helmfile"] == ["helmfile", "--version"]
+    for binary, argv in dependencies_slice.BINARY_VERSION_ARGV.items():
         assert all(isinstance(token, str) for token in argv), f"{binary} is asked with a string, not an argv"
 
 
@@ -215,7 +216,7 @@ def test_a_pinned_tool_that_errors_when_asked_does_not_stop_a_run_that_was_going
     tolerance has to be explicit rather than an accident of the wrapper.
     """
     tools.answers = {"helm": CommandExecutionError(
-        CommandResult(automation.BINARY_VERSION_ARGV["helm"], 1, stderr="helm: signal 11"))}
+        CommandResult(dependencies_slice.BINARY_VERSION_ARGV["helm"], 1, stderr="helm: signal 11"))}
     with caplog.at_level(logging.WARNING):
         check_dependencies(tools)
     assert warnings_about(caplog.records, "helm"), caplog.text
@@ -231,8 +232,8 @@ def test_a_binary_that_is_not_there_still_ends_the_run(monkeypatch):
     warning has been applied to the wrong question.
     """
     absent = FakeInstalledTools(present=set())
-    monkeypatch.setattr("kubementat.automation.shell.run", absent.run)
-    monkeypatch.setattr("kubementat.automation.shutil.which", absent.which)
+    monkeypatch.setattr("kubementat.automations.install.dependencies.shell.run", absent.run)
+    monkeypatch.setattr("kubementat.automations.install.dependencies.shutil.which", absent.which)
     with pytest.raises(SystemExit):
         check_dependencies(absent)
     assert absent.asked == [], "nothing is probed for a binary that is not installed"
@@ -246,7 +247,7 @@ def test_the_pinned_binaries_are_pinned_the_way_the_dependency_list_is_measured(
     is silently never checked for version — which is the gap this ticket is closing.
     """
     pinned = set(constants.PINNED_BINARY_VERSIONS)
-    checked = {name.split()[0] for name in Automation.KUBEMENTAT_DEPENDENCIES}
+    checked = {name.split()[0] for name in dependencies_slice.KUBEMENTAT_DEPENDENCIES}
     assert pinned <= checked, f"pinned but never presence-checked: {sorted(pinned - checked)}"
     assert "helm" in pinned and "helmfile" in pinned
     # Widening the pin is row 16's scope creep, not its scope: kubectl/tkn are deliberately absent.

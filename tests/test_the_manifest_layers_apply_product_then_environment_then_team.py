@@ -24,6 +24,7 @@ prove what a cluster does with two writes, and the order the fake *received* is 
 
 import ast
 import logging
+from types import SimpleNamespace
 import os
 import shutil
 import tempfile
@@ -32,7 +33,8 @@ from pathlib import Path
 import gnupg
 import pytest
 
-from kubementat.automation import Automation
+from kubementat.automations.install import pipelines as pipelines_slice
+from kubementat.automations.install.pipelines import setup_pipelines
 from kubementat.core.config.config import Config
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -203,25 +205,23 @@ def plant_deployer_keypair(root):
     return directory
 
 
-def a_setup_pipelines(root, cluster=None, environment="dev", team="dev1"):
-    """Run the real `setup_pipelines` against a fake cluster, without the constructor.
+def a_setup_pipelines(root, cluster, monkeypatch, environment="dev", team="dev1"):
+    """Run the real `setup_pipelines` against a fake cluster, from a `Context` and nothing else.
 
-    The constructor is skipped because it wants a reachable cluster and a helm binary; what is under
-    test is what the *apply* sequence sends, so everything past that stays real — including
-    `apply_resources`, which is what walks the directories these tests lay out.
+    What is under test is what the *apply* sequence sends, so everything past the client stays
+    real — including `apply_resources`, which is what walks the directories these tests lay out.
+    The client and the two halves that are not about manifests are replaced on the module, which
+    is where the function reads them now that there is no instance to hold them.
     """
     plant_deployer_keypair(root)
-    automation = Automation.__new__(Automation)
-    automation.environment = environment
-    automation.team = team
-    automation.config = LayeredConfig(root, environment, team)
-    automation.kubernetes_utils = cluster or RecordingCluster()
-    automation.helm_utils = None
-    # The two halves of the command that are not about manifests.
-    automation._setup_pipelines_setup_role_bindings = lambda *args: None
-    automation._setup_pipelines_show_results = lambda *args: None
-    automation.setup_pipelines()
-    return automation
+    context = SimpleNamespace(environment=environment, team=team,
+                              config=LayeredConfig(root, environment, team))
+    monkeypatch.setattr(pipelines_slice, "KubernetesUtils",
+                        lambda ctx: cluster or RecordingCluster())
+    monkeypatch.setattr(pipelines_slice, "_setup_pipelines_setup_role_bindings", lambda *args: None)
+    monkeypatch.setattr(pipelines_slice, "_setup_pipelines_show_results", lambda *args: None)
+    setup_pipelines(context)
+    return context
 
 
 def written(cluster, kind):
@@ -232,7 +232,7 @@ def written(cluster, kind):
 # ---------------------------------------------------------------------------
 # (a) the product and the team name the same Task
 # ---------------------------------------------------------------------------
-def test_a_teams_task_is_applied_last_so_it_is_the_one_the_cluster_keeps(tmp_path):
+def test_a_teams_task_is_applied_last_so_it_is_the_one_the_cluster_keeps(tmp_path, monkeypatch):
     """A team that overrides a shipped Task wins, and the shipped one is still applied first.
 
     Both documents have to reach the cluster: applying the team's and skipping the product's would
@@ -244,7 +244,7 @@ def test_a_teams_task_is_applied_last_so_it_is_the_one_the_cluster_keeps(tmp_pat
     write_manifest(team_dirs(tmp_path)[0], "Task", "git-clone", "team")
     cluster = RecordingCluster()
 
-    a_setup_pipelines(tmp_path, cluster)
+    a_setup_pipelines(tmp_path, cluster, monkeypatch)
 
     task_writes = written(cluster, "Task")
     assert [entry["name"] for entry in task_writes] == ["git-clone", "git-clone"]
@@ -255,7 +255,7 @@ def test_a_teams_task_is_applied_last_so_it_is_the_one_the_cluster_keeps(tmp_pat
     assert all(entry["namespace"] == "tekton-pipelines-dev1" for entry in task_writes)
 
 
-def test_the_layer_a_pipeline_is_applied_from_is_readable_from_the_log(tmp_path, caplog):
+def test_the_layer_a_pipeline_is_applied_from_is_readable_from_the_log(tmp_path, monkeypatch, caplog):
     """One line per layer, naming the directory and the count — the log a debug session reads.
 
     Three layers apply a Pipeline, so three lines must say which directory was walked. A reader who
@@ -268,7 +268,7 @@ def test_the_layer_a_pipeline_is_applied_from_is_readable_from_the_log(tmp_path,
     cluster = RecordingCluster()
 
     with caplog.at_level(logging.INFO):
-        a_setup_pipelines(tmp_path, cluster)
+        a_setup_pipelines(tmp_path, cluster, monkeypatch)
 
     text = caplog.text
     for directory in (product_dirs(tmp_path)[1], environment_dirs(tmp_path)[1],
@@ -282,7 +282,7 @@ def test_the_layer_a_pipeline_is_applied_from_is_readable_from_the_log(tmp_path,
 # ---------------------------------------------------------------------------
 # (b) environment versus team, and (c) environment versus product
 # ---------------------------------------------------------------------------
-def test_the_teams_layer_is_applied_after_the_environments_layer(tmp_path):
+def test_the_teams_layer_is_applied_after_the_environments_layer(tmp_path, monkeypatch):
     """Both layers declare one Pipeline. The team is applied last, so the team is the answer.
 
     The direction matters and is not obvious from the paths: the environment's files sit *above* the
@@ -293,14 +293,14 @@ def test_the_teams_layer_is_applied_after_the_environments_layer(tmp_path):
     write_manifest(team_dirs(tmp_path)[1], "Pipeline", "deploy", "team")
     cluster = RecordingCluster()
 
-    a_setup_pipelines(tmp_path, cluster)
+    a_setup_pipelines(tmp_path, cluster, monkeypatch)
 
     pipeline_writes = written(cluster, "Pipeline")
     assert [entry["layer"] for entry in pipeline_writes] == ["environment", "team"]
     assert [entry["echo"] for entry in pipeline_writes] == ["environment", "team"]
 
 
-def test_the_environments_layer_is_applied_after_the_products(tmp_path):
+def test_the_environments_layer_is_applied_after_the_products(tmp_path, monkeypatch):
     """The middle layer overrides the product and is overridden by the team.
 
     This is the half the environment layer was made for: before it, tuning a shipped Task for one
@@ -311,14 +311,14 @@ def test_the_environments_layer_is_applied_after_the_products(tmp_path):
     write_manifest(environment_dirs(tmp_path)[0], "Task", "build-image", "environment")
     cluster = RecordingCluster()
 
-    a_setup_pipelines(tmp_path, cluster)
+    a_setup_pipelines(tmp_path, cluster, monkeypatch)
 
     task_writes = written(cluster, "Task")
     assert [entry["layer"] for entry in task_writes] == ["product", "environment"]
     assert task_writes[-1]["echo"] == "environment"
 
 
-def test_all_three_layers_are_applied_in_one_order_for_one_kind(tmp_path):
+def test_all_three_layers_are_applied_in_one_order_for_one_kind(tmp_path, monkeypatch):
     """One sequence, six directories, and no place for a second one to hide.
 
     Asserted on the whole run rather than per layer because the ticket is the *order*: a layer that
@@ -332,7 +332,7 @@ def test_all_three_layers_are_applied_in_one_order_for_one_kind(tmp_path):
                        f"one-{layer}-{directory.name}", layer)
     cluster = RecordingCluster()
 
-    a_setup_pipelines(tmp_path, cluster)
+    a_setup_pipelines(tmp_path, cluster, monkeypatch)
 
     assert [entry["layer"] for entry in cluster.applied] == [
         "product", "product", "environment", "environment", "team", "team",
@@ -342,7 +342,7 @@ def test_all_three_layers_are_applied_in_one_order_for_one_kind(tmp_path):
 # ---------------------------------------------------------------------------
 # (d) a layer that is not there
 # ---------------------------------------------------------------------------
-def test_a_configuration_with_no_tekton_directory_anywhere_still_installs(tmp_path, caplog):
+def test_a_configuration_with_no_tekton_directory_anywhere_still_installs(tmp_path, monkeypatch, caplog):
     """The environment layer is optional in the literal sense, and must not be able to break an
     install.
 
@@ -352,7 +352,7 @@ def test_a_configuration_with_no_tekton_directory_anywhere_still_installs(tmp_pa
     leaves you in: nothing under `tekton/` anywhere, so every optional layer is absent.
 
     Measured, not assumed, about the team layer: `setup_pipelines` creates the team's two
-    directories before applying them (`automation.py`, the `os.makedirs` calls), so what a missing
+    directories before applying them (`automations/install/pipelines.py`, the `os.makedirs` calls), so what a missing
     *team* directory does today is get created, and the layer then applies zero documents from a
     directory that does exist. That is why the log says so in one of the two shapes, and why the
     counts below are pinned per layer rather than as a total.
@@ -362,7 +362,7 @@ def test_a_configuration_with_no_tekton_directory_anywhere_still_installs(tmp_pa
 
     cluster = RecordingCluster()
     with caplog.at_level(logging.INFO):
-        a_setup_pipelines(tmp_path, cluster)
+        a_setup_pipelines(tmp_path, cluster, monkeypatch)
 
     # Nothing raised, and everything the product ships still landed.
     assert [entry["layer"] for entry in cluster.applied] == ["product", "product"]
@@ -384,7 +384,7 @@ def test_a_configuration_with_no_tekton_directory_anywhere_still_installs(tmp_pa
     assert len(team_lines) == 2, caplog.text
 
 
-def test_an_absent_layer_is_a_no_op_for_the_team_layer_too(tmp_path, caplog):
+def test_an_absent_layer_is_a_no_op_for_the_team_layer_too(tmp_path, monkeypatch, caplog):
     """The one rule, in one place, so both optional layers obey it.
 
     The directory here is under nothing that `setup_pipelines` creates — it is a layer that simply
@@ -392,13 +392,15 @@ def test_an_absent_layer_is_a_no_op_for_the_team_layer_too(tmp_path, caplog):
     line claiming anything was applied, and no write to the cluster.
     """
     cluster = RecordingCluster()
-    automation = Automation.__new__(Automation)
-    automation.kubernetes_utils = cluster
+    context = SimpleNamespace(environment="dev", team="dev1",
+                              config=LayeredConfig(tmp_path, "dev", "dev1"))
+    monkeypatch.setattr(pipelines_slice, "KubernetesUtils", lambda ctx: cluster)
     missing = tmp_path / "platform_config" / "dev" / "tekton" / "tasks"
 
     with caplog.at_level(logging.INFO):
-        applied = automation._apply_manifest_layer("environment", missing, "tekton-pipelines-dev1",
-                                                   kind="Task", group="tekton.dev", version="v1")
+        applied = pipelines_slice._apply_manifest_layer(context, "environment", missing,
+                                                        "tekton-pipelines-dev1",
+                                                        kind="Task", group="tekton.dev", version="v1")
 
     assert applied == 0
     assert cluster.applied == []
@@ -410,7 +412,7 @@ def test_an_absent_layer_is_a_no_op_for_the_team_layer_too(tmp_path, caplog):
 # ---------------------------------------------------------------------------
 # (e) templates are never applied
 # ---------------------------------------------------------------------------
-def test_a_generator_template_under_a_layer_is_never_applied_as_a_manifest(tmp_path):
+def test_a_generator_template_under_a_layer_is_never_applied_as_a_manifest(tmp_path, monkeypatch):
     """A `templates/` directory under the environment or the team layer is generator input.
 
     The exclusion is not defensive: `templates/` sits *inside* real resource roots, so the walk that
@@ -426,7 +428,7 @@ def test_a_generator_template_under_a_layer_is_never_applied_as_a_manifest(tmp_p
     write_manifest(environment_dirs(tmp_path)[1], "Pipeline", "deploy", "environment")
     cluster = RecordingCluster()
 
-    a_setup_pipelines(tmp_path, cluster)
+    a_setup_pipelines(tmp_path, cluster, monkeypatch)
 
     names = [entry["name"] for entry in cluster.applied]
     assert "deploy-pipeline-APP_NAME_PLACEHOLDER" not in names

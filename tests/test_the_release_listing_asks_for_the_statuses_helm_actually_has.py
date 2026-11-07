@@ -29,7 +29,8 @@ import pytest
 
 from cluster_fixture import TARGET_DEV
 from kubementat.infrastructure import helm as helm_utils
-from kubementat.automation import Automation
+from kubementat.infrastructure import shell
+from kubementat.automations.uninstall import residue as residue_slice
 from kubementat.core.identity.context import Context
 from kubementat.infrastructure.helm import HelmUtils, helm_list_releases_argv
 from kubementat.core.identity.target import helm_target_args
@@ -91,38 +92,36 @@ def test_nothing_else_in_the_product_spells_a_helm_list_argv():
 
 
 def test_the_two_teardown_reads_ask_that_argv_and_not_an_equal_one(monkeypatch):
-    """What the two `automation.py` call sites actually issue, and not what a comment claims.
+    """What the two `automations/uninstall/residue.py` call sites actually issue, and not what a
+    comment claims.
 
     Row 24's half that is not a constant: the release sweep and the Traefik-definition gate both
     asked `helm list --all-namespaces --output json`, which is the narrower read -- correct on helm
     4, where every status is the default, and blind to `pending`/`superseded`/`uninstalled` on helm
     3, where the mask starts narrower. One answer is only one answer if the command issued is the
-    constant, so this runs both methods against a recording `shell.run` and reads the argv back.
+    constant, so this runs both functions against a recording `shell.run` and reads the argv back.
 
     The recording answers with a single Traefik release: enough for the gate to decide it has nothing
     to delete, and not enough for the sweep to uninstall anything it should not, so the commands
     recorded here are the reads under test.
 
-    The instance is no longer state-free. The cluster is on this command's argv, so a teardown
-    read needs the address it was handed -- and an instance built with `__new__` and no `kubernetes_utils`
-    now fails instead of quietly asking the machine running the test.
+    Neither read is state-free. The cluster is on this command's argv, so a teardown read needs the
+    address it was handed -- and a `Context` whose target is inert now fails instead of quietly
+    asking the machine running the test.
     """
-    import kubementat.automation
-
     asked = []
     traefik = ('[{"name": "traefik", "namespace": "kube-system", "chart": "traefik-33.2.1",'
                ' "status": "deployed"}]')
 
     def recording_run(argv, **kwargs):
         asked.append(list(argv))
-        return kubementat.infrastructure.shell.CommandResult(argv, 0, stdout=traefik, stderr="")
+        return shell.CommandResult(argv, 0, stdout=traefik, stderr="")
 
-    monkeypatch.setattr(kubementat.automation.shell, "run", recording_run)
-    gate = Automation.__new__(Automation)
-    gate.kubernetes_utils = KubernetesUtils(TARGET_DEV)     # the read needs an address
+    monkeypatch.setattr(residue_slice.shell, "run", recording_run)
+    context = Context(environment="dev", team=None, config=None, target=TARGET_DEV)
 
-    Automation._uninstall_helm_releases(gate, ["dev1"])
-    Automation._delete_crds_traefik_helm_leaves_behind(gate)
+    residue_slice.uninstall_helm_releases(context, ["dev1"])
+    residue_slice.delete_crds_traefik_helm_leaves_behind(context)
 
     assert [argv for argv in asked if argv[:2] == ["helm", "list"]] == [
         expected_read_for(TARGET_DEV), expected_read_for(TARGET_DEV)], (

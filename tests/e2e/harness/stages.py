@@ -968,14 +968,15 @@ class LaneRunner:
 
     # Both tables, read in the guest by the code that owns them: the declaration is
     # `constants.PINNED_BINARY_VERSIONS`, the argv each binary is asked with is
-    # `automation.BINARY_VERSION_ARGV`, and the parser is `automation.first_binary_version`. A
+    # `automations.install.dependencies.BINARY_VERSION_ARGV`, and the parser is
+    # `automations.install.dependencies.first_binary_version`. A
     # harness-side copy of any of the three is exactly the drift this probe exists to catch, so the
     # guest answers its own question and this stage only compares what it says.
     PINNED_TOOL_PROBE = """
 import json
 from kubementat.infrastructure import shell
 from kubementat.core import constants
-from kubementat.automation import BINARY_VERSION_ARGV, first_binary_version
+from kubementat.automations.install.dependencies import BINARY_VERSION_ARGV, first_binary_version
 
 seen = {}
 for binary, argv in sorted(BINARY_VERSION_ARGV.items()):

@@ -27,7 +27,7 @@ import pytest
 from cluster_fixture import configuration_only_context
 from kubementat.infrastructure import helm as helm_utils
 from kubementat.core import constants
-from kubementat.automation import Automation
+from kubementat.automations.tunnels import tunnels
 from kubementat.core.config.config import Config
 from kubementat.core.config.keys import component_config_key
 from kubementat.infrastructure.helm import HelmUtils
@@ -83,13 +83,17 @@ class RecordingKubernetesUtils:
         return "tunnel opened"
 
 
-def tunnel_automation(root, env_static):
-    automation = Automation.__new__(Automation)
-    automation.environment = ENVIRONMENT
-    automation.team = TEAM
-    automation.config = environment_config(root, env_static)
-    automation.kubernetes_utils = RecordingKubernetesUtils()
-    return automation
+def tunnel_automation(root, env_static, monkeypatch):
+    """A `Context` whose only cluster collaborator is a recording client.
+
+    The tunnels build the client from the name the slice imported, which is the seam there is no
+    longer a `self.kubernetes_utils` to hand over.
+    """
+    context = types.SimpleNamespace(environment=ENVIRONMENT, team=TEAM,
+                                    config=environment_config(root, env_static))
+    context.kubernetes_utils = RecordingKubernetesUtils()
+    monkeypatch.setattr(tunnels, "KubernetesUtils", lambda ctx: context.kubernetes_utils)
+    return context
 
 
 # --- the key, and what it is derived from ----------------------------------------------
@@ -201,7 +205,8 @@ def test_an_unknown_component_is_refused_rather_than_defaulted(tmp_path):
 
 
 @pytest.mark.parametrize("function,component,default_namespace", TUNNEL_COMPONENTS)
-def test_a_tunnel_uses_the_namespace_the_config_names(tmp_path, function, component, default_namespace):
+def test_a_tunnel_uses_the_namespace_the_config_names(tmp_path, monkeypatch, function, component,
+                                                      default_namespace):
     """The tunnel commands used to carry their own namespace, so they kept using 'grafana'.
 
     The lane's rename feature is what caught this, and all it could report was "the tunnel did not
@@ -211,9 +216,9 @@ def test_a_tunnel_uses_the_namespace_the_config_names(tmp_path, function, compon
     automation = tunnel_automation(tmp_path, {
         component_config_key(component, "DEPLOYMENT_NAMESPACE"): configured,
         component_config_key(component, "SERVICE_SELECTOR"): "app=renamed",
-    })
+    }, monkeypatch)
 
-    getattr(automation, function)(local_port=1234, remote_port=5678, host="127.0.0.1")
+    getattr(tunnels, function)(automation, local_port=1234, remote_port=5678, host="127.0.0.1")
 
     assert automation.kubernetes_utils.tunnels == [(configured, "the-pod", 1234, 5678, "127.0.0.1")]
     # ...and the selector came from the same place, so the tunnel cannot land on a pod of a
@@ -223,24 +228,24 @@ def test_a_tunnel_uses_the_namespace_the_config_names(tmp_path, function, compon
 
 @pytest.mark.parametrize("function,component,default_namespace", TUNNEL_COMPONENTS)
 def test_a_tunnel_falls_back_to_the_same_default_as_everything_else(
-        tmp_path, function, component, default_namespace):
+        tmp_path, monkeypatch, function, component, default_namespace):
     """No tunnel keeps a private namespace for the config that predates these keys."""
-    automation = tunnel_automation(tmp_path, {})
+    automation = tunnel_automation(tmp_path, {}, monkeypatch)
 
-    getattr(automation, function)()
+    getattr(tunnels, function)(automation)
 
     assert automation.kubernetes_utils.tunnels[0][0] == default_namespace
 
 
-def test_the_service_selector_defaults_match_the_selectors_the_tunnels_used(tmp_path):
+def test_the_service_selector_defaults_match_the_selectors_the_tunnels_used(tmp_path, monkeypatch):
     """Same trick, second value: the selector was string-interpolated from the component.
 
     It happens to be right for grafana and wrong to keep deriving in code: a helm release
     name is not the namespace's business either.
     """
-    automation = tunnel_automation(tmp_path, {})
+    automation = tunnel_automation(tmp_path, {}, monkeypatch)
 
-    automation.open_tunnel_grafana()
+    tunnels.open_tunnel_grafana(automation)
 
     selectors = [selector for _, selector in automation.kubernetes_utils.selectors]
     assert selectors == [
@@ -828,7 +833,7 @@ def test_the_python_uninstall_has_no_namespace_list_of_its_own():
     `test_uninstall_sweeps_everything_kubementat_owns.py`; this only says the answer is not
     written down twice.
     """
-    source = (REPO_ROOT / "src/kubementat/automation.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "src/kubementat/automations/uninstall/sweep.py").read_text(encoding="utf-8")
     # `namespace_sweep` is the walk; `namespaces_kubementat_owns` is its list view. The guard has
     # to read the function that decides, which is why this name is spelled out and not guessed at.
     sweep = _function_source(source, "namespace_sweep")
@@ -838,8 +843,11 @@ def test_the_python_uninstall_has_no_namespace_list_of_its_own():
     assert not (REPO_ROOT / "uninstall_kubementat.sh").exists(), \
         "both implementations would mean two answers, and only one of them is executed"
 
-    offenders = [f"src/kubementat/automation.py: {line.strip()}"
-                 for line in source.splitlines()
+    # The literal scan is over the whole layer `automation.py` was split into, which is all of the
+    # surface a namespace could be hardcoded into now.
+    offenders = [f"{path.relative_to(REPO_ROOT)}: {line.strip()}"
+                 for path in sorted((REPO_ROOT / "src/kubementat/automations").rglob("*.py"))
+                 for line in path.read_text(encoding="utf-8").splitlines()
                  if _namespace_literal_assignment(line)]
     assert offenders == []
 

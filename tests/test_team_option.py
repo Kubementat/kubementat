@@ -61,13 +61,16 @@ TEAM_LESS_COMMANDS = [
 ]
 
 
+# The three verbs `kmt tunnel` still opens, so the recorder below can be attached to the names the
+# commands actually look up: the tunnels layer handed them functions rather than an object.
+TUNNEL_FUNCTIONS = ("open_tunnel_grafana", "open_tunnel_tekton_dashboard", "open_tunnel_openbao")
+
+
 class RecordingContext:
-    """Stands in for the classes that take one `Context` -- `TektonUtils` and `Automation` do.
+    """Stands in for the classes that take one `Context` -- `TektonUtils` and `HelmUtils` do.
 
     Records the `(environment, team)` pair the object carries, because that pair is what these
-    tests assert; what changed is where it lives, not whether the command still decides it. The
-    tunnel entry points are here too, because for a recorder what is under test is that the pair was
-    recorded and nothing was addressed, not which half of the library the call belongs to.
+    tests assert; what changed is where it lives, not whether the command still decides it.
     """
 
     def __init__(self, calls):
@@ -84,14 +87,21 @@ class RecordingContext:
         self.calls[-1] = self.calls[-1] + (kwargs,)
         return None
 
-    # Automation: the tunnel entry points just have to exist and return
-    def open_tunnel_grafana(self, *args):
-        return None
 
-    def open_tunnel_tekton_dashboard(self, *args):
-        return None
+class RecordingTunnels:
+    """One of the three tunnel entry points, recorded instead of run.
 
-    def open_tunnel_openbao(self, *args):
+    The tunnels used to be reached through an `Automation`, so a recorder that replaced the class
+    covered all three. They are now names on the command module, called as
+    `function(ctx, local_port, remote_port, host)`, so this records the pair the `Context` carries
+    and returns nothing -- which is what `open_tunnel` reads as a tunnel that opened.
+    """
+
+    def __init__(self, calls):
+        self.calls = calls
+
+    def __call__(self, ctx, *args):
+        self.calls.append((ctx.environment, ctx.team))
         return None
 
 
@@ -99,7 +109,8 @@ class RecordingContext:
 def recorder(monkeypatch):
     calls = []
     monkeypatch.setattr(tekton, "TektonUtils", RecordingContext(calls))
-    monkeypatch.setattr(tunnels, "Automation", RecordingContext(calls))
+    for name in TUNNEL_FUNCTIONS:
+        monkeypatch.setattr(tunnels, name, RecordingTunnels(calls))
     return calls
 
 
@@ -187,6 +198,7 @@ def test_a_command_that_reads_team_config_refuses_a_run_that_named_none(command,
 @pytest.mark.parametrize("command,args", TEAM_LESS_COMMANDS,
                          ids=[command.name for command, _args in TEAM_LESS_COMMANDS])
 def test_a_command_that_cannot_act_on_a_team_says_the_flag_is_not_its_option(command, args,
+                                                                             recorder,
                                                                              resolvable_environment,
                                                                              monkeypatch):
     """The other half of the rule: a command with no team semantics does not accept `--team`.
@@ -208,6 +220,28 @@ def test_a_command_that_cannot_act_on_a_team_says_the_flag_is_not_its_option(com
     # without a cluster to read it would fail for a reason this test is not about.)
     params = {param.name for param in command.params}
     assert "team" not in params, f"kmt {command.name} still carries a team parameter"
+
+    # And the absence is load-bearing for the one command group that reaches a team-scoped
+    # function: run the tunnel with the flag it refuses off, and read back the pair it hands the
+    # tunnels layer. A `--team` put back on the option, or `dev1` reintroduced anywhere in the
+    # path, lands here as a team that is not None -- which is what the vacuous recorder this
+    # replaced could not see.
+    if command in TUNNEL_COMMANDS:
+        before = len(recorder)
+        opened = invoke(command, list(args))
+
+        assert opened.exit_code == 0, opened.output
+        assert len(recorder) == before + 1, (
+            f"kmt {command.name} reached no tunnel function at all, so the recorder above is "
+            "patching a name the command never looks up")
+        assert recorder[-1][:2] == ("dev", None), (
+            f"kmt {command.name} handed the tunnels layer {recorder[-1]}; a command with no team "
+            "semantics hands it none")
+
+
+# The three tunnel verbs, identified by command so the test below can run them for real once the
+# flag it refuses is off. `routing.status` and the seven below it never reach the tunnels layer.
+TUNNEL_COMMANDS = {tunnels.tunnel_grafana, tunnels.tunnel_tekton, tunnels.tunnel_openbao_ui}
 
 
 def test_no_team_is_hardcoded_in_the_command_modules():

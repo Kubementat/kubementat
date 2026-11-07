@@ -24,8 +24,10 @@ without one.
 import json
 
 import pytest
+from types import SimpleNamespace
 
-from kubementat.automation import Automation
+from kubementat.automations.install import registry as registry_slice
+from kubementat.automations.install.registry import setup_docker_registry_access
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 
@@ -57,7 +59,7 @@ class LayerConfig:
     """The two team reads `setup_docker_registry_access` makes, answered from one dict.
 
     Written as a fake deliberately: a real `Config` would need a whole tree, and the claim here is
-    about what the automation does with an answer of `None`, which is a fact about this function and
+    about what the capability does with an answer of `None`, which is a fact about this function and
     not about resolution.
     """
 
@@ -70,15 +72,15 @@ class LayerConfig:
 
 
 def an_automation(team_static_encrypted, monkeypatch, tmp_path):
-    """An `Automation` whose only collaborators are a recording cluster and a hand-answered config."""
-    automation = Automation.__new__(Automation)  # noqa: SLF001 - the read is the subject
-    automation.environment = "dev"
-    automation.team = "smoke"
-    automation.config = LayerConfig(
+    """A `Context` whose only collaborators are a recording cluster and a hand-answered config."""
+    automation = SimpleNamespace(environment="dev", team="smoke", config=LayerConfig(
         {"PIPELINE_NAMESPACE": "pipelines", "APP_DEPLOYMENT_NAMESPACE": "apps",
          "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME": "helm-deployer"},
-        team_static_encrypted)
+        team_static_encrypted))
     automation.kubernetes_utils = RecordingKubernetes()
+    # The slice builds its client from the name it imported, which is the seam this test closes now
+    # that there is no `self.kubernetes_utils` left to hand it over.
+    monkeypatch.setattr(registry_slice, "KubernetesUtils", lambda _ctx: automation.kubernetes_utils)
     return automation
 
 
@@ -99,7 +101,7 @@ def test_a_team_with_no_credentials_does_not_crash(block, monkeypatch, tmp_path)
     automation = an_automation({"DOCKER_REGISTRY_CREDENTIALS": block} if block is not None else {},
                                monkeypatch, tmp_path)
 
-    automation.setup_docker_registry_access()  # must not raise
+    setup_docker_registry_access(automation)  # must not raise
 
 
 def test_a_team_with_no_credentials_creates_no_secret_and_patches_nothing(monkeypatch, tmp_path):
@@ -111,7 +113,7 @@ def test_a_team_with_no_credentials_creates_no_secret_and_patches_nothing(monkey
     """
     automation = an_automation({}, monkeypatch, tmp_path)
 
-    automation.setup_docker_registry_access()
+    setup_docker_registry_access(automation)
 
     assert automation.kubernetes_utils.secrets == [], \
         "it created a docker secret for credentials nobody named"
@@ -127,7 +129,7 @@ def test_a_team_that_does_name_credentials_still_gets_the_secret(monkeypatch, tm
     """
     automation = an_automation({"DOCKER_REGISTRY_CREDENTIALS": NAMED_CREDENTIAL}, monkeypatch, tmp_path)
 
-    automation.setup_docker_registry_access()
+    setup_docker_registry_access(automation)
 
     created = automation.kubernetes_utils.secrets
     assert len(created) == 2, \
@@ -148,8 +150,8 @@ def test_the_read_that_answers_none_is_not_confused_with_the_read_that_answers_n
     with_key = an_automation({"DOCKER_REGISTRY_CREDENTIALS": None}, monkeypatch, tmp_path)
     without_key = an_automation({}, monkeypatch, tmp_path)
 
-    with_key.setup_docker_registry_access()
-    without_key.setup_docker_registry_access()
+    setup_docker_registry_access(with_key)
+    setup_docker_registry_access(without_key)
 
     assert with_key.kubernetes_utils.secrets == without_key.kubernetes_utils.secrets == []
     assert with_key.kubernetes_utils.patches == without_key.kubernetes_utils.patches == []

@@ -84,12 +84,13 @@ GENERIC_VALUES = {constants.DEFAULT_STATIC_ANSWERS["TRAEFIK_INGRESS_CLASS"],
 # they are. `local-path` is this table's own answer for `TEKTON_KUBERNETES_STORAGE_CLASS` -- the key
 # that took over `KUBERNETES_DEFAULT_STORAGE_CLASS` when `initialize` was deleted (`7888bdf`) -- so a
 # file that cites it while talking about a cluster's volume classes is citing a fact and not writing
-# a second default. `src/kubementat/automation.py` is the file the allowance is held for; it carries
-# no such literal today (measured: no `local-path` in that file), so the entry is inert and is kept
-# only as the allowance for where the literal used to sit. If a `local-path` reappears there, this
-# entry is the thing to delete.
-UNRELATED_USES = {"src/kubementat/automation.py":
-                  {constants.DEFAULT_STATIC_ANSWERS["TEKTON_KUBERNETES_STORAGE_CLASS"]}}
+# a second default. The one file that ever held this allowance, `src/kubementat/automation.py`, is
+# gone: the split spread its body across `src/kubementat/automations/`, and none of those files
+# carries the literal (measured: the only `local-path` in `src/` is the owner's own entry in
+# `constants.py`). So the table is empty and the guard is exactly as strict as it was -- a
+# `local-path` in any of the slices still fails, which is what an allowance for a deleted file
+# could no longer have kept true of.
+UNRELATED_USES = {}
 
 
 def seed(root, environment_static=None, team_static=None, write_team=True) -> Config:

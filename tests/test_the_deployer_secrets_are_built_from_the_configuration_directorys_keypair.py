@@ -32,7 +32,10 @@ import gnupg
 import pytest
 
 from kubementat import config_keys
-from kubementat.automation import Automation
+from types import SimpleNamespace
+
+from kubementat.automations.install import pipelines as pipelines_slice
+from kubementat.automations.install.pipelines import setup_pipelines
 from kubementat.errors import DeployerKeyMissingError
 
 ENVIRONMENT = "dev"
@@ -140,22 +143,19 @@ class PipelineConfig:
         }[section]
 
 
-def a_setup_pipelines(root, cluster):
+def a_setup_pipelines(root, cluster, monkeypatch):
     """The real `setup_pipelines` against the recording cluster, without the constructor.
 
-    The constructor wants a resolved `Context`; what is under test is what the method asks of the
-    configuration root and what it sends the cluster, so the two halves that are neither — the
-    role bindings and the closing print — are stubbed and everything else runs.
+    What is under test is what the function asks of the configuration root and what it sends the
+    cluster, so the two halves that are neither — the role bindings and the closing print — are
+    stubbed and everything else runs. The client is replaced on the module it is built from.
     """
-    automation = Automation.__new__(Automation)
-    automation.environment = ENVIRONMENT
-    automation.team = TEAM
-    automation.config = PipelineConfig(root)
-    automation.kubernetes_utils = cluster
-    automation._setup_pipelines_setup_role_bindings = lambda *args: None
-    automation._setup_pipelines_show_results = lambda *args: None
-    automation.setup_pipelines()
-    return automation
+    context = SimpleNamespace(environment=ENVIRONMENT, team=TEAM, config=PipelineConfig(root))
+    monkeypatch.setattr(pipelines_slice, "KubernetesUtils", lambda ctx: cluster)
+    monkeypatch.setattr(pipelines_slice, "_setup_pipelines_setup_role_bindings", lambda *args: None)
+    monkeypatch.setattr(pipelines_slice, "_setup_pipelines_show_results", lambda *args: None)
+    setup_pipelines(context)
+    return context
 
 
 def a_secret_named(cluster, name):
@@ -164,7 +164,7 @@ def a_secret_named(cluster, name):
     return found[0]
 
 
-def test_the_ssh_secret_is_the_key_files_bytes_under_one_base64_layer(configuration_root):
+def test_the_ssh_secret_is_the_key_files_bytes_under_one_base64_layer(configuration_root, monkeypatch):
     """`raw_data` is the `data` field: one layer, and under it the file's bytes and nothing else.
 
     The task on the other side writes the decoded variable to `$HOME/.ssh/deploy_key` as-is, so
@@ -172,7 +172,7 @@ def test_the_ssh_secret_is_the_key_files_bytes_under_one_base64_layer(configurat
     """
     cluster = SecretRecordingCluster()
 
-    a_setup_pipelines(configuration_root, cluster)
+    a_setup_pipelines(configuration_root, cluster, monkeypatch)
 
     secret = a_secret_named(cluster, "git-deployer-ssh-key")
     assert secret["key_type"] == "kubernetes.io/ssh-auth"
@@ -180,7 +180,7 @@ def test_the_ssh_secret_is_the_key_files_bytes_under_one_base64_layer(configurat
     assert base64.b64decode(secret["raw_data"]["ssh-privatekey"]) == SSH_PRIVATE_BYTES
 
 
-def test_the_gpg_secret_decodes_to_the_key_file_after_exactly_one_base64_d(configuration_root):
+def test_the_gpg_secret_decodes_to_the_key_file_after_exactly_one_base64_d(configuration_root, monkeypatch):
     """`string_data`, encoded once by kubementat: the task's one `base64 -d` lands on the armor.
 
     A second encoding would decode to base64 text where `gpg --import` expects key material, which
@@ -189,7 +189,7 @@ def test_the_gpg_secret_decodes_to_the_key_file_after_exactly_one_base64_d(confi
     """
     cluster = SecretRecordingCluster()
 
-    a_setup_pipelines(configuration_root, cluster)
+    a_setup_pipelines(configuration_root, cluster, monkeypatch)
 
     secret = a_secret_named(cluster, "git-deployer-gpg-key")
     assert secret["key_type"] == "Opaque"
@@ -201,7 +201,7 @@ def test_the_gpg_secret_decodes_to_the_key_file_after_exactly_one_base64_d(confi
         "one decode did not land on key material: a second base64 layer crept in"
 
 
-def test_a_root_without_a_keypair_refuses_by_name_before_touching_a_cluster(tmp_path):
+def test_a_root_without_a_keypair_refuses_by_name_before_touching_a_cluster(tmp_path, monkeypatch):
     """The guard census L found missing: named, early, and with nothing asked of the cluster.
 
     The message owes the operator the path it looked in, the four names the deployer is made of,
@@ -214,7 +214,7 @@ def test_a_root_without_a_keypair_refuses_by_name_before_touching_a_cluster(tmp_
     cluster = SecretRecordingCluster()
 
     with pytest.raises(DeployerKeyMissingError) as refused:
-        a_setup_pipelines(root, cluster)
+        a_setup_pipelines(root, cluster, monkeypatch)
 
     message = str(refused.value)
     assert str(root) in message, f"the path that was looked in: {message}"

@@ -202,13 +202,13 @@ def _reads_configuration(step: dict, pipeline: dict) -> bool:
 def test_kubementat_creates_the_secret_the_unlock_step_reads():
     """The name of the Secret is a contract across two files, and both ends are asserted.
 
-    `setup_pipelines` in `src/kubementat/automation.py` creates it; `git-crypt-unlock.yml` reads it by
+    `setup_pipelines` in `src/kubementat/automations/install/pipelines.py` creates it; `git-crypt-unlock.yml` reads it by
     `secretKeyRef`. A rename on one side is a step that unlocks nothing, and neither file read alone shows
     it, so this reads the constant out of the source and compares it against the YAML.
     """
-    automation = Path("src/kubementat/automation.py").read_text(encoding="utf-8")
+    automation = Path("src/kubementat/automations/install/pipelines.py").read_text(encoding="utf-8")
     assert CONFIGURATION_KEY_SECRET in automation, \
-        f"nothing in automation.py creates {CONFIGURATION_KEY_SECRET}, so the unlock step's Secret is " \
+        f"nothing in pipelines.py creates {CONFIGURATION_KEY_SECRET}, so the unlock step's Secret is " \
         "created by nobody and the step's own error message blames the operator for kmt install"
 
     task = _load(TASKS / f"{UNLOCK_TASK}.yml")
@@ -256,7 +256,7 @@ def test_the_secret_is_built_from_the_file_that_a_clone_cannot_carry():
     assert "def require_symmetric_key" in bootstrap, \
         "nothing reads git_crypt_symmetric.key back, so the Secret is built from a file nobody resolved"
 
-    automation = Path("src/kubementat/automation.py").read_text(encoding="utf-8")
+    automation = Path("src/kubementat/automations/install/pipelines.py").read_text(encoding="utf-8")
     assert "require_symmetric_key" in automation, \
         "the Secret is created without the reader that names the file it is built from"
 

@@ -28,14 +28,15 @@ Two things the ledger said were blockers, and what they turned out to be:
 One difference survives the deletion as a fact and not as a bug, so it is recorded here: bash wrote
 the private half in OpenSSH's own container, the library writes a classic RSA PEM (`TraditionalOpenSS
 L`). Both are 2048-bit RSA and both parse; anything that reads the key by handing it to `ssh` will
-not notice. `src/kubementat/automation.py` only ever base64-encodes what the library returned.
+not notice. `src/kubementat/automations/install/pipelines.py` only ever base64-encodes what the library returned.
 """
 
 import base64
 from pathlib import Path
 
 from cluster_parity import operations_from_calls
-from kubementat import automation, config_init, config_keys
+from kubementat import config_init, config_keys
+from kubementat.automations.install import pipelines as pipelines_slice
 from kubementat.crypto_utils import CryptoUtils
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -152,7 +153,7 @@ def test_the_stored_blob_is_the_key_encoded_once(tmp_path):
     """The last thing the script did was print a blob, and the contract behind it is still one pass.
 
     `base64_encode "$private_key_contents"` was the script's own last line, and what it fed was the
-    Secret's `ssh-privatekey` field. `automation._base64_encode_file` is the same act on the Python
+    Secret's `ssh-privatekey` field. `pipelines_slice._base64_encode_file` is the same act on the Python
     side — it is what `setup_pipelines` builds both deployer Secrets from — so it is asserted here:
     decode the stored blob and you get the key back, byte for byte — not the key's base64, twice
     encoded, which is the failure mode that produces a Secret that decodes to `QlZOV1p...` instead
@@ -160,7 +161,7 @@ def test_the_stored_blob_is_the_key_encoded_once(tmp_path):
     """
     generate_into(tmp_path)
 
-    encoded = automation._base64_encode_file(tmp_path / KEY_NAME)
+    encoded = pipelines_slice._base64_encode_file(tmp_path / KEY_NAME)
 
     assert base64.b64decode(encoded.encode()) == (tmp_path / KEY_NAME).read_bytes()
 

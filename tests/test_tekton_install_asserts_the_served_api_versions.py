@@ -25,7 +25,7 @@ from types import SimpleNamespace
 import pytest
 
 from kubementat.core.config import config as config_module
-from kubementat.automation import Automation
+from kubementat.automations.install import kubementat as install_slice
 from kubementat.errors import TektonControllerWithoutConfiguredApiError
 from kubementat.tekton_utils import (
     TEKTON_RELEASE_BASE_URL,
@@ -229,8 +229,8 @@ def test_an_install_asks_the_cluster_what_it_left_running_after_the_install_and_
     class RecordingTektonInstall:
         """Stands in for `TektonUtils.install()` so the ordering is what is under test.
 
-        Patched where `Automation` imports the name, which is also the assertion that the install
-        step is Python: a script call would not be reachable by this patch at all.
+        Patched where the install slice imports the name, which is also the assertion that the
+        install step is Python: a script call would not be reachable by this patch at all.
         """
 
         def __init__(self, ctx):
@@ -240,29 +240,24 @@ def test_an_install_asks_the_cluster_what_it_left_running_after_the_install_and_
         def install(self):
             journal.append("tekton_install")
 
-    monkeypatch.setattr("kubementat.automation.TektonUtils", RecordingTektonInstall)
+    monkeypatch.setattr(install_slice, "TektonUtils", RecordingTektonInstall)
 
-    automation = Automation.__new__(Automation)
-    automation.config = the_pinned_config()
-    automation.config.kubementat_main_dir = str(tmp_path)
-    # The `Context` the install path would have been handed, with the configuration this test pins.
-    automation.ctx = configuration_only_context("dev", "dev1", automation.config)
-    automation.environment = "dev"
-    automation.team = "dev1"
-    automation.kubernetes_utils = cluster
-    # The one `HelmUtils` the install path builds is constructed from that `Context`, so the
-    # stand-in goes on that name rather than on a `self.helm_utils` attribute or a method that
-    # resolved a `Context` of its own. Same recording, same ordering fact — and the `ctx` the
-    # factory is handed is the half that used to be a second resolution.
-    monkeypatch.setattr("kubementat.automation.HelmUtils",
+    # The `Context` the install path is handed, with the configuration this test pins. Every
+    # collaborator the old `Automation` remembered on `self` is now built inside
+    # `install_kubementat` from that `Context`, so each one is replaced on the module the
+    # function reads it through — which is what makes the ordering below observable.
+    context = configuration_only_context("dev", "dev1", the_pinned_config())
+    context.config.kubementat_main_dir = str(tmp_path)
+    monkeypatch.setattr(install_slice, "KubernetesUtils", lambda ctx: cluster)
+    monkeypatch.setattr(install_slice, "HelmUtils",
                         lambda ctx: SimpleNamespace(
                             helmfile_apply=lambda **kwargs: journal.append("helmfile_apply")))
-    automation.check_dependencies_are_installed = lambda dependencies: None
-    automation.validate_cluster_prompt = lambda assume_yes=False: None
-    automation.check_cluster_permissions = lambda: None
-    automation._print_install_finish_message = lambda: None
+    monkeypatch.setattr(install_slice, "check_dependencies_are_installed", lambda dependencies: None)
+    monkeypatch.setattr(install_slice, "validate_cluster_prompt", lambda ctx, assume_yes=False: None)
+    monkeypatch.setattr(install_slice, "check_cluster_permissions", lambda ctx: None)
+    monkeypatch.setattr(install_slice, "_print_install_finish_message", lambda ctx: None)
 
-    automation.install_kubementat(configure_tekton_pipelines=False)
+    install_slice.install_kubementat(context, configure_tekton_pipelines=False)
 
     assert journal == [
         "tekton_install",

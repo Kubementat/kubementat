@@ -580,3 +580,23 @@ class Context:
             f"let a command decide which of them it meant. Run kmt environments list to see "
             f"which environment claims which cluster, then point one of them somewhere else."
         )
+
+
+def context_name(ctx) -> str:
+    '''
+    The kube context this command resolves, named once.
+
+    The read this replaces is gone. `kubectl config current-context` answered from the
+    local kubeconfig rather than from the command's own resolution, so on a machine whose
+    kubeconfig says prod and whose command says dev the uninstall plan printed prod -- and it
+    printed `unknown` whenever the read failed, which is a third state between "dev" and
+    "prod" that no operator chose.
+
+    The answer is now a property of the `Context`, asked the same way `Context.build` asked it
+    before anything ran, so the plan and the resolution report cannot disagree. It is still
+    `unknown`-free: a command that got this far has a target, and `require_target` says so when
+    it has not.
+    '''
+    target = ctx.require_target("the cluster this uninstall plan is about")
+    return str(target.context)
+

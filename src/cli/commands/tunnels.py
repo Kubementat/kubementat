@@ -14,9 +14,15 @@ them out is `tests/test_the_polaris_and_mysql_tunnel_commands_stay_retired.py` -
 a guard is how a command comes back.
 """
 
+from functools import partial
+
 import click
 
-from kubementat.automation import Automation
+from kubementat.automations.tunnels.tunnels import (
+    open_tunnel_grafana,
+    open_tunnel_openbao,
+    open_tunnel_tekton_dashboard,
+)
 from kubementat.errors import MysqlNotConfiguredError
 from kubementat.errors import PodNotFoundError
 from kubementat.infrastructure.kubernetes import KubernetesUtils
@@ -78,11 +84,10 @@ def open_tunnel(function, *args):
 @kmt_context
 def tunnel_grafana(ctx, environment, local_port, remote_port, host):
     click.echo(f"ENVIRONMENT: {environment}")
-    automation = Automation(ctx)
     click.echo("########################")
     click.echo(f"See GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD environment variables within platform_config/{environment}/static.encrypted.json")
     click.echo("########################")
-    return open_tunnel(automation.open_tunnel_grafana, local_port, remote_port, host)
+    return open_tunnel(partial(open_tunnel_grafana, ctx), local_port, remote_port, host)
 
 # Tunnel tekton
 @tunnel.command(name='tekton', help='open a network tunnel to the tekton UI')
@@ -93,8 +98,7 @@ def tunnel_grafana(ctx, environment, local_port, remote_port, host):
 @kmt_context
 def tunnel_tekton(ctx, environment, local_port, remote_port, host):
     click.echo(f"ENVIRONMENT: {environment}")
-    automation = Automation(ctx)
-    return open_tunnel(automation.open_tunnel_tekton_dashboard, local_port, remote_port, host)
+    return open_tunnel(partial(open_tunnel_tekton_dashboard, ctx), local_port, remote_port, host)
 
 # Tunnel OpenBao UI
 # NOTE: this command was once defined as `def tunnel_polaris` as well, which silently replaced the
@@ -110,8 +114,7 @@ def tunnel_tekton(ctx, environment, local_port, remote_port, host):
 @kmt_context
 def tunnel_openbao_ui(ctx, environment, local_port, remote_port, host):
     click.echo(f"ENVIRONMENT: {environment}")
-    automation = Automation(ctx)
-    return open_tunnel(automation.open_tunnel_openbao, local_port, remote_port, host)
+    return open_tunnel(partial(open_tunnel_openbao, ctx), local_port, remote_port, host)
 
 
 # A tunnel to any pod, which is exactly what `open_pod_tunnel.sh` was: namespace, pod and both

@@ -161,7 +161,7 @@ def test_answering_no_says_the_uninstall_was_cancelled_and_exits_non_zero(
     # guards that read it get a stand-in module attribute instead.
     monkeypatch.setattr("cli.commands.kubementat.sys",
                         SimpleNamespace(stdin=SimpleNamespace(isatty=lambda: True)))
-    monkeypatch.setattr("kubementat.automation.sys",
+    monkeypatch.setattr("kubementat.automations.uninstall.kubementat.sys",
                         SimpleNamespace(stdin=SimpleNamespace(isatty=lambda: True)))
     monkeypatch.setattr("builtins.input", lambda prompt="": "n")
 

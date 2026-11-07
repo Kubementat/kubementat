@@ -31,7 +31,10 @@ import pytest
 
 EMAIL = "deployer@configuration-key-secret.test"
 
-from kubementat.automation import Automation
+from types import SimpleNamespace
+
+from kubementat.automations.install import pipelines as pipelines_slice
+from kubementat.automations.install.pipelines import setup_pipelines
 from kubementat import config_bootstrap, config_keys
 
 ENVIRONMENT = "dev"
@@ -139,16 +142,15 @@ def a_configuration_directory(root: Path, *, git_crypt: bool, key: bool, armor) 
     return directory
 
 
-def install_pipelines(directory: Path) -> RecordingCluster:
+def install_pipelines(directory: Path, monkeypatch) -> RecordingCluster:
     cluster = RecordingCluster()
-    automation = Automation.__new__(Automation)
-    automation.environment = ENVIRONMENT
-    automation.team = TEAM
-    automation.config = PipelineConfig(directory)
-    automation.kubernetes_utils = cluster
-    automation._setup_pipelines_setup_role_bindings = lambda *args: None
-    automation._setup_pipelines_show_results = lambda *args: None
-    automation.setup_pipelines()
+    context = SimpleNamespace(environment=ENVIRONMENT, team=TEAM, config=PipelineConfig(directory))
+    # The client and the two closing steps are seams on the module now, so each is replaced where
+    # `setup_pipelines` reads it; what the directory holds is what these tests are about.
+    monkeypatch.setattr(pipelines_slice, "KubernetesUtils", lambda ctx: cluster)
+    monkeypatch.setattr(pipelines_slice, "_setup_pipelines_setup_role_bindings", lambda *args: None)
+    monkeypatch.setattr(pipelines_slice, "_setup_pipelines_show_results", lambda *args: None)
+    setup_pipelines(context)
     return cluster
 
 
@@ -158,14 +160,14 @@ def a_secret_named(cluster: RecordingCluster, name: str):
     return found[0]
 
 
-def test_a_tree_that_declares_the_filter_gets_the_secret_it_needs(tmp_path, armored_deployer_key):
+def test_a_tree_that_declares_the_filter_gets_the_secret_it_needs(tmp_path, monkeypatch, armored_deployer_key):
     """The configuration clone that `git-clone-configuration` fetches is locked, so the Secret must exist.
 
     This is the case the ticket is *for*. If it is the only case the guard covers, everything below is
     decoration, which is why the next test asserts the opposite shape rather than repeating this one.
     """
     directory = a_configuration_directory(tmp_path, git_crypt=True, key=True, armor=armored_deployer_key)
-    cluster = install_pipelines(directory)
+    cluster = install_pipelines(directory, monkeypatch)
 
     secret = a_secret_named(cluster, CONFIGURATION_KEY_SECRET)
     assert secret["key_type"] == "Opaque", \
@@ -174,7 +176,7 @@ def test_a_tree_that_declares_the_filter_gets_the_secret_it_needs(tmp_path, armo
         "the Secret carries no `git-crypt-key`, so the unlock step's secretKeyRef resolves to nothing"
 
 
-def test_a_tree_that_never_used_git_crypt_gets_no_secret_and_still_installs(tmp_path, armored_deployer_key):
+def test_a_tree_that_never_used_git_crypt_gets_no_secret_and_still_installs(tmp_path, monkeypatch, armored_deployer_key):
     """A configuration with nothing encrypted has no key to hand out, and install must not pretend.
 
     The important half is that `setup_pipelines` *completes*. Failing an install because a file is missing
@@ -182,7 +184,7 @@ def test_a_tree_that_never_used_git_crypt_gets_no_secret_and_still_installs(tmp_
     kind of failure that shows up on somebody else's tree and not on yours.
     """
     directory = a_configuration_directory(tmp_path, git_crypt=False, key=False, armor=armored_deployer_key)
-    cluster = install_pipelines(directory)
+    cluster = install_pipelines(directory, monkeypatch)
 
     names = [secret["secret_name"] for secret in cluster.secrets]
     assert CONFIGURATION_KEY_SECRET not in names, \
@@ -194,7 +196,7 @@ def test_a_tree_that_never_used_git_crypt_gets_no_secret_and_still_installs(tmp_
     assert names, "nothing was created at all, so the method stopped instead of skipping"
 
 
-def test_the_absence_of_the_key_is_said_out_loudly(tmp_path, caplog, armored_deployer_key):
+def test_the_absence_of_the_key_is_said_out_loudly(tmp_path, monkeypatch, caplog, armored_deployer_key):
     """When install skips the Secret it says why, because the next failure is somebody else's pipeline.
 
     A skipped Secret is invisible in the cluster. What it costs appears days later as a pipeline that reads
@@ -203,7 +205,7 @@ def test_the_absence_of_the_key_is_said_out_loudly(tmp_path, caplog, armored_dep
     """
     directory = a_configuration_directory(tmp_path, git_crypt=False, key=False, armor=armored_deployer_key)
     with caplog.at_level(logging.WARNING):
-        install_pipelines(directory)
+        install_pipelines(directory, monkeypatch)
 
     messages = " ".join(record.getMessage() for record in caplog.records)
     assert CONFIGURATION_KEY_SECRET in messages, \
@@ -214,7 +216,7 @@ def test_the_absence_of_the_key_is_said_out_loudly(tmp_path, caplog, armored_dep
         "from a plaintext one and has to go and look, which is the thing the warning was for"
 
 
-def test_install_and_the_step_read_the_same_marker(tmp_path, armored_deployer_key):
+def test_install_and_the_step_read_the_same_marker(tmp_path, monkeypatch, armored_deployer_key):
     """Both sides ask one question of one file, so they cannot disagree about the same tree.
 
     Checked against the shipped step's script and not against a paraphrase of it: what is asserted is that

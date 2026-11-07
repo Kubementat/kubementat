@@ -15,14 +15,17 @@ kubementat never created, and a name a rule produced is an address rather than a
 """
 
 import json
+from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
 
 from cluster_fixture import configuration_only_context
-from kubementat.automation import Automation
 from kubementat.core.config.config import Config
 from kubementat.errors import TeamNotSuppliedError
+from kubementat.automations.teams import declared_team_namespaces
+from kubementat.automations.uninstall import pipelines as pipelines_slice
+from kubementat.automations.uninstall.pipelines import uninstall_pipelines
 
 ENVIRONMENT = "dev"
 TEAM = "pandas"
@@ -110,10 +113,10 @@ def test_the_teardown_reports_where_a_teams_objects_live_and_what_it_may_remove(
     apart by a caller that read the wrong one — which is how this would otherwise come back.
     """
     root, _ = tree
-    automation = Automation(configuration_only_context(ENVIRONMENT, TEAM,
+    automation_context = configuration_only_context(ENVIRONMENT, TEAM,
                                                       config=Config(ENVIRONMENT, TEAM,
-                                                                    platform_config_dir=root)))
-    entry = automation._declared_team_namespaces(TEAM)
+                                                                    platform_config_dir=root))
+    entry = declared_team_namespaces(automation_context, TEAM)
     assert entry["namespaces"] == ["pandas-pipelines", "pandas"], \
         f"placement must be answered even for a tree that wrote nothing: {entry}"
     assert entry["deletable"] == [], \
@@ -121,10 +124,10 @@ def test_the_teardown_reports_where_a_teams_objects_live_and_what_it_may_remove(
 
     (root / ENVIRONMENT / TEAM / "static.json").write_text(
         json.dumps({"PIPELINE_NAMESPACE": "pandas-pipelines"}), encoding="utf-8")
-    automation = Automation(configuration_only_context(ENVIRONMENT, TEAM,
+    automation_context = configuration_only_context(ENVIRONMENT, TEAM,
                                                       config=Config(ENVIRONMENT, TEAM,
-                                                                    platform_config_dir=root)))
-    half = automation._declared_team_namespaces(TEAM)
+                                                                    platform_config_dir=root))
+    half = declared_team_namespaces(automation_context, TEAM)
     assert half["deletable"] == ["pandas-pipelines"], \
         f"a key that is written down is deletable, and that is the point of the field: {half}"
 
@@ -138,11 +141,12 @@ def test_removing_a_teams_pipelines_refuses_when_only_the_rule_knows_the_namespa
     """
     root, config = tree
     deleted = []
-    automation = Automation(configuration_only_context(ENVIRONMENT, TEAM, config=config))
-    monkeypatch.setattr(automation.kubernetes_utils, "delete_namespace",
-                        lambda name, ignore_not_found=True: deleted.append(name))
+    automation_context = configuration_only_context(ENVIRONMENT, TEAM, config=config)
+    monkeypatch.setattr(pipelines_slice, "KubernetesUtils",
+                        lambda ctx: SimpleNamespace(
+                            delete_namespace=lambda name, ignore_not_found=True: deleted.append(name)))
     with pytest.raises(Exception) as refused:
-        automation.uninstall_pipelines()
+        uninstall_pipelines(automation_context)
 
     assert deleted == [], f"a namespace was deleted that no file named: {deleted}"
     assert "PIPELINE_NAMESPACE" in str(refused.value), str(refused.value)

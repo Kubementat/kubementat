@@ -23,7 +23,7 @@ gone, and the Python flow must exist.
 import ast
 from pathlib import Path
 
-from kubementat.automation import Automation
+from kubementat.automations.accounts import accounts as accounts_slice
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -257,14 +257,15 @@ def test_the_ingress_manifest_script_is_gone_and_the_command_answers_for_it():
 
 
 def test_creating_a_team_account_is_a_python_feature_now():
-    """All three commands exist on `Automation`, which is what the deletion was waiting for.
+    """All three commands exist as functions in the accounts slice, which is what the deletion was waiting for.
 
     Before the Python flow existed this read `assert not hasattr(Automation, "create_team_account")`, and that
     was the honest assertion at the time: the Python version was not written, so a reader had
-    to be told not to mistake a deleted corpse for a finished feature. It is finished now.
+    to be told not to mistake a deleted corpse for a finished feature. It is finished now, and the
+    class that carried them is what has to stay gone.
     """
     for name in ("create_team_account", "create_team_account_read_only", "delete_team_account"):
-        assert callable(getattr(Automation, name, None)), f"Automation.{name} does not exist"
+        assert callable(getattr(accounts_slice, name, None)), f"accounts.{name} does not exist"
 
 
 def test_there_is_only_one_confirmation_for_the_whole_flow():
@@ -287,5 +288,5 @@ def test_there_is_only_one_confirmation_for_the_whole_flow():
                     callers.append(str(path.relative_to(REPO_ROOT)))
 
     assert definitions == ["src/kubementat/infrastructure/user_management.py"], definitions
-    assert set(callers) == {"src/kubementat/automation.py"}, callers
+    assert set(callers) == {"src/kubementat/automations/accounts/accounts.py"}, callers
 

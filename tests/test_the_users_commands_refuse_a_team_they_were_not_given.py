@@ -34,7 +34,7 @@ from cli.commands import users
 from cluster_fixture import STAGING_SERVER, write_kubeconfig
 from conftest import is_a_write
 import kubementat.infrastructure.user_management as user_management
-from kubementat.automation import Automation
+from kubementat.automations.accounts.accounts import create_team_account, create_team_account_read_only, delete_team_account
 from cluster_fixture import configuration_only_context
 
 ACCOUNT = "ops-account"
@@ -185,7 +185,7 @@ def test_creating_an_account_prints_a_kubeconfig_for_the_namespace_the_team_owns
     `test_a_team_account_kubeconfig_is_a_document_and_not_a_string.py` covers.
     """
     with caplog.at_level(logging.INFO):
-        Automation(configuration_only_context(fixture_repo.environment, fixture_repo.team)).create_team_account(
+        create_team_account(configuration_only_context(fixture_repo.environment, fixture_repo.team), 
             ACCOUNT, assume_yes=True)
 
     text = kubeconfig_printed_in(caplog)
@@ -371,7 +371,7 @@ def test_deleting_an_account_removes_the_service_account_and_the_token_that_outl
     bash's `delete_team_account.sh` reported success while the kubeconfig kept working. The
     Secret goes with it.
     """
-    Automation(configuration_only_context(fixture_repo.environment, fixture_repo.team)).delete_team_account(
+    delete_team_account(configuration_only_context(fixture_repo.environment, fixture_repo.team), 
         ACCOUNT, assume_yes=True)
 
     deleted = [(method, kwargs) for method, kwargs in recorded_api.calls
@@ -391,7 +391,7 @@ def test_deleting_an_account_leaves_the_roles_and_destroys_the_credential(
     token go. The credential is the part that must not survive, because it is already sitting
     in somebody's `~/.kube/config`.
     """
-    Automation(configuration_only_context(fixture_repo.environment, fixture_repo.team)).delete_team_account(
+    delete_team_account(configuration_only_context(fixture_repo.environment, fixture_repo.team), 
         ACCOUNT, assume_yes=True)
 
     assert not [kwargs for method, kwargs in recorded_api.calls
@@ -410,13 +410,13 @@ def test_deleting_an_account_unbinds_every_binding_the_create_wrote(
     service account that no longer exists -- which reads as a success, and is the opposite of
     one.
     """
-    automation = Automation(configuration_only_context(fixture_repo.environment, fixture_repo.team))
-    automation.create_team_account(ACCOUNT, assume_yes=True)
+    context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
+    create_team_account(context, ACCOUNT, assume_yes=True)
     created = bindings_created(recorded_api)
     assert created, "the create wrote no bindings at all"
     recorded_api.calls.clear()
 
-    automation.delete_team_account(ACCOUNT, assume_yes=True)
+    delete_team_account(context, ACCOUNT, assume_yes=True)
 
     still_bound = created - bindings_deleted(recorded_api)
     assert still_bound == set(), f"left behind by delete: {sorted(still_bound)}"
@@ -430,11 +430,11 @@ def test_a_binding_for_a_tunnel_into_a_component_that_is_not_here_is_not_deleted
     guessed by namespace name would report a cleanup that never happened.
     """
     cluster_holding(recorded_api, [ns for ns in CLUSTER_NAMESPACES if ns != "polaris"])
-    automation = Automation(configuration_only_context(fixture_repo.environment, fixture_repo.team))
-    automation.create_team_account(ACCOUNT, assume_yes=True)
+    context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
+    create_team_account(context, ACCOUNT, assume_yes=True)
     recorded_api.calls.clear()
 
-    automation.delete_team_account(ACCOUNT, assume_yes=True)
+    delete_team_account(context, ACCOUNT, assume_yes=True)
 
     assert not any(kwargs.get("namespace") == "polaris"
                    for method, kwargs in recorded_api.calls
@@ -449,12 +449,12 @@ def test_the_read_only_variant_is_a_full_account_save_for_the_role_name(
     two implementations that drift by more than the one word they were supposed to differ by
     is the exact shape of the bug that made this command red for two lanes.
     """
-    Automation(configuration_only_context(fixture_repo.environment, fixture_repo.team)).create_team_account_read_only(
+    create_team_account_read_only(configuration_only_context(fixture_repo.environment, fixture_repo.team), 
         ACCOUNT, assume_yes=True)
     read_only_writes = write_shapes(recorded_api)
     recorded_api.calls.clear()
 
-    Automation(configuration_only_context(fixture_repo.environment, fixture_repo.team)).create_team_account(
+    create_team_account(configuration_only_context(fixture_repo.environment, fixture_repo.team), 
         ACCOUNT, assume_yes=True)
     admin_writes = write_shapes(recorded_api)
 
@@ -468,11 +468,11 @@ def test_an_account_created_twice_is_the_same_account_and_not_two_of_them(
     The flow goes through create-or-replace primitives; running it a second time has to be a
     no-op on the shape of what is there, not an error and not a second set of bindings.
     """
-    automation = Automation(configuration_only_context(fixture_repo.environment, fixture_repo.team))
-    automation.create_team_account(ACCOUNT, assume_yes=True)
+    context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
+    create_team_account(context, ACCOUNT, assume_yes=True)
     once = [repr(operation) for operation in recorded_api.operations()]
     recorded_api.calls.clear()
 
-    automation.create_team_account(ACCOUNT, assume_yes=True)
+    create_team_account(context, ACCOUNT, assume_yes=True)
 
     assert [repr(operation) for operation in recorded_api.operations()] == once

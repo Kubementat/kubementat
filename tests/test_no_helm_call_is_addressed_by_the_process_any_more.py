@@ -336,12 +336,12 @@ def test_the_guard_catches_a_release_read_that_dropped_its_builder(tmp_path):
     resolves through the constant instead of trusting the call.
     """
     copied = _src_copy(tmp_path)
-    _swap(copied / "kubementat/automation.py",
-          "shell.run(helm_list_releases_argv(self.kubernetes_utils.target), capture=True)",
+    _swap(copied / "kubementat/automations/uninstall/residue.py",
+          "shell.run(helm_list_releases_argv(kubernetes_utils.target), capture=True)",
           "shell.run(HELM_LIST_RELEASES_ARGV, capture=True)")
 
     caught = offenders(copied)
-    assert any("automation.py" in one and "list" in one for one in caught), (
+    assert any("residue.py" in one and "list" in one for one in caught), (
         "the shared release read went unaddressed and the guard said nothing: " + str(caught))
 
 

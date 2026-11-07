@@ -1,5 +1,63 @@
 # Unreleased
 
+- **`Automation` is gone, and `src/kubementat/automation.py` with it.** The class held 54 methods and
+  two module functions over 2 625 lines, and every one of them was a verb against a cluster or a
+  piece of configuration, which is what puts it in the automations layer rather than in a file that
+  happens to be big. It split into slices, one verb group per directory: `automations/install/`
+  (`kubementat`, `dependencies`, `pipelines`, `registry`, `secrets`), `automations/uninstall/`
+  (`kubementat`, `pipelines`, `residue`, `linkerd`, `nginx_ingress`, `sweep`),
+  `automations/tunnels/tunnels.py`, `automations/accounts/accounts.py`, plus `automations/teams.py`
+  for the two team-`static.json` readers both halves need. `context_name` went to
+  `core/identity/context.py`, where it was always read from. What the class carried as `self` —
+  `config`, `environment`, `team`, the cluster client — is what the `Context` a command already had
+  now carries, so each function takes `ctx` as its first argument and no function takes `self`.
+  Twenty private helpers came out as public module functions rather than staying private, because a
+  module function is the thing a caller reaches for.
+
+  **`kmt install` was broken by the split and is fixed here**: `install_kubementat` was the one call
+  site the author left without its `ctx`, so `kmt install` raised
+  `TypeError: install_kubementat() missing 1 required positional argument: 'ctx'` on every run while
+  `kmt uninstall` beside it passed it correctly. `kmt install` and `kmt uninstall` now hand the
+  `Context` down the same way.
+
+  **What a downstream reader has to repoint to.** There is no re-export module and no compatibility
+  shim — a behaviour change is a behaviour change, and `kubementat.automation` returning a class that
+  no longer exists would be the second way this file could be wrong. Every name below is a
+  `from kubementat.automation import X` or an `Automation.<member>` that used to resolve and now
+  does not:
+
+  | you were reaching for | it is now |
+  |---|---|
+  | `automation.install_kubementat`, `check_cluster_permissions`, `validate_cluster_prompt`, `CLUSTER_PERMISSION_CHECK_RESOURCES` | `automations/install/kubementat.py` (`:47`, `:172`, `:123`, `:43`) |
+  | `automation.BINARY_VERSION_ARGV`, `first_binary_version`, `KUBEMENTAT_DEPENDENCIES`, `check_dependencies_are_installed` | `automations/install/dependencies.py` (`:30`, `:75`, `:62`, `:138`) |
+  | `automation._base64_encode_file`, `setup_pipelines` | `automations/install/pipelines.py` (`:28`, `:38`) |
+  | `automation.setup_secrets`, `setup_docker_registry_access` | `automations/install/secrets.py:15`, `automations/install/registry.py:17` |
+  | `automation.uninstall_kubementat`, `HELM_DEPLOYER_CLUSTER_ROLE` | `automations/uninstall/kubementat.py:57`, `:40` |
+  | `automation._uninstall_helm_releases`, `_delete_crds_traefik_helm_leaves_behind`, `_release_runs_traefik_proxy` | `automations/uninstall/residue.py:307`, `:444`, `:550` — the first two are public now |
+  | `automation.uninstall_pipelines` | `automations/uninstall/pipelines.py:17` |
+  | `automation.open_tunnel_grafana` / `_tekton_dashboard` / `_openbao` | `automations/tunnels/tunnels.py:15`, `:44`, `:76` |
+  | `automation.create_team_account`, `create_team_account_read_only`, `delete_team_account` | `automations/accounts/accounts.py:23`, `:38`, `:135` |
+  | `automation._declared_team_namespaces`, `TEAM_NAMESPACE_KEYS` | `automations/teams.py:29`, `:26` |
+  | `kubementat.automation.shell.run`, `kubementat.automation.sys`, `kubementat.automation.HelmUtils`, `kubementat.automation.TektonUtils` as `monkeypatch.setattr` string targets | the slice module that issues the call — an `automations/*/….py` whose import list names the thing you are patching. A string that points at a deleted module raises, so the ones that were still pointing at `kubementat.automation` fail loudly; what you must *not* patch is the class the object used to be. |
+
+  **The honest half, stated rather than left to the diff.** The split carried two omissions over
+  that this entry closes, and they belong to the conversion rather than to the design. At old
+  `automation.py:1278/1296` the two mesh namespaces were `Automation` **class attributes**, so
+  `uninstall_kubementat` read them as `self.LINKERD_NAMESPACES`; the mover put the definitions in
+  `automations/uninstall/linkerd.py:30` and `automations/uninstall/nginx_ingress.py:32` and never
+  repointed the consumer, which still named them bare — a `NameError` on every `kmt uninstall`, and
+  46 of the failures the split left behind. The repair is the two names on the import lines that
+  already pointed at those two files, so the edge stays intra-slice and the layer rule the plan
+  states is untouched. And `automations/uninstall/residue.py` carried three `@staticmethod`
+  decorators (`:274`, `:287`, `:548`) on module-level functions in a file with no class in it — dead
+  decoration from the same transformation, and under this venv's Python 3.9 a `staticmethod` object
+  is not callable, so reading `_release_runs_traefik_proxy` raised
+  `'staticmethod' object is not callable`. They are deleted.
+
+  What is still open, and is not this change's to close: the three cross-slice edges into
+  `automations/teams.py` are a layering question the import graph cannot see, because it counts
+  `automations` as one layer.
+
 - **The last three flat modules under `src/kubementat/` took their homes.** `ci_utils.py` is
   `automations/ci.py` and `ingress_generator.py` is `automations/ingress.py` — both are verbs, not
   services, which is what puts them beside `routing` rather than below it; and `user_management.py`

@@ -1,6 +1,6 @@
 """`KUBEMENTAT_DEPENDENCIES` names what the tree actually runs, and the tree is what says so.
 
-`Automation.check_dependencies_are_installed` (`src/kubementat/automation.py:585`) is the gate in
+`check_dependencies_are_installed` (`src/kubementat/automations/install/dependencies.py:138`) is the gate in
 front of `kmt initialize` and `kmt install`: a name it cannot find on `PATH` ends the run. Before
 this file existed, nothing anywhere asserted that the list and the tree agreed, and the only hit
 for the list in `tests/` was a lambda stubbing the check out of a live-install test. So the list
@@ -51,7 +51,7 @@ import ast
 import re
 from pathlib import Path
 
-from kubementat.automation import Automation
+from kubementat.automations.install import dependencies as dependencies_slice
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
@@ -116,7 +116,7 @@ FORBIDDEN = {"yq": "no `src/` argv names it, and no shipped `scripts/**` file do
 
 
 def _declared() -> list:
-    return list(Automation.KUBEMENTAT_DEPENDENCIES)
+    return list(dependencies_slice.KUBEMENTAT_DEPENDENCIES)
 
 
 def _dependency_list_assignment_lines(tree: ast.AST) -> set:

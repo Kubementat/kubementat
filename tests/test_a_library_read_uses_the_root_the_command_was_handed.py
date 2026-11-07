@@ -34,8 +34,9 @@ from cluster_fixture import configuration_only_context, redirect_checkout
 import kubementat.infrastructure.grafana.accounts as grafana_accounts
 import kubementat.infrastructure.grafana.client as grafana_client
 from kubementat.automations.routing import routing
-from kubementat.automation import Automation
+from kubementat.automations.teams import declared_team_namespaces
 from kubementat.core.config.config import Config
+
 
 ENVIRONMENT = "dev"
 TEAM = "dev1"
@@ -106,8 +107,8 @@ def test_the_team_namespaces_a_sweep_reads_come_from_the_root_that_sweeps(tmp_pa
                                           team_values={"PIPELINE_NAMESPACE": "decoy-pipeline",
                                                        "APP_DEPLOYMENT_NAMESPACE": "decoy-app"}))
 
-    automation = Automation(configuration_only_context(ENVIRONMENT, TEAM, config=handed_down(handed)))
-    entry = automation._declared_team_namespaces(TEAM)
+    automation_context = configuration_only_context(ENVIRONMENT, TEAM, config=handed_down(handed))
+    entry = declared_team_namespaces(automation_context, TEAM)
 
     assert entry["namespaces"] == ["handed-pipeline", "handed-app"], \
         "the sweep read a team directory out of a tree it was never given"

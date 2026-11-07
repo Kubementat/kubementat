@@ -15,11 +15,13 @@ answer is no (`preflight_tekton_api_version`), asked before anything is applied.
 import pytest
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from kubementat.core.config import config as config_module
 from kubementat import config_keys
 from kubementat.infrastructure.kubernetes import apply
-from kubementat.automation import Automation
+from kubementat.automations.install import pipelines
+from kubementat.automations.install.pipelines import setup_pipelines
 from kubementat.errors import TektonControllerWithoutConfiguredApiError
 from kubementat.tekton_utils import (
     TektonUtils,
@@ -121,21 +123,21 @@ def a_setup_pipelines_call_on(tmp_path, cluster, applied, monkeypatch):
             ssh_private=pair["deployer_ssh_key"], ssh_public=pair["deployer_ssh_key.pub"],
             gpg_private=pair["gpg_private.key"], gpg_public=pair["gpg_public_key.gpg"],
             gpg_email="deployer@example.invalid"))
-    automation = Automation.__new__(Automation)
-    automation.environment = "dev"
-    automation.team = "dev1"
-    automation.config = FakeConfig(tmp_path)
-    automation.kubernetes_utils = cluster
-    automation.helm_utils = None
-    automation._setup_pipelines_setup_role_bindings = lambda *args: applied.append("roles")
-    automation._setup_pipelines_show_results = lambda *args: applied.append("results")
+    context = SimpleNamespace(environment="dev", team="dev1", config=FakeConfig(tmp_path))
+    # The client, the role bindings and the closing printout are all seams on the module now: the
+    # instance they were attributes of is gone, so each is replaced where the function reads it.
+    monkeypatch.setattr(pipelines, "KubernetesUtils", lambda ctx: cluster)
+    monkeypatch.setattr(pipelines, "_setup_pipelines_setup_role_bindings",
+                        lambda *args: applied.append("roles"))
+    monkeypatch.setattr(pipelines, "_setup_pipelines_show_results",
+                        lambda *args: applied.append("results"))
     # The apply primitive is a module function now, so the recorder replaces it where it lives:
     # `_apply_manifest_layer` calls through `kubementat.infrastructure.kubernetes.apply` and not through this instance.
     monkeypatch.setattr(
         apply, "apply_resources",
         lambda kubernetes_utils, directory, namespace, kind, group, version: applied.append(
             (kind, str(directory))))
-    return automation
+    return context
 
 
 def test_setup_pipelines_never_starts_applying_until_the_controller_answers_the_question(tmp_path,
@@ -150,7 +152,7 @@ def test_setup_pipelines_never_starts_applying_until_the_controller_answers_the_
     applied = []
 
     with pytest.raises(TektonControllerWithoutConfiguredApiError):
-        a_setup_pipelines_call_on(tmp_path, cluster, applied, monkeypatch).setup_pipelines()
+        setup_pipelines(a_setup_pipelines_call_on(tmp_path, cluster, applied, monkeypatch))
 
     assert applied == [], f"resources were applied before the cluster was asked: {applied}"
     assert cluster.calls == [], f"the cluster was touched before the answer came back: {cluster.calls}"
@@ -173,24 +175,24 @@ def test_the_products_tasks_and_pipelines_are_applied_from_the_package_and_not_a
     """
     cluster = RecordingCluster(served_versions=["v1"])
     applied = []
-    automation = a_setup_pipelines_call_on(tmp_path, cluster, applied, monkeypatch)
+    context = a_setup_pipelines_call_on(tmp_path, cluster, applied, monkeypatch)
 
-    automation.setup_pipelines()
+    setup_pipelines(context)
 
     # Only the applies: the recorder also marks the role bindings and the result dump with bare
     # strings, and they are not part of this claim.
     calls = [entry for entry in applied if isinstance(entry, tuple)]
     assert calls == [
-        ("Task", automation.config.tekton_task_asset_dir),
-        ("Pipeline", automation.config.tekton_pipeline_asset_dir),
+        ("Task", context.config.tekton_task_asset_dir),
+        ("Pipeline", context.config.tekton_pipeline_asset_dir),
         # The environment layer, applied between the two: it tunes what the product ships and is
         # tuned by every team under it.
-        ("Task", automation.config.tekton_env_task_dir),
-        ("Pipeline", automation.config.tekton_env_pipeline_dir),
+        ("Task", context.config.tekton_env_task_dir),
+        ("Pipeline", context.config.tekton_env_pipeline_dir),
         # The team's own two directories are checkout-relative output, and they are still applied,
         # last: this ticket moved which layer sits in the middle, not the team's place at the end.
-        ("Task", automation.config.tekton_team_task_dir),
-        ("Pipeline", automation.config.tekton_team_pipeline_dir),
+        ("Task", context.config.tekton_team_task_dir),
+        ("Pipeline", context.config.tekton_team_pipeline_dir),
     ], f"what `setup_pipelines` applied, in order: {calls}"
 
 

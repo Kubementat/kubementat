@@ -8,9 +8,10 @@ row 25 took away:
 
 * **the name** — `kmt tunnel-polaris` and `kmt tunnel-mysql` are refused with Click's own exit code
   for an unknown command (2) and its own message, the same shape every flat tunnel name gets.
-* **the method behind it** — `Automation.open_tunnel_polaris` and `Automation.open_tunnel_mysql` are
-  absent from the class, and no file under `src/` mentions them. A command that is not registered but
-  whose library call is still there is a command waiting to be re-registered; the method being gone
+* **the function behind it** — `open_tunnel_polaris` and `open_tunnel_mysql` are absent from
+  `automations/tunnels/tunnels.py`, and no file under `src/` mentions them. A command that is not
+  registered but
+  whose library call is still there is a command waiting to be re-registered; the function being gone
   is the part that makes the retirement real.
 
 What is *not* asserted here is the surface of the four surviving tunnels. `kmt tunnel`'s own verbs
@@ -32,7 +33,7 @@ from cli.kmt import cli
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC_ROOT = REPO_ROOT / "src"
 
-# The names that used to answer, and the two `Automation` methods they alone called.
+# The names that used to answer, and the two tunnel functions they alone called.
 RETIRED_COMMANDS = ("tunnel-polaris", "tunnel-mysql")
 RETIRED_METHODS = ("open_tunnel_polaris", "open_tunnel_mysql")
 
@@ -86,15 +87,15 @@ def test_the_retired_tunnel_name_is_not_printed(name):
 
 @pytest.mark.parametrize("method", RETIRED_METHODS)
 def test_the_retired_tunnel_method_is_not_on_the_automation(method):
-    """The library half, asked of the class rather than of a grep.
+    """The library half, asked of the module rather than of a grep.
 
-    The command was only ever a caller, so the method being reachable is the way the tunnel comes
-    back: someone registers a verb, the method is right there, and nothing in the suite says no.
+    The command was only ever a caller, so the function being reachable is the way the tunnel comes
+    back: someone registers a verb, the function is right there, and nothing in the suite says no.
     """
-    from kubementat.automation import Automation
+    from kubementat.automations.tunnels import tunnels
 
-    assert not hasattr(Automation, method), (
-        f"Automation.{method} is back on the class; row 25 retired the tunnel it opened")
+    assert not hasattr(tunnels, method), (
+        f"tunnels.{method} is back on the module; row 25 retired the tunnel it opened")
 
 
 @pytest.mark.parametrize("method", RETIRED_METHODS)

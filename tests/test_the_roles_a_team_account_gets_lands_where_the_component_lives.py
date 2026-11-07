@@ -30,7 +30,8 @@ from kubernetes import client
 
 from conftest import is_a_write
 import kubementat.infrastructure.user_management as user_management
-from kubementat.automation import Automation
+from kubementat.automations.accounts import accounts
+from kubementat.automations.accounts.accounts import create_team_account, create_team_account_read_only, delete_team_account
 from cluster_fixture import configuration_only_context
 
 # The token the controller is expected to have filled in by the time this flow prints.
@@ -95,7 +96,7 @@ def cluster_where_the_team_account_flow_runs(fixture_repo, dry_run_env, fake_bin
 @pytest.fixture
 def account(cluster_where_the_team_account_flow_runs, fixture_repo):
     """`kmt users create-team-account ops-account`, with nothing answered yet."""
-    return Automation(configuration_only_context(fixture_repo.environment, fixture_repo.team))
+    return configuration_only_context(fixture_repo.environment, fixture_repo.team)
 
 
 def writes(recorded_api):
@@ -132,7 +133,7 @@ def test_the_namespace_admin_role_lands_in_both_namespaces_the_team_declares(acc
     are read, so renaming one moves the Role and forgetting one is an error rather than an
     apply into `None`.
     """
-    account.create_team_account("ops-account", assume_yes=True)
+    create_team_account(account, "ops-account", assume_yes=True)
 
     expected = {("fixture-pipelines", "namespace-admin"), ("fixture-deployments", "namespace-admin")}
     assert expected.issubset(set(roles_created(recorded_api))), \
@@ -149,7 +150,7 @@ def test_a_read_only_account_gets_the_read_only_role_and_the_same_access_everywh
     so the only legitimate difference between these two commands is the Role name and its verb
     list. Everything else — namespaces, tunnels, bindings, kubeconfig — has to be identical.
     """
-    account.create_team_account_read_only("ops-account", assume_yes=True)
+    create_team_account_read_only(account, "ops-account", assume_yes=True)
 
     assert {("fixture-pipelines", "namespace-readonly"),
             ("fixture-deployments", "namespace-readonly")}.issubset(set(roles_created(recorded_api)))
@@ -170,7 +171,7 @@ def test_the_read_only_role_reads_pods_but_opens_tunnels_only_through_the_port_f
     tunnel; that combination is two rules, and collapsing them into one either lets the account
     write or stops it reading.
     """
-    account.create_team_account_read_only("ops-account", assume_yes=True)
+    create_team_account_read_only(account, "ops-account", assume_yes=True)
 
     rules = rule_for(recorded_api, "fixture-deployments", "namespace-readonly")
     by_resource = {tuple(rule["resources"]): rule["verbs"] for rule in rules}
@@ -187,11 +188,11 @@ def test_a_tunneling_role_names_the_component_and_lives_where_that_component_liv
     — which is what the three `*_NAMESPACE` variables the bash carried were for, and the reason
     a renamed namespace used to leave the tunneling Role behind.
     """
-    account.create_team_account("ops-account", assume_yes=True)
+    create_team_account(account, "ops-account", assume_yes=True)
 
     written = {name: namespace for namespace, name in roles_created(recorded_api)}
     for component, role in user_management.TUNNEL_COMPONENTS:
-        namespace = account._team_account_tunnel_roles()[component]
+        namespace = accounts._team_account_tunnel_roles(account)[component]
         assert written.get(role) == namespace, \
             f"{role} (for {component}) was written to {written.get(role)!r}, not {namespace!r}"
 
@@ -210,7 +211,7 @@ def test_a_renamed_component_namespace_moves_the_tunneling_role_with_it(account,
                     + ["grafana-in-a-new-place"])
     recorded_api.calls.clear()
 
-    account.create_team_account("ops-account", assume_yes=True)
+    create_team_account(account, "ops-account", assume_yes=True)
 
     written = roles_created(recorded_api)
     assert ("grafana-in-a-new-place", "grafana-tunneling") in written
@@ -232,7 +233,7 @@ def test_a_component_that_is_not_installed_gets_no_role_and_no_binding(account, 
     cluster_holding(recorded_api, [ns for ns in CLUSTER_NAMESPACES if ns != "polaris"])
 
     with caplog.at_level(logging.INFO):
-        account.create_team_account("ops-account", assume_yes=True)
+        create_team_account(account, "ops-account", assume_yes=True)
 
     assert not any(name == "polaris-tunneling" for _ns, name in roles_created(recorded_api))
     assert not any(name == "polaris-tunneling-ops-account-binding"
@@ -249,7 +250,7 @@ def test_the_tunneling_rule_opens_the_tunnel_on_the_subresource_and_reads_the_po
     three. Getting it wrong — `create` on `pods` — grants a team the right to delete a pod it
     was only meant to reach.
     """
-    account.create_team_account("ops-account", assume_yes=True)
+    create_team_account(account, "ops-account", assume_yes=True)
 
     by_resource = {tuple(rule["resources"]): rule["verbs"]
                    for rule in rule_for(recorded_api, "tekton-pipelines", "tekton-tunneling")}
@@ -265,7 +266,7 @@ def test_the_account_and_its_token_secret_are_created_before_anything_is_bound_t
     Roles, Bindings. Asserting it on the recorded calls is what stops the flow reordering
     itself into something that reads fine and writes a dangling subject.
     """
-    account.create_team_account("ops-account", assume_yes=True)
+    create_team_account(account, "ops-account", assume_yes=True)
 
     called = [method for method, _kwargs in recorded_api.calls]
     order = ["create_namespace", "create_namespaced_service_account", "create_namespaced_secret",
@@ -283,7 +284,7 @@ def test_a_role_binding_is_read_back_after_it_is_written(account, recorded_api):
     "did it work" is answered by the cluster and not by this command. The read after the write
     is the only proof the command can give, so every Binding in the flow gets one.
     """
-    account.create_team_account("ops-account", assume_yes=True)
+    create_team_account(account, "ops-account", assume_yes=True)
 
     bindings = bindings_created(recorded_api)
     assert bindings, "the flow bound nothing"
@@ -299,7 +300,7 @@ def test_the_binding_binds_the_account_in_the_namespace_it_was_created_in(accoun
     `role_binding_body` gets the namespace from the same variable that created the account, so
     a binding whose subject lives in `kube-system` is a bug in this file's subject line.
     """
-    account.create_team_account("ops-account", assume_yes=True)
+    create_team_account(account, "ops-account", assume_yes=True)
 
     for method, kwargs in recorded_api.calls:
         if method != "create_namespaced_role_binding":
@@ -326,7 +327,7 @@ def test_the_state_the_command_prints_is_read_back_from_the_cluster(account, rec
     recorded_api.answer("list_namespaced_role_binding", one("tekton-tunneling-ops-account-binding"))
 
     with caplog.at_level(logging.INFO):
-        account.create_team_account("ops-account", assume_yes=True)
+        create_team_account(account, "ops-account", assume_yes=True)
 
     text = "\n".join(record.getMessage() for record in caplog.records)
     assert "Current state of the namespaces this account touches" in text
@@ -346,7 +347,7 @@ def test_a_binding_the_cluster_rejects_is_the_error_and_not_a_silent_success(acc
                         client.exceptions.ApiException(status=404, reason="not found"))
 
     with pytest.raises(client.exceptions.ApiException):
-        account.create_team_account("ops-account", assume_yes=True)
+        create_team_account(account, "ops-account", assume_yes=True)
 
 
 def test_a_second_run_over_a_cluster_that_already_holds_the_account_replaces_rather_than_fails(
@@ -368,7 +369,7 @@ def test_a_second_run_over_a_cluster_that_already_holds_the_account_replaces_rat
                    "create_namespaced_role_binding"):
         recorded_api.answer(method, already_there)
 
-    account.create_team_account("ops-account", assume_yes=True)
+    create_team_account(account, "ops-account", assume_yes=True)
 
     replaced = sorted(method for method, _kwargs in recorded_api.calls
                       if method.startswith("replace_"))

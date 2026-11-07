@@ -104,7 +104,7 @@ def test_one_layer_opens_the_clone_and_two_layers_do_not(tmp_path):
     origin = _locked_repository(tmp_path)
     key = tmp_path / "git_crypt_symmetric.key"
 
-    from kubementat.automation import _base64_encode_file
+    from kubementat.automations.install.pipelines import _base64_encode_file
     one_layer = _base64_encode_file(key)
 
     # What the step does with it: one `base64 -d`. If the step ever decodes twice, the product's side of
@@ -147,7 +147,7 @@ def test_the_product_builds_that_one_layer_and_not_another():
     around `_base64_encode_file(...)` is the mutation that motivated the file, and a token-presence check
     would happily pass it.
     """
-    automation = Path("src/kubementat/automation.py").read_text(encoding="utf-8")
+    automation = Path("src/kubementat/automations/install/pipelines.py").read_text(encoding="utf-8")
     call = re.search(r"create_or_replace_secret\(\s*namespace=pipeline_ns,\s*secret_name="
                      r'"git-crypt-configuration-key"[\s\S]{0,700}?\)\s*$', automation, re.M)
     assert call, "the Secret's create call is not where the deployer secrets are, so there is nothing here to count"

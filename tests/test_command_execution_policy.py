@@ -29,9 +29,10 @@ import pytest
 from kubementat import errors
 from kubementat.infrastructure import shell
 from kubementat.core import constants
-from kubementat.automation import Automation
+from kubementat.automations.install import kubementat as install_slice
+from kubementat.automations.install.kubementat import check_cluster_permissions
 from kubementat.core.config.keys import component_config_key
-from cluster_fixture import TARGET_DEV, configuration_only_context
+from cluster_fixture import TARGET_DEV, UNREAD_ROOT, configuration_only_context
 from asset_paths import values_path
 from kubementat.infrastructure.helm import HelmUtils
 from kubementat.errors import PodNotFoundError
@@ -468,9 +469,9 @@ def test_a_hostile_namespace_cannot_escape_into_the_command_line(recorded_api, t
 
 
 # ---------------------------------------------------------------------------
-# 5. stdin-carrying permission probes (automation.check_cluster_permissions)
+# 5. stdin-carrying permission probes (`automations/install/kubementat.py`)
 # ---------------------------------------------------------------------------
-def test_cluster_permission_probes_ask_the_server_and_answer_themselves(recorded_api):
+def test_cluster_permission_probes_ask_the_server_and_answer_themselves(recorded_api, monkeypatch):
     """The six probes were converted to client reads, and they answer with less machinery, not more.
 
     `kubectl auth can-i create namespace` needed a stdin to answer its own yes/no prompt, which is
@@ -483,20 +484,23 @@ def test_cluster_permission_probes_ask_the_server_and_answer_themselves(recorded
     every cluster for a permission the service account does have.
     """
     utils = KubernetesUtils(TARGET_DEV, api_client=recorded_api)
-    automation = Automation.__new__(Automation)
-    automation.kubernetes_utils = utils
+    # The probe builds its client from the name the slice imported, which is the seam there is no
+    # longer a `self.kubernetes_utils` to hand over. The `Context` carries no cluster claim here:
+    # every read goes through the client above.
+    monkeypatch.setattr(install_slice, "KubernetesUtils", lambda ctx: utils)
 
-    automation.check_cluster_permissions()
+    check_cluster_permissions(configuration_only_context("dev", "smoke",
+                                                         platform_config_dir=UNREAD_ROOT))
 
     reviews = [kwargs for method, kwargs in recorded_api.calls
                if method == "create_self_subject_access_review"]
-    assert len(reviews) == len(automation.CLUSTER_PERMISSION_CHECK_RESOURCES)
+    assert len(reviews) == len(install_slice.CLUSTER_PERMISSION_CHECK_RESOURCES)
     assert [str(review["body"].spec.resource_attributes.resource) for review in reviews] == \
-        list(automation.CLUSTER_PERMISSION_CHECK_RESOURCES)
+        list(install_slice.CLUSTER_PERMISSION_CHECK_RESOURCES)
     assert all(review["body"].spec.resource_attributes.verb == "create" for review in reviews)
 
 
-def test_a_denied_verb_stops_the_run_and_names_the_verbs_it_denied(recorded_api):
+def test_a_denied_verb_stops_the_run_and_names_the_verbs_it_denied(recorded_api, monkeypatch):
     """A "no" that is printed and thrown away is the same as not checking, which is what bash did."""
     def answering(**kwargs):
         resource = kwargs["body"].spec.resource_attributes.resource
@@ -506,11 +510,11 @@ def test_a_denied_verb_stops_the_run_and_names_the_verbs_it_denied(recorded_api)
 
     recorded_api.answer("create_self_subject_access_review", answering)
     utils = KubernetesUtils(TARGET_DEV, api_client=recorded_api)
-    automation = Automation.__new__(Automation)
-    automation.kubernetes_utils = utils
+    monkeypatch.setattr(install_slice, "KubernetesUtils", lambda ctx: utils)
 
     with pytest.raises(errors.CommandExecutionError) as error:
-        automation.check_cluster_permissions()
+        check_cluster_permissions(configuration_only_context("dev", "smoke",
+                                                             platform_config_dir=UNREAD_ROOT))
     assert "clusterroles" in str(error.value)
 
 

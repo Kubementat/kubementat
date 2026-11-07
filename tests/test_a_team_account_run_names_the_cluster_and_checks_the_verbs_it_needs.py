@@ -30,8 +30,10 @@ from conftest import is_a_write
 from click.exceptions import ClickException
 
 import kubementat.infrastructure.user_management as user_management
-from kubementat.automation import Automation
+from kubementat.automations.accounts.accounts import (
+    create_team_account, create_team_account_read_only, delete_team_account)
 from kubementat.core.identity.context import Context
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 # The credential the cluster is holding for the account by the time the flow prints.
 ACCOUNT_TOKEN = "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZlYXR1cmUifQ.payload.signature"
@@ -136,7 +138,7 @@ def on_a_cluster_that_grants_everything(asked_cluster, monkeypatch):
     """
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
-    return Automation(Context.build(asked_cluster.environment, asked_cluster.team))
+    return Context.build(asked_cluster.environment, asked_cluster.team)
 
 
 def can_i_asked(recorded_api):
@@ -178,16 +180,14 @@ def test_the_cluster_is_named_before_anything_on_it_is_changed(
     ordering was the only part of the check that actually worked. This keeps both halves: the
     cluster named is the one the client is bound to, and it is named before the first write.
 
-    Which is why the `Automation` here is built from a resolved `Context` and not from
+    Which is why the `Context` here is resolved and not built inert by
     `configuration_only_context`: the cluster this line names is now the *target*, so a fixture
     whose target is inert names nothing (`cluster_fixture` says the same thing about itself). The
     address that answers is the fixture's own — `CLUSTER_KUBE_CONTEXT` in its `static.json`, read
     through `Config` — and no kubeconfig on the machine running pytest is consulted.
     """
-    automation = on_a_cluster_that_grants_everything
-
     with caplog.at_level(logging.INFO):
-        automation.create_team_account("ops-account")
+        create_team_account(on_a_cluster_that_grants_everything, "ops-account")
 
     text = "\n".join(record.getMessage() for record in caplog.records)
     named = text.find("You are going to edit users on the following cluster")
@@ -205,7 +205,7 @@ def test_the_verbs_of_everything_the_flow_is_about_to_do_are_asked_about(
     Both sides are asserted: `CLUSTER_ACCESS_CHECKS` is what the flow plans, the recorded argv
     is what it asked, and the two have to agree verb for verb.
     """
-    on_a_cluster_that_grants_everything.create_team_account("ops-account")
+    create_team_account(on_a_cluster_that_grants_everything, "ops-account")
 
     asked = can_i_asked(recorded_api)
     assert asked == list(user_management.CLUSTER_ACCESS_CHECKS), (
@@ -243,10 +243,10 @@ def test_a_denied_verb_stops_the_run_before_the_first_write_and_names_it(
     cluster_refuses(recorded_api, "create", "rolebindings")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
-    automation = Automation(Context.build(asked_cluster.environment, asked_cluster.team))
+    ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
     with pytest.raises(ClickException) as raised:
-        automation.create_team_account("ops-account")
+        create_team_account(ctx, "ops-account")
 
     assert "create rolebindings" in str(raised.value)
     assert client_writes(recorded_api) == [], "it wrote to the cluster after being told no"
@@ -263,10 +263,10 @@ def test_every_denied_verb_is_reported_and_not_only_the_first(
     cluster_refuses(recorded_api, "patch", "roles")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
-    automation = Automation(Context.build(asked_cluster.environment, asked_cluster.team))
+    ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
     with pytest.raises(ClickException) as raised:
-        automation.create_team_account("ops-account")
+        create_team_account(ctx, "ops-account")
 
     assert "create rolebindings" in str(raised.value)
     assert "patch roles" in str(raised.value)
@@ -282,10 +282,10 @@ def test_answering_no_at_the_prompt_creates_nothing(
     """
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "n")
-    automation = Automation(Context.build(asked_cluster.environment, asked_cluster.team))
+    ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
     with pytest.raises(ClickException) as raised:
-        automation.create_team_account("ops-account")
+        create_team_account(ctx, "ops-account")
 
     assert "Cancelled" in str(raised.value)
     assert client_writes(recorded_api) == []
@@ -302,9 +302,9 @@ def test_an_answer_that_is_neither_yes_nor_no_is_asked_again(
     answers = iter(["maybe", "nope", "y"])
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
-    automation = Automation(Context.build(asked_cluster.environment, asked_cluster.team))
+    ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
-    automation.create_team_account("ops-account")
+    create_team_account(ctx, "ops-account")
 
     assert client_writes(recorded_api), "the account was never created"
 
@@ -320,8 +320,8 @@ def test_yes_skips_the_question_and_changes_nothing_else(
     """
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
-    by_hand = Automation(Context.build(asked_cluster.environment, asked_cluster.team))
-    by_hand.create_team_account("ops-account")
+    by_hand = Context.build(asked_cluster.environment, asked_cluster.team)
+    create_team_account(by_hand, "ops-account")
     by_hand_operations = recorded_api.operations()
     by_hand_checks = can_i_asked(recorded_api)
     recorded_api.calls.clear()
@@ -331,7 +331,7 @@ def test_yes_skips_the_question_and_changes_nothing_else(
         raise AssertionError("--yes reached a prompt it was told to skip")
 
     monkeypatch.setattr("builtins.input", no_prompt)
-    Automation(Context.build(asked_cluster.environment, asked_cluster.team)).create_team_account(
+    create_team_account(Context.build(asked_cluster.environment, asked_cluster.team),
         "ops-account", assume_yes=True)
 
     assert recorded_api.operations() == by_hand_operations
@@ -346,10 +346,10 @@ def test_no_terminal_and_no_yes_is_refused_before_the_cluster_is_asked_anything(
     the flag that is missing and does nothing else -- no `can-i`, no namespace, no account.
     """
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
-    automation = Automation(Context.build(asked_cluster.environment, asked_cluster.team))
+    ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
     with pytest.raises(ClickException) as raised:
-        automation.create_team_account("ops-account")
+        create_team_account(ctx, "ops-account")
 
     assert "--yes" in str(raised.value)
     assert client_writes(recorded_api) == []
@@ -367,10 +367,10 @@ def test_the_question_asked_of_the_operator_says_what_the_command_is_about(
     asked = []
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": asked.append(prompt) or "y")
-    automation = Automation(Context.build(asked_cluster.environment, asked_cluster.team))
+    ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
     user_management.check_cluster_and_access(
-        automation.kubernetes_utils, False,
+        KubernetesUtils(ctx), False,
         "delete the team account 'ops-account' and everything it can do on this cluster")
 
     assert any("delete the team account" in prompt for prompt in asked)
@@ -383,7 +383,7 @@ def test_the_checks_happen_before_any_write_whichever_command_is_standing_there(
     A second copy of this function is exactly what let one variant walk past it, so the
     read-only command is measured here rather than trusted to reuse it.
     """
-    on_a_cluster_that_grants_everything.create_team_account_read_only("ops-account")
+    create_team_account_read_only(on_a_cluster_that_grants_everything, "ops-account")
 
     assert can_i_asked(recorded_api) == list(user_management.CLUSTER_ACCESS_CHECKS)
     assert client_writes(recorded_api), "the read-only command wrote nothing"
@@ -398,6 +398,6 @@ def test_a_command_that_deletes_an_account_checks_the_same_verbs(asked_cluster, 
     """
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
-    Automation(Context.build(asked_cluster.environment, asked_cluster.team)).delete_team_account("ops-account")
+    delete_team_account(Context.build(asked_cluster.environment, asked_cluster.team), "ops-account")
 
     assert can_i_asked(recorded_api) == list(user_management.CLUSTER_ACCESS_CHECKS)

@@ -30,7 +30,7 @@ import time
 import pytest
 
 import kubementat.infrastructure.user_management as user_management
-from kubementat.automation import Automation
+from kubementat.automations.accounts.accounts import create_team_account
 from kubementat.errors import ServiceAccountTokenNotFoundError
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 from cluster_fixture import TARGET_DEV, UNREAD_ROOT, configuration_only_context
@@ -226,10 +226,10 @@ def test_a_run_that_cannot_read_a_token_prints_no_kubeconfig(
     the credential is what is missing. What must not happen is the second half of the bash's
     answer: exit code 0, a banner, and a `token:` line to paste.
     """
-    automation = Automation(configuration_only_context(fixture_repo.environment, fixture_repo.team))
+    context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
 
     with caplog.at_level(logging.INFO), pytest.raises(ServiceAccountTokenNotFoundError):
-        automation.create_team_account(ACCOUNT, assume_yes=True)
+        create_team_account(context, ACCOUNT, assume_yes=True)
 
     text = "\n".join(record.getMessage() for record in caplog.records)
     assert "Please put the settings below" not in text, "it printed a credential it did not have"

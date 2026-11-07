@@ -23,7 +23,8 @@ import click
 
 from cli.context import kmt_context
 from cli.helpers import team_option
-from kubementat.automation import Automation
+from kubementat.automations.install import pipelines as install_pipelines_slice
+from kubementat.automations.uninstall import pipelines as uninstall_pipelines_slice
 from kubementat.tekton_utils import (PIPELINE_RUN_POLL_INTERVAL_SECONDS,
                                      PIPELINE_RUN_TIMEOUT_SECONDS, TektonUtils)
 
@@ -116,8 +117,7 @@ def cleanup_pipeline_runs(ctx, environment, team, filter):
 @click.argument('team',envvar='TEAM')
 @kmt_context
 def setup_pipelines(ctx, environment, team):
-    automation = Automation(ctx)
-    automation.setup_pipelines()
+    install_pipelines_slice.setup_pipelines(ctx)
 
 # --------------------------------------------
 # SETUP TEKTON TRIGGERS
@@ -206,15 +206,13 @@ def generate_pipeline_run(ctx, environment, team, pipeline_file):
 @click.option('--yes', '-y', is_flag=True, help="Do not ask for user input. For scripting purposes.")
 @kmt_context
 def uninstall_pipelines(ctx, environment, team, yes):
-    automation = Automation(ctx)
-    
     if yes:
-        automation.uninstall_pipelines()
+        uninstall_pipelines_slice.uninstall_pipelines(ctx)
         exit(0)
     
     yn = input(f"Do you really wish to uninstall pipeline and task configuration for env: {environment} and team: {team} on this cluster? (yes/no): ")
     if yn.lower() in ['yes', 'y']:
-        automation.uninstall_pipelines()
+        uninstall_pipelines_slice.uninstall_pipelines(ctx)
     else:
         print("Cancelled pipeline/task config deletion.")
         exit(1)
