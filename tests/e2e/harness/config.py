@@ -988,8 +988,8 @@ class ExpectedResidue:
 # `869aeb8` deliberately does not reach them: `tekton-triggers-eventlistener-roles` and
 # `tekton-triggers-eventlistener-clusterroles` are bound by the EventListener controller at run
 # time, so no `ClusterRoleBinding` in the pinned release references them and they carry no
-# `managed-by` label for the uninstall sweep to claim. `src/kubementat/automation.py`'s
-# `_delete_cluster_scoped_rbac_kubementat_owns` states this in advance and refuses to hard-code
+# `managed-by` label for the uninstall sweep to claim. `automations/uninstall/kubementat.py`'s
+# `delete_cluster_scoped_rbac_kubementat_owns` states this in advance and refuses to hard-code
 # upstream role names -- that rule stays where it is. The names belong in the harness that
 # measures the residue, not in the product's sweep, and the assert still goes red for anything not
 # listed: this table excuses what it names, nothing else. A kind listed with an empty `names` was

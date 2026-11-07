@@ -68,13 +68,13 @@ sudo apt-get -qq install -y git-crypt yq python3-pip curl ca-certificates jq
 # A checkout that cannot be read is an error and not a licence to guess: without the table this
 # stage would be installing a version nobody declared, which is the failure it is written to avoid.
 for PIN_CANDIDATE in "$MOUNT" "$WORKDIR"; do
-  if [ -r "$PIN_CANDIDATE/src/kubementat/constants.py" ]; then
+  if [ -r "$PIN_CANDIDATE/src/kubementat/core/constants.py" ]; then
     PIN_SOURCE="$PIN_CANDIDATE"
     break
   fi
 done
 if [ -z "${PIN_SOURCE:-}" ]; then
-  echo "no readable src/kubementat/constants.py under $MOUNT or $WORKDIR: the pinned helm and"
+  echo "no readable src/kubementat/core/constants.py under $MOUNT or $WORKDIR: the pinned helm and"
   echo "helmfile versions are the product's declaration, and this stage will not guess them." >&2
   exit 4
 fi

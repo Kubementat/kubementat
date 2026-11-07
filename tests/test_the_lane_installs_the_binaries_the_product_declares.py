@@ -81,6 +81,19 @@ def ask_the_script_to_pin(name: str) -> str:
     return answer.stdout.strip()
 
 
+def checkout_search_block(text: str) -> str:
+    """The script's own search for the checkout that holds the table, read out of the script.
+
+    `pin` resolves its answer through a `PIN_SOURCE` the caller hands it, so a test that only calls
+    `pin` proves the *read* works and proves nothing about the *finding*. When `constants.py` moved
+    under `core/`, the read moved and the search did not, and the stage that followed failed the lane
+    three commits later -- which is the difference between a 55-second signal and a 400-second one.
+    """
+    start = text.index("for PIN_CANDIDATE in")
+    end = text.index("exit 4", start)
+    return text[start:end + len("exit 4\nfi\n")]
+
+
 # ---------------------------------------------------------------------------------------
 # the two halves of the decision, on the install side
 # ---------------------------------------------------------------------------------------
@@ -117,6 +130,28 @@ def test_the_provisioning_stage_reads_the_table_rather_than_assuming_a_version()
     for binary, pinned in sorted(constants.PINNED_BINARY_VERSIONS.items()):
         assert ask_the_script_to_pin(binary) == pinned, (
             "the stage cannot pin %s; %s declares %s" % (binary, "constants.py", pinned))
+
+
+def test_the_stage_finds_the_table_where_the_product_keeps_it():
+    """The stage's own search, run against this checkout, resolves both pins.
+
+    Nothing else in the suite runs the search: `pin` is always tested with `PIN_SOURCE` handed to it,
+    so a guard naming a path that no longer exists is invisible until the lane reaches stage 01. This
+    closes that gap with the only two facts that matter -- the checkout is real, and a wrong path
+    cannot hide in a comment.
+    """
+    text = PROVISION_SCRIPT.read_text()
+    for binary, pinned in sorted(constants.PINNED_BINARY_VERSIONS.items()):
+        command = 'MOUNT="%s" WORKDIR="%s"\n%s\n%s\npin %s\n' % (
+            REPO_ROOT, REPO_ROOT / "no-such-directory", checkout_search_block(text),
+            shell_function(text, "pin"), binary)
+        answer = subprocess.run(["bash", "-c", command], capture_output=True, text=True)
+        assert answer.returncode == 0, (
+            "the provisioning stage cannot find the table in a real checkout, so stage 01 would exit 4"
+            " on a guest that has the code: %s" % answer.stderr.strip())
+        assert answer.stdout.strip() == pinned, (
+            "the stage found a checkout and read %s for %s; %s declares %s" % (
+                answer.stdout.strip(), binary, "constants.py", pinned))
 
 
 def test_a_checkout_that_cannot_be_read_is_an_error_and_not_a_default_version():
