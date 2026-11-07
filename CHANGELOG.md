@@ -1,5 +1,61 @@
 # Unreleased
 
+- **The generation half leaves `tekton_utils.py`: `src/kubementat/infrastructure/tekton/generation.py`
+  is the first module of the Tekton split.** Twenty-three names — the generation group's 21 (11
+  ex-methods and 9 module-level functions, plus `generate_random_postfix`, which hoists rather than
+  threading `ctx` through a body that never used one) and the two helpers the DAG homes here, the
+  placeholder substitution and the obsolete-trigger refusal. `tekton_utils.py` stays, with its class
+  and its `__init__`, because five tickets are left; what moves out, moves out once, and
+  `grep -n "def <moved name>" src/kubementat/tekton_utils.py` answers nothing for all 23.
+
+  The methods lost `self` the way the `Automation` slices did: what these bodies read from the
+  instance was `Config`, so each takes one `config` parameter and the body is otherwise what it was.
+  Two names kept their signature exactly, because they never had an instance to read through.
+  The per-name delta is per-name rather than implied in `.agent-work/P4-1-equivalence.md`.
+
+  Why this is the sink and not just the first file: `generation.py` imports `kubementat.errors` and
+  the standard library and nothing that answers a cluster, so `runs → generation` (two calls in
+  `run_pipeline`) and `triggers → generation` (one call in `_apply_team_trigger_resources`) are the
+  only edges touching it, and both point inward. The graph proves the direction rather than
+  asserting it, because `tekton_utils.py` now imports this module at line 7 — any edge back out of
+  `generation.py` would be a cycle, and `python3 .agent-work/import_graph.py src` prints
+  `CYCLES: none`, with `kubementat.infrastructure.tekton.generation -> kubementat.errors` its one
+  outgoing edge. `__init__.py` ships empty of names for the reason §5 gives: every tekton seam is
+  patched by *module object*, and a re-export is a second binding nobody patches.
+
+  **What a downstream reader repoints to.** No re-export, no compatibility import, no class method
+  left behind. `tekton_utils.py` reaches its own moved names module-qualified, at the three places
+  that still call them (`:1135`, `:1343`, `:1350`), and imports nothing else from the package.
+
+  | you were reaching for | it is now |
+  |---|---|
+  | `TektonUtils.generate_deploy_pipeline(app_name, …)` | `generation.generate_deploy_pipeline(ctx.config, app_name, …)` |
+  | `TektonUtils.generate_trigger_configs(app_name, pipeline_name=, trigger_type=)` | `generation.generate_trigger_configs(ctx.config, app_name, pipeline_name=, trigger_type=)` |
+  | `TektonUtils.generate_pipeline_run(pipeline_file)` | `generation.generate_pipeline_run(ctx.config, pipeline_file)` |
+  | `TektonUtils.generate_random_postfix()`, `._replace_placeholders_in_dict(doc)`, `._refuse_obsolete_team_trigger_dir(config)` | `generation.<same name>(config, …)` — the postfix takes no `config` |
+  | `tekton_utils.CONFIG_PLACEHOLDER_SOURCES` and the 13 template / `PIPELINE_RUN_*` tables | `generation.<same name>` |
+
+  Consumers repointed, per file: `src/cli/commands/tekton.py` (the three generator commands, and one
+  import); `src/kubementat/tekton_utils.py` (the import above, plus the three qualified calls);
+  `tests/test_generated_deploy_pipelines_and_trigger_configs_are_written_where_they_are_read.py` and
+  `tests/test_generated_pipeline_runs_are_written_where_the_run_commands_read_them.py` (the harness
+  helper `utils(checkout)` became `generation_config(checkout)`; 15 call sites across the two, of
+  which `:216`'s `utils(checkout)._replace_placeholders_in_dict(document)` is the one §3 named — its
+  assertion is unchanged, because the config it substitutes from is built the same way in both
+  spellings); `tests/test_parity_tekton_runs.py:48` (the substitution table's import path);
+  `tests/test_the_eight_former_environment_variables_arrive_only_through_the_layers.py:156`
+  (`_category_tables(tekton_utils)` became `_category_tables(generation)`, and the table it reads off
+  the syntax tree is byte for byte the one it read before — the test's own claim, not a widened one).
+
+  **The one thing this changes under a user's hands, and where it belongs.** The three generator
+  commands still build a `TektonUtils` and take only its `config`, because the team refusal is a
+  constructor line until P4-6 dissolves the class. Ask the constructor for less and
+  `kmt tekton-generate-triggers <env>` without a team stops refusing and writes `None` into the team
+  fields of four manifests. §3 item 6 gives that move to P4-6, with the test that says so; this
+  ticket keeps the refusal and names it as the ticket's one visible seam.
+
+  `uv run pytest -q` → **1777 passed, 1 skipped**, `python3 .agent-work/import_graph.py src` → exit 0,
+  no file deleted, no behaviour of a moved function changed.
 - **The team-`static.json` reader goes below the slices that read it: `automations/teams.py` is now
   `src/kubementat/core/config/teams.py`.** The plan's layer rule says nothing below may reach up, and
   this was the one violation the import graph could not see, because it counts `automations` as a

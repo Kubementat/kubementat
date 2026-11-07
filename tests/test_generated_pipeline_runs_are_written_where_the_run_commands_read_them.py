@@ -1,4 +1,4 @@
-"""Parity: `generate_pipeline_run.sh` against `TektonUtils.generate_pipeline_run`, and where the
+"""Parity: `generate_pipeline_run.sh` against `generation.generate_pipeline_run`, and where the
 generated run is allowed to live.
 
 The script had no caller. `grep -rl generate_pipeline_run src tests/e2e tekton_ci README.md` answers
@@ -65,6 +65,7 @@ import yaml
 from conftest import REPO_ROOT, run_bash, run_kmt
 from cluster_fixture import configuration_only_context
 from asset_paths import tekton_ci_path
+from kubementat.infrastructure.tekton import generation
 
 # The record is the commit that still holds the script. Pinning it rather than asking for `HEAD` is
 # what lets this file keep its claim after the deletion lands: `git show HEAD:<script>` starts
@@ -120,10 +121,14 @@ def checkout(fixture_repo, dry_run_env):
     return fixture_repo
 
 
-def utils(checkout):
-    from kubementat.tekton_utils import TektonUtils
+def generation_config(checkout):
+    """The configuration the generator reads, with no `TektonUtils` in front of it.
 
-    return TektonUtils(configuration_only_context(checkout.environment, checkout.team))
+    The generation group moved out of the class, so this is the parameter the ticket's
+    conversion gave the function — what the old method read from the instance, and
+    nothing else about the call changed.
+"""
+    return configuration_only_context(checkout.environment, checkout.team).config
 
 
 def pipeline_source(checkout, pipeline):
@@ -173,7 +178,7 @@ def raw_parameters_of(path):
 
 
 def generated_pipeline_run(checkout, pipeline):
-    return utils(checkout).generate_pipeline_run(str(pipeline_source(checkout, pipeline)))
+    return generation.generate_pipeline_run(generation_config(checkout), str(pipeline_source(checkout, pipeline)))
 
 
 def documents_of(path):
@@ -209,7 +214,7 @@ def resolved(checkout, document):
     same configuration — which is also the exact point where the two halves' claims about
     configuration diverge.
     """
-    utils(checkout)._replace_placeholders_in_dict(document)
+    generation._replace_placeholders_in_dict(generation_config(checkout), document)
     return document
 
 
@@ -386,7 +391,7 @@ def test_a_pipeline_file_that_is_not_there_names_the_path_it_reached_for(checkou
     missing = checkout.root / "tekton_ci/pipelines/no-such-pipeline.yml"
 
     with pytest.raises(GenerationInputNotFoundError) as error:
-        utils(checkout).generate_pipeline_run(str(missing))
+        generation.generate_pipeline_run(generation_config(checkout), str(missing))
 
     assert "no-such-pipeline.yml" in str(error.value)
     assert not written_run(checkout, "no-such-pipeline").parent.joinpath("null-run.yml").exists()
@@ -411,7 +416,7 @@ def test_a_file_that_is_not_one_pipeline_is_refused_by_name(checkout, body, what
     source.write_text(body)
 
     with pytest.raises(GenerationInputNotUsableError) as error:
-        utils(checkout).generate_pipeline_run(str(source))
+        generation.generate_pipeline_run(generation_config(checkout), str(source))
 
     assert what in str(error.value)
     assert not written_run(checkout, "not-a-pipeline").exists()
@@ -431,7 +436,7 @@ def test_a_pipeline_with_no_name_is_refused(checkout):
                       "spec:\n  params:\n    - name: docker-registry-base-url\n")
 
     with pytest.raises(GenerationInputNotUsableError) as error:
-        utils(checkout).generate_pipeline_run(str(source))
+        generation.generate_pipeline_run(generation_config(checkout), str(source))
 
     assert "nameless.yml" in str(error.value)
     assert not list(Path(checkout.root).rglob("null-run.yml"))
@@ -472,7 +477,7 @@ def test_a_parameter_declared_with_no_name_is_refused(checkout):
                       "spec:\n  params:\n    - default: nothing\n")
 
     with pytest.raises(GenerationInputNotUsableError) as error:
-        utils(checkout).generate_pipeline_run(str(source))
+        generation.generate_pipeline_run(generation_config(checkout), str(source))
 
     assert "nameless-parameter.yml" in str(error.value)
     assert not written_run(checkout, "nameless-parameter").exists()
@@ -628,7 +633,7 @@ def _difference_the_api_version_is_read_and_not_written(checkout):
                            f"../../../tekton_ci/pipelines/{PIPELINE}.yml")
     assert record["document"]["apiVersion"] == "tekton.dev/v1", "the record's is a literal"
 
-    config = utils(checkout).config
+    config = generation_config(checkout)
     assert documents_of(generated_pipeline_run(checkout, PIPELINE))[0][
         "apiVersion"] == f"{config.TEKTON_API_GROUP}/{config.TEKTON_API_VERSION}"
 
@@ -648,7 +653,7 @@ def _difference_a_file_that_is_not_a_pipeline_is_refused(checkout):
     assert record["document"]["spec"]["pipelineRef"]["name"] == "a-task"
 
     with pytest.raises(GenerationInputNotUsableError):
-        utils(checkout).generate_pipeline_run(str(source))
+        generation.generate_pipeline_run(generation_config(checkout), str(source))
 
 
 def _difference_a_pipeline_that_declares_no_parameters_is_generated(checkout):
@@ -666,7 +671,7 @@ def _difference_a_pipeline_that_declares_no_parameters_is_generated(checkout):
     assert "Cannot iterate over null" in record["output"], record["output"]
     assert not record["target"].exists(), "bash died before its redirect, so there is no file"
 
-    document = documents_of(utils(checkout).generate_pipeline_run(str(source)))[0]
+    document = documents_of(generation.generate_pipeline_run(generation_config(checkout), str(source)))[0]
     assert document["spec"]["pipelineRef"]["name"] == "no-parameters"
     assert document["spec"]["params"] == []
 

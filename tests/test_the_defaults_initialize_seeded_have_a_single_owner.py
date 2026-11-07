@@ -66,7 +66,7 @@ EXCLUDED_NAMESPACE_KEYS = ("PIPELINE_NAMESPACE", "APP_DEPLOYMENT_NAMESPACE")
 
 # Which category a reader asks. HELM_DEPLOYER_SERVICE_ACCOUNT_NAME lives in the team's file (the
 # team template carries it), and the other nine in the environment's, which is what the substitution
-# table in `tekton_utils.CONFIG_PLACEHOLDER_SOURCES` also says.
+# table in `generation.CONFIG_PLACEHOLDER_SOURCES` also says.
 READ_CATEGORY = {key: "team_static" for key in ("HELM_DEPLOYER_SERVICE_ACCOUNT_NAME",)}
 READ_CATEGORY.update({key: "env_static" for key in TEN_KEYS if key not in READ_CATEGORY})
 

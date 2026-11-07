@@ -1,5 +1,5 @@
-"""Parity: the two generator scripts against `TektonUtils.generate_deploy_pipeline` and
-`TektonUtils.generate_trigger_configs`.
+"""Parity: the two generator scripts against `generation.generate_deploy_pipeline` and
+`generation.generate_trigger_configs`.
 
 Neither script had a caller. `grep -rl generate_deploy_pipeline_from_template src tests/e2e
 tests/*.py tekton_ci README.md` answers nothing, and neither does the same search for the trigger
@@ -35,6 +35,7 @@ import yaml
 from conftest import REPO_ROOT, run_bash, run_kmt
 from asset_paths import relocate_asset_root, tekton_ci_path
 from cluster_fixture import configuration_only_context
+from kubementat.infrastructure.tekton import generation
 
 BLOB_REVISION = "07368d4"
 GENERATOR_SCRIPTS = {
@@ -111,10 +112,14 @@ def checkout(fixture_repo, dry_run_env, monkeypatch):
     return fixture_repo
 
 
-def utils(checkout):
-    from kubementat.tekton_utils import TektonUtils
+def generation_config(checkout):
+    """The configuration the two generators read, with no `TektonUtils` in front of it.
 
-    return TektonUtils(configuration_only_context(checkout.environment, checkout.team))
+    The generation group moved out of the class, so the parity harness calls the module the way a
+    caller does now: the parameter the conversion gave those functions is `Config`, which is what
+    the old methods read from the instance, and nothing else about the call changed.
+    """
+    return configuration_only_context(checkout.environment, checkout.team).config
 
 
 def run_generator_script(checkout, which, variables):
@@ -162,14 +167,15 @@ def everything_under(directory):
 
 
 def generated_trigger_files(checkout, trigger_type="github", app_name=APP):
-    return utils(checkout).generate_trigger_configs(app_name, pipeline_name=PIPELINE,
-                                                    trigger_type=trigger_type)
+    return generation.generate_trigger_configs(generation_config(checkout), app_name,
+                                               pipeline_name=PIPELINE,
+                                               trigger_type=trigger_type)
 
 
 def generated_deploy_pipeline(checkout, **overrides):
     arguments = dict(PYTHON_GIT)
     arguments.update(overrides)
-    return utils(checkout).generate_deploy_pipeline(APP, **arguments)
+    return generation.generate_deploy_pipeline(generation_config(checkout), APP, **arguments)
 
 
 # --- the deploy pipeline ---------------------------------------------------------------------
@@ -283,10 +289,10 @@ def test_a_placeholder_the_config_does_not_supply_fails_naming_the_key_and_write
         "    - name: base-domain\n"
         "      default: BASE_DOMAIN_PLACEHOLDER\n")
     checkout.environment_static(BASE_DOMAIN=None)
-    generator = utils(checkout)
+    config = generation_config(checkout)
 
     with pytest.raises(Exception) as error:
-        generator.generate_deploy_pipeline(APP, template_file=str(template), **PYTHON_GIT)
+        generation.generate_deploy_pipeline(config, APP, template_file=str(template), **PYTHON_GIT)
 
     assert type(error.value).__name__ == "GenerationPlaceholderNotConfiguredError"
     assert "BASE_DOMAIN_PLACEHOLDER" in str(error.value)
@@ -304,8 +310,9 @@ def test_a_missing_git_coordinate_is_refused_by_name_and_writes_nothing(checkout
     from kubementat.errors import GenerationArgumentNotSuppliedError
 
     with pytest.raises(GenerationArgumentNotSuppliedError) as error:
-        utils(checkout).generate_deploy_pipeline(
-            APP, git_url=PYTHON_GIT["git_url"], git_project_name=PYTHON_GIT["git_project_name"])
+        generation.generate_deploy_pipeline(generation_config(checkout), APP,
+                                            git_url=PYTHON_GIT["git_url"],
+                                            git_project_name=PYTHON_GIT["git_project_name"])
 
     assert "`--git-server-host`" in str(error.value)
     assert "`--git-server-port`" in str(error.value)
@@ -317,7 +324,8 @@ def test_an_app_name_that_would_escape_the_directory_is_refused(checkout):
     from kubementat.errors import GenerationArgumentNotSuppliedError
 
     with pytest.raises(GenerationArgumentNotSuppliedError) as error:
-        utils(checkout).generate_deploy_pipeline("../other-team", **PYTHON_GIT)
+        generation.generate_deploy_pipeline(generation_config(checkout), "../other-team",
+                                            **PYTHON_GIT)
 
     assert "other-team" in str(error.value)
     assert not [path for path in (checkout.root / "platform_config").rglob("deploy-pipeline-*")
@@ -413,10 +421,11 @@ def test_a_trigger_template_with_no_configured_base_domain_names_the_key(checkou
     what it is given.
     """
     checkout.environment_static(BASE_DOMAIN=None)
-    generator = utils(checkout)
+    config = generation_config(checkout)
 
     with pytest.raises(Exception) as error:
-        generator.generate_trigger_configs(APP, pipeline_name=PIPELINE, trigger_type="github")
+        generation.generate_trigger_configs(config, APP, pipeline_name=PIPELINE,
+                                            trigger_type="github")
 
     assert type(error.value).__name__ == "GenerationPlaceholderNotConfiguredError"
     assert "BASE_DOMAIN_PLACEHOLDER" in str(error.value)

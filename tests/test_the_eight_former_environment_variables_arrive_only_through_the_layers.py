@@ -33,7 +33,8 @@ from pathlib import Path
 
 import pytest
 
-from kubementat import config_answers, tekton_utils
+from kubementat import config_answers
+from kubementat.infrastructure.tekton import generation
 import kubementat.automations.ci as ci_utils
 from kubementat.core import constants
 from kubementat.automations.ci import CiUtils
@@ -145,14 +146,14 @@ def test_a_key_the_row_leaves_to_l0_never_arrives_from_the_process_environment(t
 def test_the_substitution_tables_and_the_read_path_agree_on_the_category(tmp_path):
     """Every (category, key) pair in `src/` that names one of these keys says `env_static`.
 
-    `tekton_utils.CONFIG_PLACEHOLDER_SOURCES` is what fills a generated manifest's placeholders, and
+    `generation.CONFIG_PLACEHOLDER_SOURCES` is what fills a generated manifest's placeholders, and
     it is a second statement of "where this value comes from". If one of its rows said `team_static`
     while every read said `env_static`, the generator and the command would answer two different
     questions from one key — which is the drift class this row is supposed to close. Keys no table
     mentions (`CLUSTER_MANAGER_EMAIL` is read directly by `routing._cluster_manager_email`) are
     reported as absent from the tables rather than treated as a failure.
     """
-    triples = _category_tables(tekton_utils)
+    triples = _category_tables(generation)
     seen = {}
     for key in FORMER_ENVIRONMENT_VARIABLES:
         entries = [(table, source, category)

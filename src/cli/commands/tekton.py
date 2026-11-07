@@ -27,6 +27,7 @@ from kubementat.automations.install import pipelines as install_pipelines_slice
 from kubementat.automations.uninstall import pipelines as uninstall_pipelines_slice
 from kubementat.tekton_utils import (PIPELINE_RUN_POLL_INTERVAL_SECONDS,
                                      PIPELINE_RUN_TIMEOUT_SECONDS, TektonUtils)
+from kubementat.infrastructure.tekton import generation
 
 
 @click.group(name='tekton',
@@ -161,7 +162,13 @@ def setup_cleanup_job(ctx, environment, team):
 @kmt_context
 def generate_deploy_pipeline(ctx, environment, team, app_name, git_url, git_project_name,
                              git_server_host, git_server_port, git_server_ssh_user):
-    TektonUtils(ctx).generate_deploy_pipeline(
+    # The generation half moved out of the class, so the call lands on the module and what the
+    # method read from the instance arrives as `Config`. The class is still built first, and only
+    # for its `config`: the team guard is a constructor line until P4-6 dissolves the class, and
+    # skipping the constructor would generate a manifest that says `None` in the team fields
+    # instead of refusing a run that never named one.
+    generation.generate_deploy_pipeline(
+        TektonUtils(ctx).config,
         app_name, git_url=git_url, git_project_name=git_project_name,
         git_server_host=git_server_host, git_server_port=git_server_port,
         git_server_ssh_user=git_server_ssh_user)
@@ -180,8 +187,10 @@ def generate_deploy_pipeline(ctx, environment, team, app_name, git_url, git_proj
               help="Which git host's templates to generate from: github or gitlab")
 @kmt_context
 def generate_trigger_configs(ctx, environment, team, app_name, pipeline_name, trigger_type):
-    TektonUtils(ctx).generate_trigger_configs(
-        app_name, pipeline_name=pipeline_name, trigger_type=trigger_type)
+    # Read the note on `generate_deploy_pipeline` — same reason, same shape.
+    generation.generate_trigger_configs(TektonUtils(ctx).config,
+                                        app_name, pipeline_name=pipeline_name,
+                                        trigger_type=trigger_type)
 
 # --------------------------------------------
 # GENERATE PIPELINE RUN
@@ -195,7 +204,8 @@ def generate_trigger_configs(ctx, environment, team, app_name, pipeline_name, tr
 @click.argument('pipeline_file')
 @kmt_context
 def generate_pipeline_run(ctx, environment, team, pipeline_file):
-    TektonUtils(ctx).generate_pipeline_run(pipeline_file)
+    # Read the note on `generate_deploy_pipeline` — same reason, same shape.
+    generation.generate_pipeline_run(TektonUtils(ctx).config, pipeline_file)
 
 # --------------------------------------------
 # UNINSTALL PIPELINES

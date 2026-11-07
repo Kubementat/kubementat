@@ -44,7 +44,8 @@ from conftest import (ENVIRONMENT_STATIC, FIXTURE_KUBE_CONTEXT, PIPELINE_NAMESPA
 # the half that has to say it out loud — and a Python path that addressed another cluster is now a
 # difference the comparison finds rather than a detail the record used to leave out.
 CLUSTER = cluster_named(context=FIXTURE_KUBE_CONTEXT)
-from kubementat.tekton_utils import CONFIG_PLACEHOLDER_SOURCES
+# The substitution table moved out with the generation group, so the read points at its new home.
+from kubementat.infrastructure.tekton.generation import CONFIG_PLACEHOLDER_SOURCES
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
