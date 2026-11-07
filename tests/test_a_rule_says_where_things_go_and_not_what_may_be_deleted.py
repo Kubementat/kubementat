@@ -23,7 +23,7 @@ from click.testing import CliRunner
 from cluster_fixture import configuration_only_context
 from kubementat.core.config.config import Config
 from kubementat.errors import TeamNotSuppliedError
-from kubementat.automations.teams import declared_team_namespaces
+from kubementat.core.config.teams import declared_team_namespaces
 from kubementat.automations.uninstall import pipelines as pipelines_slice
 from kubementat.automations.uninstall.pipelines import uninstall_pipelines
 

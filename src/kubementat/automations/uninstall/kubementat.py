@@ -7,7 +7,7 @@ and what survived is collected from every step and raised once -- an uninstall t
 while a release is still running is the failure this command exists to stop.
 
 The deletes themselves are in `residue`, `linkerd` and `nginx_ingress`; the namespace answer is in
-`sweep`; the team directory is read by `automations.teams`. This module owns only the order, the
+`sweep`; the team directory is read by `core.config.teams`. This module owns only the order, the
 plan the operator is shown before being asked, and the summary that says which directories were
 read as teams and which were not.
 """
@@ -19,11 +19,11 @@ import sys
 import click
 
 from kubementat import errors
+from kubementat.core.config.teams import TEAM_NAMESPACE_KEYS
 from kubementat.core.identity.context import context_name
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 from kubementat.tekton_utils import HELM_DEPLOYER_CLUSTER_ROLE_NAME
 
-from kubementat.automations.teams import TEAM_NAMESPACE_KEYS
 from kubementat.automations.uninstall.linkerd import (
     LINKERD_NAMESPACES,
     uninstall_linkerd,

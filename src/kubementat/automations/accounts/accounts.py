@@ -14,10 +14,9 @@ to bind anything in.
 
 import logging
 
+from kubementat.core.config.teams import team_namespaces
 from kubementat.infrastructure import user_management
 from kubementat.infrastructure.kubernetes import KubernetesUtils
-
-from kubementat.automations.teams import team_namespaces
 
 
 def create_team_account(ctx, service_account_name: str, assume_yes: bool = False) -> None:

@@ -34,7 +34,7 @@ from cluster_fixture import configuration_only_context, redirect_checkout
 import kubementat.infrastructure.grafana.accounts as grafana_accounts
 import kubementat.infrastructure.grafana.client as grafana_client
 from kubementat.automations.routing import routing
-from kubementat.automations.teams import declared_team_namespaces
+from kubementat.core.config.teams import declared_team_namespaces
 from kubementat.core.config.config import Config
 
 

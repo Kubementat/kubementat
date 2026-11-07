@@ -2,7 +2,7 @@
 
 Two sources, both of them configuration, and one failure policy that belongs to the sweep and not
 to the reader: `sweep` is where a directory that is not a team is decided. The strict reader of the
-same file lives in `automations.teams`, so the two commands cannot disagree about what
+same file lives in `core.config.teams`, so the two commands cannot disagree about what
 `static.json` declares; what they decide differently is only what to do about a short answer.
 """
 
@@ -10,8 +10,7 @@ same file lives in `automations.teams`, so the two commands cannot disagree abou
 import logging
 
 from kubementat.core import constants
-
-from kubementat.automations.teams import (
+from kubementat.core.config.teams import (
     declared_team_namespaces,
     unreadable_team_configuration,
     warn_about_team_directory,

@@ -1,12 +1,43 @@
 # Unreleased
 
+- **The team-`static.json` reader goes below the slices that read it: `automations/teams.py` is now
+  `src/kubementat/core/config/teams.py`.** The plan's layer rule says nothing below may reach up, and
+  this was the one violation the import graph could not see, because it counts `automations` as a
+  single layer and the three readers sit inside it — exit 0, and the automation layer owning a
+  configuration reader all the same. No redesign, no signature changes, no behaviour change: the
+  file moved, and every import that pointed at it was repointed. Why that home and not
+  `core/teams.py`: the module imports exactly one thing, `kubementat.core.config.config`, and it is
+  now the ninth module of the package whose other eight read layered configuration — `core/` would
+  have owned a second kind of thing beside a package that already owns this kind, and one plausible
+  home beats two.
+
+  **What a downstream reader repoints to.** There is no re-export module, no shim, no compatibility
+  alias: `import kubementat.automations.teams` raises `ModuleNotFoundError`, which is what a deleted
+  module is supposed to do. Every reader below is now a
+  `from kubementat.core.config.teams import …`:
+
+  | the reader | what it takes |
+  |---|---|
+  | `automations/accounts/accounts.py:17` | `team_namespaces` |
+  | `automations/uninstall/kubementat.py:22` | `TEAM_NAMESPACE_KEYS` |
+  | `automations/uninstall/sweep.py:13` | `declared_team_namespaces`, `unreadable_team_configuration`, `warn_about_team_directory` |
+  | `tests/test_a_library_read_uses_the_root_the_command_was_handed.py:37`, `tests/test_a_rule_says_where_things_go_and_not_what_may_be_deleted.py:26` | `declared_team_namespaces` |
+
+  The two sentences that said where the reader lived — `automations/uninstall/kubementat.py:10` and
+  `automations/uninstall/sweep.py:5` — name `core.config.teams` now. They are the only place the
+  relationship is written down, and a stale sentence there is how the next reader re-creates the
+  edge. The graph says so: `automations/… -> core/config/teams` three times, no edge the other way,
+  1777 passed and 1 skipped, no name defined twice.
+
 - **`Automation` is gone, and `src/kubementat/automation.py` with it.** The class held 54 methods and
   two module functions over 2 625 lines, and every one of them was a verb against a cluster or a
   piece of configuration, which is what puts it in the automations layer rather than in a file that
   happens to be big. It split into slices, one verb group per directory: `automations/install/`
   (`kubementat`, `dependencies`, `pipelines`, `registry`, `secrets`), `automations/uninstall/`
   (`kubementat`, `pipelines`, `residue`, `linkerd`, `nginx_ingress`, `sweep`),
-  `automations/tunnels/tunnels.py`, `automations/accounts/accounts.py`, plus `automations/teams.py`
+  `automations/tunnels/tunnels.py`, `automations/accounts/accounts.py`, plus the two team-`static.json`
+  readers the halves share — at the time they landed in `automations/teams.py`, and one entry below
+  says where that reader lives now.
   for the two team-`static.json` readers both halves need. `context_name` went to
   `core/identity/context.py`, where it was always read from. What the class carried as `self` —
   `config`, `environment`, `team`, the cluster client — is what the `Context` a command already had
@@ -37,7 +68,7 @@
   | `automation.uninstall_pipelines` | `automations/uninstall/pipelines.py:17` |
   | `automation.open_tunnel_grafana` / `_tekton_dashboard` / `_openbao` | `automations/tunnels/tunnels.py:15`, `:44`, `:76` |
   | `automation.create_team_account`, `create_team_account_read_only`, `delete_team_account` | `automations/accounts/accounts.py:23`, `:38`, `:135` |
-  | `automation._declared_team_namespaces`, `TEAM_NAMESPACE_KEYS` | `automations/teams.py:29`, `:26` |
+  | `automation._declared_team_namespaces`, `TEAM_NAMESPACE_KEYS` | `core/config/teams.py` (moved out of `automations/teams.py` by the entry above) |
   | `kubementat.automation.shell.run`, `kubementat.automation.sys`, `kubementat.automation.HelmUtils`, `kubementat.automation.TektonUtils` as `monkeypatch.setattr` string targets | the slice module that issues the call — an `automations/*/….py` whose import list names the thing you are patching. A string that points at a deleted module raises, so the ones that were still pointing at `kubementat.automation` fail loudly; what you must *not* patch is the class the object used to be. |
 
   **The honest half, stated rather than left to the diff.** The split carried two omissions over
@@ -54,9 +85,9 @@
   is not callable, so reading `_release_runs_traefik_proxy` raised
   `'staticmethod' object is not callable`. They are deleted.
 
-  What is still open, and is not this change's to close: the three cross-slice edges into
-  `automations/teams.py` are a layering question the import graph cannot see, because it counts
-  `automations` as one layer.
+  The three cross-slice edges into `automations/teams.py` were a layering question the import graph
+  could not see, because it counts `automations` as one layer. The entry above closes it, and it is
+  the entry above that the two pointers to `automations/teams.py` in this entry's table now defer to.
 
 - **The last three flat modules under `src/kubementat/` took their homes.** `ci_utils.py` is
   `automations/ci.py` and `ingress_generator.py` is `automations/ingress.py` — both are verbs, not
