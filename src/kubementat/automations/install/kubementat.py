@@ -24,6 +24,7 @@ from kubementat.infrastructure.kubernetes import KubernetesUtils
 # The preflight assertion moved out of `tekton_utils.py` (P4-2). The name it goes by is unchanged;
 # what changed is the module it is read from, and it is read from that module rather than bound
 # here because every tekton seam is patched by module object.
+from kubementat.infrastructure.tekton import install as tekton_install
 from kubementat.infrastructure.tekton import preflight
 from kubementat.tekton_utils import TektonUtils
 
@@ -81,8 +82,17 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
 
     # Tekton installation: the three pinned releases and the ClusterRole that authorises
     # helm to deploy. It used to be the last bash script on this path, which is why `kmt
-    # install` still needed a checkout of `scripts/` to touch a cluster.
-    TektonUtils(ctx).install()
+    # install` still needed a checkout of `scripts/` to touch a cluster. It is a function of
+    # `infrastructure/tekton/install.py` now (P4-4), called through the module rather than bound
+    # here, and it is handed exactly what the class used to read off `self`.
+    #
+    # What this line no longer does is construct `TektonUtils`, which used to be how a context with
+    # no team was refused on this path. The refusal itself is untouched (`TektonUtils.__init__`, and
+    # the `setup_triggers` branch below still reaches it), and it is P4-6's to move; the command
+    # itself names `TEAM` as a required argument, so `kmt install` cannot reach this line without
+    # one. That is why dropping the construction here is a drift to report and not one to hide: a
+    # library caller that hands over a team-less `Context` now finds out at `setup_triggers`.
+    tekton_install.install(kubernetes_utils, config, environment)
 
     # That the applies succeeded is not the same fact as "the cluster now serves what
     # kubementat speaks": the release URLs are built from the TEKTON_VERSION_* pins, so a

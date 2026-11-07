@@ -812,11 +812,20 @@ def test_the_shell_side_reads_namespaces_from_static_json_rather_than_holding_th
     assert not (REPO_ROOT / relative).exists(), \
         "both implementations would mean two answers, and only one of them is executed"
 
-    source = (REPO_ROOT / "src/kubementat/tekton_utils.py").read_text(encoding="utf-8")
-
-    offenders = [line.strip() for line in source.splitlines() if _namespace_literal_assignment(line)]
-    assert offenders == [], "the replacement may not have inherited the script's constant"
-    assert "component_namespace" in source, \
+    # Read over the package rather than over the one file that used to hold all of it. The cleanup
+    # job left for `runs.py` in P4-3 and the install left for `install.py` in P4-4, so a rule pointed
+    # at `tekton_utils.py` checks a file that no longer does this work: it would keep passing while
+    # guarding nothing. The pair is asserted per file for the literal half -- no module of the split
+    # gets its own namespace -- and the accessor half as one package claim.
+    modules = sorted((REPO_ROOT / "src/kubementat/infrastructure/tekton").glob("*.py"))
+    assert modules, "the split's own modules are what this rule reads"
+    for module in modules:
+        offenders = [line.strip() for line in module.read_text(encoding="utf-8").splitlines()
+                     if _namespace_literal_assignment(line)]
+        assert offenders == [], \
+            f"{module.name} may not have inherited the script's constant"
+    sources = "\n".join(module.read_text(encoding="utf-8") for module in modules)
+    assert "component_namespace" in sources, \
         "the namespace has to come from the same accessor install and uninstall read"
 
 

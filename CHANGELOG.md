@@ -1,5 +1,91 @@
 # Unreleased
 
+- **The install half leaves `tekton_utils.py`: `src/kubementat/infrastructure/tekton/install.py` is the
+  fourth module of the Tekton split.** Six names — `install`, `_install_helm_deployer_cluster_role`,
+  `_wait_for_pipeline_webhook`, `_release_manifest_url`, `release_manifests_to_apply`,
+  `helm_deployer_cluster_role` — plus `TEKTON_RELEASE_BASE_URL`, `RELEASE_MANIFESTS`,
+  `HELM_DEPLOYER_CLUSTER_ROLE_NAME`, `HELM_DEPLOYER_RULE_API_GROUPS`, `PIPELINE_WEBHOOK_SERVICE_NAME`,
+  `WEBHOOK_READY_TIMEOUT_SECONDS` and `WEBHOOK_READY_POLL_SECONDS`. `DISCOVERY_ATTEMPTS` and
+  `DISCOVERY_DELAY_SECONDS` did *not* come here and are not anywhere new: they are
+  `preflight.preflight_installed_tekton_api_versions`'s own default arguments, and moving them would
+  have reversed an edge the DAG already proved. Methods lose `self`; what the constructor read is a
+  parameter now (`kubernetes_utils`, `config`, and `environment` for the log line), and every body is
+  what it was — per-name deltas are in `.agent-work/P4-4-equivalence.md`, and
+  `grep -n "def <moved name>" src/kubementat/tekton_utils.py` answers nothing for all six. The file is
+  609 → 360 lines, and `import time` and `import shell` left with the code that used them; the class
+  keeps `__init__`, the team refusal, and the trigger group. `install.py` imports nothing from inside
+  the package, which is what makes its edge legal: the checker proves a cycle would be seen
+  (`install → runs → install` prints when probed), so "none" is evidence and not a blind spot.
+
+  **Two patches that this move could have made inert, and what proves they are not.**
+  *The instance patch, which is the site the plan flagged as the phase's highest severity.*
+  `test_the_role_is_written_after_the_control_plane_it_authorises` used to `setattr` the role writer on
+  a `TektonUtils` instance. It is a module attribute now, so the patch is
+  `monkeypatch.setattr(tekton_install, "_install_helm_deployer_cluster_role", recording_role)`. The
+  honest correction to the plan: **it could never have gone silently green here.** Freezing the binding
+  in `install.py` — the `from … import` shape that is the whole reason §0.4 forbids name imports —
+  makes the substitute uncallable, the journal records four applies and no `clusterrole`, and the test
+  fails with `ValueError: 'clusterrole' is not in list` before any assertion runs. What *is* true is
+  narrower and worse than the plan said: the assertion that carried this test only ever asked *where* in
+  the journal the role write landed, so a role written twice passes it (`3 > 1 > 0`). Making the
+  substitute be called twice proved it: **with** the reached-exactly-once assertion the test fails,
+  **without** it the same mutation passes. That assertion is what the ticket adds, and it is the first
+  place in the suite that says the ClusterRole is written once per install — which the parity tests do
+  not cover, because they compare against a script that wrote it with `kubectl apply`.
+  *The two wait constants.* Both are owned by `install.py` and read there as module globals, so the
+  short-deadlines patch lands where the loop reads. Proving it needed a fail that is not obvious: with
+  `WEBHOOK_READY_POLL_SECONDS` frozen at import so the patch cannot reach it, all seven tests in
+  `test_the_tekton_install_waits_…` **pass** — and the file's wall clock goes 1.1 s → 8.2 s, which is
+  the real two-second schedule running underneath a green run. The bound is the half that is observable,
+  because the expiry sentence quotes it: the same mutation on `WEBHOOK_READY_TIMEOUT_SECONDS` fails with
+  `assert '0.3' in '… served no endpoints for 120.0s …'`, while `test_the_wait_holds_the_line_it_was_given`
+  passes under it. A lower bound on elapsed time cannot tell a missed patch from a real wait; the
+  sentence can. So: `WEBHOOK_READY_TIMEOUT_SECONDS` and `WEBHOOK_READY_POLL_SECONDS` belong to
+  `infrastructure.tekton.install`, patched as `install.<name>`, and a reader who patches the ceiling
+  should expect the sentence to say so.
+
+  **One observable change, and it is the smallest of the changes.** The install step in
+  `automations/install/kubementat.py` is `tekton_install.install(kubernetes_utils, config, environment)`
+  and no longer constructs `TektonUtils`. The team refusal itself is untouched — `TektonUtils.__init__`
+  still carries it, the `setup_triggers` branch of the same function still reaches it, and `kmt install`
+  names `TEAM` as a required argument so no invocation of the command can reach this line without one.
+  What changes is only for a library caller handing `install_kubementat` a team-less `Context`: it finds
+  out at `setup_triggers` instead of before the first manifest goes in. That is the phase's declared
+  trajectory (the refusal moves into the bodies that need a namespace, and installing the three releases
+  into the `tekton` component namespace needs none), and it is P4-6's to finish.
+
+  **What a downstream reader repoints to.** No re-export, no compatibility import, no method standing
+  behind the function.
+
+  | you were reaching for | it is now |
+  |---|---|
+  | `TektonUtils.install()` | `infrastructure.tekton.install.install(kubernetes_utils, config, environment)` |
+  | `TektonUtils._install_helm_deployer_cluster_role()`, `._wait_for_pipeline_webhook(ns)` | `install._install_helm_deployer_cluster_role(kubernetes_utils)`, `install._wait_for_pipeline_webhook(kubernetes_utils, namespace)` |
+  | `tekton_utils.release_manifests_to_apply(env_static)`, `.helm_deployer_cluster_role()`, `._release_manifest_url(…)` | `install.<same name>`, same arguments |
+  | `tekton_utils.TEKTON_RELEASE_BASE_URL`, `.RELEASE_MANIFESTS`, `.HELM_DEPLOYER_CLUSTER_ROLE_NAME`, `.HELM_DEPLOYER_RULE_API_GROUPS`, `.PIPELINE_WEBHOOK_SERVICE_NAME`, `.WEBHOOK_READY_TIMEOUT_SECONDS`, `.WEBHOOK_READY_POLL_SECONDS` | `install.<same name>` |
+  | `kubementat.tekton_utils.shell.run` (as a patch target) | `kubementat.infrastructure.tekton.install.shell.run` — `install.py` binds `shell` as a module, which is what lets a dotted string reach it |
+  | `monkeypatch.setattr(tekton_utils, "WEBHOOK_READY_TIMEOUT_SECONDS", …)` | `monkeypatch.setattr(tekton_install, "WEBHOOK_READY_TIMEOUT_SECONDS", …)` |
+  | `install_slice.TektonUtils` as the install step's seam | `install_slice.tekton_install.install` |
+
+  **Consumers repointed, per file.** `src/kubementat/automations/install/kubementat.py` — the install
+  step, and the `preflight` assertion after it is unchanged. `src/kubementat/automations/uninstall/kubementat.py`
+  — `HELM_DEPLOYER_CLUSTER_ROLE` is `tekton_install.HELM_DEPLOYER_CLUSTER_ROLE_NAME` now, read through the
+  module so the uninstaller deletes the object the installer writes and not a second binding of its name.
+  `tests/test_the_tekton_install_reads_its_configuration_first.py` (the instance patch, the `shell.run`
+  string, four call sites), `tests/test_the_tekton_install_waits_for_the_webhook_the_next_release_must_call.py`
+  (three constant patches, four call sites), `tests/test_parity_tekton_installs_the_pinned_releases.py`,
+  `tests/test_tekton_install_asserts_the_served_api_versions.py` (the ordering recorder moved off the class
+  and onto the module, and the base-URL rule now reads the package rather than one file),
+  `tests/test_the_defaults_initialize_seeded_have_a_single_owner.py`, and
+  `tests/test_component_namespaces_come_from_configuration.py` — that last one was the failure this move
+  had to catch: its "the namespace comes from the accessor" rule was still pointed at `tekton_utils.py`,
+  which lost the last line of that work in this ticket, so it is a rule over the package now. The prose
+  that still points a reader at `tekton_utils.py` for install code (`errors.py:449`, `errors.py:470`,
+  `config_init.py:315` and `:506`, `kubernetes/constants.py:36`, `uninstall/residue.py:151`) is deferred
+  to P4-6, which is also where the `SURVIVORS` key and the 16 instantiation sites go.
+
+  Suite 1779 passed / 1 skipped, `import_graph.py` exit 0, no cycles, no layer violations.
+
 - **The run path leaves `tekton_utils.py`: `src/kubementat/infrastructure/tekton/runs.py` is the third
   module of the Tekton split.** Twenty-one names — 15 methods and 6 functions — plus the `CLEANUP_JOB_*`
   set, `CLEANUP_JOBS_TO_KEEP`, the prune heredoc, and the two numbers `--wait` asks the cluster by.

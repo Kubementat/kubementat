@@ -31,10 +31,15 @@ import time
 import pytest
 from kubernetes.client import V1EndpointAddress, V1EndpointSubset, V1Endpoints, V1ObjectMeta
 
-from kubementat import tekton_utils
 from kubementat.errors import TektonWebhookNotReachableError
-from kubementat.tekton_utils import (HELM_DEPLOYER_CLUSTER_ROLE_NAME, PIPELINE_WEBHOOK_SERVICE_NAME,
-                                     TEKTON_RELEASE_BASE_URL, TektonUtils)
+# The wait, the Service it asks about and both of its numbers live in `infrastructure/tekton/install.py`
+# now (P4-4). The module is imported as a module for the same reason: the loop reads both numbers as
+# globals of the module it is defined in, so a patch on any other object is a number nobody sees.
+from kubementat.infrastructure.tekton import install as tekton_install
+from kubementat.infrastructure.tekton.install import (HELM_DEPLOYER_CLUSTER_ROLE_NAME,
+                                                      PIPELINE_WEBHOOK_SERVICE_NAME,
+                                                      TEKTON_RELEASE_BASE_URL)
+from kubementat.tekton_utils import TektonUtils
 from conftest import is_apply
 from cluster_fixture import configuration_only_context
 
@@ -42,6 +47,19 @@ VERSION_KEYS = ("TEKTON_VERSION_PIPELINE", "TEKTON_VERSION_TRIGGERS", "TEKTON_VE
 PINS = dict(zip(VERSION_KEYS, ("1.17.1", "0.37.2", "0.73.0")))
 
 NAMESPACE = "tekton-pipelines"
+
+
+def install_the_pinned_releases(fixture_repo):
+    """`tekton_install.install()`, read the way `kmt install` reads it.
+
+    The `Context` is still resolved through the class, because the class still resolves the client
+    the wait asks and still refuses a run with no team (that refusal is P4-6's to move, not this
+    ticket's). The work is the module function's, and the three arguments are what it used to read
+    off the instance.
+    """
+    utils = TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team))
+    return tekton_install.install(utils.kubernetes_utils, utils.config, utils.environment)
+
 
 # The URLs, abbreviated: which of these went in is the whole question this file asks.
 PIPELINE_URL = f"{TEKTON_RELEASE_BASE_URL}/pipeline/previous/v{PINS['TEKTON_VERSION_PIPELINE']}/release.yaml"
@@ -75,15 +93,17 @@ def short_deadlines(monkeypatch):
     """The real bound and the real interval, shrunk to milliseconds.
 
     Only the *numbers* change. The loop, the read it makes and the error it raises on expiry are
-    the ones that run in production.
+    the ones that run in production. The target is the module that owns them, and that is the half
+    worth reading: patch `install` and the schedule changes, patch the object that used to hold the
+    loop and the real two minutes run while the test asserts a shortened one.
     """
-    monkeypatch.setattr(tekton_utils, "WEBHOOK_READY_TIMEOUT_SECONDS", 0.3)
-    monkeypatch.setattr(tekton_utils, "WEBHOOK_READY_POLL_SECONDS", 0.02)
+    monkeypatch.setattr(tekton_install, "WEBHOOK_READY_TIMEOUT_SECONDS", 0.3)
+    monkeypatch.setattr(tekton_install, "WEBHOOK_READY_POLL_SECONDS", 0.02)
     return 0.3
 
 
 def install(fixture_repo, recorded_api, fake_binaries, answer):
-    """`TektonUtils.install()` against a cluster whose webhook answers however `answer` says.
+    """`tekton_install.install()` against a cluster whose webhook answers however `answer` says.
 
     The clock is what is under test as much as the code is, so the install is timed: a test that
     claimed to wait while sleeping zero would pass for the wrong reason.
@@ -91,7 +111,7 @@ def install(fixture_repo, recorded_api, fake_binaries, answer):
     fixture_repo.environment_static(**PINS)
     recorded_api.answer("read_namespaced_endpoints", endpoints(answer))
     started = time.monotonic()
-    TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team)).install()
+    install_the_pinned_releases(fixture_repo)
     return time.monotonic() - started
 
 
@@ -130,7 +150,7 @@ def test_the_releases_that_call_the_webhook_are_applied_the_moment_it_is_there(
 
     fixture_repo.environment_static(**PINS)
     recorded_api.answer("read_namespaced_endpoints", endpoints(arriving))
-    TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team)).install()
+    install_the_pinned_releases(fixture_repo)
 
     urls = applied_urls(fake_binaries)
     assert urls.index(PIPELINE_URL) == 0, "the control plane still goes in first"
@@ -192,7 +212,7 @@ def test_the_read_that_answers_the_question_does_not_call_a_missing_service_an_e
     started = time.monotonic()
 
     with pytest.raises(TektonWebhookNotReachableError):
-        TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team)).install()
+        install_the_pinned_releases(fixture_repo)
 
     assert time.monotonic() - started >= bound, \
         "a 404 was treated as an error rather than as 'nothing here yet'"
@@ -215,9 +235,9 @@ def test_the_wait_is_aimed_at_the_namespace_the_control_plane_landed_in(
                            subsets=[V1EndpointSubset(
                                addresses=[V1EndpointAddress(ip="10.42.0.2")])])
 
-    monkeypatch.setattr(tekton_utils, "WEBHOOK_READY_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(tekton_install, "WEBHOOK_READY_POLL_SECONDS", 0.01)
     recorded_api.answer("read_namespaced_endpoints", record)
-    TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team)).install()
+    install_the_pinned_releases(fixture_repo)
 
     assert (PIPELINE_WEBHOOK_SERVICE_NAME, "team-mesh") in asked, \
         f"the webhook was looked for somewhere else: {asked}"

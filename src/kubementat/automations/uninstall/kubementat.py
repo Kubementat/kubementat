@@ -22,7 +22,11 @@ from kubementat import errors
 from kubementat.core.config.teams import TEAM_NAMESPACE_KEYS
 from kubementat.core.identity.context import context_name
 from kubementat.infrastructure.kubernetes import KubernetesUtils
-from kubementat.tekton_utils import HELM_DEPLOYER_CLUSTER_ROLE_NAME
+# The name moved out with the install half (P4-4). It is read through the module rather than
+# imported, because a name imported past its home is a second binding and the seam a test patches
+# is the module the code runs in -- and because `uninstall_kubementat` deletes exactly the object
+# `install.install` writes, so the two halves have to agree on the spelling of one thing.
+from kubementat.infrastructure.tekton import install as tekton_install
 
 from kubementat.automations.uninstall.linkerd import (
     LINKERD_NAMESPACES,
@@ -43,7 +47,7 @@ from kubementat.automations.uninstall.residue import (
 from kubementat.automations.uninstall.sweep import namespace_sweep
 
 
-HELM_DEPLOYER_CLUSTER_ROLE = HELM_DEPLOYER_CLUSTER_ROLE_NAME
+HELM_DEPLOYER_CLUSTER_ROLE = tekton_install.HELM_DEPLOYER_CLUSTER_ROLE_NAME
 
 
 ## uninstall kubementat

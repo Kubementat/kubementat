@@ -1,6 +1,6 @@
 """Installing Tekton: what the configuration says, and what a refusal to read it looks like.
 
-`TektonUtils.install()` is the whole of `kmt install`'s Tekton step: four release manifests from
+`tekton_install.install()` is the whole of `kmt install`'s Tekton step: four release manifests from
 one base URL, and the ClusterRole that lets a helm deploy deploy. The tests here are the three
 branches a wrong answer needs — everything present, the object already there, and something the
 configuration was supposed to say and did not.
@@ -20,11 +20,13 @@ import pytest
 from kubementat import errors
 from kubementat.infrastructure import shell
 from kubementat.errors import TektonReleaseVersionNotConfiguredError
-from kubementat.tekton_utils import (
-    HELM_DEPLOYER_CLUSTER_ROLE_NAME,
-    TEKTON_RELEASE_BASE_URL,
-    TektonUtils,
-)
+# Both names the install is built from moved out with it (P4-4), and the module is imported as a
+# module as well as by name: the role write is patched *on* `install` below, and a name imported past
+# its home is a second binding that patch would miss.
+from kubementat.infrastructure.tekton import install as tekton_install
+from kubementat.infrastructure.tekton.install import (HELM_DEPLOYER_CLUSTER_ROLE_NAME,
+                                                      TEKTON_RELEASE_BASE_URL)
+from kubementat.tekton_utils import TektonUtils
 from conftest import is_apply
 from cluster_fixture import configuration_only_context
 
@@ -37,9 +39,20 @@ NAMESPACE = "tekton-pipelines"
 
 
 def install(fixture_repo, **overrides):
-    """`TektonUtils.install()` against the fixture's configuration, with the pins in place."""
+    """`tekton_install.install()` against the fixture's configuration, with the pins in place."""
     fixture_repo.environment_static(**{**PINS, **overrides})
-    TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team)).install()
+    install_the_pinned_releases(fixture_repo)
+
+
+def install_the_pinned_releases(fixture_repo):
+    """The one install every test here runs, and where its arguments now come from.
+
+    The `Context` is still resolved through the class, because the class still builds the client and
+    still refuses a run with no team (that refusal is P4-6's to move, not this ticket's). The work is
+    `tekton_install.install`'s, and the three arguments are what its body used to read off `self`.
+    """
+    utils = TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team))
+    return tekton_install.install(utils.kubernetes_utils, utils.config, utils.environment)
 
 
 def applied_urls(fake_binaries):
@@ -130,22 +143,29 @@ def test_the_role_is_written_after_the_control_plane_it_authorises(
     """
     journal = []
     fixture_repo.environment_static(**PINS)
-    utils = TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team))
     run_the_command = shell.run
-    write_the_role = utils._install_helm_deployer_cluster_role
+    write_the_role = tekton_install._install_helm_deployer_cluster_role
 
     def recording_run(argv, **kwargs):
         journal.append("apply:" + argv[-1])
         return run_the_command(argv, **kwargs)
 
-    def recording_role():
+    def recording_role(kubernetes_utils):
         journal.append("clusterrole")
-        write_the_role()
+        write_the_role(kubernetes_utils)
 
-    monkeypatch.setattr("kubementat.tekton_utils.shell.run", recording_run)
-    monkeypatch.setattr(utils, "_install_helm_deployer_cluster_role", recording_role)
+    # Both patches are on `install`, which is what runs this now. The first is a dotted string that
+    # reaches `shell.run` only because `install.py` binds `shell` as a module; the second is the role
+    # write, which stopped being a bound method in P4-4 and so has to be patched as the module
+    # function it is.
+    monkeypatch.setattr("kubementat.infrastructure.tekton.install.shell.run", recording_run)
+    monkeypatch.setattr(tekton_install, "_install_helm_deployer_cluster_role", recording_role)
 
-    utils.install()
+    install_the_pinned_releases(fixture_repo)
+
+    # Reached, and reached once. The position assertion below cannot tell "written once here" from
+    # "written twice here", so this is the half that says the substitute is load-bearing.
+    assert journal.count("clusterrole") == 1, journal
 
     role_at = journal.index("clusterrole")
     fetched = [index for index, entry in enumerate(journal) if entry.startswith("apply:")]
@@ -170,7 +190,7 @@ def test_a_release_version_the_configuration_omits_installs_the_version_constant
     del pins["TEKTON_VERSION_TRIGGERS"]
     fixture_repo.environment_static(**pins)
 
-    TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team)).install()
+    install_the_pinned_releases(fixture_repo)
 
     assert f"{TEKTON_RELEASE_BASE_URL}/triggers/previous/v{PINS['TEKTON_VERSION_TRIGGERS']}/release.yaml" \
         in applied_urls(fake_binaries), \
@@ -190,7 +210,7 @@ def test_a_release_version_declared_null_stops_the_install_before_anything_is_se
     fixture_repo.environment_static(**{**PINS, "TEKTON_VERSION_TRIGGERS": None})
 
     with pytest.raises(TektonReleaseVersionNotConfiguredError) as error:
-        TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team)).install()
+        install_the_pinned_releases(fixture_repo)
 
     assert "TEKTON_VERSION_TRIGGERS" in str(error.value)
     assert applied_urls(fake_binaries) == [], "the install sent manifests before checking its pins"
@@ -207,7 +227,7 @@ def test_a_release_version_present_but_empty_is_treated_as_missing(
     fixture_repo.environment_static(**{**PINS, "TEKTON_VERSION_DASHBOARD": "   "})
 
     with pytest.raises(TektonReleaseVersionNotConfiguredError) as error:
-        TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team)).install()
+        install_the_pinned_releases(fixture_repo)
 
     assert "TEKTON_VERSION_DASHBOARD" in str(error.value)
     assert applied_urls(fake_binaries) == []

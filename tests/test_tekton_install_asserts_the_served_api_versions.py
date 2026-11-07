@@ -27,15 +27,24 @@ import pytest
 from kubementat.core.config import config as config_module
 from kubementat.automations.install import kubementat as install_slice
 from kubementat.errors import TektonControllerWithoutConfiguredApiError
-from kubementat.tekton_utils import TEKTON_RELEASE_BASE_URL, TektonUtils
-# The post-install assertion moved to `preflight.py` (P4-2) and is read from there, module-qualified:
-# `tekton_utils.py` holds no copy of the name to import.
+from kubementat.tekton_utils import TektonUtils
+# The post-install assertion moved to `preflight.py` (P4-2) and the release URLs, their base and the
+# ClusterRole they are authorised through moved to `install.py` (P4-4), both read module-qualified:
+# `tekton_utils.py` holds no copy of either name to import.
+from kubementat.infrastructure.tekton import install as tekton_install
 from kubementat.infrastructure.tekton import preflight
+from kubementat.infrastructure.tekton.install import TEKTON_RELEASE_BASE_URL
 from cluster_fixture import configuration_only_context
 from asset_paths import template_path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-INSTALL_SOURCE = REPO_ROOT / "src/kubementat/tekton_utils.py"
+# What the installer is made of, read as a package and not as a file: the base URL, the manifest
+# table and the builder that turns the pins into addresses all moved into
+# `infrastructure/tekton/install.py` (P4-4), and "one base URL" is a rule about the split, not about
+# whichever file held it when the rule was written. `tekton_utils.py` is deliberately not in the set:
+# after this move it holds none of the install names, and P4-6 deletes it.
+TEKTON_PACKAGE = REPO_ROOT / "src/kubementat/infrastructure/tekton"
+TEKTON_SOURCES = sorted(TEKTON_PACKAGE.glob("*.py"))
 STATIC_TEMPLATE = template_path("environment", "static.json.template")
 TEKTON_DOC = REPO_ROOT / "docs/README_TEKTON.md"
 
@@ -194,7 +203,7 @@ def test_the_installer_builds_every_url_from_one_base_and_never_from_the_old_buc
     this asserts the shape of the code rather than the shape of a script: no old bucket, one base
     URL, and every component's address carrying its own pin.
     """
-    source = INSTALL_SOURCE.read_text()
+    source = "\n".join(path.read_text(encoding="utf-8") for path in TEKTON_SOURCES)
 
     assert "storage.googleapis.com/tekton-releases" not in source, (
         "that bucket serves only what it kept, and the pins have moved past it"
@@ -226,20 +235,17 @@ def test_an_install_asks_the_cluster_what_it_left_running_after_the_install_and_
     cluster = ClusterAnsweringDiscovery(served=SERVES_BOTH_GROUPS, on_answer=note_discovery)
 
     class RecordingTektonInstall:
-        """Stands in for `TektonUtils.install()` so the ordering is what is under test.
+        """Stands in for `tekton_install.install()` so the ordering is what is under test.
 
-        Patched where the install slice imports the name, which is also the assertion that the
-        install step is Python: a script call would not be reachable by this patch at all.
+        Patched on the module the install slice calls into — the function moved out of the class in
+        P4-4, so the class is no longer where this step can be intercepted, and patching it is also
+        the assertion that the step is Python: a script call would not be reachable here at all.
         """
 
-        def __init__(self, ctx):
-            self.journal = journal
-            self.ctx = ctx
-
-        def install(self):
+        def install(kubernetes_utils, config, environment):
             journal.append("tekton_install")
 
-    monkeypatch.setattr(install_slice, "TektonUtils", RecordingTektonInstall)
+    monkeypatch.setattr(install_slice.tekton_install, "install", RecordingTektonInstall.install)
 
     # The `Context` the install path is handed, with the configuration this test pins. Every
     # collaborator the old `Automation` remembered on `self` is now built inside
@@ -282,7 +288,10 @@ def test_the_install_applies_the_urls_the_pinned_versions_actually_point_at(fixt
         "TEKTON_VERSION_DASHBOARD": DASHBOARD,
     })
 
-    TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team)).install()
+    # The install itself, module-qualified now (P4-4); the class is still what resolves the `Context`
+    # into the client and the configuration the function takes.
+    utils = TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team))
+    tekton_install.install(utils.kubernetes_utils, utils.config, utils.environment)
 
     applied = [call[-1] for call in fake_binaries.commands()
                if call[:1] == ["kubectl"] and "-f" in call
