@@ -323,7 +323,8 @@ def uninstall_helm_releases(ctx, namespaces: list) -> list:
     if not namespaces:
         return []
     # The one release read the product has, read directly and not rebuilt here: which statuses
-    # answer "what releases live here" is decided on helm_utils, and a sweep that asked its own
+    # answer "what releases live here" is decided on `helm_list_releases_argv` in
+    # `infrastructure/helm.py`, and a sweep that asked its own
     # narrower question would uninstall less than the sweep's own residue assert claims. The
     # cluster goes on the command line and not in the environment, because a sweep that
     # deletes releases from whichever kubeconfig the operator's shell happens to point at is a
@@ -353,7 +354,7 @@ def list_claims_in(ctx, namespace: str):
     namespace that is empty: a teardown that reads the first as the second reports success on a
     cluster it never actually looked at.
 
-    Said plainly: this is the read `helm_utils._delete_release_claims` used to
+    Said plainly: this is the read `_delete_release_claims` in `infrastructure/helm.py` used to
     ask with `kubectl get persistentvolumeclaims`, while this method asked it through the
     client. Same question, two answers, one uninstall. There is now one answer, in
     `KubernetesUtils.list_persistent_volume_claims`.

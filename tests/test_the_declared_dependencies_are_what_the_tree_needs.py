@@ -100,7 +100,8 @@ CARRIED_WITHOUT_A_PROOF = {
 # let a stale justification age into. `uv` is still needed, but as what `python3` above is: the way
 # the product is *run* from a checkout -- `src/cli/README.md`'s installation section, and the
 # `uv run ...` hints `src/` prints for the operator (`infrastructure/tekton/runs.py`,
-# `automation.py:716`, `:996`, `:999`, `:1003`, all log lines and none of them a spawn). That is a
+# the log lines in `automations/install/` and `automations/uninstall/` -- four of them, none of
+# them a spawn). That is a
 # precondition of a
 # source tree, not a tool kubementat execs, and nothing in this file's derivation can attest it, so
 # the honest place for it is this comment and not a table.

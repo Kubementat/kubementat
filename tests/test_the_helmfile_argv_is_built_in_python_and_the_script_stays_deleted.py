@@ -9,7 +9,7 @@ the Grafana pair out of `static.encrypted.json` with `jq`, and ran
 all of which `HelmUtils.helmfile_apply` (`src/kubementat/infrastructure/helm.py:31`) already does for
 every path that could have reached the script:
 
-* `kmt install` -- `Automation.install_kubementat` (`src/kubementat/automation.py:543`)
+* `kmt install` -- `install_kubementat` (`src/kubementat/automations/install/kubementat.py:115`)
 * `kmt routing install` -- `install_routing` (`src/kubementat/automations/routing/routing.py:246`)
 * `kmt helm apply` -- the CLI command (`helmfile_apply` in `src/cli/commands/helm.py`)
 

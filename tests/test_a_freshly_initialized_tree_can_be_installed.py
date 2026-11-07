@@ -2,7 +2,7 @@
 
 Before this test existed, no test in the suite could answer that question, and the answer was *no*.
 
-`helm_utils.helmfile_apply` reads `GRAFANA_ADMIN_USER` out of the environment's
+`HelmUtils.helmfile_apply` (`infrastructure/helm.py`) reads `GRAFANA_ADMIN_USER` out of the environment's
 `static.encrypted.json` and refuses to apply anything without it — deliberately so, and by its own
 comment for a good reason. What it did not expect was that after `kmt initialize` was deleted
 (`7888bdf`), nothing in the product wrote that key any more. The verb that used to copy

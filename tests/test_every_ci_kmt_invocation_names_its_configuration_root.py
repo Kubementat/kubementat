@@ -17,7 +17,8 @@ the rule belongs: in the shipped YAML, read off the tree by a test.
 The layer it is enforced in matters. Most of this suite's trees are fixtures and not prepared
 directories, so a rule phrased as "a tree must have a `platform_config`" and implemented in `Config`
 breaks 227 unrelated tests — that is how this epic lost hours before, and it is why nothing here or in
-the Task files touches `config.py`, `config_init.py`, `ClusterTarget`, or any Python read path. A
+the Task files touches `core/config/config.py`, `config_init.py`, `ClusterTarget`, or any Python read
+path. A
 refusal that gets *nicer* is a silent default wearing a better sentence, which is what the rule that
 named roots never locate deletes. The same is true of a `KUBEMENTAT_PLATFORM_CONFIG_DIR` step env entry
 added to rescue the step: the noun is `--config-dir`, and an env default is the behaviour that rule

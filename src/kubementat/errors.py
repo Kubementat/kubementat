@@ -241,8 +241,9 @@ class CommandExecutionError(KubementatError):
 #
 # Three answers to three different questions: the request went wrong (GrafanaError, and its status),
 # the credential was refused (GrafanaUnauthorizedError), or the configuration could not express the
-# call at all so nothing was sent (GrafanaConfigurationError). They come from `grafana_client.py`,
-# and from `grafana_accounts.py` for the configuration half, because the two files are one client
+# call at all so nothing was sent (GrafanaConfigurationError). They come from
+# `infrastructure/grafana/client.py`, and from `infrastructure/grafana/accounts.py` for the
+# configuration half, because the two files are one client
 # split by whether it needs the cluster.
 #
 # The shape is the tree's own: `GrafanaError` is the family base, carries the status code, and

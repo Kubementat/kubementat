@@ -5,9 +5,9 @@ method still answers to the same name, the constructor still takes the `Context`
 (or the `ClusterTarget` a library caller or a test addresses one with) and still accepts an
 injected `api_client`, because those three shapes are how the rest of the tree and the suite reach
 a cluster: a command builds the object, hands it across a module boundary to whoever needs a read,
-and a test that cannot get past the constructor an `Automation` hides its object behind injects
-through the target's own client factory. A class that had to be renamed, or a set of module
-functions a caller had to be told about, would have moved that seam, and an unchanged suite is
+and a test that cannot get past the constructor of the object this class is built into injects
+through the target's own client factory, because that constructor is the only part of the seam that
+resolves anything. A class that had to be renamed, or a set of module functions a caller had to be told about, would have moved that seam, and an unchanged suite is
 not the same thing as an unchanged contract.
 
 The areas are what made the split worth doing: one file per kind of thing the cluster is asked
@@ -49,7 +49,8 @@ class KubernetesUtils(KubernetesExec,
     class refuses to keep: a library that holds one process-wide answer cannot hold two clusters.
 
         Everything is built on first use. That is not a performance preference: the
-        configuration-only context builds this object inside `Automation` to write JSON files, and a
+        configuration-only context (`Context.for_configuration`) builds this object to write JSON
+        files and never addresses a cluster, and a
         constructor that resolved a kubeconfig made that path fail on a host with none -- which is
         the same argument `Context.for_configuration` makes about the target itself.
 

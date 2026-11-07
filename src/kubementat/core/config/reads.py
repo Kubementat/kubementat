@@ -21,7 +21,7 @@ status, because nothing can know it from a file's contents and kubementat reads 
 unlocks — the checkout's smudge filter is what makes a checked-out file readable in the first place,
 so a file that will not decode is refused as git-crypt's and left exactly where it is. It does not
 decide whether the file exists: `FileNotFoundError` propagates, because "the team's optional file is
-missing" is a state `config.py`'s `missing_team_config_files` machinery already models into a warning
+missing" is a state `core/config/config.py`'s `missing_team_config_files` machinery already models into a warning
 at load and a named refusal at read, and a helper that raised its own error there would turn a
 degradable tree into a hard failure.
 

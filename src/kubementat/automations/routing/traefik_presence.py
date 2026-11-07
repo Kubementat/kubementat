@@ -17,8 +17,9 @@ asked of the cluster on its own terms, and the answers are unioned:
 
 Matching the *chart* rather than the release name is the point of the first row: the case a name
 list gets wrong is exactly the release somebody renamed. The second row is the controller string
-the chart's own `_helpers.tpl` writes, and it is not `automation.py`'s
-`NGINX_INGRESS_CONTROLLER_PREFIX` (`k8s.io/ingress-nginx`), which is pointed the other way on
+the chart's own `_helpers.tpl` writes, and it is not the
+`NGINX_INGRESS_CONTROLLER_PREFIX` (`k8s.io/ingress-nginx`) declared in
+`automations/uninstall/nginx_ingress.py`, which is pointed the other way on
 purpose — conflating the two would make the nginx sweep delete the class kubementat installed.
 
 **The classification, and why `foreign` wins.** `TraefikPresence.classification` is exactly one of
@@ -69,10 +70,12 @@ CLASSIFICATION_FOREIGN = "foreign"
 # left to excuse.
 #
 # `HELM_LIST_RELEASES_ARGV` is deliberately not restated here. The release read is the product's one
-# read (`helm_utils.helm_list_releases_argv`, which points it at the cluster it was told about), and a
+# read (`helm_list_releases_argv` in `infrastructure/helm.py`, which points it at the cluster it was
+# told about), and a
 # probe that answered "what releases live here" its own way is the disagreement that would show the
-# lane a release the guard cannot see -- the same reason `automation.py`'s uninstall sweep and its
-# Traefik CRD sweep read it instead of spelling an argv of their own. A narrower read here would
+# lane a release the guard cannot see -- the same reason the uninstall sweep in
+# `automations/uninstall/residue.py` and the Traefik CRD sweep read it instead of spelling an argv of
+# their own. A narrower read here would
 # also have been the one that answers differently per helm major, because on the helm this product
 # pins the six statuses *are* the default, so naming them is a portability decision and not a
 # widening (see the reasoning written on the constant). `--all` is not in that read either:
@@ -476,7 +479,8 @@ def _helm_releases(cluster, reads=shell.run):
     this helm version cannot describe or a different helm writing the row, and either way the
     operator should hear about it instead of being shown a clean list.
 
-    The read is the product's one release read -- `helm_utils.helm_list_releases_argv`, and not an
+    The read is the product's one release read -- `helm_list_releases_argv` in
+    `infrastructure/helm.py`, and not an
     argv written here -- for the reason spelled on both of them: `--all` is a flag helm 4
     rejects, and the statuses the flag used to stand for are what a skip decision has to be able to
     see anyway. It is addressed to `cluster`, because that is what stops a controller that is running

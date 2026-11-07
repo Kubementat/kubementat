@@ -69,7 +69,7 @@ TEAM_LAYER = (TEAM_FILES | {Path(NEW_ENVIRONMENT) / TEAM,
                             Path(NEW_ENVIRONMENT) / TEAM / "tekton" / "triggers"})
 
 # The names of everything the package ships under `templates/`, as the copy pass would name it: a
-# destination is its template's name minus the `.template` suffix (`automation.py`'s own walk). What
+# destination is its template's name minus the `.template` suffix (`config_init.py`'s own walk). What
 # these verbs must not write is anything on this list *other than* the two static files, which they
 # do write, empty and by rule rather than by copying a shipped document into the tree.
 SHIPPED_TEMPLATE_DESTINATIONS = {path.name[: -len(".template")]

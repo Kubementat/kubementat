@@ -31,7 +31,8 @@ exists" is read from the status and body grafana actually sends** -- a 412 whose
 which is what a real duplicate looks like, and not from the absence of output -- and **there is no
 default base URL**, because the default was the first lost step.
 
-The credential rules match `helm_utils._grafana_admin_credentials`, which reads the same file:
+The credential rules match `_grafana_admin_credentials` in `infrastructure/helm.py`, which reads the
+same file:
 `platform_config/{environment}/static.encrypted.json` is the authority, and what an operator
 happens to have exported in a shell is not consulted. A configured service-account token wins over
 basic auth, which is the helper's own open TODO; otherwise the admin pair is used; with neither,
@@ -105,7 +106,7 @@ class GrafanaClient:
         every operation "succeeded" against a socket that was not there. Pass the URL of a tunnel
         this process started, or the service's ClusterIP -- something that is true.
     admin_user, admin_password : str, optional
-        Basic auth, the pair `helm_utils` installs grafana with. Read one of them from
+        Basic auth, the pair `HelmUtils` installs grafana with. Read one of them from
         `static.encrypted.json` rather than passing a literal; the constructor does not check that
         it did, but `from_environment` does.
     service_account_token : str, optional
@@ -148,7 +149,7 @@ class GrafanaClient:
                          config: Config) -> "GrafanaClient":
         """Build the client from `platform_config/{environment}/static.encrypted.json`.
 
-        Same reader as `helm_utils._grafana_admin_credentials` -- `Config.get
+        Same reader as `_grafana_admin_credentials` in `infrastructure/helm.py` -- `Config.get
         ('env_static_encrypted')`, the environment file and never a team file, because the pair is
         per environment and a team's file declares neither key.
 
@@ -157,7 +158,8 @@ class GrafanaClient:
         and nothing else: the last construction in `src/` that answered the root question for
         itself instead of taking the one its caller had. It was reached **zero** times by the
         suite (census D, instrumented), because the one `src/` caller --
-        `grafana_accounts._client_for` -- always hands its `Context`'s `Config` down, so the
+        `_client_for` in `infrastructure/grafana/accounts.py` -- always hands its `Context`'s
+        `Config` down, so the
         fallback was dead code with a live hazard: the day someone called it from a command that
         had been told which tree to read, that command would have read whichever tree its own
         environment named. The branch is deleted rather than guarded, so an omitted `config`
@@ -190,7 +192,7 @@ class GrafanaClient:
                 f"again.")
 
         if admin_user and not token and not admin_password:
-            # helm_utils only warns about this, because it is writing a release that can install
+            # `HelmUtils` only warns about this, because it is writing a release that can install
             # without a readable API. Here the whole point is the API, and an empty password sends
             # a basic-auth request that answers 401 -- which would blame the user for the password.
             raise errors.GrafanaConfigurationError(
@@ -259,10 +261,14 @@ class GrafanaClient:
         """Create the account, and say whether it was created or found.
 
         No password is not an error: the bash generated one with `gpg --gen-random`, which is a
-        subprocess and therefore not this method's job, and `Automation.generate_password` already
-        answers it in the stdlib. Callers that have no password say "no password please" and get
+        subprocess and therefore not this method's job, and this method generates one with
+        `secrets.token_urlsafe(32)` at `client.py:279` when a caller brings none. Callers that have
+        no password say "no password please" and get
         the generated one back on the returned account, so it can be stored. `secrets` rather than
-        gpg for the same reason: the generator has no reason to need a keyring.
+        gpg for the same reason: the generator has no reason to need a keyring. The same stdlib call
+        and the same 32 bytes are what `config set --generate` answers with
+        (`config_init.GENERATED_ANSWER_BYTES`); what is not here any more is the
+        `Automation.generate_password` method this sentence used to name, which went with the class.
 
         `org_role` is what makes the "read only" name true, and only that: the bash script called
         `create_grafana_read_only_account.sh` never set a role, so it created a user who got the

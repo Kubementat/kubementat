@@ -8,7 +8,7 @@ The tests are driven by a fake session, so every one of them is about what the c
 none of them is about whether something is listening on a port.
 
 The second half of the file is the credential rule: the pair comes from the environment's
-`static.encrypted.json`, which is the file `helm_utils` installs grafana from, and a key that is
+`static.encrypted.json`, which is the file `infrastructure/helm.py` installs grafana from, and a key that is
 not in that file is an error before a request, not a 401 afterwards.
 """
 
@@ -174,7 +174,7 @@ def test_the_credentials_are_read_from_the_environments_encrypted_file():
 
 
 def test_the_credentials_come_from_the_file_a_config_reader_actually_opens(tmp_path):
-    """The same reader `helm_utils` uses, over a real `Config` on a real path.
+    """The same reader `infrastructure/helm.py` uses, over a real `Config` on a real path.
 
     A recording config proves which category is asked for; only a file on disk proves that the key
     the operator wrote is the key the client sends.
@@ -211,7 +211,7 @@ def test_an_environment_that_names_no_admin_and_no_token_is_refused_before_anyth
 
 
 def test_an_admin_user_with_no_password_is_refused_rather_than_answered_with_a_401():
-    """`helm_utils` only warns about a missing password, and there the install can still run.
+    """`HelmUtils` in `infrastructure/helm.py` only warns about a missing password, and there the install can still run.
 
     Here the read is the whole command, and an empty password sends a real request that grafana
     rejects for the wrong reason: it would say *the credential* is bad when what is missing is the

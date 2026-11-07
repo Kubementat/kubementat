@@ -42,7 +42,8 @@ DEPLOYMENT_LABEL = "app.kubernetes.io/instance"
 # indistinguishable from one the operator wrote.
 #
 # The uninstall reads it back in the other direction -- see
-# `Automation._delete_cluster_scoped_rbac_kubementat_owns` -- which is the other half of the same
+# `delete_cluster_scoped_rbac_kubementat_owns` in `automations/uninstall/residue.py` -- which is the
+# other half of the same
 # claim: if a teardown is allowed to identify what it owns by a label, the label has to be written
 # by the code that owns the object and not guessed at read time.
 MANAGED_BY_LABEL = "managed-by"

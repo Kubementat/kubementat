@@ -192,7 +192,7 @@ def every_helm_argv(root=None):
                     yield relative(path, root), node.lineno, words_of(node.value, constants)
                 continue
             # A constant read here but declared elsewhere is the same command, and the only way to
-            # see it: `automation.py` hands `HELM_LIST_RELEASES_ARGV` to `shell.run` without owning
+            # see it: the slices under `automations/` hand `HELM_LIST_RELEASES_ARGV` to `shell.run` without owning
             # it, and a guard that only read assignments would call that read nothing at all.
             if isinstance(node, ast.Name) and node.id in read and node.id in constants \
                     and node.id not in written_here:

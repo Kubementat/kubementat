@@ -17,10 +17,11 @@ repo's rule and this migration's whole argument against a command having two ans
 
 **How a component is installed, and what this command will not do.** Everything here goes through
 helmfile with a label filter (`component_name=<name>`), the same mechanism `kmt install` uses for a
-group (`automation.py:544` passes `group=<name>`, `kmt routing install` passes `group=routing`).
+group (`automations/install/kubementat.py:114` builds `group=<name>` and passes that,
+`kmt routing install` passes `group=routing`).
 There is no per-component install path, no `helm upgrade` written here, and no component table: what
 this command can apply is read out of the manifest kubementat ships and applies
-(`config_reads_index.read_release_index`, and `helmfile_paths_for` is what names that file) and what it is *allowed to be told about* is read out of
+(the manifest is named by `release_index.helmfile_paths_for`, which is what names that file) and what it is *allowed to be told about* is read out of
 `constants.DEFAULT_NAMESPACES`. Both change without an edit here.
 
 Three answers a reader should not have to discover by hitting them:
@@ -189,7 +190,7 @@ def install(ctx, environment, component):
         raise click.ClickException(
             f"kubementat could not read the helmfile it ships, so it cannot say what is installable"
             f" for environment '{environment}' ({error}). Nothing was installed. That manifest is"
-            f" product data -- `config_reads_index.helmfile_paths_for` is what names it -- and the installation,"
+            f" product data -- `release_index.helmfile_paths_for` is what names it -- and the installation,"
             f" not `platform_config`, is where it is missing.") from error
 
     if not releases:

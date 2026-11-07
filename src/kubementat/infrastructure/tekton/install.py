@@ -38,7 +38,9 @@ import time
 TEKTON_RELEASE_BASE_URL = "https://infra.tekton.dev/tekton-releases"
 
 # The ClusterRole every helm deploy is authorised through. kubementat creates it, so kubementat
-# also has to be able to name it on the way out (`Automation.uninstall_kubementat`): it is
+# also has to be able to name it on the way out. `uninstall_kubementat` in
+# `automations/uninstall/kubementat.py` is that way out, and it names this constant rather than
+# rebuilding the manifest it came from: it is
 # cluster-scoped, which means no namespace delete takes it with it.
 HELM_DEPLOYER_CLUSTER_ROLE_NAME = "helm-deployer-cluster-role"
 
@@ -162,7 +164,8 @@ def install(kubernetes_utils, config, environment) -> None:
     an existing one gets the same manifests written over them, which is why an upgrade is a
     version bump in `static.json` and not a procedure. `preflight_installed_tekton_api_versions`
     is what turns "the applies succeeded" into "this cluster now serves what kubementat
-    speaks"; it is called by `Automation.install_kubementat` after this returns, because the
+    speaks"; it is called by `install_kubementat` in `automations/install/kubementat.py` after this
+    returns, because the
     controller takes a moment to open its API path.
 
     The two things that differ from bash are deliberate:

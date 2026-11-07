@@ -295,7 +295,8 @@ def test_a_team_without_a_deploy_key_entry_is_no_answer_at_all(tmp_path):
 
     A deploy key is six fields of operator's material and one field the team's name determines, so
     deriving it from a name alone would be generation with a nicer name — and a stub entry would land
-    in `automation.py`'s Secret creation as a `KeyError` after the run has started to write. So
+    in `automations/install/secrets.py`'s Secret creation as a `KeyError` after the run has started to
+write. So
     nothing answers, which is a fact the reader can act on and not a hole in the rules.
     """
     config = seed(tmp_path)

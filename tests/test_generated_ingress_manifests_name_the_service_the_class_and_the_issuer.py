@@ -141,7 +141,7 @@ def test_the_ingress_class_comes_from_the_environment_configuration_when_the_key
 
 def test_an_unset_class_falls_back_to_traefik_because_that_is_what_the_chart_installs(
         fixture_repo, dry_run_env, caplog):
-    """A real environment whose static.json does not set the key: `config.py` answers and warns
+    """A real environment whose static.json does not set the key: `Config` answers and warns
     once, and this generator adds nothing of its own -- silence here belongs to config.py, which
     is where every other default warning lives.
     """
@@ -159,7 +159,7 @@ def test_generating_without_an_environment_says_no_configuration_was_read(fixtur
     comes from the variable is not an error: kubementat writes its default and says it read nothing.
     The sentence is the script's, because it named the two places it looked, and `routing.py`'s
     "kubementat defaulted to it" phrasing cannot say "I read nothing" without sounding like the
-    same claim config.py makes when the file is there.
+    same claim `Config` makes when the file is there.
     """
     answer = generate("")
     assert answer.answered_by == "default"

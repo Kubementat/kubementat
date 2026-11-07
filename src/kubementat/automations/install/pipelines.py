@@ -53,7 +53,8 @@ def setup_pipelines(ctx):
     6. Displaying setup results
 
     Parameters:
-        self: Automation class instance with access to configuration and Kubernetes utilities
+        ctx: The resolved Context -- configuration, environment, team and the cluster to write
+            through, all of it read from the one object the command built.
         
     Returns:
         None (performs side-effect operations)

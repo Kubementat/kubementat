@@ -318,7 +318,7 @@ def apply_helmfile(tmp_path, monkeypatch, shims, **kwargs):
             return constants.static_answer(component_config_key(component, "INGRESS_CLASS"))
 
     # The configuration goes into the `Context` the class is built with, which is the
-    # documented seam. Patching a `Config` name inside `helm_utils` only worked while the class built
+    # documented seam. Patching a `Config` name inside `infrastructure/helm.py` only worked while the class built
     # its own, and it is a fact about a module rather than about the object under test.
     #
     # The namespaces helmfile is handed go into the process environment, which is where a child

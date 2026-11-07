@@ -331,7 +331,7 @@ def test_both_sides_create_nothing_for_an_account_that_is_already_there(tree, cu
 
 
 def test_the_helper_library_is_fully_covered_by_the_client(tmp_path):
-    """Everything `grafana_helpers.sh` declared has an answer in `grafana_client.py`.
+    """Everything `grafana_helpers.sh` declared has an answer in `infrastructure/grafana/client.py`.
 
     The helper is seven functions, and which one is which is the interesting part: two request
     senders (both answered by one transport method), a bearer-header builder nobody ever called,

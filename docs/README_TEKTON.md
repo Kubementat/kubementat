@@ -35,8 +35,10 @@ cluster held back to the LTS still gets a Dashboard that declares it.
 controller bump of its own — but upstream still *serves* `tekton.dev/v1beta1` across all 1.x releases,
 so a v1-only tree runs unchanged on both 1.15.x and 1.17.x. Triggers is deliberately left on
 `v1beta1`: the 0.37 release.yaml declares `v1beta1` served and stored on every trigger CRD and never
-`v1`, so the six generator templates this kmt ships (the directories under
-`Config.tekton_trigger_template_dir`) keep that apiVersion, and only the `PipelineRun` they embed
+`v1`, so the eight generator templates this kmt ships — four under each of the `github/` and `gitlab/`
+directories under `Config.tekton_trigger_template_dir`, counted with
+`find src/kubementat/core/assets/tekton_ci/triggers/templates -name '*.yml' | wc -l` —
+keep that apiVersion, and only the `PipelineRun` they embed
 says `tekton.dev/v1`.
 
 Check what your cluster serves:
@@ -398,15 +400,37 @@ evidence the tree is readable from that point onward and nothing more.
 `uv run kmt tekton-generate-triggers <ENVIRONMENT> <TEAM> <APP_NAME> --pipeline-name <NAME> --trigger-type github|gitlab` — see the section of the same name above under "Installing / configuring tekton", which is where the whole flow is written up.
 
 ## Adding pipeline run configuration yml files easily
-We created a script for generating pipeline-run yml files from existing pipelines for an environment and team. The script will create the according file in pipeline-runs/TEAM.
+`kmt tekton-generate-pipeline-run <ENVIRONMENT> <TEAM> <PIPELINE_FILE>` writes a pipeline-run manifest
+for a pipeline the checkout has. It is the replacement for `generate_pipeline_run.sh`, which is
+**deleted** — no `./generate_pipeline_run.sh` exists at the repository root any more, and running the
+command is the only way to make the file.
 
-You can use the script as follows:
 ```
 # General
-./generate_pipeline_run.sh <ENVIRONMENT> <TEAM> <PIPELINE_YML_FILE>
-# e.g.:
-./generate_pipeline_run.sh dev dev2 ../pipelines/build-pipeline-ci-images.yml
+uv run kmt tekton-generate-pipeline-run <ENVIRONMENT> <TEAM> <PIPELINE_YML_FILE>
+# e.g. -- the path of the pipeline file, resolved against the working directory:
+uv run kmt tekton-generate-pipeline-run dev dev2 \
+    src/kubementat/core/assets/tekton_ci/pipelines/build-pipeline-ci-images.yml
 ```
+
+The shipped pipelines live inside the installed `kmt` (`Config.tekton_pipeline_asset_dir`, which in a
+checkout is `src/kubementat/core/assets/tekton_ci/pipelines/`). The root `tekton_ci/` holds only
+`pipeline-runs/`, which is the same fact the generated output's location records, and the script's
+`../pipelines/…` argument assumed a root `pipelines/` that is not here either.
+
+Two things the script did differently, because both are things a reader following the old
+instructions would have hit. **Where it writes moved:** bash wrote
+`tekton_ci/pipeline-runs/<TEAM>/`, which `kmt tekton run-pipeline` only reads through a `global/`
+prefix and `kmt tekton list` scans non-recursively — so the script's own output was invisible to the
+command that applies it. The command writes to `Config.tekton_team_pipeline_run_dir`, which is
+`platform_config/<ENVIRONMENT>/<TEAM>/tekton/pipeline-runs/`, and that is the directory
+`run-pipeline` reads a team's runs from. And **an unnamed parameter is written `TODO` and not empty**,
+so the review the command asks for is the review the file needs. Review it either way: the
+parameters that belong to the app rather than to the platform are the ones the generator cannot know.
+
+`generate_pipeline_run` is pure file and configuration work — it opens no cluster, writes no namespace
+and reads none. `run_pipeline` decides the namespace, from `PIPELINE_NAMESPACE`, when it applies this
+file.
 
 # Tekton triggers
 

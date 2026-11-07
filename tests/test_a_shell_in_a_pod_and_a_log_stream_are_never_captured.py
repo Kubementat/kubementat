@@ -5,7 +5,8 @@
 that does not fail a test: a captured `kubectl exec --stdin --tty` is a session nobody sees,
 and a captured `kubectl logs -f` is a terminal that shows nothing until Ctrl+C. Both scripts
 streamed, so both replacements must stream, and that is the assertion this file is built
-around rather than an afterthought -- see `ci_utils`, which documents the same rule for the
+around rather than an afterthought -- see `CiUtils` in `automations/ci.py`, which documents the same
+rule for the
 one interactive command that predates these two.
 
 The other half is what both scripts answered *badly*, because bash had no way to tell a

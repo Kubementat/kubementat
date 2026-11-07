@@ -131,7 +131,8 @@ def apply_resources(kubernetes_utils, resource_dir, target_namespace, kind, grou
     Parameters:
 
     - kubernetes_utils: KubernetesUtils - The object that answers the cluster this applies to.
-      Every shipped caller passes `self.kubernetes_utils`; a test passes its own recorder.
+      Every shipped caller hands it the `KubernetesUtils` it built from its own `Context`; a test
+      passes its own recorder.
     - resource_dir: str - Directory containing resource files
     - target_namespace: str - Target namespace for resource application
     - kind: str - Kind for the documents that do not declare one; None to require every

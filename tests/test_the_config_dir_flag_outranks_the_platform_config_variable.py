@@ -107,7 +107,8 @@ def test_without_the_flag_the_variable_is_still_the_rule(tmp_path, monkeypatch):
     """The control. A flag wired as an early return passes the tests above and fails this one.
 
     Nothing about the precedence moved, so the variable still answers a run that typed nothing —
-    and it answers *its* tree rather than the checkout's, which is the D11 rule `config.py` keeps.
+    and it answers *its* tree rather than the checkout's, which is the D11 rule `core/config/config.py`
+keeps.
     """
     roots = two_roots(tmp_path, monkeypatch, environment="dev",
                       servers={"variable": DEV_SERVER, "flag": PROD_SERVER})

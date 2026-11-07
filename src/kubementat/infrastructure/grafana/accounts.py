@@ -3,7 +3,8 @@
 This is `scripts/user_management/create_grafana_accounts.sh` (40 LOC) and
 `create_grafana_read_only_account.sh` (52), with `grafana_helpers.sh` (69) as the library they
 sourced. All three are deleted by this commit; the client they needed landed as
-`grafana_client.py`, so the only thing missing was a caller and an address.
+`infrastructure/grafana/client.py`, and these two verbs as the module you are reading, so the only
+thing missing was a caller and an address.
 
 That second half is the ticket. The bash resolved an address by *guessing* one:
 
@@ -53,7 +54,8 @@ from kubementat.infrastructure.kubernetes import KubernetesUtils
 # The key whose rows this flow creates. Same file the admin credentials come from, because a
 # list of accounts and the pair that installs them are both environment-level facts. The
 # component is named inline at the two places that need a namespace and a selector, exactly the
-# way `automation.py`'s tunnels do, so this module adds no namespace-shaped constant of its own.
+# way `automations/tunnels/tunnels.py` does, so this module adds no namespace-shaped constant of its
+# own.
 GRAFANA_USERS_KEY = "GRAFANA_USERS"
 
 
@@ -100,7 +102,7 @@ class GrafanaAccountRow:
 def grafana_users_rows(config: Config, environment: str) -> list:
     """The rows to create, validated, from the environment's `static.encrypted.json`.
 
-    The same file `helm_utils` installs grafana from and `GrafanaClient.from_environment` reads the
+    The same file `HelmUtils` installs grafana from and `GrafanaClient.from_environment` reads the
     credentials out of -- one authority, read the same way in all three places. An absent key is an
     empty list, because "this environment declares no grafana accounts" is a fact and not a failure;
     it is reported loudly rather than quietly, since a green row that created nothing because

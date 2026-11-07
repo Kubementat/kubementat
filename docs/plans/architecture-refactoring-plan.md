@@ -462,3 +462,38 @@ pipeline-run polling constants (`PIPELINE_RUN_POLL_INTERVAL_SECONDS`, …) stay 
   `lint-imports` outside pytest).
 - No touching `platform_config/` or git-crypt-encrypted files.
 - No "improvements" to docstring style, logging levels, or comment prose while moving code.
+
+## 10. What the tree looks like when the plan is finished (2026-11-07)
+
+This section is the result, not a revision of §4–§7, and it is here so that a reader arriving after the last
+ticket does not have to re-derive the layout from tables written against a tree that no longer exists. The
+tables above stay as they were: they are the plan, dated. Every number below is `wc -l` on the path named.
+
+**Three layers, and the rule is that nothing below may reach up** (`python3 .agent-work/import_graph.py src`
+exits 0, with no cycles and no layer violations at HEAD `15be650`):
+
+- `src/kubementat/core/` — 21 files, 4,528 LOC. `constants.py` (imports nothing), `version.py`,
+  `quantities.py`, `assets/`, `config/` (nine named modules plus its `__init__.py`: `config.py`, `keys.py`,
+  `paths.py`, `stamp.py`, `versions.py`, `derived.py`, `reads.py`, `release_index.py`, and `teams.py`), and
+  `identity/` (five named modules plus its `__init__.py`: `kubeconfig.py` as the leaf, then `target.py`,
+  `comparison.py`, `registry.py`, `context.py`).
+- `src/kubementat/infrastructure/` — 24 files, 7,567 LOC. `kubernetes/` (12 files), `tekton/` (six: `generation.py`,
+  `runs.py`, `install.py`, `triggers.py`, `preflight.py`, and an `__init__.py` that exposes modules and
+  re-exports no names), `grafana/` (two), plus `helm.py`, `shell.py`, `user_management.py`.
+- `src/kubementat/automations/` — 23 files, 4,777 LOC. `install/`, `uninstall/`, `tunnels/`, `accounts/`,
+  `routing/`, `ci.py`, `ingress.py`. The team-`static.json` reader is *not* here; it sits below at
+  `core/config/teams.py`, because three slices read it and the layer rule is what decided its home.
+- `src/kubementat/` itself keeps 8 files: `errors.py` (all 37 exception classes), the five flat config
+  verb modules the plan said to leave, `crypto_utils.py`, and `__init__.py`.
+
+**The classes, and what answers their surface instead.** `Automation`'s 54 methods are module-level functions
+that take `ctx`, one verb group per `automations/` slice. `KubernetesUtils` became nine area modules whose
+union is what consumers import. `TektonUtils`' 18 public methods and 27 module functions are the five
+`tekton/` modules. `cluster.py` is `core/identity/`, and `config.py`'s sections are `core/config/`. All of
+them were public API by the diagram's surface counts, which is why `CHANGELOG.md` records each one as a
+removal and not as a move.
+
+**One rule moved, deliberately.** The team refusal lived in `TektonUtils.__init__`, where merely constructing
+the object earned a team for every path. It now sits at the call sites that actually read a team-scoped
+namespace, so a library caller holding a team-less `Context` is refused before the first apply rather than
+after it.

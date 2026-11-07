@@ -180,8 +180,8 @@ class Context:
         `kmt config init` is the command this exists for. It writes the `static.json` a resolution
         reads, so asking it to resolve one first would make it the strictest command in the product
         for the least benefit: a tree that does not exist yet cannot say which cluster it is for,
-        and the promise is that the first run works. The same argument against an eager
-        `Automation` — a constructor that resolves a kubeconfig fails a command that
+        and the promise is that the first run works. The same argument the old service class carried
+        against a constructor that resolves a kubeconfig — it fails a command that
         touches no cluster — applies to the object a constructor is handed, so a verb that writes
         a configuration root gets
         this Context and nothing else.

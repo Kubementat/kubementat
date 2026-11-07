@@ -16,7 +16,8 @@ This replaces it. Three things it does on purpose:
     get them. The
     fallback is `traefik` because `constants.DEFAULT_STATIC_ANSWERS` says so, and that
     table is also what the cluster's release is configured with: the traefik block in
-    `helmfile.yaml.gotmpl` reads the variable `helm_utils.export_ingress_class` puts into the
+    `helmfile.yaml.gotmpl` reads the variable `export_ingress_class` in
+    `infrastructure/helm.py` puts into the
     environment and carries no `default` of its own, so a tree that configured nothing gets the same
     `traefik` in the manifest and on the cluster, and a tree that configured something gets what it
     wrote. A literal in this file would be a second answer to that question.

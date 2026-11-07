@@ -16,7 +16,8 @@ names, the two knobs that say whether it was released.
 What this module is not. It holds no `Config` and reads no file: the dictionaries it resolves and the
 callable that turns a category into a path are both handed in, which is what keeps the edge pointing
 one way. It imports `constants` and `derived`, both of which are below it, and never `config` —
-`config.py` imports this file, and a back-edge would be the cycle the census warned about, the same
+`core/config/config.py` imports this file, and a back-edge would be the cycle the census warned
+about, the same
 one that keeps `constants.py` from importing `component_config_key` back. It re-exports nothing to
 that module either: `config.CATEGORY_LAYERS` raises `AttributeError`, and that is the state that makes
 the next split safe.
@@ -44,9 +45,10 @@ from kubementat.core.config import derived as config_derived
 # key by key and shallow: a layer never contributes half an object, and a key is never merged out
 # of two files.
 #
-# L0 is `src/kubementat/constants.py`, plus — and only for the keys that are not defaults but
-# consequences of a team's name — the rules in `config_derived.py`. `constants.py` answers the
-# keys kubementat ships a default for; `config_derived.py` answers the five the team's name already
+# L0 is `src/kubementat/core/constants.py`, plus — and only for the keys that are not defaults but
+# consequences of a team's name — the rules in `core/config/derived.py`. `constants.py` answers the
+# keys kubementat ships a default for; `core/config/derived.py` answers the five the team's name
+# already
 # determines, which is why they are L0 and not a template some verb copies into the tree. A key that
 # is absent
 # from `constants.py` is not thereby derivable, and a team-shaped key is not thereby a default: the

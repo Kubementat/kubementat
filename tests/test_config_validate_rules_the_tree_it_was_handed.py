@@ -171,7 +171,7 @@ ERROR_ROWS = [
     ("team-named-like-layer-directory",
      lambda root: ((root / ENVIRONMENT / "values").mkdir(),
                    (root / ENVIRONMENT / "values" / "static.json").write_text("{}", encoding="utf-8"))),
-    # The gap `_load_json_file` leaves open (`config.py:1025` checks no shape): an array is JSON,
+    # The gap `_load_json_file` leaves open (`core/config/config.py:903` checks no shape): an array is JSON,
     # and kubementat reads a layer as a mapping, so nothing in the file is ever asked for.
     ("layer-file-not-an-object",
      lambda root: (root / ENVIRONMENT / TEAM / "static.json").write_text("[1, 2]", encoding="utf-8")),

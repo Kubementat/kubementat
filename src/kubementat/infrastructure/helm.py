@@ -111,7 +111,8 @@ class HelmUtils:
         # helm-only command (`kmt helm-version`) never pays for a target it does not use.
         self.ctx = ctx
         # A release's claims are deleted through the client, and the same question is
-        # already asked that way by `Automation._delete_claims_in`. One object answers it, built
+        # already asked that way by `delete_claims_in` in `automations/uninstall/residue.py`. One
+        # object answers it, built
         # from the `Context` this class was handed -- lazily, so a helm-only command that never
         # sweeps claims pays nothing.
         self.kubernetes_utils = KubernetesUtils(ctx)
@@ -319,7 +320,7 @@ class HelmUtils:
     def helmfile_paths(self) -> tuple:
         """The two paths of the packaged manifest, for this environment.
 
-        The answer is `config_reads_index.helmfile_paths_for`, which is where it lives: this class
+        The answer is `release_index.helmfile_paths_for`, which is where it lives: this class
         addresses a cluster, and which manifest the product ships is not a fact about a cluster.
         The delegation is not a compatibility shim -- the method still does its own work, handing
         those two paths to `helmfile_apply` below and to `component_release_index` -- and a caller
@@ -390,10 +391,11 @@ class HelmUtils:
         that is serving traffic right now is the one that keeps serving, in the old namespace.
 
         **Why the refusal is here and nowhere else.** Every cluster write kubementat makes
-        through helmfile runs through `helmfile_apply`: `kmt install` (`automation.py:755`),
-        `kmt helm apply` (`cli/commands/helm.py:80`), `kmt component install`
-        (`cli/commands/component.py:269`) and `kmt routing install`
-        (`automations/routing/routing.py:247`). A guard on the install function would be stepped
+        through helmfile runs through `helmfile_apply`: `kmt install` (the `helmfile_apply` call in
+        `automations/install/kubementat.py:115`),
+        `kmt helm apply` (`cli/commands/helm.py:94`), `kmt component install`
+        (`cli/commands/component.py:219`) and `kmt routing install`
+        (`automations/routing/routing.py:248`). A guard on the install function would be stepped
         around by the other three -- including the one an operator reaches for when they are
         trying this at all, which is `kmt helm apply` -- so a refusal on any of those four would
         be a refusal for some of them, which is the same failure as no refusal wearing a name.
@@ -614,7 +616,8 @@ class HelmUtils:
         claims.
 
         This is the convergence, said out loud because it is the point of the bucket and not
-        a detail of it: `Automation._delete_claims_in` already swept claims through the client
+        a detail of it: `delete_claims_in` in `automations/uninstall/residue.py` already swept claims
+        through the client
         while this method swept them through `kubectl get` and `kubectl delete`. Two halves of the
         same uninstall asked one question two ways and could answer it differently, which is the
         failure this conversion exists to close. Both halves now go through

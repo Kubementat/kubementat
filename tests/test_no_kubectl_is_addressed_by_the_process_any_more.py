@@ -44,13 +44,12 @@ PENDING_KUBECTL_READS = {
     # `kubectl get` reappearing beside them is still counted as debt.
     "kubementat/infrastructure/kubernetes/tunnel.py": 0,
     "kubementat/infrastructure/kubernetes/exec.py": 0,
-    "kubementat/ci_utils.py": 0,
-    "kubementat/automation.py": 0,
     "kubementat/infrastructure/helm.py": 0,
-    "kubementat/user_management.py": 0,
-    "kubementat/grafana_accounts.py": 0,
-    # `kubementat/tekton_utils.py` is gone, so its zero entry went with the file: the key counted a
-    # module the scanner no longer walks, and a table entry that names a deleted path is not debt,
+    "kubementat/infrastructure/user_management.py": 0,
+    "kubementat/infrastructure/grafana/accounts.py": 0,
+    # `kubementat/automation.py`, `kubementat/ci_utils.py` and `kubementat/tekton_utils.py` are gone,
+    # so their zero entries went with the files: the key counted a module the scanner no longer
+    # walks, and a table entry that names a deleted path is not debt,
     # it is a line that cannot be read.
     # The routing lane was the last module carrying debt here, and it is gone: its three discovery
     # reads used to go through a documented `reader=` seam whose records were argv lists, which is

@@ -56,7 +56,8 @@ TRAEFIK_IMAGE = "rancher/mirrored-library-traefik:3.7.15"
 # the cluster -- which is what makes this command safe to point at a live control plane.
 #
 # Two channels, because that is what the design has: one command and two API calls. The command is
-# the product's release read (`helm_utils.helm_list_releases_argv`), not a second argv written here:
+# the product's release read (`helm_list_releases_argv` in `infrastructure/helm.py`), not a second argv
+# written here:
 # row 24's guard fails the tree if a probe ever answers the release question its own way, because two
 # answers to "what releases live here" is what the uninstall residue assert would end up disagreeing
 # about. The two API calls are recorded separately, because they do not go through a shim -- a test

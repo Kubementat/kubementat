@@ -466,7 +466,7 @@ def test_the_credential_is_the_ones_the_file_names_and_no_shell_export_is_consul
     """`static.encrypted.json` is the authority, and an operator's shell is not a second one.
 
     The pair the fixture file names is what reaches the request, even when the machine's own
-    environment exports a different one -- the same contract `helm_utils` and the lane's probe
+    environment exports a different one -- the same contract `infrastructure/helm.py` and the lane's probe
     both read.
     """
     monkeypatch.setenv("GRAFANA_ADMIN_USER", "an-exported-user")

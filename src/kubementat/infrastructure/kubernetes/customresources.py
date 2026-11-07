@@ -112,8 +112,9 @@ class KubernetesCustomResources(KubernetesClients):
     def list_persistent_volume_claims(self, namespace: str, selector: str = None) -> list:
         """The claims in `namespace`, optionally narrowed by `selector`.
 
-        One read for both halves of the product (`automation.py`'s uninstall sweep and
-        `helm_utils`'s release-claim delete, which asked kubectl the same question in its own
+        One read for both halves of the product (the uninstall sweep in
+        `automations/uninstall/residue.py` and the release-claim delete in
+        `infrastructure/helm.py`, which asked kubectl the same question in its own
         words until here). That divergence is the reason this bucket exists.
 
         Raises:

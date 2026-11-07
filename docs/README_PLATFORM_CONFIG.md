@@ -51,7 +51,12 @@ nothing in a team's configuration for them to ask.
 Here is an example structure for the configuration of the nginx-example in ENVIRONMENT=dev and TEAM=dev1:
 - dev/dev1/nginx-example/values.encrpyted.yaml -> the helm deployment configuration
 
-All relevant env and team specific configuration is contained in json or yaml files and read by the automation scripts and the pipeline execution scripts. The jq command line tool is used for reading out information from those configuration files.
+All relevant env and team specific configuration is contained in json or yaml files, read by the
+library through `Config` (`src/kubementat/core/config/config.py`) and by the pipeline steps through
+`kmt` and the `--config-dir` flag. Nothing reads them with `jq` any more: the `jq -r` that used to
+answer these keys lived in the shell scripts, those scripts are deleted, and the reads they answered
+now go through the layers — which is why a missing key warns and says which file to edit, instead of
+becoming the literal string `null` the way `jq -r` handed it on.
 
 Every `*.encrypted.*` file kubementat touches lives **in the configuration directory**, never beside the
 product, and git-crypt is initialized there by `config init` (see `docs/README_GIT_CRYPT.md`). The product
@@ -90,8 +95,9 @@ tells you which two paths it is talking about.
 
 ## static.json
 
-The keys are read through `Config._component_value` (`src/kubementat/core/config/config.py:405`): configuration
-answers first, `src/kubementat/constants.py` is the fallback, and a key that is missing warns once and
+The keys are read through `Config._component_value` (`src/kubementat/core/config/config.py:791`):
+configuration answers first, `src/kubementat/core/constants.py` is the fallback, and a key that is
+missing warns once and
 uses the built-in default instead of failing. A warning that names the key is therefore not an error —
 it is kubementat telling you the cluster got its default and you may want something else. The rule
 applies to every component; the routing keys are the ones documented here because that is the surface
@@ -102,12 +108,12 @@ to something it was never told to talk to.
 
 Two keys break that rule, and they break it toward the manifest. `<COMPONENT>_ENABLED` and
 `<COMPONENT>_VERSION` are answered by `Config.component_release_enabled` and
-`Config.component_release_version` (`src/kubementat/core/config/config.py`), which read the layers only — the team's
+`Config.component_release_version` (`src/kubementat/core/config/config.py:579` and `:621`), which read the layers only — the team's
 pair, then the environment's — and fall back to no constant at all. So `false` is not a warning and not a
 default: it is `installed: false` in the spec helmfile builds, which removes a release that is live and is
 not an error on a cluster that never had one. A version nobody names answers from the shipped manifest,
 whose `default` in each release block carries the chart version kubementat ships — the one place in the read
-path where the fallback is not `src/kubementat/constants.py`, because R-4.4 made that manifest the entry
+path where the fallback is not `src/kubementat/core/constants.py`, because R-4.4 made that manifest the entry
 point and copying the pin here would give it two owners. A number, list or dict under either key is refused
 where it was typed, naming the file to edit, because neither knob has a valid answer that is not a boolean
 or a string.
@@ -119,7 +125,9 @@ Two keys, both environment-level, both read directly rather than through `compon
 requires them and none fills them — `config init` writes `null` and prints what that means, because
 recording whatever `kubectl` is pointed at would be kubementat inventing a cluster claim it did not earn.
 
-One resolution order, in one place (`Context.build`, `src/kubementat/cluster.py`), for every command. It is
+One resolution order, in one place (`Context.build`, `src/kubementat/core/identity/context.py:220`),
+for every command — `core/identity/` is where that resolution lives now, and the module it was
+extracted out of, `cluster.py`, is deleted. It is
 five layers, and the fifth is the one that arrived after the spec was written:
 
 ```
@@ -149,15 +157,15 @@ defaults are `kubementat/core/assets/templates/environment/static.json.template`
 `kmt`). Three of them
 (`TRAEFIK_DEPLOYMENT_NAMESPACE`, `TRAEFIK_INGRESS_CLASS`, `TRAEFIK_SERVICE_SELECTOR`) belong to the
 component and are named by deriving the component's name into the key (`component_config_key`,
-`src/kubementat/core/config/config.py:82-96`); the fourth, `CLUSTER_MANAGER_EMAIL`, is read directly and has no default
+`src/kubementat/core/config/keys.py:195`); the fourth, `CLUSTER_MANAGER_EMAIL`, is read directly and has no default
 an operator can lean on.
 
 | key | default | who reads it | what it decides |
 |---|---|---|---|
-| `TRAEFIK_DEPLOYMENT_NAMESPACE` | `traefik` (`constants.DEFAULT_NAMESPACES`, `constants.py:70`) | `kubementat/core/assets/values/helmfile.yaml.gotmpl:341` reads it as `env "TRAEFIK_DEPLOYMENT_NAMESPACE" \| default "traefik"`, exported there by `HelmUtils._export_component_namespaces` (`src/kubementat/helm_utils.py:393-397`); `Config.component_namespace("traefik")` reads the same key on the Python side, and it is one of the namespaces `kmt uninstall` deletes. | which namespace the controller release lands in — and, because "ours" is decided by reading the cluster, **whether kubementat recognises a Traefik as its own** (`traefik_presence.py`'s classification is a Traefik chart release *in this namespace*, nothing else). Rename it and a release the cluster still carries is reported as `foreign`. |
-| `TRAEFIK_INGRESS_CLASS` | `traefik` (`constants.DEFAULT_STATIC_ANSWERS`, which `routing.py`'s fallback table reads from) | `Config.component_ingress_class` (`config.py`) is the one read path, and the same answer reaches helmfile from `helm_utils.export_ingress_class` — the traefik release's inline `ingressClass.name` entry (`helmfile.yaml.gotmpl`, the block labelled `component_name: traefik`) reads `env "TRAEFIK_INGRESS_CLASS"` and names no class of its own. Also: the `ClusterIssuer` HTTP-01 solvers (`routing.py:280` → `routing.py:496`), the "nothing serves that class" warning (`routing.py:528-565`), and `src/kubementat/automations/ingress.py`, which reads it through `Config` when it writes an `Ingress` for `kmt create-ingress` — where the script that used to `jq` this file out of a path built from its own location used to answer it | the `IngressClass` the controller creates and the class every solver and every generated `Ingress` names. It is a config key and not a literal because a cluster that already runs a controller has to be able to rename this one without editing a template. Note what it does **not** do: it is not the cluster default. `ingressClass.isDefaultClass: true` is what makes an Ingress that names nothing routable, and that lives in the values file below. |
-| `TRAEFIK_SERVICE_SELECTOR` | `app.kubernetes.io/name=traefik,app.kubernetes.io/instance=traefik` (`constants.DEFAULT_SERVICE_SELECTORS`, `constants.py:87`) | `Config.component_service_selector` (`config.py:396-403`) — but no `src/` call site names `traefik` today: the selector-based pod lookups resolve `grafana`, `tekton`, `polaris` and `openbao` only (`automation.py:2349,2375,2398,2421`). | which pod a selector-based lookup would find. It is declared so that a rename is answered in `static.json` and not in code, exactly like the other components; **today it has no reader.** The pair only matches while the release is named `traefik`, which is why it is a key and not something built from the component name. |
-| `CLUSTER_MANAGER_EMAIL` | none, and nothing writes one. No shipped default answers it and no verb invents a value for it, so a fresh tree has the key absent | `routing.py:563-571`, when both `ClusterIssuer`s are applied | the ACME account contact. `kmt routing install` raises with this file's path when the value is missing or still a `REPLACEME_*` placeholder, because cert-manager registers the account with it and Let's Encrypt rejects a malformed contact — an issuance failure that stays invisible until a certificate expires. Set it before the first `routing install` with `kmt config set <dir> <env> CLUSTER_MANAGER_EMAIL=...`. |
+| `TRAEFIK_DEPLOYMENT_NAMESPACE` | `traefik` (`constants.DEFAULT_NAMESPACES`, `core/constants.py:58`) | `kubementat/core/assets/values/helmfile.yaml.gotmpl:432` reads it as `env "TRAEFIK_DEPLOYMENT_NAMESPACE" \| default "traefik"`, exported there by `HelmUtils._export_component_namespaces` (`src/kubementat/infrastructure/helm.py:802`); `Config.component_namespace("traefik")` (`core/config/config.py:548`) reads the same key on the Python side, and it is one of the namespaces `kmt uninstall` deletes. | which namespace the controller release lands in — and, because "ours" is decided by reading the cluster, **whether kubementat recognises a Traefik as its own** (`traefik_presence.py`'s classification is a Traefik chart release *in this namespace*, nothing else). Rename it and a release the cluster still carries is reported as `foreign`. |
+| `TRAEFIK_INGRESS_CLASS` | `traefik` (`constants.DEFAULT_STATIC_ANSWERS`, which `routing.py`'s fallback table reads from) | `Config.component_ingress_class` (`core/config/config.py:755`) is the one read path, and the same answer reaches helmfile from `export_ingress_class` (`infrastructure/helm.py:986`) — the traefik release's inline `ingressClass.name` entry (`helmfile.yaml.gotmpl`, the block labelled `component_name: traefik`) reads `env "TRAEFIK_INGRESS_CLASS"` and names no class of its own. Also: the `ClusterIssuer` HTTP-01 solvers (`_apply_cluster_issuers` at `automations/routing/routing.py:491`, which writes the class into the solver at `routing.py:534`), the "nothing serves that class" warning (`_warn_when_nothing_serves_the_class`, `automations/routing/routing.py:568-611`), and `src/kubementat/automations/ingress.py`, which reads it through `Config` when it writes an `Ingress` for `kmt create-ingress` — where the script that used to `jq` this file out of a path built from its own location used to answer it | the `IngressClass` the controller creates and the class every solver and every generated `Ingress` names. It is a config key and not a literal because a cluster that already runs a controller has to be able to rename this one without editing a template. Note what it does **not** do: it is not the cluster default. `ingressClass.isDefaultClass: true` is what makes an Ingress that names nothing routable, and that lives in the values file below. |
+| `TRAEFIK_SERVICE_SELECTOR` | `app.kubernetes.io/name=traefik,app.kubernetes.io/instance=traefik` (`constants.DEFAULT_SERVICE_SELECTORS`, `core/constants.py:88`) | `Config.component_service_selector` (`core/config/config.py:746`) — but no `src/` call site names `traefik` today: the selector-based pod lookups resolve `grafana`, `tekton` and `openbao` only, in `automations/tunnels/tunnels.py:39,70,103`. (`polaris` is retired and no tunnel command reads a selector for it.) | which pod a selector-based lookup would find. It is declared so that a rename is answered in `static.json` and not in code, exactly like the other components; **today it has no reader.** The pair only matches while the release is named `traefik`, which is why it is a key and not something built from the component name. |
+| `CLUSTER_MANAGER_EMAIL` | none, and nothing writes one. No shipped default answers it and no verb invents a value for it, so a fresh tree has the key absent | `automations/routing/routing.py:540-558` (`_cluster_manager_email`), called from `_apply_cluster_issuers`, when both `ClusterIssuer`s are applied | the ACME account contact. `kmt routing install` raises with this file's path when the value is missing or still a `REPLACEME_*` placeholder, because cert-manager registers the account with it and Let's Encrypt rejects a malformed contact — an issuance failure that stays invisible until a certificate expires. Set it before the first `routing install` with `kmt config set <dir> <env> CLUSTER_MANAGER_EMAIL=...`. |
 
 The nginx-era keys do not come back. `NGINX_INGRESS_DEPLOYMENT_NAMESPACE` is out of this file and out of
 `constants.DEFAULT_NAMESPACES`, there is no `--enable-ingress`, no `--routing`, no alias and no key that
@@ -170,7 +178,8 @@ TODO:
 # Routing: what gets applied, and by what
 
 `kmt routing install <environment> [--yes] [--update]` applies helmfile's `routing` group — the Traefik
-release and the `cert-manager` release (`helmfile.yaml.gotmpl:169-207`) — and then applies the two
+release and the `cert-manager` release (`helmfile.yaml.gotmpl:388-441`, the two releases labelled
+`group: routing`) — and then applies the two
 `letsencrypt` / `letsencrypt-staging` `ClusterIssuer`s with their solver pointed at
 `TRAEFIK_INGRESS_CLASS`. Which of those releases is touched is decided by a label filter that the command
 can narrow (`group=routing`, or `group=routing,component_name!=traefik` when it finds a controller it does
@@ -202,7 +211,8 @@ validates the template against the chart's own `values.schema.json` for that rea
 here. `helmfile.yaml.gotmpl` supplies both from the environment kubementat hands it:
 `env "TRAEFIK_DEPLOYMENT_NAMESPACE" | default "traefik"` for the namespace, and for the class an
 `ingressClass.name` entry fed by `env "TRAEFIK_INGRESS_CLASS"` and carrying **no `default`** since
-T-31 — the answer is exported into that environment by `helm_utils.export_ingress_class` from
+T-31 — the answer is exported into that environment by `export_ingress_class`
+(`infrastructure/helm.py:986`) from
 `Config.component_ingress_class`, which is why the template needs no fallback of its own. (It used to
 say `default "traefik"` there, and while it did, nothing in `src/` exported the key: the release read
 the template's own word and the Python side read the layer, which is how a tree that declared a class

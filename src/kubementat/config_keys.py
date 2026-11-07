@@ -35,7 +35,8 @@ whoever ran the command. The private key that used to land there alongside the f
 the file is all that was ever meant to hold it.
 
 **No environment reads, and no defaults that come from outside these arguments.** `initialize`
-derived the deployer's identity from `BASE_DOMAIN` (`automation.py:338-340`), which is exactly the
+derived the deployer's identity from `BASE_DOMAIN` — a `Config` read inside the class that used to
+own it, which is exactly the
 answer that belongs to a caller and not to a library. So this module reads no `os.environ`
 anywhere, and a generation that is not given an email is refused rather than guessed at — refusing
 with the command and flag that would supply the answer is the house rule, and inventing

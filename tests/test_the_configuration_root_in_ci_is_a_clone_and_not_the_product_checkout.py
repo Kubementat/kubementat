@@ -32,7 +32,7 @@ What is *not* done here, deliberately:
   clones `$(params.automation-git-url)`, and the only param added is `configuration-git-project-name`,
   which says *which directory of the same workspace* that clone occupies. A Task cannot learn which
   repository it was cloned from, but it can be told which directory to read.
-* **Nothing in `src/`.** This is a CI-shape change. `config.py`, `config_init.py`, and every
+* **Nothing in `src/`.** This is a CI-shape change. `core/config/config.py`, `config_init.py`, and every
   read path stay untouched: most trees in this suite are fixtures and not prepared directories, and a
   rule that says "a root must be a clone" phrased against `Config` breaks 227 unrelated tests, which is
   how this epic lost hours before. Enforcement lives in the shipped YAML, read off the tree.

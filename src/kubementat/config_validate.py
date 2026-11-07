@@ -87,14 +87,17 @@ WARNING = "warning"
 _MANIFEST_KEYS = ("schema_version", "kubementat")
 
 # What a shipped template leaves behind when nobody answered the key. The spec's table spells the
-# family `SETME`; every template under `src/kubementat/core/assets/templates/` and every reader that
-# recognises one (`routing.py:561`, `automation.py:475-477`) spells it `REPLACEME_`, and an honest
+# family `SETME`; every template under `src/kubementat/core/assets/templates/` and the one reader that
+# recognises one spells it `REPLACEME_` (`_cluster_manager_email`,
+# `automations/routing/routing.py:551`, refuses one). The substitution that used to rewrite a
+# placeholder inside a copied file went with `automation.py` and the `kmt initialize` verb that ran
+# it, and an honest
 # check matches the spelling that actually ships.
 _PLACEHOLDER_PREFIX = "REPLACEME"
 
 # How far from the root a layer file may sit: depth 1 is an environment, depth 2 under one is a
 # team. `EnvironmentRegistry.environments()` (`core/identity/registry.py`) and `Config.teams()`
-# (`config.py:889-925`) already answer "what is there"; these checks only name the near-misses
+# (`core/config/config.py:708`) already answer "what is there"; these checks only name the near-misses
 # neither of them can see because they do not enumerate what they filter out.
 _ENVIRONMENT_DEPTH = 1
 _TEAM_DEPTH = 2
@@ -196,7 +199,7 @@ def _manifest_findings(root: Path, findings: list[Finding]) -> None:
     """What `kubementat.yaml` is allowed to say — decided here, for the first time.
 
     No owner exists in `src/`: there is no reader, no key lookup, and no shape check anywhere
-    (`config.py` exposes no property for it; `config_init.py:86-89` records the absence). So this
+    (`core/config/config.py` exposes no property for it; `config_init.py:86-89` records the absence). So this
     function does not restate a rule, it sets one, and the rule is one sentence: the file says which
     product this tree is for and nothing else. Which environments and teams exist is a fact about
     the directories, not about this file, so `environments:` or `teams:` are reported as keys
@@ -496,7 +499,7 @@ def _layer_findings(root: Path, environment: str, team: Optional[str],
 def _read_object_file(path: Path, label: str, findings: list[Finding]) -> Optional[dict]:
     """One layer file as a mapping, with the finding attached when it is not one.
 
-    This is the gap the census found: `Config._load_json_file` (`config.py:1025`) does `open` +
+    This is the gap the census found: `Config._load_json_file` (`core/config/config.py:903`) does `open` +
     `json.load` and no shape check, so a file holding `[1, 2]` passes straight through today and
     fails later, somewhere else, in a place nobody is looking. `registry._static_declaration` is the
     only existing owner of "is an object", and it reads only the environment's plain file; the shape
@@ -536,8 +539,8 @@ def _read_object_file(path: Path, label: str, findings: list[Finding]) -> Option
 def _placeholder_findings(path: Path, document: dict, findings: list[Finding]) -> None:
     """Answers the templates left blank.
 
-    Shipped templates spell these `REPLACEME_…` and the readers that recognise them say so
-    (`routing.py:561` refuses one, `automation.py:475-477` substitutes inside another). What is
+    Shipped templates spell these `REPLACEME_…` and the one reader in `src/` that recognises them
+    says so (`_cluster_manager_email`, `automations/routing/routing.py:551`, refuses one). What is
     really being reported is "the template was copied and not answered", so the spelling that
     ships is the spelling that matches.
     """

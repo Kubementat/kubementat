@@ -116,8 +116,9 @@ _MODULE_TREES = {}
 def _module_tree(dotted):
     """The syntax tree of one module inside `src/`, parsed once; None for anything else.
 
-    Needed because a call site may read its argv from another module: `automation.py` reads
-    `helm_utils.HELM_LIST_RELEASES_ARGV`, and a guard that refuses to cross the import would ask for
+    Needed because a call site may read its argv from another module: the slices under
+    `automations/` read `HELM_LIST_RELEASES_ARGV` from `infrastructure/helm.py`, and a guard that
+    refuses to cross the import would ask for
     the same argv to be spelled again where it is used. That is the second answer row 24 removes.
     """
     path = SRC_ROOT.joinpath(*dotted.split("."))

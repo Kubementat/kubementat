@@ -49,7 +49,8 @@ def open_tunnel(function, *args):
       and Click ignores return values, so a `kubectl port-forward` that refused a port someone
       else already had printed its complaint and exited 0. The operator saw "tunnel open" in the
       log line above it and connected to the wrong database. A tunnel that is not a tunnel has to
-      fail, whatever it prints. (Same rule `ci_utils` carries: an interactive command is judged
+      fail, whatever it prints. (Same rule `CiUtils` in `automations/ci.py` carries: an interactive
+      command is judged
       by the code it exits with, not by the fact that it ran.)
     """
     try:

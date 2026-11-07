@@ -14,7 +14,7 @@ which is Click's **two positionals**, and the command declares one. Typing it do
 answers `Error: Got unexpected extra argument`, measured. `kmt config set` takes `KEY=VALUE` as a single
 answer (`cli/commands/config.py:295`, `metavar='[KEY=VALUE]'`), and both
 `docs/README_PLATFORM_CONFIG.md:131` and `kubementat.errors.CiImageNotConfiguredError`, raised from
-`ci_utils.py`, already spell it that way. The guard
+`automations/ci.py`, already spell it that way. The guard
 here is that shape, checked by running what the refusal printed rather than by searching for an `=`.
 
 A usage error is what fails this file. A refusal that objects to the directory is a pass, because that

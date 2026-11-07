@@ -238,7 +238,8 @@ def test_kubementat_creates_the_secret_the_unlock_step_reads():
             "resolves it to nothing at run time"
     assert declared[name_param] == CONFIGURATION_KEY_SECRET, \
         f"the Secret's name defaults to {declared[name_param]!r} but kubementat creates " \
-        f"{CONFIGURATION_KEY_SECRET!r} in automation.py. The two ends of this contract have drifted, and " \
+        f"{CONFIGURATION_KEY_SECRET!r} in `automations/install/pipelines.py`. The two ends of this " \
+        "contract have drifted, and " \
         "neither file looks wrong when read alone"
     assert declared[key_param] == CONFIGURATION_KEY_DATA, \
         f"the key within the Secret defaults to {declared[key_param]!r}, not {CONFIGURATION_KEY_DATA!r}, " \
@@ -280,7 +281,8 @@ def test_kubementat_still_never_unlocks():
     step, so the first thing this guards is that the product stayed clean while the lane gained the ability.
 
     Checked against the *invocation* and not the words, because "git-crypt unlock" already appears in
-    `src/` several times inside prose that says kubementat does not run it -- `config_reads.py` carries it
+    `src/` several times inside prose that says kubementat does not run it -- `core/config/reads.py` and
+    `errors.py` carry it
     in an error message whose whole job is to send someone to the pipeline. A guard that flagged those
     would fail on documentation and pass on a real regression, which is worse than no guard: the next
     person relaxes it and the rule stops being watched.

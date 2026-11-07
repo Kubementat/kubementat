@@ -12,7 +12,8 @@ Six claims, and the fifth is the one that breaks a "simpler" implementation.
 **One answer, one layer, read back through `Config`.** `set` writes the key into one file of one
 layer, and the layer that declares it answers it. Where the same key is declared twice it is answered
 *by the team*, which is precedence and not presence: `CATEGORY_LAYERS['team_static']` is team-then-
-environment (`config.py:102-110`), so an environment answer sitting below a team answer is invisible,
+environment (`core/config/config.py:103-111`), so an environment answer sitting below a team answer is
+invisible,
 not redundant. `unset` is the other half of that — clearing the team's answer is what lets the
 environment's answer appear, which is the contract stated here and the reason the verb exists.
 
@@ -99,7 +100,8 @@ def layered(root: Path, team=None) -> Config:
     """The `Config` a reader would use for that tree — the same construction the library makes.
 
     `preload=True`, because every assertion here is about what a *loaded* configuration answers, and
-    the point of reading through `Config` is that the layer order is the one in `config.py` and not the
+    the point of reading through `Config` is that the layer order is the one in `core/config/config.py` and
+not the
     one this file believes in.
     """
     return Config(ENVIRONMENT, team, platform_config_dir=root, preload_configs=True)

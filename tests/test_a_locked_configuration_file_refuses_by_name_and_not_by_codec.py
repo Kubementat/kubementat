@@ -12,7 +12,8 @@ shape, and the sentence is the same one.
 Seven claims, one per read that the census measured, plus two about what the seam must not do:
 
 1. `Config._load_json_file` — the bottom of the encrypted-value graph, which everything downstream
-   (`helm_utils`, `grafana_client`, `infrastructure/tekton`, `automation`, `config show`) reads
+   (`infrastructure/helm.py`, `infrastructure/grafana/client.py`, `infrastructure/tekton`,
+   `automations/`, `config show`) reads
    through. A locked layer file refuses with the file's name and git-crypt.
 2. `config_init._read_document` — the read-modify-write verbs (`config set`, `config unset`,
    `config set --generate`). It keeps its own refusal wording for unreadable and non-JSON, which is

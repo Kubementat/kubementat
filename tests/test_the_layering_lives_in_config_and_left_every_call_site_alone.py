@@ -3,7 +3,8 @@
 Census E's whole finding was *where* the answer came from, so the answer to it has to be keepable in
 one place — and a rule that lives in one place is a rule a later ticket can move without noticing
 unless something here is structural. P2-2d moved that one place out of `config.py` and into `keys.py`,
-which is why the exclusions below name two files instead of one: the owner is `keys.py` and `config.py`
+which is why the exclusions below name two files instead of one: the owner is `keys.py` and
+`core/config/config.py`
 is the module that reaches it.
 
 Four claims, one test each, in the shape the tree already uses for deletions and single-owner rules
@@ -11,10 +12,12 @@ Four claims, one test each, in the shape the tree already uses for deletions and
 paragraph-matched):
 
 * **Two files name the layering, and no more.** The tables and the walk are `keys.py`'s vocabulary and
-  `config.py` is the only reader of it; a third file that names `CATEGORY_LAYERS` or the pair constants
+  `core/config/config.py` is the only reader of it; a third file that names `CATEGORY_LAYERS` or the pair
+constants
   is a second owner of the order, and two owners of one rule is how a listing and a command start
   disagreeing about which layer answered.
-* **The raw category dictionaries are private to `config.py`.** A caller that reaches past the
+* **The raw category dictionaries are private to `core/config/config.py`.** A caller that reaches past
+the
   layered view and reads `env_static` out of the loaded configuration answers for itself again,
   which is the census E bug with a nicer name.
 * **`_component_value` is still the one accessor for the keys it owns** — namespace, selector,
@@ -44,7 +47,8 @@ CALLER_ROOTS = ("src", "scripts", "tekton_ci", "examples", "tools")
 # it. A third name here is a second owner, and that is what the first test is for.
 LAYERING_OWNERS = (CONFIG_PY, KEYS_PY)
 
-# The vocabulary the layering is spelled in. A file outside `config.py` that names any of these has
+# The vocabulary the layering is spelled in. A file outside `core/config/config.py` that names any
+# of these has
 # not called the rule, it has *re-implemented* it.
 LAYERING_VOCABULARY = (
     "CATEGORY_LAYERS", "COMPONENT_LAYERS", "TEAM_PAIR", "ENVIRONMENT_PAIR",
@@ -101,7 +105,7 @@ def statements_of(function):
 def test_only_keys_py_and_config_py_name_the_layering():
     """A rule with two owners is a rule that rots the day one spelling is edited.
 
-    `keys.py` owns the tables and `config.py` is the reader they were written for, and both are
+    `keys.py` owns the tables and `core/config/config.py` is the reader they were written for, and both are
     excluded below for that one reason. Excluding a *directory* or a name pattern would be the
     weaker check and would pass the day a third file copies a chain into itself.
     """

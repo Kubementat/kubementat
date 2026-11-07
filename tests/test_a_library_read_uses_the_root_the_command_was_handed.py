@@ -1,6 +1,7 @@
 """Three library reads that used to answer "which root?" for themselves, and now do not.
 
-The subject here is not the flag — `Config` already took a root and `config.py:219-220` already
+The subject here is not the flag — `Config` already took a root and
+`core/config/paths.py:120` (`resolve_platform_config_dir`) already
 outranked the variable with it. It is the three constructions that built a `Config` out of an
 `(environment, team)` pair and nothing else, so a command that had been *told* which tree to read
 went and asked the process's own environment instead. That is the failure class this ticket is
@@ -11,10 +12,11 @@ What changed, site by site:
 * `automations/routing/routing.py:_configuration` — used to build `Config(ctx.environment,
   ctx.team)`; it now reads the `Config` the `Context` carries. Same accessor, same keys, and no
   second instance beside the one that resolved the cluster.
-* `automation.py:_declared_team_namespaces` — a per-team `Config` inside a sweep that belongs to
+* `core/config/teams.py:declared_team_namespaces` — a per-team `Config` inside a sweep that belongs to
   one command. A sweep is one root, decided once upstream.
-* `grafana_client.py:from_environment`'s `else` branch — reached only when a caller had no
-  `Config`; the one caller in `src/` (`grafana_accounts._client_for`) hands its `Context`'s down,
+* `infrastructure/grafana/client.py:from_environment`'s `else` branch — reached only when a caller had no
+  `Config`; the one caller in `src/` (`infrastructure/grafana/accounts.py`'s `_client_for`) hands its
+  `Context`'s down,
   which is what the test below asserts rather than a new path. That branch is deleted rather
   than guarded, so the subject of the grafana half below is "this cannot happen": the read is
   still asserted, and the impossibility is asserted next to it instead of by a factory that raises

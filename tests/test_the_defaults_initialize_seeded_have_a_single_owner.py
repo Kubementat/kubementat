@@ -84,7 +84,7 @@ GENERIC_VALUES = {constants.DEFAULT_STATIC_ANSWERS["TRAEFIK_INGRESS_CLASS"],
 # they are. `local-path` is this table's own answer for `TEKTON_KUBERNETES_STORAGE_CLASS` -- the key
 # that took over `KUBERNETES_DEFAULT_STORAGE_CLASS` when `initialize` was deleted (`7888bdf`) -- so a
 # file that cites it while talking about a cluster's volume classes is citing a fact and not writing
-# a second default. The one file that ever held this allowance, `src/kubementat/automation.py`, is
+# a second default. The one module that ever held this allowance, `config_init.py`, is
 # gone: the split spread its body across `src/kubementat/automations/`, and none of those files
 # carries the literal (measured: the only `local-path` in `src/` is the owner's own entry in
 # `constants.py`). So the table is empty and the guard is exactly as strict as it was -- a
@@ -199,7 +199,7 @@ def test_a_tree_that_declared_nothing_still_answers_the_deployer_service_account
     """`HELM_DEPLOYER_SERVICE_ACCOUNT_NAME` is asked of the **team's** file, and answered anyway.
 
     This is the one key of the ten whose template sits under `team/`, so a reader that only consulted
-    the environment would have answered it from the wrong layer. `automation.py` reads it through
+    the environment would have answered it from the wrong layer. `config_init.py` reads it through
     `get('team_static')` twice over, which is what makes the category part of the claim.
     """
     config = seed(tmp_path)
@@ -398,7 +398,7 @@ def test_these_two_keys_are_excluded_on_purpose_and_are_not_a_gap_someone_may_cl
     `dev1-pipelines` and `dev1` — and a reader who compares the ten here against the templates would
     conclude these two were forgotten. They were not: they are derivations, computed before this
     change and after it from the team's name at read time
-    (`config_derived.py`). A `constants.py` default would be a second owner for a value that is
+    (`core/config/derived.py`). A `constants.py` default would be a second owner for a value that is
     *computed*, which is the one kind of second owner that reads as documentation and answers as a
     lie: it would outrank nothing, agree with nothing, and be edited by someone who assumed the table
     was where answers live.

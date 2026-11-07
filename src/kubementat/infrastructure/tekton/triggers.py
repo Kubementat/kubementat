@@ -379,7 +379,8 @@ def _apply_team_trigger_resources(ctx, config, namespace: str, team) -> None:
         return
 
     # The primitive walks the directory and answers for every document in it; the object it
-    # hands the cluster is built here, which is why no `Automation` is needed to reach it.
+    # hands the cluster is built here, from the `Context` this function was handed, which is why
+    # no enclosing object has to be constructed to reach it.
     logging.info(f"Setting up configured triggers for team {team} ...")
     apply.apply_resources(KubernetesUtils(ctx), trigger_dir, namespace, kind=None,
                               group=config.TRIGGERS_API_GROUP,

@@ -4,7 +4,7 @@
 name list, and by that rule two objects deliberately survive: `tekton-triggers-eventlistener-roles`
 and `tekton-triggers-eventlistener-clusterroles` are bound by the EventListener controller at run
 time, so no binding in the pinned release references them and they carry no `managed-by` label for
-the sweep to claim them with. `src/kubementat/automation.py`'s
+the sweep to claim them with. The uninstall slice's
 `_delete_cluster_scoped_rbac_kubementat_owns` says exactly that in advance, and refuses to hard-code
 upstream role names -- a name list moved into that method would undo the rule it is protecting, so
 the list lives in `config.CLUSTER_SCOPED_EXPECTED_RESIDUE`, which is the harness that measures the

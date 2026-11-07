@@ -7,7 +7,8 @@ meant applying a group and everything in it.
 
 Two rules decided the shape here, and they are what these tests are for.
 
-**The install path is helmfile with a label filter, and nothing else.** `helm_utils.helmfile_apply`
+**The install path is helmfile with a label filter, and nothing else.** `HelmUtils.helmfile_apply`
+(`infrastructure/helm.py`)
 takes the filter as a mandatory positional argument, `kmt install` passes `group=standard`, and `kmt
 routing install` passes `group=routing` (`routing.py:69`). A per-component `helm upgrade` written
 beside that would be a second install path, which is the thing this whole migration is against. So

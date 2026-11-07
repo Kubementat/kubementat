@@ -42,8 +42,8 @@ def uninstall(ctx, environment, yes):
             "Re-run with --yes (-y) to uninstall kubementat without prompting.")
     # Environment-scoped: the sweep covers every team `platform_config/{environment}` configures,
     # so passing one team along would be a claim about the install that is not true. The `Context`
-    # the decorator resolved is all this command hands `Automation`: a cluster to sweep, and no
-    # team, whose shape is decided by the command and not defaulted from the caller's context.
+    # the decorator resolved is all this command hands the uninstall slice: a cluster to sweep, and
+    # no team, whose shape is decided by the command and not defaulted from the caller's context.
     uninstall_slice.uninstall_kubementat(ctx, assume_yes=yes)
 
 

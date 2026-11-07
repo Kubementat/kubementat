@@ -181,7 +181,7 @@ class Config:
         # the manifest it was handed, so the manifest and the ten values files it names travel
         # together or a release installs with chart defaults. Nothing writes under it and nothing
         # reads it out of a checkout: this is the manifest `helmfile_apply` applies, and
-        # `config_reads_index.helmfile_paths_for` is its only reader in `src/` -- reached from
+        # `release_index.helmfile_paths_for` is its only reader in `src/` -- reached from
         # `HelmUtils.helmfile_paths` and from the config report alike, which is the one reason a
         # read of this attribute cannot end up pointed at two files.
         self.helmfile_asset_dir = asset_path("values")
@@ -551,8 +551,9 @@ class Config:
 
         Reads `<COMPONENT>_DEPLOYMENT_NAMESPACE` from the environment-level `static.json` and
         falls back to `kubementat.core.constants.DEFAULT_NAMESPACES`, warning once per instance
-        when it does. Earlier the answer lived in the code (`automation.py` had four
-        `namespace = '...'` lines, `uninstall_kubementat.sh` had fifteen), so renaming one
+        when it does. Earlier the answer lived in the code (the install/uninstall module had four
+        `namespace = '...'` lines and `uninstall_kubementat.sh` had fifteen — the module is deleted
+        and both live in `core/constants.py` now), so renaming one
         namespace meant finding every copy of it — which is exactly what the
         `namespace-rename-tunnel-still-correct` lane assert used to catch.
 
@@ -874,8 +875,8 @@ class Config:
         occurrences of the key in the log, and a sentence that recites it twice reads as a bug.
 
         The fallback below is L0. For the keys this warning covers, L0 is
-        `src/kubementat/constants.py` and nothing else; the exception is the five team-shaped answers
-        in `config_derived.py`, which are not defaults and do not warn, because they were
+        `src/kubementat/core/constants.py` and nothing else; the exception is the five team-shaped
+        answers in `core/config/derived.py`, which are not defaults and do not warn, because they were
         never a question. The packaged `defaults/static.json` is not consulted here
         and does not exist in this tree, and must not be added in this phase: its source is the
         environment template, 40 keys of which 8 are `REPLACEME_*`, so promoting it to a default

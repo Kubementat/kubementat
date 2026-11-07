@@ -12,7 +12,7 @@ an undeclared one as the bug it is:
 * the logs half of `analyze_deployment.sh` asked for pods by
   `app.kubernetes.io/name`; the replacement selects a deployment the way every other
   kubementat command does, by its release name in `app.kubernetes.io/instance`
-  (`helm_utils.RELEASE_INSTANCE_LABEL`), so the two selectors do not mean the same pods.
+  (`infrastructure/helm.py`'s `RELEASE_INSTANCE_LABEL`), so the two selectors do not mean the same pods.
 * the replacement reads the deployment object by name to answer "does this exist", which
   bash never did; without it, "no logs" could be a wrong deployment name or a quiet pod.
 * logs on the Python side arrive per pod (`read_namespaced_pod_log`) where bash asked for

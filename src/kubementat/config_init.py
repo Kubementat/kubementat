@@ -132,7 +132,7 @@ RESERVED_ROOT_NAMES = ("kubementat.yaml", "secrets", "deployer_ssh_key", "deploy
 
 # kubementat's own *layer* directory names inside every environment, which a team must not be named.
 # `kubementat_components` belongs here for the reason it belongs in `NON_TEAM_ENVIRONMENT_DIRECTORIES`
-# (`config.py:51`): the team listing already filters it out as a stale directory, so a team wearing
+# (`core/config/config.py:49`): the team listing already filters it out as a stale directory, so a team wearing
 # that name would be a directory two rules both claim.
 LAYER_DIRECTORY_NAMES = ("values", "values.encrypted", "tekton", "triggers", "pipeline-runs",
                          "kubementat_components")
@@ -769,9 +769,9 @@ _ANSWER_CLAIM = "kmt config set and kmt config unset put one answer on one layer
 def _layer_files(config: Config, team) -> list[tuple[str, Path]]:
     """The two files of the layer a verb was given, encrypted first.
 
-    The order is the one `config.py` gives a layer's two files, and for the reason it gives: a layer's
+    The order is the one `core/config/config.py` gives a layer's two files, and for the reason it gives: a layer's
     two files are *one answer with two spellings*, and when both declare a key the encrypted one is what
-    answers. Nothing here re-declares that order — `config.py` is the only file that spells it, and this
+    answers. Nothing here re-declares that order — `core/config/config.py` is the only file that spells it, and this
     function takes the pair as it is given. So the steps a pair verb returns come back in the order the
     reader resolves them, and the printed lines say which file an answer lives in without spelling a
     path. The step names are `init_configuration`'s, which is the point rather than a coincidence: a
@@ -1031,10 +1031,11 @@ def unset_answer(root, environment, key, team=None) -> tuple[InitStep, ...]:
 
 # `--generate`'s length, spelled once. `secrets.token_urlsafe(nbytes)` is the generator and `nbytes`
 # is the only number that decides what comes out, so a test that hard-coded the resulting string
-# length would be a test that disagrees with its own generator. `automation.py`'s legacy
-# `generate_password` is the same stdlib call with the same length; it stays there until phase 8
-# deletes it, because importing that object into a library module would drag a `Context` in behind a
-# value. Two call sites of one stdlib function is not two owners.
+# length would be a test that disagrees with its own generator. (The object this comment used to
+# point at — `generate_password`, the one method `automation.py` kept for it — is gone with the
+# class and the file; nothing in `src/` imports that name any more, and the two call sites of
+# `secrets.token_urlsafe` are all that is left of the pair. Two call sites of one stdlib function is
+# not two owners.)
 GENERATED_ANSWER_BYTES = 32
 
 
@@ -1155,7 +1156,8 @@ def warn_cluster_not_addressed(environment, static_json_path) -> None:
 
     It is guidance about state and not the command's output, so it goes out as a warning rather than
     as a line of the run's stdout. The sentence is the product's and the channel is not: `logging` is
-    what the surrounding library uses everywhere else (`config.py:905`, `automations/routing.py:320`),
+    what the surrounding library uses everywhere else (`_load_json_file` in
+    `core/config/config.py`, `automations/routing/routing.py`'s warnings),
     and this was the one place under `src/kubementat/` that wrote operator-facing text straight to a
     stream. The CLI's `configure_logging` puts warnings on stderr, so a human at a terminal
     still reads this below the `created` lines; under `kmt` the difference is the record's timestamp

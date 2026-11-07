@@ -74,7 +74,8 @@ def no_answers_in_the_environment(monkeypatch):
     """This module reads no dial, so every test runs with the dials a real machine would have set.
 
     `BASE_DOMAIN` is cleared because `initialize` derived the deployer's identity from it
-    (`automation.py:338-340`) and this module must not; the two root variables go for the same reason
+    (`automations/install/pipelines.py`'s `setup_pipelines`) and this module must not; the two root
+variables go for the same reason
     a decoy is set elsewhere. A module that read any of them would still pass the tests above, which
     is why the source is read as well — see the last test.
     """
@@ -349,7 +350,8 @@ def test_a_generation_that_is_not_told_whose_key_it_is_refuses_and_names_the_fla
     """No email, no key: refused, with the flag that would have answered.
 
     `initialize` answered this by building `deployer<n>@$BASE_DOMAIN` out of an environment variable
-    (`automation.py:338-340`), which is the answer this rule takes away. Inventing one here would pass
+    (`automations/install/pipelines.py`'s `setup_pipelines`), which is the answer this rule takes away.
+Inventing one here would pass
     a test that checks only that a file exists.
     """
     with pytest.raises(Exception) as refused:

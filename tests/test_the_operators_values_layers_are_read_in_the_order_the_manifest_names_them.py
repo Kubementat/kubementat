@@ -65,7 +65,7 @@ def child_environment(root=None, environment=ENVIRONMENT, team=None):
     """The three coordinates a packaged manifest reads, plus what its own templating requires.
 
     `KUBEMENTAT_CONFIG_ROOT` / `KUBEMENTAT_ENVIRONMENT` / `KUBEMENTAT_TEAM` are what
-    `helm_utils.export_configuration_coordinates` writes before helmfile starts, and they are
+    `export_configuration_coordinates` in `infrastructure/helm.py` writes before helmfile starts, and they are
     the manifest's only way to address the operator's tree. Passing no root answers a hand-run
     helmfile, which exports nothing and should apply exactly the shipped defaults.
     """

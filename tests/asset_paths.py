@@ -15,7 +15,7 @@ reads are the bytes the writer opens.
 The shape of what is exposed:
 
 * `asset_path(...)` — anything the package ships, rooted at the asset root;
-* `template_path(...)` — a shipped template, spelled the way `automation.py` spells it, so a
+* `template_path(...)` — a shipped template, spelled the way `Config.templates_dir` spells it, so a
   guard that parses a template and a writer that opens it resolve to one path by construction;
 * `values_path(...)` — the packaged helmfile and the default values it names, which are
   data and not templates and therefore have no copy anywhere;
@@ -52,7 +52,7 @@ def asset_path(*parts: str) -> Path:
 
 
 def template_path(*parts: str) -> Path:
-    """A shipped template, spelled the way `automation.py` spells it.
+    """A shipped template, spelled the way `Config.templates_dir` spells it.
 
     `template_path("environment", "static.json.template")` is what
     `f"{self.config.templates_dir}/environment/static.json.template"` builds, so the guard that

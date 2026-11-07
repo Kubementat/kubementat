@@ -61,7 +61,7 @@ CHART = "traefik/traefik"
 MIRROR_ROW_KEYS = ("name", "description", "source", "destination")
 
 # `initialize` copies this template to platform_config verbatim
-# (`src/kubementat/automation.py:246`); the base url is the operator's fill-in.
+# (`automations/routing/traefik_presence.py`'s read of `helm.py`); the base url is the operator's fill-in.
 REGISTRY_PLACEHOLDER = "REPLACEME_DOCKER_REGISTRY_BASE_URL"
 
 

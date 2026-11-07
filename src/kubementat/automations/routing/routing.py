@@ -18,7 +18,8 @@ consequences that follow, stated before the code rather than buried in a log lev
   or from a value `platform_config` happens to carry. What `install` prints is the same answer
   `kmt routing status` prints, because two callers reading two answers is two products.
 * **Nothing here is a second namespace answer.** The namespace is `Config.component_namespace`, the
-  class is the class key, and both go through `config.py`'s one rule: a key that is not there warns
+  class is the class key, and both go through `core/config/config.py`'s one rule: a key that is not
+  there warns
   and uses the built-in default rather than crashing or inventing a name.
 * **`--update` asks before it writes.** A foreign controller plus `--update` means a second
   controller, a second class and a second writer of `Ingress.status`, and the plan's own reason for
@@ -543,7 +544,8 @@ def _cluster_manager_email(config: Config) -> str:
     for. Applying an issuer with a blank or placeholder contact is worse than not applying it --
     cert-manager registers the account and Let's Encrypt rejects a malformed contact, which is an
     issuance failure that stays invisible until a certificate expires -- so this says what is missing
-    and stops, exactly the way `helm_utils._grafana_admin_credentials` says grafana cannot be built
+    and stops, exactly the way `_grafana_admin_credentials` in `infrastructure/helm.py` says grafana
+    cannot be built
     without an admin user and stops.
     """
     value = config.get('env_static').get(CLUSTER_MANAGER_EMAIL_KEY)

@@ -74,14 +74,15 @@ CONSTANTS_DEFAULT_SOURCE = "constants.py"
 RELEASE_INDEX_DEFAULT_SOURCE = "release index"
 
 # A rule over the team's name is an L0 as well, and the report has to name the owner that answered.
-# Naming `constants.py` here would be the second owner of a fact `config_derived.py` already owns, so
+# Naming `constants.py` here would be the second owner of a fact
+# `core/config/derived.py` already owns, so
 # the report says what answered: a rule, and which module holds it.
-DERIVED_DEFAULT_SOURCE = "a rule over the team's name (config_derived.py)"
+DERIVED_DEFAULT_SOURCE = "a rule over the team's name (core/config/derived.py)"
 
 # The suffix each component family is keyed by. They are spelled here and nowhere else in this module,
 # and each one is the exact string the `Config` accessor named beside it passes to its own read —
-# `config.py:757` and `:933` for the two file-backed families, `:799` and `:803` for the release knobs.
-# `component_config_key(component, suffix)` turns the pair into a key, so this module generates keys
+# `core/config/config.py:619`/`:651` for the release knobs and `core/config/keys.py:193` for the key builder that
+# turns each pair into a key, so this module generates keys
 # instead of typing them, and a rename reaches the report through the one line that owns the name.
 #
 # There are no suffix *constants* here, and that is not an oversight: the packaged-version guard
@@ -99,22 +100,24 @@ DERIVED_DEFAULT_SOURCE = "a rule over the team's name (config_derived.py)"
 
 
 def _namespace_key(component: str) -> str:
-    """`<NAME>_DEPLOYMENT_NAMESPACE`, spelled as `config.py:757` spells it."""
+    """`<NAME>_DEPLOYMENT_NAMESPACE`, spelled the way `component_namespace` spells it."""
     return component_config_key(component, "DEPLOYMENT_NAMESPACE")
 
 
 def _service_selector_key(component: str) -> str:
-    """`<NAME>_SERVICE_SELECTOR`, spelled as `config.py:933` spells it — the deviation above."""
+    """`<NAME>_SERVICE_SELECTOR`, spelled the way `component_service_selector` spells it — the deviation above."""
     return component_config_key(component, "SERVICE_SELECTOR")
 
 
 def _enabled_key(component: str) -> str:
-    """`<NAME>_ENABLED`, spelled as `config.py:799` spells it."""
+    """`<NAME>_ENABLED`, spelled the way `component_release_enabled` spells it
+    (`core/config/config.py:619`)."""
     return component_config_key(component, "ENABLED")
 
 
 def _version_key(component: str) -> str:
-    """`<NAME>_VERSION`, spelled as `config.py:803` spells it."""
+    """`<NAME>_VERSION`, spelled the way `component_release_version` spells it
+    (`core/config/config.py:651`)."""
     return component_config_key(component, "VERSION")
 
 # The one L0 that is not in `constants.py`: the shipped manifest carries `installed: … | default
@@ -131,7 +134,7 @@ class AnsweredKey:
     """One key as it answers today.
 
     `source` is the file that declared the answer — the encrypted file of a layer when both declare
-    it, because that is the order `config.py` gives a layer's pair. It is `None` when nothing
+    it, because that is the order `core/config/config.py` gives a layer's pair. It is `None` when nothing
     declared anything, which is the difference between "this key is answered by a default" and
     "this key is answered by nothing" — the second one does not exist in this universe.
 
@@ -251,7 +254,8 @@ def _namespace_keys(config: Config, answers: dict) -> None:
 def _service_selector_keys(config: Config, answers: dict) -> None:
     """`<NAME>_SERVICE_SELECTOR` for every entry in `constants.DEFAULT_SERVICE_SELECTORS`.
 
-    `Config.component_service_selector` is the read that answers it (`config.py:933`), so the key this
+    `Config.component_service_selector` is the read that answers it (`core/config/config.py:745`), so
+    the key this
     family prints is the one that read takes. The spelling difference against the ticket is written up
     above the four key functions.
     """
@@ -382,7 +386,7 @@ def _declared_keys(config: Config, answers: dict) -> None:
             key=key,
             value=None if value is _NOTHING_DECLARED else value,
             # A key that appears in a file of a consulted layer always answers at that layer, so
-            # `default` here is the fall-through `config.py` describes and not a second case.
+            # `default` here is the fall-through `core/config/config.py` describes and not a second case.
             origin=(DEFAULT_ORIGIN if value is _NOTHING_DECLARED else _layer_tag(config, declared_in)),
             source=declared_in,
             # Nothing in `constants.py` or the manifest answers a key of this shape; the file is the

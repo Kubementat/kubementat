@@ -210,7 +210,7 @@ def test_the_script_read_the_key_from_the_same_file_the_code_reads(fixture_repo,
     code, code_warnings = from_code(fixture_repo, ARGUMENTS, "dev")
     assert script["spec"]["ingressClassName"] == code["spec"]["ingressClassName"] == "traefik"
     assert script_stderr == "", "bash had a file to read and a default that matched the chart"
-    assert code_warnings == (), "the file was there, so config.py answers on its own account and " \
+    assert code_warnings == (), "the file was there, so `Config` answers on its own account and " \
                                 "this generator adds nothing of its own"
 
 

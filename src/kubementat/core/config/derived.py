@@ -38,7 +38,8 @@ out of the team's name alone: six of an entry's fields are the operator's key ma
 them would be generation with a nicer name. So the rule has a precondition the other four do not —
 an entry has to exist. Where no layer declares `SSH_DEPLOY_KEYS` there is no answer, and that is the
 correct answer rather than a gap: a deploy key with a derived namespace and no public key is not a
-key, and a stub entry would reach `automation.py:1396` as a `KeyError` inside a secret creation that
+key, and a stub entry would reach `automations/install/secrets.py:66-69` as a `KeyError` inside a
+secret creation that
 has already started.
 
 The names here are the rules, not the files. The shipped templates still carry `REPLACEME_TEAM`

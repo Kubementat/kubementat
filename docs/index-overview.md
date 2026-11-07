@@ -29,16 +29,48 @@ default any more** — `--team` is a `team_option()` on four commands and nothin
 tree.** Two commands still start a process (`kmt tekton setup-pipelines`, whose
 `install()` in `src/kubementat/infrastructure/tekton/install.py` applies the release YAMLs, and
 `kmt run-ci-container`, which runs `kubectl run` against the CI image);
-everything else goes through `kubementat.shell.run`, and `subprocess` is imported in no module but
-`kubementat/shell.py`. The `tunnel-vault-ui` naming bug is fixed (`def tunnel_vault_ui`, registered) and
+everything else goes through `kubementat.infrastructure.shell.run`, and `subprocess` is imported in no
+module but `kubementat/infrastructure/shell.py`. The `tunnel-vault-ui` naming bug is fixed (`def tunnel_vault_ui`, registered) and
 the duplicate `kmt` entry point was deleted — `src/cli/kmt.py` is the only one. See
 `docs/plans/finish-python-migration-last-lap.md` for the current ticket state.
 
 ### docker_files/ (4 files, 1 CI image)
 Single Docker image `ubuntu-ci-minimal` — the universal CI worker for all Tekton pipeline tasks. Contains 15+ tools (kubectl, helm, helmfile, tkn, linkerd, yq, skopeo, git-crypt, mysql-client, python3). Multi-arch (amd64/arm64). Deeply integrated with Tekton CI pipelines. No multi-stage builds.
 
-### src/ (31 Python modules, 12,350 LOC — this directory was `lib/` until FIN-01 moved it; measured with `find src -name '*.py' -not -path '*egg-info*' -not -path '*__pycache__*' -exec wc -l {} +`)
-Core library. `automation.py` is the largest module at 2,504 lines (`wc -l`), handling initialization, installation, secrets, tunnels, and uninstall. `kubernetes_utils.py` (1,590) wraps the kubernetes client for namespaces, secrets, service accounts, RBAC, custom resources, and port-forwarding. `infrastructure/tekton/` (five modules, the split of one file) handles pipeline listing, running (with placeholder replacement, which lives in `generation.py`), and cleanup. `config.py` loads encrypted/encrypted JSON configs from `platform_config/`. `helm_utils.py` wraps helmfile apply. `crypto_utils.py` generates SSH/GPG keys. `utils.py` is deleted (FIN-08) — the body of this section described a 7-module, ~2,000-line `lib/`, and that is the tree before FIN-01.
+### src/ (76 Python modules and 21,012 LOC under `src/kubementat/`; 92 modules and 23,822 LOC under `src/` including `src/cli/`)
+
+**Every number below is one that was run in this tree.** The command for the whole inventory is
+`find src/kubementat -name '*.py' -not -path '*/__pycache__/*' | xargs wc -l | sort -n` → **21,012 total
+across 76 files**; adding `src/cli/` (16 files, 2,810 LOC) is what `find src -name '*.py' -not
+-path '*egg-info*' -not -path '*__pycache__*' -exec wc -l {} +` answers: **23,822 across 92**.
+
+| Where | Files | LOC | What lives there |
+|---|---:|---:|---|
+| `core/` | 21 | 4,528 | `config/config.py` 909 (`Config`, the layer precedence, the encrypted-JSON reads) and its eight siblings (`keys.py` 209, `teams.py` 196, `stamp.py` 192, `derived.py` 194, `paths.py` 154, `versions.py` 97, `release_index.py` 112, `reads.py` 73 — 2,155 together); `identity/` 1,798 (`context.py` 602, `registry.py` 364, `kubeconfig.py` 357, `target.py` 338, `comparison.py` 119); `constants.py` 389, `quantities.py` 69, `version.py` 43, `assets/` 65 |
+| `infrastructure/` | 24 | 7,567 | `helm.py` 1,127; `kubernetes/` 2,471 across 12 files (`workloads.py` 527, `customresources.py` 317, `clients.py` 289, `serviceaccounts.py` 229, `rbac.py` 207, `exec.py` 199, `apply.py` 199, `namespaces.py` 189, `secrets.py` 156, plus `constants.py`, `tunnel.py`, `__init__.py`); `tekton/` 2,598 across 6 files (`generation.py` 859, `runs.py` 859, `triggers.py` 387, `install.py` 281, `preflight.py` 203); `grafana/` 836 (`client.py` 558, `accounts.py` 278); `user_management.py` 342; `shell.py` 182 |
+| `automations/` | 23 | 4,777 | `routing/` 1,506 (`traefik_presence.py` 822, `routing.py` 675), `uninstall/` 1,490 (`residue.py` 623, `kubementat.py` 434), `install/` 1,035 (`pipelines.py` 383, `kubementat.py` 247), `accounts/accounts.py` 256, `ingress.py` 237, `ci.py` 122, `tunnels/tunnels.py` 105 |
+| flat in `src/kubementat/` | 8 | 4,140 | `config_init.py` 1,178 — the largest module in the package — `config_validate.py` 659, `errors.py` 638, `config_bootstrap.py` 624, `config_keys.py` 513, `config_answers.py` 431, `crypto_utils.py` 97, `__init__.py` 0 |
+| `src/kubementat/` | **76** | **21,012** | the four rows above sum to it |
+| `src/` | **92** | **23,822** | plus `src/cli/` — 16 files, 2,810 LOC |
+
+The five largest files, which is what a line about the tree's centre of gravity is now told by
+(`find src/kubementat -name '*.py' -not -path '*/__pycache__/*' -exec wc -l {} + | sort -rn | head -6`):
+`config_init.py` 1,178, `infrastructure/helm.py` 1,127, `core/config/config.py` 909,
+`infrastructure/tekton/runs.py` 859, `infrastructure/tekton/generation.py` 859. No module in this tree
+holds 1,500 lines, and none is where the old sections pointed.
+
+**What is not in this tree, and therefore not in the table.** `automation.py`, `kubernetes_utils.py`,
+`tekton_utils.py`, `helm_utils.py`, `cluster.py`, the root-level `config.py`, `config_derived.py`,
+`config_reads.py`, `k8s_apply.py`, `ci_utils.py`, `ingress_generator.py`, `user_management.py`,
+`shell.py`, `grafana_client.py`, `grafana_accounts.py` and `utils.py` are deleted — not moved-and-
+left-behind. What they held sits in the directories the table names. The classes `Automation` and
+`TektonUtils` no longer exist as anything a caller constructs; `KubernetesUtils` survives as the
+composition of the nine `kubernetes/` areas and nothing else
+(`infrastructure/kubernetes/__init__.py` says so in its own words).
+
+The rest of this paragraph is a **record, dated**: the body of this section used to describe a
+7-module, ~2,000-line `lib/`, which is the tree before FIN-01, and the line above about a 2,504-line
+`automation.py` described the tree before Phase 3.
 
 ### platform_config/ (2 environments, team-based hierarchy)
 JSON config files organized as `platform_config/{env}/{team}/`. Two levels: environment-level (`static.json`, `static.encrypted.json`) and team-level. Nothing in this tree is a copy of a shipped file: 11
@@ -151,8 +183,8 @@ asking *what happened*, *what we measured*, *what we decided*, or *what we plan 
   a *decision* spec rather than a plan, so it records what the owner decided and the evidence for each decision,
   and deliberately does **not** schedule work or size tickets. It is the design for environments-as-clusters and
   multi-cluster addressing, and it supersedes the deferrals `finish-python-migration.md` §1.2 and `TODOs.md`
-  Features both carry. Read it before touching anything in `kubernetes_utils.py`, `automation.py`'s cluster
-  paths, or any command signature.
+  Features both carry. Read it before touching anything under `core/identity/` (the cluster resolution,
+which `cluster.py` used to hold) or any command signature, or `core/config/config.py`'s cluster keys.
 - **`docs/finished-tickets/` — 5 files.** `T001`…`T005`, the small hygiene tickets recorded individually.
 
 The seven `docs/README_*.md` files alongside them are operator-facing (configuration, Tekton, E2E lanes,
@@ -173,7 +205,10 @@ The two counts that agree with `find` — 8 trigger templates and 4 pipeline run
 Complete Tekton CI/CD system. Tasks include git-clone (with SSH auth), Docker build/push, helmfile CLI, MySQL operations, skopeo image operations, terraform, and echo. Pipelines orchestrate Docker builds, Helm deployments, image sync, and a hello-world example. Trigger templates for GitHub and GitLab webhooks. Pipeline runs with placeholder replacement. (The MySQL/Redis setup pipelines went with the backing-service install automation, removed 2026-10-27; the two MySQL Tasks remain.)
 
 ### `kubementat/core/assets/templates/` (7 template files, measured with `find src/kubementat/core/assets/templates -type f | wc -l`; 19 until T-18 moved the ten files under `values/` out, and 8 until `kubementat_components/` went)
-JSON/YAML templates for initialization, and **product data** since T-02a: they ship inside the installed `kmt`, so no checkout carries a directory of that name for a sentence to point at. `environment/static.json.template` and `static.encrypted.json.template` describe a layer's shape. `environment/team/` templates for team configs. `mirrored_docker_images.json.template`. What `kmt initialize` did with them was copy them into `platform_config/{environment}/` — the copy is the operator's working material, the template is what the package ships — **except** the helmfile manifest and its default values, which T-18 moved to `assets/values/` and took out of the copy altogether: they are applied and read from inside the package. The command is deleted and the copy with it, so no verb reads these files any more; deleting a template is a decision and not a side effect. `environment/kubementat_components/` is now absent, not empty: it held one file after T-18, `monitoring/grafana_node_service.yaml.template`, a `Service` that exposes Grafana's UI on a NodePort and was applied by hand with a `kubectl apply` comment. Nothing in `src/`, no manifest, no test and no pipeline ever read it, and `grafana_client.py:521` already names a NodePort of that shape as the address kubementat refuses to guess, so it was deleted on 2026-11-03 rather than shipped as an undocumented manual step. Exposing the UI is a port-forward or the service's ClusterIP.
+JSON/YAML templates for initialization, and **product data** since T-02a: they ship inside the installed `kmt`, so no checkout carries a directory of that name for a sentence to point at. `environment/static.json.template` and `static.encrypted.json.template` describe a layer's shape. `environment/team/` templates for team configs. `mirrored_docker_images.json.template`. What `kmt initialize` did with them was copy them into `platform_config/{environment}/` — the copy is the operator's working material, the template is what the package ships — **except** the helmfile manifest and its default values, which T-18 moved to `assets/values/` and took out of the copy altogether: they are applied and read from inside the package. The command is deleted and the copy with it, so no verb reads these files any more; deleting a template is a decision and not a side effect. `environment/kubementat_components/` is now absent, not empty: it held one file after T-18, `monitoring/grafana_node_service.yaml.template`, a `Service` that exposes Grafana's UI on a NodePort and was applied by hand with a `kubectl apply` comment. Nothing in `src/`, no manifest, no test and no pipeline ever read it, and
+`infrastructure/grafana/client.py` already names a NodePort of that shape — line 496 of it, in the
+address the create path refuses to guess — so it was deleted on 2026-11-03 rather than shipped as an
+undocumented manual step. Exposing the UI is a port-forward or the service's ClusterIP.
 
 ### `kubementat/core/assets/values/` (11 files, measured with `find src/kubementat/core/assets/values -type f | wc -l`)
 The product's helmfile entry point plus the ten `*.encrypted.yaml` defaults its releases name, one directory per component, and **data rather than templates**: there is no `.template` suffix here because nothing renders or copies these files. They sit together because helmfile resolves a release's relative `values:` path against the directory of the manifest it was handed. `HelmUtils.helmfile_paths()` returns this directory and its `helmfile.yaml.gotmpl`, `Config.helmfile_asset_dir` is the accessor, and `tests/test_the_values_files_the_manifest_names_are_the_ones_the_tree_ships.py` is the guard that keeps the reference list and the file list one set.
@@ -236,16 +271,26 @@ Contains only `.gitkeep`. All actual Helm chart content lives in `examples/helm_
 
 ### Library Architecture
 - Split `automation.py` into focused classes (Initializer, Installer, SecretManager, TunnelManager, Uninstaller)
+  — **closed, and not as classes.** Phase 3 deleted `Automation` and landed its 21 public methods as the
+  `automations/{install,uninstall,tunnels,accounts}` slices plus `automations/ingress.py` and
+  `automations/ci.py`. This is the only line of the three that is closed; `utils.py` was removed below and
+  `crypto_utils.py` is a wish still ungranted.
 - Move `crypto_utils.py` into the library properly (currently only used during initialization)
-- Complete the empty `utils.py` or remove it
+- ~~Complete the empty `utils.py` or remove it~~ **Deleted (FIN-08).** Nothing imports it and nothing can.
 - Add type hints consistently across all modules
 - Add docstrings to all public methods
 
 ### Test Coverage
-- Add pytest unit tests for `kubernetes_utils.py`, `config.py`, `tekton_utils.py`
+- Add pytest unit tests for the modules the tree has: `core/config/`, `core/identity/`,
+  `infrastructure/kubernetes/`, `infrastructure/tekton/`. (The names this line used to carry —
+  `kubernetes_utils.py`, `config.py`, `tekton_utils.py` — belong to a tree four phases old. Coverage is
+  not what this line measures: `find tests -name 'test_*.py' | wc -l` → **81 modules**, all run by
+  `uv run pytest -q`, which reports **1785 passed / 1 skipped** as of this ticket.)
 - Add integration tests using a mock/minikube cluster
 - Replace bash smoke tests with pytest-based test suite
-- Add test fixtures for Config, Automation, KubernetesUtils
+- Add test fixtures for `Config` and the `Context`/`ClusterTarget` pair. (`Automation` is gone, so a
+  fixture for it is a fixture for nothing; `KubernetesUtils` survives only as the composition in
+  `infrastructure/kubernetes/__init__.py`, which is what the fixtures build.)
 
 ### CI/CD
 - Add GitHub Actions or Tekton-based CI for running tests on every PR
@@ -278,11 +323,20 @@ User → kmt CLI → src/kubementat/ → Kubernetes Cluster
 1. **Initialization:** `kmt config init <dir>` lays a tree down in the directory it is told, generates
    the deployer's SSH/GPG keypairs there, and configures git-crypt in that directory's own git
    repository. It writes answers and no product shape.
-2. **Installation:** `kmt install` validates deps, runs helmfile, sets up Tekton (via lib or shell scripts)
-3. **Pipeline execution:** `kmt tekton run-pipeline` loads YAML from `tekton_ci/pipeline-runs/`, replaces placeholders from config, applies via Kubernetes API
-4. **Tunneling:** `kmt tunnel <component>` finds pods via selector, opens `kubectl port-forward`
-5. **Secrets:** `kmt setup-secrets` reads encrypted SSH keys from config, creates K8s secrets
-6. **Helmfile:** `kmt helm apply` runs `helmfile apply` with label filters against `platform_config/` values
+2. **Installation:** `kmt install <environment> <team>` validates the declared dependencies, prompts or
+   refuses about the cluster, applies helmfile's `group=standard` releases, and sets up Tekton through
+   `automations/install/` — every one of those is a Python call, and no step starts a script.
+3. **Pipeline execution:** `kmt tekton run-pipeline` loads YAML from the team's own pipeline-run directory
+   (`Config.tekton_team_pipeline_run_dir`, under `platform_config/{env}/{team}/tekton/`), replaces
+   placeholders from config through `infrastructure/tekton/generation.py`, and applies via the Kubernetes
+   API.
+4. **Tunneling:** `kmt tunnel <component>` finds the pod through `Config.component_namespace` and
+   `Config.component_service_selector`, then runs `kubectl port-forward` via
+   `infrastructure/kubernetes/tunnel.py`.
+5. **Secrets:** `kmt setup-secrets` reads the encrypted SSH keys out of the team's own layer and creates
+   the K8s Secrets through `automations/install/secrets.py`.
+6. **Helmfile:** `kmt helm apply` runs `helmfile apply` with label filters, in the packaged
+   `core/assets/values/` directory the release paths are relative to.
 
 ---
 
@@ -290,12 +344,12 @@ User → kmt CLI → src/kubementat/ → Kubernetes Cluster
 
 | Priority | File | Why |
 |----------|------|-----|
-| 1 | `src/kubementat/automation.py` | 700+ line monolith — main refactoring target |
+| 1 | `src/kubementat/automations/` | What `automation.py` was: 23 files and 4,777 LOC of install, uninstall, tunnel, account, ingress, routing and CI behaviour, in slices instead of one class. Measured with `find src/kubementat/automations -name '*.py' -not -path '*__pycache__*' -exec wc -l {} +`. |
 | 2 | ~~`src/cli/kmt`~~ | **resolved 2026-10-28** — the pre-FIN-01 CLI entry file is deleted; nothing imported it and nothing could |
-| 3 | `src/cli/commands/tunnels.py` | Has the tunnel-vault-ui bug |
+| 3 | `src/cli/commands/tunnels.py` | The `tunnel-vault-ui` bug this row used to name is **fixed** — `def tunnel_vault_ui` is decorated and registered, and `tunnel-polaris`/`tunnel-mysql` are retired rather than grouped. Read it for the retirement guard, not for the bug: `tests/test_the_polaris_and_mysql_tunnel_commands_stay_retired.py` |
 | 4 | `src/kubementat/core/config/config.py` | Config loading — lazy loading, encrypted JSON |
-| 5 | `src/kubementat/kubernetes_utils.py` | K8s API wrapper — solid but could use more type hints |
-| 6 | `src/kubementat/tekton_utils.py` | Pipeline execution — placeholder replacement logic |
+| 5 | `src/kubementat/infrastructure/kubernetes/` | K8s API wrapper, 12 files and 2,471 LOC: one file per area, assembled into the `KubernetesUtils` class by `__init__.py`. Read the area file, not the `__init__`, for a method |
+| 6 | `src/kubementat/infrastructure/tekton/` | 6 files and 2,598 LOC. `generation.py` holds the placeholder table and the two generators; `runs.py` the run lifecycle and cleanup; `install.py` and `triggers.py` what a cluster gets; `preflight.py` the api-version read |
 | 8 | `pyproject.toml` | Project config — entry point, dependencies |
 | 9 | `src/cli/commands/tekton.py` | Tekton CLI — still calls shell scripts |
 | 10 | ~~`scripts/automation/tekton/generate_trigger_config_from_templates.sh`~~ | **Deleted 2026-10-28 (FIN-23)**, along with `generate_deploy_pipeline_from_template.sh` (FIN-22) — both had no caller in `src/`. The migration targets are now `kmt tekton-generate-triggers` and `kmt tekton-generate-deploy-pipeline`, backed by `generate_trigger_configs()` / `generate_deploy_pipeline()` in `src/kubementat/infrastructure/tekton/generation.py` |
