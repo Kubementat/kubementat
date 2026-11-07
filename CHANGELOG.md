@@ -1,5 +1,71 @@
 # Unreleased
 
+- **The run path leaves `tekton_utils.py`: `src/kubementat/infrastructure/tekton/runs.py` is the third
+  module of the Tekton split.** Twenty-one names — 15 methods and 6 functions — plus the `CLEANUP_JOB_*`
+  set, `CLEANUP_JOBS_TO_KEEP`, the prune heredoc, and the two numbers `--wait` asks the cluster by.
+  The methods lose `self` the way the two tickets before them did, and what the constructor read is a
+  parameter now: `kubernetes_utils` and `config` first, then `environment`, `team`, and the namespace
+  that used to be `self.pipeline_namespace`. Bodies are what they were; per-name deltas are in
+  `.agent-work/P4-3-equivalence.md`, and `grep -n "def <moved name>" src/kubementat/tekton_utils.py`
+  answers nothing for all 21. `tekton_utils.py` is 1 351 → 609 lines and no longer imports `yaml`.
+
+  **One thing about waiting is observable, and it is the smallest of the changes.** The loop, its
+  schedule, its thirty-minute bound, its exit codes and every sentence it logs are byte-for-byte what
+  they were — nothing a reader can measure moved. What did move is *where the clock is read from*, and
+  that is a test-side fact with a consequence: `tests/test_the_cli_waits_…` patches the wait's clock by
+  a dotted string, and the string has to name `kubementat.infrastructure.tekton.runs.time.monotonic`,
+  because `runs.py` is the module that calls `monotonic` now. It must bind `time` as a module (never
+  `from time import …`) for that string to reach the loop. Two things a reader should not have to
+  discover in a guest: a string that names the old module still *passes* — `time` is one module object,
+  so patching it anywhere patches it everywhere — which is why it was repointed rather than left
+  "harmless"; and if `runs.py` ever binds `monotonic` by name instead, that same patch becomes inert,
+  the bound is measured against a wall clock, and the test runs ten seconds of real time before
+  failing. `test_importing_the_module_that_waits_sleeps_nothing` also widened: no import-time sleep is
+  now a rule over every module of the package, and the "sleeps in exactly one place" half stays
+  per-file, pointed at the module with the loop. Its assertions are the same two claims.
+
+  **What a downstream reader repoints to.** No re-export, no compatibility import, no method standing
+  behind the function.
+
+  | you were reaching for | it is now |
+  |---|---|
+  | `TektonUtils.run_pipeline(ident, parallel)` | `infrastructure.tekton.runs.run_pipeline(kubernetes_utils, config, environment, team, ident, parallel)` |
+  | `TektonUtils.wait_for_pipeline_run(name, ns, poll, timeout)` | `runs.wait_for_pipeline_run(kubernetes_utils, config, name, ns, poll, timeout)` |
+  | `TektonUtils.list_*`, `.list_all_tekton_resources()`, `.cleanup_*`, `.check_running_pipelines()`, `.setup_cleanup_job()`, `._list_tekton_resource()` | `runs.<same name>`, with `kubernetes_utils`/`config` (and the namespace where it is read) ahead of the old arguments |
+  | `TektonUtils.list_available_pipeline_runs()` | `runs.list_available_pipeline_runs(config, team)` — the one member the plan's four buckets never placed; it is here by decision, as the read-side twin of `run_pipeline`'s `global/` rule, and the commit message says so |
+  | `tekton_utils.cleanup_job_image / _ / cleanup_pipelinerun_cron_job / _resolve_pipeline_run_file_path / _first_status_condition` | `runs.<same name>` |
+  | `tekton_utils.PIPELINE_RUN_POLL_INTERVAL_SECONDS`, `.PIPELINE_RUN_TIMEOUT_SECONDS`, `.CLEANUP_JOB_*`, `.CLEANUP_JOBS_TO_KEEP` | `runs.<same name>` |
+  | `kubementat.tekton_utils.time.monotonic` (as a patch target) | `kubementat.infrastructure.tekton.runs.time.monotonic` |
+
+  **Consumers repointed, per file.** `src/cli/commands/tekton.py` — six commands, and the two `click`
+  defaults that read the poll interval; the commands still build `TektonUtils(ctx)`, because that is
+  where the team is refused and where `kubernetes_utils`/`config`/`environment`/`team` still come
+  from, and that object goes away with P4-6. `src/kubementat/tekton_utils.py` — the 21 defs and their
+  constants are gone; it keeps `time` (`_wait_for_pipeline_webhook` still asks for it) and reaches
+  `generation`/`preflight` module-qualified as before. Tests: the CLI-wait file (its `waiter()`
+  fixture hands over the three values the method used to carry, and its clock patch names `runs`),
+  `test_the_cleanup_job_is_created_in_the_namespace_the_config_names.py` (imports, its setup helper,
+  and its namespace-literal rule — now a scan of `infrastructure/tekton/*.py`, renamed accordingly),
+  `test_tekton_api_version_preflight.py` (the four listings are called as the command calls them),
+  `test_a_locked_configuration_file_refuses_by_name_and_not_by_codec.py` (the raw-read exemption is
+  keyed by file and function, so the key became
+  `("kubementat/infrastructure/tekton/runs.py", "run_pipeline")`; left with its old spelling the walk
+  reports the read in its new home *and* the stale key — both assertions failed before the key was
+  corrected), and `test_team_option.py` (the command no longer calls a method, so the recorder
+  intercepts `runs.setup_cleanup_job` as well as the `Context` it is handed). No test lost an
+  assertion: 1779 passed / 1 skipped, the same as before the ticket. Two files were deliberately not
+  touched — `test_parity_tekton_runs.py` reaches `run_pipeline` through the CLI and never constructs
+  the class, so it is a run target, and `test_generated_pipeline_runs_are_written_where_the_run_commands_read_them.py`
+  names the same function only in prose.
+
+  **What the DAG got wrong, or was early about.** Its §3 item 5 gives `test_team_option.py`'s
+  `TektonUtils` patch to P4-6 and says no ticket before P4-6 may touch the instantiation sites. That
+  holds only while the CLI calls a method; `setup_cleanup_job` is this ticket's name, so the
+  interception retargeted here for that one command and P4-6 still owns the rest. The DAG also placed
+  `list_available_pipeline_runs` nowhere, which §2 corrected and this ticket honoured. Its cache row
+  is left alone on purpose: `DISCOVERY_ATTEMPTS`/`DISCOVERY_DELAY_SECONDS` are `preflight.py`'s
+  defaults and are not this ticket's to move.
+
 - **The preflight leaves `tekton_utils.py`: `src/kubementat/infrastructure/tekton/preflight.py` is the
   second module of the Tekton split, and the cached answer it carries is keyed by cluster.** Four
   names — `preflight_tekton_api_version`, `preflight_installed_tekton_api_versions`,

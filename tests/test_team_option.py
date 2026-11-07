@@ -17,6 +17,8 @@ from cli import helpers
 from cli.commands import (component, helm, kubementat, routing, tekton, tunnels,
                            users, utilities)
 from kubementat.errors import TeamNotSuppliedError
+# The run path's verbs are module functions now (P4-3), so this is the seam to intercept.
+from kubementat.infrastructure.tekton import runs
 
 TEAM = "smoke"
 
@@ -70,7 +72,9 @@ class RecordingContext:
     """Stands in for the classes that take one `Context` -- `TektonUtils` and `HelmUtils` do.
 
     Records the `(environment, team)` pair the object carries, because that pair is what these
-    tests assert; what changed is where it lives, not whether the command still decides it.
+    tests assert; what changed is where it lives, not whether the command still decides it. The run
+    path reads that pair plus the config and a client off the object now (P4-3 moved the verb out
+    of the class and into `runs`), so all four are what it hands over.
     """
 
     def __init__(self, calls):
@@ -78,13 +82,33 @@ class RecordingContext:
 
     def __call__(self, ctx):
         self.calls.append((ctx.environment, ctx.team))
+        # What the run path reads off the object now (P4-3 moved the verb onto `runs`). The verb is
+        # intercepted below, so nothing here is ever asked to touch a cluster.
+        self.config = ctx.config
+        self.environment = ctx.environment
+        self.team = ctx.team
+        self.kubernetes_utils = None
         return self
-
-    def setup_cleanup_job(self, *args):
-        return None
 
     def helmfile_apply(self, **kwargs):
         self.calls[-1] = self.calls[-1] + (kwargs,)
+        return None
+
+
+class RecordingVerb:
+    """The run path's verb, recorded instead of run.
+
+    `setup_cleanup_job` is a function on `infrastructure.tekton.runs` now (P4-3), so a recorder
+    attached to the class would let the command run the real thing against a cluster this test was
+    never given. It records the `(environment, team)` pair the command handed it, which is the same
+    claim these tests made off the constructor.
+    """
+
+    def __init__(self, calls):
+        self.calls = calls
+
+    def __call__(self, kubernetes_utils, config, environment, team, *args, **kwargs):
+        self.calls.append((environment, team))
         return None
 
 
@@ -109,6 +133,9 @@ class RecordingTunnels:
 def recorder(monkeypatch):
     calls = []
     monkeypatch.setattr(tekton, "TektonUtils", RecordingContext(calls))
+    # The verb the command calls is on `runs` now (P4-3), so that is what gets intercepted; the
+    # class is only what the command reads its pair off.
+    monkeypatch.setattr(runs, "setup_cleanup_job", RecordingVerb(calls))
     for name in TUNNEL_FUNCTIONS:
         monkeypatch.setattr(tunnels, name, RecordingTunnels(calls))
     return calls

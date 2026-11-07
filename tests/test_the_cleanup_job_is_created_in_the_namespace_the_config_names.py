@@ -26,9 +26,12 @@ from kubernetes.client.exceptions import ApiException
 from cluster_parity import ClusterOperation, cluster_named, compare, operations_from_calls
 from conftest import FIXTURE_ENVIRONMENT, RecordedCall
 from kubementat.errors import CleanupJobImageNotConfiguredError
-from kubementat.tekton_utils import (CLEANUP_JOB_CLUSTER_ROLE_BINDING_NAME,
-                                     CLEANUP_JOB_CLUSTER_ROLE_NAME, CLEANUP_JOB_NAME,
-                                     CLEANUP_JOB_SERVICE_ACCOUNT_NAME, cleanup_job_image)
+# The cleanup job's names and the reader that answers its image moved out of `tekton_utils.py`
+# (P4-3) into the module that builds the job, which is where a patch of them has to land.
+from kubementat.infrastructure.tekton.runs import (CLEANUP_JOB_CLUSTER_ROLE_BINDING_NAME,
+                                                   CLEANUP_JOB_CLUSTER_ROLE_NAME, CLEANUP_JOB_NAME,
+                                                   CLEANUP_JOB_SERVICE_ACCOUNT_NAME,
+                                                   cleanup_job_image)
 from cluster_fixture import configuration_only_cluster, configuration_only_context
 
 # The cluster both sides of this comparison address. The Python side gets it from the `Context` it
@@ -156,10 +159,15 @@ def configured_fixture(fixture_repo, namespace=NAMESPACE):
 
 
 def the_python_setup(fixture_repo, namespace=NAMESPACE):
+    from kubementat.infrastructure.tekton import runs
     from kubementat.tekton_utils import TektonUtils
 
     configured_fixture(fixture_repo, namespace)
-    TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team)).setup_cleanup_job()
+    # The same `Context` and the same seven cluster operations, handed over as the arguments the
+    # function now takes: what it used to read off the instance it is given. The class still
+    # resolves the client and still refuses a run with no team, so it is still built here.
+    utils = TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team))
+    runs.setup_cleanup_job(utils.kubernetes_utils, utils.config, utils.environment, utils.team)
     return None
 
 
@@ -200,7 +208,7 @@ def test_the_rbac_and_the_job_the_python_writes_are_the_ones_the_script_wrote(fi
             bash_only=the_script_reports(),
             python_only=[ClusterOperation("read", "serviceaccount", NAMESPACE, None, (), cluster=CLUSTER)],
             context="what setup_tekton_pipelinerun_cleanup_job.sh asked the cluster, against what "
-                    "TektonUtils.setup_cleanup_job() asks it now")
+                    "`runs.setup_cleanup_job()` asks it now")
 
 
 def test_the_namespace_comes_from_the_environment_config_and_nowhere_else(fixture_repo,
@@ -306,28 +314,31 @@ def test_a_missing_image_key_is_an_error_that_names_the_key(fixture_repo):
     assert "TEKTON_CI_IMAGE_NAME" in str(error.value)
 
 
-def test_no_namespace_is_written_into_the_module_that_creates_the_job():
+def test_no_namespace_is_written_into_the_package_that_creates_the_job():
     """The component is named in the code; the namespace is not. That is the whole defect.
 
     A literal here would be a second answer, and the second answer is what makes a rename only
     half happen.
     """
-    source = (REPO_ROOT / "src/kubementat/tekton_utils.py").read_text(encoding="utf-8")
-
-    # The same rule `test_no_module_under_src_binds_a_namespace_to_a_literal` applies over all of
-    # `src/`, stated for the module that creates this job: a name bound to a namespace value is a
-    # second answer, and a comment that quotes the old answer is not one.
+    # The rule is the package's now, not one file's: the job is created in `runs.py` (P4-3) and the
+    # module that used to create it has no job code left in it, so reading that file would be a
+    # guard about nothing. Both halves — the bound literal and the accessor — are checked over every
+    # module, and a hit names the file it came from.
     from kubementat.core import constants
 
     namespaces = set(constants.DEFAULT_NAMESPACES.values())
     bound = []
-    for line in source.splitlines():
-        if line.strip().startswith("#"):
-            continue
-        literal = re.match(r"^\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*[\"']([^\"']+)[\"']\s*$", line)
-        if literal and literal.group(1) in namespaces:
-            bound.append(line.strip())
+    sources = []
+    for module in sorted((REPO_ROOT / "src/kubementat/infrastructure/tekton").glob("*.py")):
+        source = module.read_text(encoding="utf-8")
+        sources.append(source)
+        for line in source.splitlines():
+            if line.strip().startswith("#"):
+                continue
+            literal = re.match(r"^\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*[\"']([^\"']+)[\"']\s*$", line)
+            if literal and literal.group(1) in namespaces:
+                bound.append(f"{module.name}: {line.strip()}")
 
-    assert bound == [], "a namespace written into this module is a second answer to rename"
-    assert "component_namespace" in source, "it has to come from the same accessor every other "\
+    assert bound == [], "a namespace written into the package that creates this job is a second answer to rename"
+    assert "component_namespace" in "\n".join(sources), "it has to come from the same accessor every other "\
         "component namespace comes from"

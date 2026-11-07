@@ -23,10 +23,10 @@ from kubementat.infrastructure.kubernetes import apply
 from kubementat.automations.install import pipelines
 from kubementat.automations.install.pipelines import setup_pipelines
 from kubementat.errors import TektonControllerWithoutConfiguredApiError
-from kubementat.tekton_utils import TektonUtils
-# The preflight moved to its own module (P4-2) and `tekton_utils.py` keeps no copy of the name, so
-# the call here reaches it the way every tekton call is reached: through the module object.
-from kubementat.infrastructure.tekton import preflight
+# Both halves of the split this file's checks reach are module-qualified (P4-2 for the preflight,
+# P4-3 for the listings that ask the version question): `tekton_utils.py` keeps no copy of either
+# name, and the seam a patch reaches is the module that runs.
+from kubementat.infrastructure.tekton import preflight, runs
 
 
 class RecordingCluster:
@@ -212,15 +212,15 @@ def test_a_cluster_that_does_not_serve_the_written_version_names_the_knob_that_c
 def test_a_cluster_that_serves_the_written_version_is_asked_once_for_a_whole_command():
     """Listing four kinds of resource is one command, so it is one discovery call."""
     cluster = RecordingCluster(served_versions=["v1"])
+    config = FakeConfig()
+    namespace = "tekton-pipelines-team"
 
-    utils = TektonUtils.__new__(TektonUtils)
-    utils.kubernetes_utils = cluster
-    utils.config = FakeConfig()
-    utils.pipeline_namespace = "tekton-pipelines-team"
-    utils.list_pipelines()
-    utils.list_tasks()
-    utils.list_pipeline_runs()
-    utils.list_taskruns()
+    # Called the way the command calls them now: the client, the config, the namespace. The
+    # assertion is the one that was here before -- four listings, one `api_version_is_served` call.
+    runs.list_pipelines(cluster, config, namespace)
+    runs.list_tasks(cluster, config, namespace)
+    runs.list_pipeline_runs(cluster, config, namespace)
+    runs.list_taskruns(cluster, config, namespace)
 
     assert cluster.asked == [("tekton.dev", "v1")], (
         f"the question was asked {len(cluster.asked)} times; the check belongs once per command"

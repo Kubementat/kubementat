@@ -3,11 +3,11 @@
 `tekton_ci/tasks/run-tekton-pipeline.yml` used to run one bash step that started a pipeline run and
 then polled it forever: `while true`, `tkn pipelinerun describe`, no bound. The owner's decision is
 that this becomes a flag on the command and nothing else — the Task runs one step and the waiting
-lives in `TektonUtils.wait_for_pipeline_run`, which reads the Kubernetes API instead of a binary.
+lives in `runs.wait_for_pipeline_run`, which reads the Kubernetes API instead of a binary.
 
 Two things this suite exists because they were not true before:
 
-* **The command cannot stay silent about refusing.** `TektonUtils.run_pipeline` has always had a
+* **The command cannot stay silent about refusing.** `runs.run_pipeline` has always had a
   code for a parallel-run refusal or an unreadable file, and the command function dropped it, so a
   run that was never started exited 0. Every exit code here is asserted, not assumed.
 * **The wait has a bound.** `PIPELINE_RUN_TIMEOUT_SECONDS` is thirty minutes, not infinity, and the
@@ -30,17 +30,24 @@ from kubernetes import client
 
 from cli.commands import tekton
 from conftest import PIPELINE_NAMESPACE
-from kubementat.tekton_utils import (PIPELINE_RUN_POLL_INTERVAL_SECONDS,
-                                     PIPELINE_RUN_TIMEOUT_SECONDS, TektonUtils)
+from kubementat.infrastructure.tekton import runs
+from kubementat.infrastructure.tekton.runs import (PIPELINE_RUN_POLL_INTERVAL_SECONDS,
+                                                   PIPELINE_RUN_TIMEOUT_SECONDS)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 # The Task ships inside the package: `REPO_ROOT` is where this file's own source reads
 # come from, and the manifest is asked of the resolver the install path uses.
 TASK = tekton_ci_path("tasks", "run-tekton-pipeline.yml")
+# The wait loop's own home, which the sleep rule below reads. The loop moved out of
+# `tekton_utils.py` with the rest of the run path (P4-3), so a rule over the file that used to hold
+# it would now be a rule about a file with no loop in it.
+WAIT_SOURCE = REPO_ROOT / "src" / "kubementat" / "infrastructure" / "tekton" / "runs.py"
+# Every module of the package, for the half of the rule that holds everywhere: an import-time sleep
+# is a hang for whoever imports the module, whichever module of the package it sits in.
+TEKTON_PACKAGE = sorted((REPO_ROOT / "src" / "kubementat" / "infrastructure" / "tekton").glob("*.py"))
 # What the Task and the deleted script looked like before this ticket, for the comparisons that
 # need the other side of a change that has not been committed yet.
 SCRIPT_REVISION = "40f281b"
-SOURCE = REPO_ROOT / "src" / "kubementat" / "tekton_utils.py"
 
 
 def pipelinerun(status, reason, message, name="hello-run-abcdef"):
@@ -95,17 +102,17 @@ class Clock:
 
 
 def waiter(replies):
-    """A `TektonUtils` with no cluster and no config load, reading the replies this test wrote.
+    """The two things the waiter reads, in the order its signature takes them now.
 
-    `TektonUtils.__new__` is the shape `test_a_namespace_that_cannot_be_deleted_is_not_mistaken_for_success`
-    uses for the same reason: the constructor wants a kubeconfig and a `platform_config`, and the
-    method under test needs neither.
+    This used to build a `TektonUtils` with `__new__` -- the shape
+    `test_a_namespace_that_cannot_be_deleted_is_not_mistaken_for_success` uses for the same reason:
+    the constructor wants a kubeconfig and a `platform_config`, and the loop under test needs
+    neither. The loop lost its `self`, so what it used to read off the instance is returned as the
+    arguments it now takes: the client that answers the reads, and the two config answers it lists
+    objects by. The namespace is passed per call, exactly as it was before.
     """
-    utils = TektonUtils.__new__(TektonUtils)
-    utils.config = SimpleNamespace(TEKTON_API_GROUP="tekton.dev", TEKTON_API_VERSION="v1")
-    utils.pipeline_namespace = PIPELINE_NAMESPACE
-    utils.kubernetes_utils = FakePipelineRunReads(replies)
-    return utils
+    return (FakePipelineRunReads(replies),
+            SimpleNamespace(TEKTON_API_GROUP="tekton.dev", TEKTON_API_VERSION="v1"))
 
 
 def test_the_defaults_are_the_bound_the_ci_task_can_rely_on():
@@ -121,10 +128,10 @@ def test_the_defaults_are_the_bound_the_ci_task_can_rely_on():
 
 def test_a_run_that_reports_true_finishes_the_wait_with_zero():
     """The one answer that lets the step exit successfully, and the reads it took to get there."""
-    utils = waiter([pipelinerun("True", "Succeeded", "All Tasks have completed")])
+    cluster, config = waiter([pipelinerun("True", "Succeeded", "All Tasks have completed")])
 
-    assert utils.wait_for_pipeline_run("hello-run-abcdef", PIPELINE_NAMESPACE) == 0
-    assert utils.kubernetes_utils.read_count == 1, "a finished run is polled a second time"
+    assert runs.wait_for_pipeline_run(cluster, config, "hello-run-abcdef", PIPELINE_NAMESPACE) == 0
+    assert cluster.read_count == 1, "a finished run is polled a second time"
 
 
 def test_a_run_that_reports_false_fails_and_hands_over_the_reason_and_the_message(caplog):
@@ -134,11 +141,11 @@ def test_a_run_that_reports_false_fails_and_hands_over_the_reason_and_the_messag
     `PipelineRunValidationFailed` has to be told apart from a `Failed` Task by something other than
     the word "failed". Both halves of the condition are in the message the operator sees.
     """
-    utils = waiter([pipelinerun("False", "Failed",
+    cluster, config = waiter([pipelinerun("False", "Failed",
                                 "Tasks Failed: \"build\"; step \"compile\" exited with code 1")])
 
     with caplog.at_level(logging.ERROR):
-        code = utils.wait_for_pipeline_run("hello-run-abcdef", PIPELINE_NAMESPACE)
+        code = runs.wait_for_pipeline_run(cluster, config, "hello-run-abcdef", PIPELINE_NAMESPACE)
 
     assert code == 1
     assert "PipelineRunValidationFailed" not in caplog.text  # not invented; the real reason is
@@ -154,15 +161,15 @@ def test_a_run_that_is_still_running_is_asked_again_at_the_interval_it_was_given
     sleep of one poll interval between two reads is the whole of the timing claim this makes; the
     bound is a different test's problem.
     """
-    utils = waiter([pipelinerun("Unknown", "Running", "Tasks Running"),
+    cluster, config = waiter([pipelinerun("Unknown", "Running", "Tasks Running"),
                     pipelinerun("True", "Succeeded", "All Tasks have completed")])
     slept = []
 
-    code = utils.wait_for_pipeline_run("hello-run-abcdef", PIPELINE_NAMESPACE,
+    code = runs.wait_for_pipeline_run(cluster, config, "hello-run-abcdef", PIPELINE_NAMESPACE,
                                        poll_interval_seconds=3, sleep=slept.append)
 
     assert code == 0
-    assert utils.kubernetes_utils.read_count == 2
+    assert cluster.read_count == 2
     assert slept == [3], f"the poll interval did not survive the loop: {slept}"
 
 
@@ -175,8 +182,10 @@ def test_the_bound_expires_on_a_run_that_never_finishes_and_says_what_it_was_wai
     five reads, four sleeps, the last one shortened so it lands on the deadline instead of past it.
     """
     clock = Clock()
-    monkeypatch.setattr("kubementat.tekton_utils.time.monotonic", clock.monotonic)
-    utils = waiter([pipelinerun("Unknown", "Running", "Tasks Running")])
+    # The loop reads `monotonic` through `runs`, so the string names `runs`: patching a module
+    # that no longer calls it reaches nothing, and the bound would be measured on a wall clock.
+    monkeypatch.setattr("kubementat.infrastructure.tekton.runs.time.monotonic", clock.monotonic)
+    cluster, config = waiter([pipelinerun("Unknown", "Running", "Tasks Running")])
     slept = []
 
     def sleep(seconds):
@@ -184,13 +193,13 @@ def test_the_bound_expires_on_a_run_that_never_finishes_and_says_what_it_was_wai
         clock.advance(seconds)
 
     with caplog.at_level(logging.ERROR):
-        code = utils.wait_for_pipeline_run("hello-run-abcdef", PIPELINE_NAMESPACE,
+        code = runs.wait_for_pipeline_run(cluster, config, "hello-run-abcdef", PIPELINE_NAMESPACE,
                                            poll_interval_seconds=3, timeout_seconds=10,
                                            sleep=sleep)
 
     assert code == 1, "running out of time is not a success"
     assert slept == [3, 3, 3, 1], f"the sleep schedule missed the bound: {slept}"
-    assert utils.kubernetes_utils.read_count == 5
+    assert cluster.read_count == 5
     assert "had not finished after 10s" in caplog.text, caplog.text
     assert "kmt tekton list" in caplog.text, "the timeout says nothing about where to look next"
 
@@ -202,11 +211,11 @@ def test_a_run_that_vanishes_is_reported_as_gone_and_not_as_a_traceback_or_a_han
     immediately rather than after the bound — and it is the one place where "not found" has to be
     said in words a human can act on, because the run was there a moment ago.
     """
-    utils = waiter([client.exceptions.ApiException(status=404, reason="Not Found")])
+    cluster, config = waiter([client.exceptions.ApiException(status=404, reason="Not Found")])
     slept = []
 
     with caplog.at_level(logging.ERROR):
-        code = utils.wait_for_pipeline_run("hello-run-abcdef", PIPELINE_NAMESPACE, sleep=slept.append)
+        code = runs.wait_for_pipeline_run(cluster, config, "hello-run-abcdef", PIPELINE_NAMESPACE, sleep=slept.append)
 
     assert code == 1
     assert slept == [], "a run that is not there is waited for"
@@ -221,10 +230,10 @@ def test_a_read_that_is_refused_is_not_relabelled_as_a_missing_run():
     that says no would come out as a run that is not there, which is a lie about the cluster and not
     a graceful degradation.
     """
-    utils = waiter([client.exceptions.ApiException(status=403, reason="Forbidden")])
+    cluster, config = waiter([client.exceptions.ApiException(status=403, reason="Forbidden")])
 
     with pytest.raises(client.exceptions.ApiException) as error:
-        utils.wait_for_pipeline_run("hello-run-abcdef", PIPELINE_NAMESPACE)
+        runs.wait_for_pipeline_run(cluster, config, "hello-run-abcdef", PIPELINE_NAMESPACE)
     assert error.value.status == 403
 
 
@@ -235,11 +244,11 @@ def test_the_wait_reads_the_api_and_never_a_command_line_tool(fake_binaries):
     is the same empty-log assertion the keypair guard makes, applied to the polling path: an empty
     log after a real wait means nothing was execed.
     """
-    utils = waiter([pipelinerun("Unknown", "Running", "not yet"),
+    cluster, config = waiter([pipelinerun("Unknown", "Running", "not yet"),
                     pipelinerun("Unknown", "Running", "not yet"),
                     pipelinerun("True", "Succeeded", "done")])
 
-    assert utils.wait_for_pipeline_run("hello-run-abcdef", PIPELINE_NAMESPACE,
+    assert runs.wait_for_pipeline_run(cluster, config, "hello-run-abcdef", PIPELINE_NAMESPACE,
                                        poll_interval_seconds=0, sleep=lambda _seconds: None) == 0
 
     assert operations_from_calls(fake_binaries.take_calls()) == []
@@ -248,12 +257,15 @@ def test_the_wait_reads_the_api_and_never_a_command_line_tool(fake_binaries):
 def test_importing_the_module_that_waits_sleeps_nothing():
     """No import-time sleep, because a module that waits must be importable by a test that does not.
 
-    The check is structural and not timed: nothing at module level calls `time.sleep`, and the only
-    sleep in the file is the one inside the waiter's own loop. A `time.sleep` sitting beside the
-    definition would be a hang that only shows up for whoever imports this on a busy machine.
+    The check is structural and not timed, and the split is what pulls it into two rules. **The
+    import half is a rule over the package:** an import-time `time.sleep` is a hang for whoever
+    imports that module, and after P4-3 the wait lives in `runs.py` while the other modules are
+    imported next to it, so reading the one file that used to hold the loop would no longer be
+    reading the package that is actually imported. **The once-per-loop half stays per file**, and
+    it is stated about the file that waits: exactly one `sleep_seconds` call, inside the loop. A
+    `time.sleep` sitting beside a definition would be a hang that only shows up for whoever imports
+    the module on a busy machine.
     """
-    tree = ast.parse(SOURCE.read_text(encoding="utf-8"), filename=str(SOURCE))
-
     def calls_excluding_definitions(node):
         found = []
         for child in ast.iter_child_nodes(node):
@@ -263,10 +275,13 @@ def test_importing_the_module_that_waits_sleeps_nothing():
             found.extend(calls_excluding_definitions(child))
         return found
 
-    slept = [node for node in calls_excluding_definitions(tree)
-             if ast.unparse(node.func) in ("time.sleep", "sleep_seconds")]
-    assert slept == [], f"the module sleeps when it is imported, at line {slept}"
+    for module in TEKTON_PACKAGE:
+        tree = ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
+        slept = [node for node in calls_excluding_definitions(tree)
+                 if ast.unparse(node.func) in ("time.sleep", "sleep_seconds")]
+        assert slept == [], f"{module.name} sleeps when it is imported, at line {slept}"
 
+    tree = ast.parse(WAIT_SOURCE.read_text(encoding="utf-8"), filename=str(WAIT_SOURCE))
     waiter_calls = [node for node in ast.walk(tree)
                     if isinstance(node, ast.Call) and ast.unparse(node.func) == "sleep_seconds"]
     assert len(waiter_calls) == 1, "the loop sleeps somewhere other than in the one place that waits"
@@ -350,7 +365,7 @@ def test_a_run_file_that_cannot_be_read_is_reported_as_a_failure(fixture_repo, d
                                                                  recorded_api):
     """The other half of the defect, with a different cause: nothing was applied, so it is not a 0.
 
-    Before this, `return 1` out of `TektonUtils.run_pipeline` reached a command module that ignored
+    Before this, `return 1` out of `runs.run_pipeline` reached a command module that ignored
     it. A typo in a run file's name produced a pipeline that said it had started a run.
     """
     from click.testing import CliRunner

@@ -25,9 +25,12 @@ from cli.context import kmt_context
 from cli.helpers import team_option
 from kubementat.automations.install import pipelines as install_pipelines_slice
 from kubementat.automations.uninstall import pipelines as uninstall_pipelines_slice
-from kubementat.tekton_utils import (PIPELINE_RUN_POLL_INTERVAL_SECONDS,
-                                     PIPELINE_RUN_TIMEOUT_SECONDS, TektonUtils)
-from kubementat.infrastructure.tekton import generation
+from kubementat.tekton_utils import TektonUtils
+# The run path moved out of `tekton_utils.py` (P4-3), so it is reached through the module the same
+# way `generation` is: a name imported past its home is a second binding, and the seam the tests
+# patch is the module the code actually runs. The class stays behind for one thing only -- the
+# state every one of these calls used to read off `self` -- and P4-6 deletes it with the file.
+from kubementat.infrastructure.tekton import generation, runs
 
 
 @click.group(name='tekton',
@@ -58,25 +61,29 @@ def tekton():
                    f"default, so a terminal behaves as it always did; this is what "
                    f"tekton_ci/tasks/run-tekton-pipeline.yml runs.")
 @click.option('--poll-interval', 'poll_interval_seconds', type=int,
-              default=PIPELINE_RUN_POLL_INTERVAL_SECONDS, show_default=True,
+              default=runs.PIPELINE_RUN_POLL_INTERVAL_SECONDS, show_default=True,
               help='Seconds between reads of the run, with --wait.')
 @click.option('--timeout', 'timeout_seconds', type=int,
-              default=PIPELINE_RUN_TIMEOUT_SECONDS, show_default=True,
+              default=runs.PIPELINE_RUN_TIMEOUT_SECONDS, show_default=True,
               help='Seconds to wait for the run before giving up on it, with --wait.')
 @kmt_context
 def run_pipeline(ctx, environment, team, pipeline_run_identifier, parallel, wait,
                  poll_interval_seconds, timeout_seconds):
+    # What the run path reads is still what a `Context` carries, so the object that carried it is
+    # still built here -- it is also where a run with no team is refused. `runs` does the work.
     tekton_utils = TektonUtils(ctx)
     if not pipeline_run_identifier:
         # List available pipeline runs
         if team:
-            tekton_utils.list_available_pipeline_runs()
+            runs.list_available_pipeline_runs(tekton_utils.config, tekton_utils.team)
         return 0
 
-    started = tekton_utils.run_pipeline(pipeline_run_identifier, parallel)
+    started = runs.run_pipeline(tekton_utils.kubernetes_utils, tekton_utils.config,
+                                tekton_utils.environment, tekton_utils.team,
+                                pipeline_run_identifier, parallel)
     # The first command on this surface that propagates an exit code, and the reason it is worth
     # breaking the pattern for is on the other end of the line: `tekton_ci/tasks/run-tekton-pipeline.yml`
-    # reads this command's status as its own. `TektonUtils.run_pipeline` has always had something to
+    # reads this command's status as its own. `runs.run_pipeline` has always had something to
     # say about a run it refused to start -- a parallel-run refusal, an unreadable file, a cluster that
     # took the object back -- and Click throws away whatever a command function returns, so `return 1`
     # was a no-op and an outer pipeline reported success over a run that never existed. Nothing else on
@@ -85,8 +92,9 @@ def run_pipeline(ctx, environment, team, pipeline_run_identifier, parallel, wait
         raise SystemExit(1)
 
     if wait:
-        raise SystemExit(tekton_utils.wait_for_pipeline_run(
-            started, tekton_utils.pipeline_namespace, poll_interval_seconds, timeout_seconds))
+        raise SystemExit(runs.wait_for_pipeline_run(
+            tekton_utils.kubernetes_utils, tekton_utils.config, started,
+            tekton_utils.pipeline_namespace, poll_interval_seconds, timeout_seconds))
 
 # --------------------------------------------
 # LIST TEKTON RESOURCES
@@ -95,8 +103,11 @@ def run_pipeline(ctx, environment, team, pipeline_run_identifier, parallel, wait
 @click.argument('team',envvar='TEAM')
 @kmt_context
 def list(ctx, environment, team):
+    # The same construction for the same reason: the namespace the four kinds are listed in and the
+    # client they are listed with are both what a `Context` answers through.
     tekton_utils = TektonUtils(ctx)
-    tekton_utils.list_all_tekton_resources()
+    runs.list_all_tekton_resources(tekton_utils.kubernetes_utils, tekton_utils.config,
+                                   tekton_utils.pipeline_namespace)
 
 # --------------------------------------------
 # CLEANUP PIPELINE RUNS
@@ -109,7 +120,8 @@ def list(ctx, environment, team):
 @kmt_context
 def cleanup_pipeline_runs(ctx, environment, team, filter):
     tekton_utils = TektonUtils(ctx)
-    tekton_utils.cleanup_pipeline_runs(filter)
+    runs.cleanup_pipeline_runs(tekton_utils.kubernetes_utils, tekton_utils.config,
+                               tekton_utils.pipeline_namespace, filter)
 
 # --------------------------------------------
 # SETUP PIPELINES
@@ -138,7 +150,11 @@ def setup_triggers(ctx, environment, team):
 @team_option()
 @kmt_context
 def setup_cleanup_job(ctx, environment, team):
-    TektonUtils(ctx).setup_cleanup_job()
+    # `setup_cleanup_job` asks the namespace question of `config` and takes the client from the
+    # `Context`, so the pair of them is what this command hands over.
+    tekton_utils = TektonUtils(ctx)
+    runs.setup_cleanup_job(tekton_utils.kubernetes_utils, tekton_utils.config,
+                           tekton_utils.environment, tekton_utils.team)
 
 # --------------------------------------------
 # GENERATE DEPLOY PIPELINE
