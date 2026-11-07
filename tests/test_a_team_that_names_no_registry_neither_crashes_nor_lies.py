@@ -10,9 +10,10 @@ which names no key, no file, and no verb — and it did it on a tree from `confi
 shape a new operator is handed. The lane found it by getting further than it ever had: `config init`
 stopped dying on its own commit, and the next capability was this one.
 
-`tekton_utils` had already been fixed for the identical bug on the cleaner's pull secret, and its
-docstring records what the bash used to do: it read the block unconditionally, so a team with no
-credentials got a Secret containing four `null`s and a pod the registry rejected without naming any of
+`infrastructure/tekton/runs.py` had already been fixed for the identical bug on the cleaner's pull
+secret, and its docstring records what the bash used to do: it read the block unconditionally, so a
+team with no credentials got a Secret containing four `null`s and a pod the registry rejected
+without naming any of
 them. The two call sites now agree, and the difference between "nothing to do" and "crashed trying" is
 the claim this file makes.
 

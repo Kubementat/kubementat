@@ -55,8 +55,9 @@ class CiUtils:
         # None` is a pod in the wrong namespace rather than an error. Nothing on this path opens
         # `platform_config/{environment}/<team>/` -- `ci_image` reads `env_static` for the image
         # reference -- so the reason says the namespace and not a file. The `Config` itself is the
-        # same lazy construction `TektonUtils` uses: nothing is read until it is asked for, and
-        # every read goes through `Config.get`, which names the file a missing key lives in.
+        # lazy construction `core/identity/registry.py` builds it with, `preload_configs=False`: not
+        # reading a file until it is asked for, and every read going through `Config.get`, which
+        # names the file a missing key lives in.
         self.environment = ctx.environment
         self.team = ctx.require_team("the namespace `-n` puts the CI container in")
         self.config = ctx.config

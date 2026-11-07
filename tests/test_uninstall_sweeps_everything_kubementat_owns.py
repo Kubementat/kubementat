@@ -171,7 +171,8 @@ FOREIGN_ALLOY_RELEASE = {"name": "grafana-agent", "namespace": "observability",
 # Two halves, and they are identified two different ways -- which is the whole of what the sweep
 # under test has to get right.
 #
-# The release half is sourced, not imagined: `TektonUtils.install()` `kubectl apply`s the three
+# The release half is sourced, not imagined: `install()` in `infrastructure/tekton/install.py`
+# `kubectl apply`s the three
 # pinned manifests, and the rows below are what those files declared when they were read on
 # 2026-10-30 (`pipeline/v1.17.1/release.yaml`, `triggers/v0.37.2/release.yaml`,
 # `dashboard/v0.73.0/release-full.yaml`). What is true of all sixteen of the bindings those
@@ -221,7 +222,7 @@ RELEASE_RBAC = {
     ],
 }
 
-# kubementat's own writes: stamped, as `tekton_utils._trigger_labels` and
+# kubementat's own writes: stamped, as `infrastructure/tekton/triggers.py`'s `_trigger_labels` and
 # `automations/install/pipelines.py`'s `_setup_pipelines_setup_role_bindings` stamp them, and bound wherever the team's
 # `static.json` said. The label is what takes them, so a binding that lands in a namespace this
 # command owns but is not labelled still goes -- and one that is labelled goes whatever its
@@ -1672,7 +1673,8 @@ def test_the_cluster_scoped_rbac_the_release_manifests_applied_is_swept(uninstal
                                                                        caplog):
     """The RBAC the Tekton releases put outside every namespace goes too, and it is not labelled.
 
-    `TektonUtils.install()` applies the three release manifests with `kubectl apply -f`, so
+    `install()` (`infrastructure/tekton/install.py`) applies the three release manifests with
+    `kubectl apply -f`, so
     everything in them arrives with upstream's `app.kubernetes.io/part-of` and without kubementat's
     `managed-by` claim -- which is the reason a sweep that only reads its own label finds one object
     out of thirty-odd. What all sixteen of the bindings those manifests ship have in common is that

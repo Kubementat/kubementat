@@ -270,7 +270,8 @@ def service_account_token(ctx, environment, namespace, service_account_name):
 
 
 # kubementat's claim on the Secrets it writes. Every other caller sends it
-# (`tekton_utils._trigger_labels`, `CLEANUP_JOB_LABELS`); the bash script sent none, so a Secret
+# (`infrastructure/tekton/triggers.py`'s `_trigger_labels`,
+# `infrastructure/tekton/runs.py`'s `CLEANUP_JOB_LABELS`); the bash script sent none, so a Secret
 # this Task created and a Secret the operator created with `kubectl` were indistinguishable.
 SECRET_MANAGEMENT_LABELS = {"managed-by": "kubementat"}
 

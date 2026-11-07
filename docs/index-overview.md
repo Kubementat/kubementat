@@ -26,8 +26,9 @@ what cluster is each one" from configuration alone. **Every one of those 27 take
 positional or an `ENVIRONMENT` envvar, and nothing about the cluster, the team or the environment has a
 default any more** — `--team` is a `team_option()` on four commands and nothing else. **This section once described a 5-module,
 18-command, flat CLI that delegated to shell scripts via `subprocess.check_call()`; that is the 2026-06
-tree.** Two commands still start a process (`kmt tekton setup-pipelines`, whose `TektonUtils.install()`
-applies the release YAMLs, and `kmt run-ci-container`, which runs `kubectl run` against the CI image);
+tree.** Two commands still start a process (`kmt tekton setup-pipelines`, whose
+`install()` in `src/kubementat/infrastructure/tekton/install.py` applies the release YAMLs, and
+`kmt run-ci-container`, which runs `kubectl run` against the CI image);
 everything else goes through `kubementat.shell.run`, and `subprocess` is imported in no module but
 `kubementat/shell.py`. The `tunnel-vault-ui` naming bug is fixed (`def tunnel_vault_ui`, registered) and
 the duplicate `kmt` entry point was deleted — `src/cli/kmt.py` is the only one. See
@@ -37,7 +38,7 @@ the duplicate `kmt` entry point was deleted — `src/cli/kmt.py` is the only one
 Single Docker image `ubuntu-ci-minimal` — the universal CI worker for all Tekton pipeline tasks. Contains 15+ tools (kubectl, helm, helmfile, tkn, linkerd, yq, skopeo, git-crypt, mysql-client, python3). Multi-arch (amd64/arm64). Deeply integrated with Tekton CI pipelines. No multi-stage builds.
 
 ### src/ (31 Python modules, 12,350 LOC — this directory was `lib/` until FIN-01 moved it; measured with `find src -name '*.py' -not -path '*egg-info*' -not -path '*__pycache__*' -exec wc -l {} +`)
-Core library. `automation.py` is the largest module at 2,504 lines (`wc -l`), handling initialization, installation, secrets, tunnels, and uninstall. `kubernetes_utils.py` (1,590) wraps the kubernetes client for namespaces, secrets, service accounts, RBAC, custom resources, and port-forwarding. `tekton_utils.py` (2,274) handles pipeline listing, running (with placeholder replacement), and cleanup. `config.py` loads encrypted/encrypted JSON configs from `platform_config/`. `helm_utils.py` wraps helmfile apply. `crypto_utils.py` generates SSH/GPG keys. `utils.py` is deleted (FIN-08) — the body of this section described a 7-module, ~2,000-line `lib/`, and that is the tree before FIN-01.
+Core library. `automation.py` is the largest module at 2,504 lines (`wc -l`), handling initialization, installation, secrets, tunnels, and uninstall. `kubernetes_utils.py` (1,590) wraps the kubernetes client for namespaces, secrets, service accounts, RBAC, custom resources, and port-forwarding. `infrastructure/tekton/` (five modules, the split of one file) handles pipeline listing, running (with placeholder replacement, which lives in `generation.py`), and cleanup. `config.py` loads encrypted/encrypted JSON configs from `platform_config/`. `helm_utils.py` wraps helmfile apply. `crypto_utils.py` generates SSH/GPG keys. `utils.py` is deleted (FIN-08) — the body of this section described a 7-module, ~2,000-line `lib/`, and that is the tree before FIN-01.
 
 ### platform_config/ (2 environments, team-based hierarchy)
 JSON config files organized as `platform_config/{env}/{team}/`. Two levels: environment-level (`static.json`, `static.encrypted.json`) and team-level. Nothing in this tree is a copy of a shipped file: 11
@@ -78,8 +79,9 @@ The paragraph below is the 2026-06 description of this directory and is kept as 
 **2026-10-28 correction.** The two generator scripts this section used to name —
 `generate_deploy_pipeline_from_template.sh` (71) and `generate_trigger_config_from_templates.sh` (123) —
 are deleted. `kmt tekton-generate-deploy-pipeline` and `kmt tekton-generate-triggers` are their
-replacements (`src/cli/commands/tekton.py`, `TektonUtils.generate_deploy_pipeline()` /
-`generate_trigger_configs()` in `src/kubementat/tekton_utils.py`), and neither script had a caller
+replacements (`src/cli/commands/tekton.py`, `generate_deploy_pipeline()` /
+`generate_trigger_configs()` in `src/kubementat/infrastructure/tekton/generation.py`), and neither
+script had a caller
 anywhere in `src/`, which is why a command is the replacement and not a library call. The count is now
 **the 12 scripts and 717 LOC of that date** under `scripts/`, not ~60. It has moved
 twice since: the pair below took one, and `run_pipeline.sh` (FIN-51b, `85f1ea8`) took the rest. The
@@ -296,7 +298,7 @@ User → kmt CLI → src/kubementat/ → Kubernetes Cluster
 | 6 | `src/kubementat/tekton_utils.py` | Pipeline execution — placeholder replacement logic |
 | 8 | `pyproject.toml` | Project config — entry point, dependencies |
 | 9 | `src/cli/commands/tekton.py` | Tekton CLI — still calls shell scripts |
-| 10 | ~~`scripts/automation/tekton/generate_trigger_config_from_templates.sh`~~ | **Deleted 2026-10-28 (FIN-23)**, along with `generate_deploy_pipeline_from_template.sh` (FIN-22) — both had no caller in `src/`. The migration targets are now `kmt tekton-generate-triggers` and `kmt tekton-generate-deploy-pipeline`, backed by `TektonUtils.generate_trigger_configs()` / `generate_deploy_pipeline()` in `tekton_utils.py`, which is row 6 above |
+| 10 | ~~`scripts/automation/tekton/generate_trigger_config_from_templates.sh`~~ | **Deleted 2026-10-28 (FIN-23)**, along with `generate_deploy_pipeline_from_template.sh` (FIN-22) — both had no caller in `src/`. The migration targets are now `kmt tekton-generate-triggers` and `kmt tekton-generate-deploy-pipeline`, backed by `generate_trigger_configs()` / `generate_deploy_pipeline()` in `src/kubementat/infrastructure/tekton/generation.py` |
 
 ---
 

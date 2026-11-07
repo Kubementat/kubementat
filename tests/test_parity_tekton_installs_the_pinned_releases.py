@@ -1,4 +1,5 @@
-"""Parity: the Tekton installer script, and `TektonUtils.install()` that replaced it.
+"""Parity: the Tekton installer script, and the `install()` of
+`src/kubementat/infrastructure/tekton/install.py` that replaced it.
 
 The bash half of every comparison here is a **record**, not a run: the script is deleted, and what
 it sent to the cluster is written down below. `git show 3f9d80b --stat | grep -i tekton` still

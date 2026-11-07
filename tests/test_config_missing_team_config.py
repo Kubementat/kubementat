@@ -93,7 +93,7 @@ def test_missing_encrypted_team_config_is_reported_the_same_way(tmp_path):
 
 
 def test_lazy_loading_reads_environment_config_before_any_team_read(tmp_path):
-    """This is the HelmUtils/TektonUtils shape: preload_configs=False, then get(...)."""
+    """This is the `Context`'s shape: preload_configs=False, then get(...)."""
     root, platform_config_dir = make_repo_root(tmp_path, team_files=())
     config = config_for(root, platform_config_dir, preload_configs=False)
 

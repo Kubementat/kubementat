@@ -21,7 +21,8 @@ better-behaved and not a regression:
 * **bash wrote no labels.** `kubectl create secret generic` puts nothing on the object, so a Secret
   this Task created and a Secret an operator created by hand were indistinguishable. The command
   sends kubementat's `managed-by` claim, the same one every other Secret-writing caller sends
-  (`tekton_utils._trigger_labels`, `CLEANUP_JOB_LABELS`).
+  (`infrastructure/tekton/triggers.py`'s `_trigger_labels`,
+  `infrastructure/tekton/runs.py`'s `CLEANUP_JOB_LABELS`).
 * **a nested value is refused.** The script piped every key through `jq tostring` and got something
   out whatever it was: `[object Object]` on the `jq` that predates 1.7, compact JSON after. Which
   spelling a pod had to read back was a function of the image, so the command names the key and

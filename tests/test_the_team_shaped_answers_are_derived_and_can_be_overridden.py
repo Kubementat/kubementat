@@ -271,8 +271,8 @@ def test_a_run_that_names_no_team_refuses_and_names_the_key_and_the_missing_answ
     """No team is no input, and `None` is not a stand-in for a team's name.
 
     Two refusals, one rule: a category read says this configuration has no team, and the rule itself
-    says which key it was asked for and what it is missing. The second is the one `tekton_utils.py
-    's `PipelineNamespaceNotConfiguredError` docstring exists to explain — a namespace that answered
+    says which key it was asked for and what it is missing. The second is the one `errors.py`'s
+    `PipelineNamespaceNotConfiguredError` docstring exists to explain — a namespace that answered
     `None` put eight objects into a namespace called `null`, and every one of the nine errors that
     followed named the cluster and none of them named the key.
     """

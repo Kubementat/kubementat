@@ -26,8 +26,9 @@ derivation test in the tree.
 
 **The team is the rule's whole input, so it is a precondition.** A run that named no team cannot be
 answered from nothing: `require_team` raises `TeamNotSuppliedError` naming the key and saying what is
-missing. `None` would be the silent answer `tekton_utils.py:59-68` had to be given a guard for, and
-that guard's own docstring is the tree's best evidence that a silent `None` once shipped.
+missing. `None` would be the silent answer the Tekton constructor had to be given a guard for, and that
+guard — `require_team` itself, read where a team-scoped path is about to be taken — is what earned a team
+for every Tekton path until the class dissolved.
 
 **One of the five is a structure, and it is the one a reader gets wrong.** `SSH_DEPLOY_KEYS` is a
 list of entries, and the rule reaches inside an entry: it answers the entry's `TARGET_NAMESPACE` when

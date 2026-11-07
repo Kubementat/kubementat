@@ -625,7 +625,8 @@ def recorded_api(monkeypatch):
 
     Two answers are seeded: a service account that exists, and a Service whose webhook has
     endpoints. `patch_service_account_with_pull_secrets` reads the account before it patches it, and
-    `TektonUtils.install` holds the Triggers release until the Pipelines webhook is reachable — so a
+    `infrastructure/tekton/install.py`'s `install` holds the Triggers release until the Pipelines
+    webhook is reachable — so a
     `None` in either place is a cluster that answers nothing, which is a bug the test would invent
     rather than one it is testing. A test that cares about the unreachable case says so with its own
     `answer()`.
@@ -650,9 +651,10 @@ def recorded_api(monkeypatch):
                         metadata=V1ObjectMeta(name=name, namespace=namespace),
                         subsets=[V1EndpointSubset(
                             addresses=[V1EndpointAddress(ip="10.42.0.1")])]))
-    # The seam for a test that cannot inject one. A test driving `Automation` or `TektonUtils` gets
-    # its `KubernetesUtils` from a constructor it does not control, so the one place it can put the
-    # recorder is the target's own client factory — which is also the only line in `src/` that
+    # The seam for a test that cannot inject one. A test driving a verb of `automations/` builds its
+    # `KubernetesUtils` from the `Context` inside a function it does not control, so the one place it
+    # can put the recorder is the target's own client factory — which is also the only line in `src/`
+    # that
     # touches a credential, so replacing it is exactly what a suite that must not read the machine
     # asks for. `KubernetesUtils` then takes the injected path: a client that is not an
     # `ApiClient` is used as the API object, which is what this recorder already is.

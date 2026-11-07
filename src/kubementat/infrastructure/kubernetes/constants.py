@@ -33,8 +33,10 @@ DEPLOYMENT_LABEL = "app.kubernetes.io/instance"
 
 # kubementat's claim on an object, in two parts because they are one fact and reading one of them
 # from the air is how a sweep deletes somebody else's work. Every writer in this product sends the
-# pair (`tekton_utils.helm_deployer_cluster_role`, `tekton_utils._trigger_labels`,
-# `tekton_utils.CLEANUP_JOB_LABELS`, the role bindings in `automation._setup_pipelines_setup_role_bindings`,
+# pair (`infrastructure/tekton/install.py`'s `helm_deployer_cluster_role`,
+# `infrastructure/tekton/triggers.py`'s `_trigger_labels`,
+# `infrastructure/tekton/runs.py`'s `CLEANUP_JOB_LABELS`, the role bindings in
+# `automations/install/pipelines.py`'s `_setup_pipelines_setup_role_bindings`,
 # the Secrets in `cli/commands/kubernetes.py`), and this module is where the pair is said to mean
 # what it means: `create_or_replace_secret` documents that an unlabelled object is
 # indistinguishable from one the operator wrote.

@@ -16,7 +16,8 @@
 # with whatever decides what rewrites mean on Traefik (stripPrefix/replacePath middlewares), not here.
 #
 # The class name is spelled rather than substituted, on purpose: kubementat's only substitution
-# mechanism (the placeholder table in src/kubementat/tekton_utils.py, the one that fills the
+# mechanism (the placeholder table in
+# src/kubementat/infrastructure/tekton/generation.py, the one that fills the
 # BASE_DOMAIN placeholder) refuses a template whose key no static.json answers for, which is how an
 # unset BASE_DOMAIN never becomes a host ending in `.null`. Wiring TRAEFIK_INGRESS_CLASS through it
 # would make trigger generation fail for every environment initialized before that key existed, and

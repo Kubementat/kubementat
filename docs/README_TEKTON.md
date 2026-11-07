@@ -48,8 +48,8 @@ kubectl api-versions | grep tekton.dev
 
 ## Where the release manifests come from
 
-`TektonUtils.install()` (`src/kubementat/tekton_utils.py`, run by `uv run kmt install`) builds every
-URL it applies from one constant, `TEKTON_RELEASE_BASE_URL` (currently
+`install()` (`src/kubementat/infrastructure/tekton/install.py`, run by `uv run kmt install`) builds
+every URL it applies from one constant, `TEKTON_RELEASE_BASE_URL` (currently
 `https://infra.tekton.dev/tekton-releases`), and never from a second place. Upstream moved where
 releases are served and the bucket this address used to name holds only what it happened to keep,
 which is why the base URL and the three pins land in one commit: pinning a version the old bucket no
@@ -431,13 +431,14 @@ uv run tkm tekton-uninstall-pipelines dev dev2
 # Notes
 
 ## Manual Tekton Uninstall
-The URLs are the same ones `TektonUtils.install()` applies, so the pinned versions come from the same
+The URLs are the same ones `install()` in
+`src/kubementat/infrastructure/tekton/install.py` applies, so the pinned versions come from the same
 place — do not hand-write them here:
 ```
 # uninstall tekton dashboard
 BASE_URL=https://infra.tekton.dev/tekton-releases
 ENVIRONMENT=dev   # the environment whose pins these URLs carry
-# the same keys TektonUtils reads, from the environment's own static.json; the shipped defaults they
+# the same keys `install()` reads, from the environment's own static.json; the shipped defaults they
 # start from are the template inside the installed kmt
 PIPELINE_VERSION=$(jq -r .TEKTON_VERSION_PIPELINE "platform_config/$ENVIRONMENT/static.json")
 DASHBOARD_VERSION=$(jq -r .TEKTON_VERSION_DASHBOARD "platform_config/$ENVIRONMENT/static.json")

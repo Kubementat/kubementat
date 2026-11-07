@@ -312,8 +312,8 @@ def _refuse_obsolete_team_trigger_dir(config: Config) -> None:
     say where the path lives now, and stop. Not silently migrated (the content is the operator's
     to review) and not deleted (deleting a directory is a decision, not a side effect of adding
     one); kubementat rewrites no operator tree, so the refusal is the whole of the safety here. The
-    reader refuses the same directory, in `tekton_utils.py`, so the two sentences name the same
-    two paths.
+    reader refuses the same directory, in `infrastructure/tekton/generation.py`, so the two
+    sentences name the same two paths.
     """
     if config.team is None:
         return
@@ -503,9 +503,10 @@ def init_configuration(root, environment, team=None, answers=(), encrypted_answe
     #
     # Two candidates from the same census are deliberately not created, for the same reason each:
     #   * `<environment>/tekton/triggers` — no property names it and nothing in `src/` opens it: the
-    #     apply path that reads a trigger directory is team-only (`tekton_utils.py:1488-1514`, and
-    #     the note above `Config.tekton_env_task_dir` says so). A directory that exists and is read by
-    #     nothing is the shape of the tree the epic deleted.
+    #     apply path that reads a trigger directory is team-only (`_apply_team_trigger_resources`
+    #     in `infrastructure/tekton/triggers.py`, and the note above `Config.tekton_env_task_dir`
+    #     says so). A directory that exists and is read by nothing is the shape of the tree the
+    #     epic deleted.
     #   * `<environment>/tekton/pipeline-runs` — same: no reader. This one is also output rather than
     #     input, written when a run happens and not looked for as a layer.
     # `values/` and `values.encrypted/` are not created either: helmfile's `isFile` guard exists

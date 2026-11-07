@@ -457,7 +457,8 @@ def test_no_environment_triggers_directory_ships_with_this_layer(tmp_path):
     """An earlier design put one there; nothing reads one, so shipping one would be a dead directory.
 
     The read path that applies a trigger directory is team-only
-    (`tekton_utils.py`'s `_apply_team_trigger_resources`), so an environment `triggers/` directory
+    (`infrastructure/tekton/triggers.py`'s `_apply_team_trigger_resources`), so an environment
+    `triggers/` directory
     is a directory that exists and is read by nothing — the shape of the `kubementat_components/`
     tree that was deleted for that exact reason. The *team* trigger directory later moved under
     `tekton/`; the environment half still has no reader, so it still ships nothing, and it lands

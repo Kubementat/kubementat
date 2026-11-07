@@ -24,7 +24,7 @@ from kubementat.automations.install import pipelines
 from kubementat.automations.install.pipelines import setup_pipelines
 from kubementat.errors import TektonControllerWithoutConfiguredApiError
 # Both halves of the split this file's checks reach are module-qualified (P4-2 for the preflight,
-# P4-3 for the listings that ask the version question): `tekton_utils.py` keeps no copy of either
+# P4-3 for the listings that ask the version question): no shim keeps a copy of either
 # name, and the seam a patch reaches is the module that runs.
 from kubementat.infrastructure.tekton import preflight, runs
 

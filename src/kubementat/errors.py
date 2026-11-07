@@ -286,8 +286,9 @@ class GrafanaUnauthorizedError(GrafanaError):
 # which is the whole content of this group's edit: the classes, their messages, and their reasons are
 # unchanged, and each now answers to `KubementatError`.
 #
-# `IngressTargetExistsError` is the overwrite rule, and the rule is `TektonUtils`'s: kubementat does
-# not replace what it has already handed the operator. The other two are the argument checks the bash
+# `IngressTargetExistsError` is the overwrite rule, and the rule is `automations/ingress.py`'s:
+# kubementat does not replace what it has already handed the operator. The other two are the
+# argument checks the bash
 # script made by passing `$1`-`$3` unquoted, where a missing argument and an empty one looked the same
 # and a blank host applies and routes nothing.
 # ---------------------------------------------------------------------------
@@ -446,7 +447,8 @@ class ObsoleteTriggerDirectoryError(KubementatError):
 # ---------------------------------------------------------------------------
 # What the Tekton install refuses to start with.
 #
-# Five answers from `tekton_utils.py`'s install path, and they used to be five bare `Exception`
+# Five answers from the Tekton install path -- raised now by whichever module of
+# `infrastructure/tekton/` is asked -- and they used to be five bare `Exception`
 # classes with no parent, which is the whole content of this group's edit: the classes, their
 # messages and their reasons are unchanged, and each now answers to `KubementatError`, so a caller
 # that asks "did kubementat refuse me, or did Python break" can tell.
@@ -467,8 +469,8 @@ class ObsoleteTriggerDirectoryError(KubementatError):
 # because the question it answers is not *which cluster does this command mean* — that question
 # resolved perfectly well, and then the cluster was refused for what it does not serve.
 # `TektonWebhookNotReachableError` is a timing question about a Service name that is a constant in
-# `tekton_utils.py` and not something the operator picked; it is the answer the E2E suite was
-# missing when an apply died on a webhook nobody had chosen.
+# `infrastructure/tekton/install.py` and not something the operator picked; it is the answer the E2E
+# suite was missing when an apply died on a webhook nobody had chosen.
 # ---------------------------------------------------------------------------
 
 

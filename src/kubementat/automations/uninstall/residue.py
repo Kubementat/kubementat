@@ -148,8 +148,10 @@ def delete_cluster_scoped_rbac_kubementat_owns(ctx, plan: dict) -> list:
     came from:
 
     * **kubementat's own claim.** `metadata.labels["managed-by"] == "kubementat"`, the label
-      every writer in this product sends (`tekton_utils.helm_deployer_cluster_role`,
-      `bindings_and_interceptors_cluster_role`, `cleanup_job_cluster_role`,
+      every writer in this product sends (`infrastructure/tekton/install.py`'s
+      `helm_deployer_cluster_role`, `infrastructure/tekton/triggers.py`'s
+      `bindings_and_interceptors_cluster_role`, `infrastructure/tekton/runs.py`'s
+      `cleanup_job_cluster_role`, `automations/install/pipelines.py`'s
       `_setup_pipelines_setup_role_bindings`). It is kubementat saying so, which is
       the only claim a teardown needs before it deletes something.
     * **who the binding binds.** A `ClusterRoleBinding` every one of whose subjects is a
@@ -276,8 +278,9 @@ def _rbac_is_claimed_by_kubementat(item: dict) -> bool:
     '''
     Whether kubementat's own `managed-by` claim is on this object.
 
-    The same label the install path stamps (`automation.py`'s role bindings,
-    `tekton_utils._trigger_labels`, `CLEANUP_JOB_LABELS`), read off the object rather than
+    The same label the install path stamps (`automations/install/pipelines.py`'s role bindings,
+    `infrastructure/tekton/triggers.py`'s `_trigger_labels`,
+    `infrastructure/tekton/runs.py`'s `CLEANUP_JOB_LABELS`), read off the object rather than
     matched against a name so a renamed object is still the object it is.
     '''
     labels = ((item.get("metadata") or {}).get("labels")) or {}

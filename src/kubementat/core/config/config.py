@@ -268,8 +268,10 @@ class Config:
     #
     # `triggers/` is deliberately absent here, and that is a measured decision and not an
     # omission: the read path that applies a trigger directory is team-only
-    # (`tekton_utils.py:1488-1514`), so an environment `triggers/` directory would be a directory
-    # that exists and is read by nothing — the dead `kubementat_components/` tree, recreated. The
+    # (`_apply_team_trigger_resources`, which reads the team's directory in
+    # `infrastructure/tekton/triggers.py`), so an environment `triggers/` directory would be a
+    # directory that exists and is read by nothing — the dead `kubementat_components/` tree,
+    # recreated. The
     # *team* trigger directory sits under `tekton/` (`tekton_team_trigger_dir` below);
     # the environment half lands only when something actually opens one.
     @property
@@ -303,7 +305,8 @@ class Config:
 
         Under `tekton/`, like its three siblings. A tree that still has the old `<team>/triggers/`
         directory is refused by name, at
-        the point of reading (`tekton_utils.py`'s `_apply_team_trigger_resources`) and at the
+        the point of reading (`infrastructure/tekton/triggers.py`'s `_apply_team_trigger_resources`,
+        through `generation.py`'s guard) and at the
         point of scaffolding (`config_init`), because silently applying nothing is the failure
         the move would otherwise create. kubementat records no rename table and rewrites nothing, so
         moving that content is the operator's and is decided beside this path, not by it.

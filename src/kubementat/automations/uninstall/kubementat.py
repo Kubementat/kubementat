@@ -131,8 +131,9 @@ def uninstall_kubementat(ctx, assume_yes: bool = False) -> None:
     # Cluster-scoped first: it is the only object the namespace sweep below cannot reach.
     kubernetes_utils.delete_cluster_role(HELM_DEPLOYER_CLUSTER_ROLE)
 
-    # ... and the rest of the class it is one object from. The release manifests `TektonUtils`
-    # applies put RBAC on the cluster that belongs to no release secret, no namespace and no
+    # ... and the rest of what the install path wrote. The release manifests
+    # `infrastructure/tekton/install.py` applies put RBAC on the cluster that belongs to no release
+    # secret, no namespace and no
     # name written down in this checkout, so the line above leaves every one of them and every
     # namespace delete below reaches none of it. Which ones are kubementat's is answered by the
     # cluster, before any namespace goes -- `delete_cluster_scoped_rbac_kubementat_owns` says
