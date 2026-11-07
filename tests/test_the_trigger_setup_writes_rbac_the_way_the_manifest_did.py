@@ -1,6 +1,6 @@
 """What one team's trigger setup asks the cluster for, and what it refuses to ask.
 
-`TektonUtils.setup_triggers()` is the Python half of the flow. Everything in this file is judged
+`triggers.setup_triggers()` is the Python half of the flow. Everything in this file is judged
 against the two shapes the deleted script had: nine heredocs it piped into `kubectl apply -f -`,
 two Secrets written from `static.encrypted.json`, and one directory of generated manifests. The
 comparison of the heredoc half against the script's record is in
@@ -27,17 +27,8 @@ import pytest
 from kubernetes import client
 
 from kubementat.errors import PipelineNamespaceNotConfiguredError, ResourceWithoutNameError
-from kubementat.tekton_utils import (
-    BINDINGS_AND_INTERCEPTORS_CLUSTER_ROLE_NAME,
-    TRIGGER_CONTROLLER_ROLE_BINDING_NAME,
-    TRIGGER_CONTROLLER_ROLE_NAME,
-    TRIGGER_CONTROLLER_SERVICE_ACCOUNT_NAME,
-    TRIGGER_WEBHOOK_JOB_ROLE_BINDING_NAME,
-    TRIGGER_WEBHOOK_JOB_ROLE_NAME,
-    TRIGGER_WEBHOOK_JOB_SERVICE_ACCOUNT_NAME,
-    TektonUtils,
-    webhook_job_cluster_role_binding_name,
-)
+from kubementat.infrastructure.tekton import triggers
+from kubementat.tekton_utils import TektonUtils
 from cluster_fixture import configuration_only_context
 
 # The team-level trigger directory: platform_config, under `tekton/`,
@@ -96,12 +87,17 @@ def run_the_setup(fixture_repo, recorded_api, **team_static_overrides):
     """`setup_triggers()`, the way `kmt install` runs it: real config, fake cluster.
 
     The config is the fixture's `platform_config`, read through `Config` the same way the CLI's
-    `kmt tekton setup-triggers` reads it, and the cluster is the recording client. `TektonUtils`
-    is constructed the same way the two call sites construct it, so a test that reaches a namespace
-    the fixture did not write is testing the code and not a mock.
+    `kmt tekton setup-triggers` reads it, and the cluster is the recording client. The `Context`
+    is handed to `triggers.setup_triggers` twice over -- as itself, and inside the `TektonUtils`
+    that still refuses a run with no team -- the same way the two call sites in `src/` hand it
+    over, so a test that reaches a namespace the fixture did not write is testing the code and not
+    a mock.
     """
     fixture_repo.team_static(**team_static_overrides)
-    TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team)).setup_triggers()
+    context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
+    utils = TektonUtils(context)
+    triggers.setup_triggers(context, utils.kubernetes_utils, utils.config, utils.environment,
+                            utils.team)
     return recorded_api.operations()
 
 
@@ -122,20 +118,20 @@ def test_the_setup_writes_the_rbac_a_webhook_needs_and_nothing_else(fixture_repo
     cluster_scope = [(op.kind, op.name) for op in operations
                      if op.namespace is None and op.kind in ("clusterrole", "clusterrolebinding")]
     assert cluster_scope == [
-        ("clusterrole", BINDINGS_AND_INTERCEPTORS_CLUSTER_ROLE_NAME),
-        ("clusterrolebinding", webhook_job_cluster_role_binding_name(fixture_repo.team)),
+        ("clusterrole", triggers.BINDINGS_AND_INTERCEPTORS_CLUSTER_ROLE_NAME),
+        ("clusterrolebinding", triggers.webhook_job_cluster_role_binding_name(fixture_repo.team)),
     ], cluster_scope
     assert [(op.verb, op.kind, op.namespace, op.name) for op in operations if op.namespace][:6] == [
         ("ensure", "serviceaccount", fixture_repo.pipeline_namespace,
-         TRIGGER_CONTROLLER_SERVICE_ACCOUNT_NAME),
-        ("ensure", "role", fixture_repo.pipeline_namespace, TRIGGER_CONTROLLER_ROLE_NAME),
+         triggers.TRIGGER_CONTROLLER_SERVICE_ACCOUNT_NAME),
+        ("ensure", "role", fixture_repo.pipeline_namespace, triggers.TRIGGER_CONTROLLER_ROLE_NAME),
         ("ensure", "rolebinding", fixture_repo.pipeline_namespace,
-         TRIGGER_CONTROLLER_ROLE_BINDING_NAME),
-        ("ensure", "role", fixture_repo.pipeline_namespace, TRIGGER_WEBHOOK_JOB_ROLE_NAME),
+         triggers.TRIGGER_CONTROLLER_ROLE_BINDING_NAME),
+        ("ensure", "role", fixture_repo.pipeline_namespace, triggers.TRIGGER_WEBHOOK_JOB_ROLE_NAME),
         ("ensure", "serviceaccount", fixture_repo.pipeline_namespace,
-         TRIGGER_WEBHOOK_JOB_SERVICE_ACCOUNT_NAME),
+         triggers.TRIGGER_WEBHOOK_JOB_SERVICE_ACCOUNT_NAME),
         ("ensure", "rolebinding", fixture_repo.pipeline_namespace,
-         TRIGGER_WEBHOOK_JOB_ROLE_BINDING_NAME),
+         triggers.TRIGGER_WEBHOOK_JOB_ROLE_BINDING_NAME),
     ], recorded_api.as_str()
     # Everything else this flow writes is a Secret or a trigger manifest, asserted elsewhere.
     assert {op.kind for op in operations} == {"clusterrole", "clusterrolebinding", "role",
@@ -209,12 +205,15 @@ def test_the_shared_role_is_labelled_once_and_the_team_objects_twice(
         if document and document.get("metadata"):
             sent[document["metadata"]["name"]] = document["metadata"].get("labels") or {}
 
-    assert sorted(sent[BINDINGS_AND_INTERCEPTORS_CLUSTER_ROLE_NAME]) == ["managed-by"], \
+    assert sorted(sent[triggers.BINDINGS_AND_INTERCEPTORS_CLUSTER_ROLE_NAME]) == ["managed-by"], \
         "the one ClusterRole is shared, so it names no team"
-    for name in (TRIGGER_CONTROLLER_ROLE_NAME, TRIGGER_CONTROLLER_SERVICE_ACCOUNT_NAME,
-                 TRIGGER_WEBHOOK_JOB_ROLE_NAME, TRIGGER_WEBHOOK_JOB_SERVICE_ACCOUNT_NAME,
-                 TRIGGER_CONTROLLER_ROLE_BINDING_NAME, TRIGGER_WEBHOOK_JOB_ROLE_BINDING_NAME,
-                 webhook_job_cluster_role_binding_name(fixture_repo.team)):
+    for name in (triggers.TRIGGER_CONTROLLER_ROLE_NAME,
+                 triggers.TRIGGER_CONTROLLER_SERVICE_ACCOUNT_NAME,
+                 triggers.TRIGGER_WEBHOOK_JOB_ROLE_NAME,
+                 triggers.TRIGGER_WEBHOOK_JOB_SERVICE_ACCOUNT_NAME,
+                 triggers.TRIGGER_CONTROLLER_ROLE_BINDING_NAME,
+                 triggers.TRIGGER_WEBHOOK_JOB_ROLE_BINDING_NAME,
+                 triggers.webhook_job_cluster_role_binding_name(fixture_repo.team)):
         assert sorted(sent[name]) == ["managed-by", "team"], (name, sent[name])
 
 
@@ -279,15 +278,27 @@ def test_no_triggers_configured_is_a_state_and_not_a_failure(
     run_the_setup(fixture_repo, recorded_api)
 
     assert not trigger_dir(fixture_repo).exists()
-    assert not [op for op in recorded_api.operations()
+    operations = recorded_api.operations()
+    # The half the name of this test promises is "the RBAC still goes in", so the RBAC is asked for
+    # here and not merely cleared of the wrong kinds: an assertion that only rules kinds out is a
+    # claim a flow that wrote nothing satisfies, and that is the silent answer this suite is not
+    # allowed to fall into.
+    assert {op.kind for op in operations} >= {"clusterrole", "clusterrolebinding", "role",
+                                              "rolebinding", "serviceaccount"}, \
+        recorded_api.as_str()
+    assert not [op for op in operations
                 if op.kind not in ("clusterrole", "clusterrolebinding", "role", "rolebinding",
                                    "serviceaccount", "secret")]
 
     # A directory that exists but is empty is the same answer: nothing to apply, nothing to say.
+    # The two runs are compared against each other and not against themselves: `X == X` is a claim
+    # about nothing, and a flow that asked the cluster for nothing would pass it. The claim kept
+    # here is the product's -- the empty directory changes what is applied and not what is written.
+    first = recorded_api.operations()
     trigger_dir(fixture_repo).mkdir(parents=True)
     recorded_api.calls.clear()
     run_the_setup(fixture_repo, recorded_api)
-    assert recorded_api.operations() == recorded_api.operations()
+    assert recorded_api.operations() == first, recorded_api.as_str()
 
 
 def test_the_old_trigger_directory_is_refused_by_name_and_nothing_is_applied(

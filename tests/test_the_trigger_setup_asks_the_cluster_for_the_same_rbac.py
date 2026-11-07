@@ -1,4 +1,4 @@
-"""Parity: `TektonUtils.setup_triggers()` and the 269-line script that used to do it.
+"""Parity: `triggers.setup_triggers()` and the 269-line script that used to do it.
 
 The bash half here is a **record**, not a run: `setup_triggers.sh` is deleted by this commit, and
 what it asked the cluster for is written down below, in the heredocs it piped into `kubectl apply
@@ -23,7 +23,8 @@ test for exactly that reason.
 
 from conftest import FIXTURE_ENVIRONMENT, RecordedCall
 from cluster_parity import compare, operations_from_calls
-from kubementat.tekton_utils import WEBHOOK_SECRETS
+from kubementat.infrastructure.tekton import triggers
+from kubementat.tekton_utils import TektonUtils
 from cluster_fixture import configuration_only_cluster, configuration_only_context
 
 # The cluster both sides address, for the same reason the cleanup-job comparison spells it out:
@@ -210,7 +211,7 @@ def the_script_asks(tokens=()):
                           ["apply"] + (["-n", namespace] if namespace else []) + ["-f", "-"],
                           cwd="/", stdin=document)
              for namespace, document in RBAC_HEREDOCS]
-    for secret_name, key in WEBHOOK_SECRETS:
+    for secret_name, key in triggers.WEBHOOK_SECRETS:
         if secret_name in tokens:
             calls.append(RecordedCall("kubectl", ["apply", "-n", NAMESPACE, "-f", "-"], cwd="/",
                                       stdin=webhook_secret_document(secret_name, tokens[secret_name])))
@@ -223,12 +224,17 @@ def the_python_setup(fixture_repo, tokens=None):
     `tokens` is what the team's `static.encrypted.json` answers for the two webhook keys, because
     the webhook half is judged by which Secrets arrive and what is in them. None leaves the
     fixture's generated passwords in place.
-    """
-    from kubementat.tekton_utils import TektonUtils
 
+    The `Context` is handed over twice for the reason the two call sites in `src/` hand it over
+    twice: `triggers.setup_triggers` reads the team refusal out of the `TektonUtils` it is given,
+    and builds its own client out of the `Context` for the half that applies a directory.
+    """
     if tokens is not None:
         fixture_repo.team_static_encrypted(**tokens)
-    TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team)).setup_triggers()
+    context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
+    utils = TektonUtils(context)
+    triggers.setup_triggers(context, utils.kubernetes_utils, utils.config, utils.environment,
+                            utils.team)
     return None
 
 
@@ -237,7 +243,7 @@ def compare_the_two(fixture_repo, recorded, tokens=None):
     the_python_setup(fixture_repo, tokens)
     compare(the_script_asks(tokens or {}), recorded.operations(),
             context="what setup_triggers.sh asked the cluster, against what "
-                    "TektonUtils.setup_triggers() asks it now")
+                    "triggers.setup_triggers() asks it now")
 
 
 def test_the_rbac_the_python_writes_is_the_rbac_the_heredocs_wrote(fixture_repo, dry_run_env,
@@ -300,6 +306,11 @@ def test_the_two_writes_are_idempotent_and_the_record_only_had_to_be_run_once(
     """
     the_python_setup(fixture_repo)
     first = recorded_api.operations()
+    # The comparison below is run against run, never against a constant, so it says nothing at all
+    # if the recording client was never asked: two silences are equal. This half names the eight
+    # writes the flow owes, which is the assertion that fails when the code stops asking.
+    assert {op.kind for op in first} >= {"clusterrole", "clusterrolebinding", "role",
+                                         "rolebinding", "serviceaccount"}, recorded_api.as_str()
     recorded_api.calls.clear()
 
     the_python_setup(fixture_repo)

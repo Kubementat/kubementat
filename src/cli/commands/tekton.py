@@ -30,7 +30,7 @@ from kubementat.tekton_utils import TektonUtils
 # way `generation` is: a name imported past its home is a second binding, and the seam the tests
 # patch is the module the code actually runs. The class stays behind for one thing only -- the
 # state every one of these calls used to read off `self` -- and P4-6 deletes it with the file.
-from kubementat.infrastructure.tekton import generation, runs
+from kubementat.infrastructure.tekton import generation, runs, triggers
 
 
 @click.group(name='tekton',
@@ -139,7 +139,14 @@ def setup_pipelines(ctx, environment, team):
 @click.argument('team',envvar='TEAM')
 @kmt_context
 def setup_triggers(ctx, environment, team):
-    TektonUtils(ctx).setup_triggers()
+    # The trigger group moved out of the class (P4-5), and this is the one call on this surface
+    # that still needs the object: the last half of the flow applies the team's directory through
+    # a client it builds from a `Context`, so the raw `Context` goes to the function as well as the
+    # client the class built. `TektonUtils` is constructed here for the reason it is constructed
+    # everywhere else on this file -- it is where a run with no team is refused.
+    tekton_utils = TektonUtils(ctx)
+    triggers.setup_triggers(ctx, tekton_utils.kubernetes_utils, tekton_utils.config,
+                            tekton_utils.environment, tekton_utils.team)
 
 # --------------------------------------------
 # SETUP TEKTON CLEANUP JOB

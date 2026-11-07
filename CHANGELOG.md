@@ -1,5 +1,107 @@
 # Unreleased
 
+- **The trigger group leaves `tekton_utils.py`, and the class is a constructor: `src/kubementat/infrastructure/tekton/triggers.py`
+  is the fifth and last module of the Tekton split.** Nine names — `setup_triggers`,
+  `_setup_trigger_rbac`, `_setup_webhook_secrets`, `_apply_team_trigger_resources` (four methods), and
+  `webhook_job_cluster_role_binding_name`, `_trigger_labels`, `bindings_and_interceptors_cluster_role`,
+  `trigger_controller_role`, `trigger_webhook_job_role` (five functions that were already module-level)
+  — plus the `TRIGGER_*` set, `BINDINGS_AND_INTERCEPTORS_CLUSTER_ROLE_NAME` and `WEBHOOK_SECRETS`.
+  `grep -n "def <moved name>" src/kubementat/tekton_utils.py` answers nothing for all nine, the file is
+  360 → 43 lines, and what is left is `__init__`, the team refusal, and the one import the constructor
+  needs — `import click` left with the code that used it, and so did `generation`, which P4-4 left on the
+  import line for one helper call that is now this module's. `TektonUtils.__init__` was not touched; its
+  body diffes empty against `HEAD`, which is what keeps
+  `test_the_commands_that_refused_a_team_they_do_not_read.py`'s `SURVIVORS` key answering. Per-name
+  deltas are in `.agent-work/P4-5-equivalence.md`: the method region is byte-identical to
+  `HEAD:src/kubementat/tekton_utils.py` lines 165-360 after a 4-space dedent and twelve substitutions,
+  all of them parameter swaps, and the module-level block is byte-identical to lines 16-146 except for
+  the one docstring paragraph this ticket adds (below).
+
+  **The `Context` decision, and it is the only one in this ticket that is not a move.** The other four
+  modules took `(kubernetes_utils, config, …)` because that is what their constructors read. This one
+  cannot: `_apply_team_trigger_resources` builds `KubernetesUtils(ctx)` itself on its way into
+  `apply.apply_resources`, and it has done that since the day it was Python. So the entry point is
+  `setup_triggers(ctx, kubernetes_utils, config, environment, team)` and the last half of the flow takes
+  `ctx` too — not instead of the state, but as well as it. The state stays a parameter because the team
+  refusal lives in `TektonUtils.__init__` until P4-6 dissolves it, and a function that read
+  `ctx.config` here would be answering the namespace question in a second place. What the two existing
+  callers had to give up is the one-expression form: `TektonUtils(ctx).setup_triggers()` becomes a
+  named object plus a call that hands the same `Context` to the module twice, once as itself and once
+  inside the client the constructor built from it. That is not decoration — a client built out of
+  anything other than that `Context` says which cluster the team's manifests land in, and the parity
+  comparison is the thing that would notice.
+
+  **Two assertions that were not assertions, and the mutation that found them.** The recorder these
+  files consult is `recorded_api`, injected by patching `ClusterTarget.client`; the trigger tests
+  `monkeypatch` nothing else, so the only way to check that it is load-bearing is to stop it answering.
+  With the three calls in `setup_triggers` replaced by a no-op — the flow asks the cluster for nothing —
+  14 of the 17 trigger tests failed, and two of the survivors were not survivors of a *correct* design:
+  `test_no_triggers_configured_is_a_state_and_not_a_failure` ended with
+  `assert operations == operations`, a self-comparison that says nothing, and
+  `test_the_two_writes_are_idempotent_…` compared two runs that had both recorded nothing. Both are
+  fixed, one by comparing the two runs against each other and one by naming the five RBAC kinds the flow
+  owes, and under the same mutation the count goes 14 failed → 16 failed of 17. `WEBHOOK_SECRETS` is read
+  from `triggers` now and it is read through the module for that reason: patching
+  `triggers.WEBHOOK_SECRETS` to one entry makes
+  `test_a_configured_webhook_token_becomes_the_same_secret_either_way` fail with the record short one
+  Secret, which is the test noticing that the record is built from the home and not from a copy.
+
+  **Two things the mutations said that are worth having written down.** Removing
+  `generation._refuse_obsolete_team_trigger_dir(config)` fails exactly one test —
+  `test_the_old_trigger_directory_is_refused_by_name_and_nothing_is_applied` — so the module-qualified
+  cross-module call is proved consulted, and `generation` stays bound as a module rather than unpacked.
+  Replacing the inline `KubernetesUtils(ctx)` with the client that was handed in changes nothing:
+  all 17 pass, because both clients resolve through the same patched `ClusterTarget.client`. The recorder
+  cannot adjudicate that decision, which is why it was made from the body.
+
+  **The `managed-by` label's home is this module.** `_trigger_labels` is the rule, and five places
+  restate the pair instead of importing it — `automations/uninstall/residue.py:280`,
+  `infrastructure/kubernetes/constants.py:36`, `cli/commands/kubernetes.py:273`,
+  `tests/test_uninstall_sweeps_everything_kubementat_owns.py:224` and
+  `tests/test_a_secret_is_created_from_the_keys_of_a_json_file.py:24` — and all five keep their spelling,
+  because none of them imports it: the uninstaller reads the label off the object it is sweeping and the
+  CLI stamps its own. The docstring on `_trigger_labels` now says this, so the sentence a reader has to
+  update is findable from the code, which is the only way this ticket could leave them alone and still
+  not lose the rule.
+
+  **Consumers repointed, per file.** `src/cli/commands/tekton.py` — the `setup-triggers` command, and the
+  `triggers` import added to the line that already carried `generation` and `runs`.
+  `src/kubementat/automations/install/kubementat.py` — the same call, still reached through a
+  `TektonUtils` it constructs for the refusal; the sentence P4-4 wrote about a team-less library caller
+  finding out "at `setup_triggers`" is still true, unchanged. The other four tests that name the trigger
+  flow (`test_applying_a_directory_applies_what_is_actually_in_it.py`,
+  `test_a_secret_is_created_from_the_keys_of_a_json_file.py`, `test_command_execution_policy.py`,
+  `test_generated_deploy_pipelines_and_trigger_configs_are_written_where_they_are_read.py`,
+  `test_uninstall_sweeps_everything_kubementat_owns.py`) were run, not edited: they read prose and
+  configuration and touch no name this ticket moved. The 11 tests in
+  `test_the_manifest_layers_apply_product_then_environment_then_team.py` are the census's row D — under a
+  mutation that stops the trigger flow asking the cluster for anything, all 11 pass, which is the proof
+  that they drive `setup_pipelines` and not this module. The prose that still points a reader at
+  `tekton_utils.py` for trigger code (`core/config/config.py:306`, `config_init.py:315` and `:506`,
+  `uninstall/residue.py:151`, `automations/uninstall/kubementat.py`, and
+  `test_the_manifest_layers…py:460`) is deferred to P4-6 with the rest of it.
+
+  **DAG, measured.** Four new edges: `automations.install.kubementat → triggers`,
+  `triggers → errors`, `triggers → kubernetes.apply`, `triggers → generation`; the last is the only edge
+  this module follows inside the package, and it is the direction the checker's own arithmetic agrees
+  with — adding `generation → triggers` in a probe makes the checker print
+  `triggers → generation → triggers` and exit 1, so "no cycles" here is a result and not a blind spot.
+  The `tekton_utils →` edges go from three (`errors`, `kubernetes.apply`, `generation`) to one
+  (`kubernetes`) because a class and not a submodule is the only thing the constructor imports; same
+  dependency, different spelling, and the checker's `from pkg import name` rule is what spells it that
+  way. `cli/commands/tekton.py` is outside the scanned root, so its new edge to `triggers` is not
+  counted; it is a command module importing a module of the infrastructure layer, which is the direction
+  every other command already reads.
+
+  Suite 1779 passed / 1 skipped, `import_graph.py` exit 0, no cycles, no layer violations.
+
+  | you were reaching for | it is now |
+  |---|---|
+  | `TektonUtils.setup_triggers()` | `infrastructure.tekton.triggers.setup_triggers(ctx, kubernetes_utils, config, environment, team)` |
+  | `TektonUtils._setup_trigger_rbac(ns)`, `._setup_webhook_secrets(ns)`, `._apply_team_trigger_resources(ns)` | `triggers._setup_trigger_rbac(kubernetes_utils, ns, team)`, `triggers._setup_webhook_secrets(kubernetes_utils, config, ns, team)`, `triggers._apply_team_trigger_resources(ctx, config, ns, team)` |
+  | `tekton_utils.webhook_job_cluster_role_binding_name(team)`, `._trigger_labels(team, team_scoped)`, `.bindings_and_interceptors_cluster_role()`, `.trigger_controller_role(team)`, `.trigger_webhook_job_role(team)` | `triggers.<same name>`, same arguments |
+  | `tekton_utils.TRIGGER_*`, `.BINDINGS_AND_INTERCEPTORS_CLUSTER_ROLE_NAME`, `.WEBHOOK_SECRETS` | `triggers.<same name>` — `WEBHOOK_SECRETS` is read through the module, which is what lets the parity record be patched |
+
 - **The install half leaves `tekton_utils.py`: `src/kubementat/infrastructure/tekton/install.py` is the
   fourth module of the Tekton split.** Six names — `install`, `_install_helm_deployer_cluster_role`,
   `_wait_for_pipeline_webhook`, `_release_manifest_url`, `release_manifests_to_apply`,

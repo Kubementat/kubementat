@@ -25,7 +25,7 @@ from kubementat.infrastructure.kubernetes import KubernetesUtils
 # what changed is the module it is read from, and it is read from that module rather than bound
 # here because every tekton seam is patched by module object.
 from kubementat.infrastructure.tekton import install as tekton_install
-from kubementat.infrastructure.tekton import preflight
+from kubementat.infrastructure.tekton import preflight, triggers
 from kubementat.tekton_utils import TektonUtils
 
 from kubementat.automations.install.dependencies import (
@@ -122,7 +122,15 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
         # failures were treated as transient, which is how a script hid an object that was
         # already there in a shape `kubectl` disliked. Every operation setup_triggers does is
         # now create-or-replace, so a repeat run is the retry, and the retry is gone.
-        TektonUtils(ctx).setup_triggers()
+        #
+        # What the class still does for this line is the team refusal in its constructor; what the
+        # function needs is the same state plus the raw `Context`, because the last half of the
+        # flow builds its own client from a `Context` before it hands a directory to `apply`. That
+        # is the seam this call had to keep: a client built from anything else would say which
+        # cluster the team's manifests land in.
+        tekton_utils = TektonUtils(ctx)
+        triggers.setup_triggers(ctx, tekton_utils.kubernetes_utils, tekton_utils.config,
+                                tekton_utils.environment, tekton_utils.team)
     else:
         logging.info("Skipping Tekton pipeline configuration.")
 
