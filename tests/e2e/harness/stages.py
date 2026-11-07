@@ -2079,7 +2079,7 @@ print(json.dumps({"declared": dict(constants.PINNED_BINARY_VERSIONS), "observed"
                         restored and shown and round_trip == context,
                         "environment %s declares %s=%r again after the refusal (kmt config show "
                         "agreed=%s, the lane had written %r)"
-                        % (config.ENVIRONMENT, config.CLUSTER_KUBE_CONTEXT_KEY, round_trip, explained,
+                        % (config.ENVIRONMENT, config.CLUSTER_KUBE_CONTEXT_KEY, round_trip, shown,
                            context))
 
     def _expect_collision_refuses_and_writes_nothing(self):
@@ -3334,15 +3334,81 @@ print(json.dumps({"declared": dict(constants.PINNED_BINARY_VERSIONS), "observed"
         """
         removed = self.guest.run(command="rm -rf %s" % shlex.quote(config.GUEST_TREE), timeout=120, cwd="/")
         under_tree = re.compile(r"%s(/|\s|$)" % re.escape(config.GUEST_TREE))
-        listing = self.guest.run(command="ps -eo pid=,args=; for p in /proc/[0-9]*; do "
-                                         "printf '%s cwd=%s\\n' \"${p#/proc/}\" \"$(readlink $p/cwd 2>/dev/null)\"; done",
-                                 timeout=60, cwd="/")
-        processes = [line.strip() for line in listing.stdout.splitlines() if under_tree.search(line)]
+        listing = self.guest.run(command=self._residue_listing(), timeout=60, cwd="/")
+        processes = self._residue_lines(listing.stdout, under_tree)
         objects = self.cluster.kubectl("get", "pods,pv", "-A", "-o", "json", timeout=60)
         mounted = bool(objects.ok and under_tree.search(objects.stdout.replace('"', " ")))
         self.expect("uninstall-independent-of-tree", removed.ok and not processes and not mounted,
                     "guest copy deletable=%s, processes still using it=%s, cluster objects mounting it=%s"
                     % (removed.ok, processes[:5] or "none", mounted))
+
+    @staticmethod
+    def _residue_listing():
+        """One guest command: the process list, every cwd, and who the probe itself is.
+
+        The first two statements say it in the open because `ps` cannot tell a residue from the
+        check that looks for one. `$$` is the shell the listing runs in, and its ancestors include
+        the `sh -c` that sshd started for this very command -- whose argv carries the lane's
+        exports, and therefore `KUBEMENTAT_PLATFORM_CONFIG_DIR=/var/tmp/kmt-e2e/platform_config`
+        (config.DUMMY_ENV, wired into every guest command by `guest.Guest._remote`). That is a line
+        about the tree that is not about a residue, which is exactly what a bare `under_tree.search`
+        over the whole listing used to report as one.
+        """
+        return ("echo probe-self=$$; echo \"probe-ppid-map=$(ps -eo pid=,ppid= | awk '{printf \"%s:%s;\",$1,$2}')\"; "
+                "ps -eo pid=,args=; for p in /proc/[0-9]*; do "
+                "printf '%s cwd=%s\\n' \"${p#/proc/}\" \"$(readlink $p/cwd 2>/dev/null)\"; done")
+
+    @classmethod
+    def _residue_lines(cls, text, under_tree):
+        """The listing's lines that name a process using the tree, minus the probe's own tree.
+
+        The exclusion is by pid and never by the shape of the line: a predicate that recognised
+        `ps -eo` would hand the false positive straight back to the next harness command that
+        exports a path inside the checkout, which is the general form of this bug. A pid is the
+        probe's if it is `$$`, or descends from it, or is one of its ancestors -- the whole of the
+        probe's process tree and nothing else. A line that names no pid is kept untouched, so what
+        this rule can hide is only a process it has identified, and a canned listing that says
+        nothing about the probe's pids is filtered as if it said nothing at all.
+        """
+        parents = {}
+        probe = set()
+        self_pid = None
+        for line in text.splitlines():
+            if line.startswith("probe-self="):
+                pid = line[len("probe-self="):].strip()
+                self_pid = int(pid) if pid.isdigit() else None
+            elif line.startswith("probe-ppid-map="):
+                for pair in line[len("probe-ppid-map="):].split(";"):
+                    pid, _, ppid = pair.partition(":")
+                    if pid.strip().isdigit() and ppid.strip().isdigit():
+                        parents[int(pid)] = int(ppid)
+        if self_pid is not None:
+            probe.add(self_pid)
+            pid = self_pid
+            while pid not in (1, None):                      # sshd and whatever exported the tree
+                pid = parents.get(pid)
+                if pid is None or pid in probe:
+                    break
+                probe.add(pid)
+            children = {}
+            for pid, ppid in parents.items():
+                children.setdefault(ppid, []).append(pid)
+            stack = [self_pid]
+            while stack:                                     # and what the probe forked to ask
+                for child in children.get(stack.pop(), []):
+                    if child not in probe:
+                        probe.add(child)
+                        stack.append(child)
+        found = []
+        for line in text.splitlines():
+            if line.startswith("probe-"):
+                continue
+            head = line.strip().partition(" ")[0]
+            if head.isdigit() and int(head) in probe:
+                continue
+            if under_tree.search(line):
+                found.append(line.strip())
+        return found
 
     def _grafana_user_emails(self):
         """The emails the create command was given, read from the file that gives them.
