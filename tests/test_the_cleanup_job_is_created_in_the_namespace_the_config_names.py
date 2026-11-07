@@ -159,15 +159,16 @@ def configured_fixture(fixture_repo, namespace=NAMESPACE):
 
 
 def the_python_setup(fixture_repo, namespace=NAMESPACE):
+    from kubementat.infrastructure.kubernetes import KubernetesUtils
     from kubementat.infrastructure.tekton import runs
-    from kubementat.tekton_utils import TektonUtils
 
     configured_fixture(fixture_repo, namespace)
     # The same `Context` and the same seven cluster operations, handed over as the arguments the
-    # function now takes: what it used to read off the instance it is given. The class still
-    # resolves the client and still refuses a run with no team, so it is still built here.
-    utils = TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team))
-    runs.setup_cleanup_job(utils.kubernetes_utils, utils.config, utils.environment, utils.team)
+    # function now takes: what it used to read off the instance it was given is read off the
+    # `Context`. The team is asked for there too -- `setup_cleanup_job` refuses a run with no team
+    # before it creates the namespace, not five operations later on the way to the pull Secret.
+    context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
+    runs.setup_cleanup_job(context, KubernetesUtils(context), context.config, context.environment)
     return None
 
 

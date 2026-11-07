@@ -69,12 +69,13 @@ TUNNEL_FUNCTIONS = ("open_tunnel_grafana", "open_tunnel_tekton_dashboard", "open
 
 
 class RecordingContext:
-    """Stands in for the classes that take one `Context` -- `TektonUtils` and `HelmUtils` do.
+    """Stands in for the classes that take one `Context` -- `HelmUtils` does, and did.
 
     Records the `(environment, team)` pair the object carries, because that pair is what these
     tests assert; what changed is where it lives, not whether the command still decides it. The run
-    path reads that pair plus the config and a client off the object now (P4-3 moved the verb out
-    of the class and into `runs`), so all four are what it hands over.
+    path reads that pair plus the config and a client off the `Context` now (`P4-6` deleted
+    `TektonUtils`, which is what used to read them off and hand them on), so the recorder that
+    covered both services now covers only the one that is still a class.
     """
 
     def __init__(self, calls):
@@ -98,17 +99,19 @@ class RecordingContext:
 class RecordingVerb:
     """The run path's verb, recorded instead of run.
 
-    `setup_cleanup_job` is a function on `infrastructure.tekton.runs` now (P4-3), so a recorder
-    attached to the class would let the command run the real thing against a cluster this test was
-    never given. It records the `(environment, team)` pair the command handed it, which is the same
-    claim these tests made off the constructor.
+    `setup_cleanup_job` is a function on `infrastructure.tekton.runs` (P4-3), so a recorder
+    attached to a class would let the command run the real thing against a cluster this test was
+    never given. It records the `(environment, team)` pair off the `Context` the command handed
+    over, which is the claim these tests made off the constructor until P4-6 deleted it — and since
+    the class is what used to make that claim, the recorder now reads the pair from the one object
+    that carries it, so a flag that never reaches the `Context` still fails here.
     """
 
     def __init__(self, calls):
         self.calls = calls
 
-    def __call__(self, kubernetes_utils, config, environment, team, *args, **kwargs):
-        self.calls.append((environment, team))
+    def __call__(self, ctx, kubernetes_utils, config, environment, *args, **kwargs):
+        self.calls.append((environment, ctx.team))
         return None
 
 
@@ -132,9 +135,10 @@ class RecordingTunnels:
 @pytest.fixture
 def recorder(monkeypatch):
     calls = []
-    monkeypatch.setattr(tekton, "TektonUtils", RecordingContext(calls))
-    # The verb the command calls is on `runs` now (P4-3), so that is what gets intercepted; the
-    # class is only what the command reads its pair off.
+    # The `TektonUtils` seam is gone with the class (P4-6), and the run-path verb carries the pair
+    # the commands used to read off it, so intercepting the verb is both the recorder and the
+    # assertion. A patch that only covered a name the command never looks up would keep this file
+    # green while saying nothing, which is why the assertion below compares what the recorder saw.
     monkeypatch.setattr(runs, "setup_cleanup_job", RecordingVerb(calls))
     for name in TUNNEL_FUNCTIONS:
         monkeypatch.setattr(tunnels, name, RecordingTunnels(calls))

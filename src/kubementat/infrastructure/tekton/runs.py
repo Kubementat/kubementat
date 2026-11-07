@@ -9,11 +9,21 @@ a module that would have to import this one back.
 
 Methods lost `self` the way the rest of the split did, and what they read off the instance is a
 parameter now: `kubernetes_utils` and `config` first, then the fields the constructor resolved off a
-`Context` (`environment`, `team`) and the namespace it read out of `team_static`
-(`pipeline_namespace`) where the function needs one. Where the instance value was a *default* rather
-than a value a caller could hand over — the waiter's namespace — the read is written out at the
-point of use, because the value belongs to `Config` and not to the object that used to exist.
+`Context` (`environment`) and the namespace it read out of `team_static` (`pipeline_namespace`)
+where the function needs one. Where the instance value was a *default* rather than a value a caller
+could hand over — the waiter's namespace — the read is written out at the point of use, because the
+value belongs to `Config` and not to the object that used to exist.
 Nothing else in any body changed.
+
+The team refusal is this module's, in two of its functions, and it arrived here with `P4-6` because
+that is what deleting the class made necessary. `TektonUtils.__init__` used to refuse a run that
+named no team, before it had done anything at all, and when the class went the refusal had to land
+where the team is actually read: `run_pipeline` reads the namespace out of `team_static`, and
+`setup_cleanup_job` reads the registry credential out of `team_static_encrypted`. Both therefore
+take the `Context` first and ask it for the team as their first statement, so a library caller
+holding a team-less `Context` is refused before this module creates a namespace, writes a Secret,
+or applies a document. Every other function here needs no `Context` for that reason: they list, wait
+and prune through arguments that carry no team.
 
 `time` is bound here as a module, and that is not decoration. The wait's clock is patched in the
 tests by a dotted string (`…runs.time.monotonic`), and a string patch reaches the loop only if the
@@ -304,7 +314,20 @@ def list_pipeline_runs(kubernetes_utils, config, pipeline_namespace):
     return _list_tekton_resource(kubernetes_utils, config, pipeline_namespace, "pipelineruns")
 
 
-def list_all_tekton_resources(kubernetes_utils, config, pipeline_namespace):
+def list_all_tekton_resources(kubernetes_utils, config, pipeline_namespace=None):
+    """The four kinds, in the order `kmt tekton list` has always printed them.
+
+    The namespace is the team's `PIPELINE_NAMESPACE` when the caller does not name one. That
+    default is not a convenience: the class that used to sit in front of this call read the
+    namespace off `self` and handed it down, so with the class gone a command that lists has to
+    either read `team_static` in its own module — a namespace decision made in a second place,
+    which is the defect every namespace row of the census recites — or leave the read here, beside
+    the three functions that take it as an argument. It stays here, where `run_pipeline` already
+    reads it, and the refusal a team-less `Context` gets is `Config`'s own, ahead of the first
+    listing.
+    """
+    if pipeline_namespace is None:
+        pipeline_namespace = config.get('team_static').get('PIPELINE_NAMESPACE')
     list_pipelines(kubernetes_utils, config, pipeline_namespace)
     list_tasks(kubernetes_utils, config, pipeline_namespace)
     list_pipeline_runs(kubernetes_utils, config, pipeline_namespace)
@@ -312,7 +335,7 @@ def list_all_tekton_resources(kubernetes_utils, config, pipeline_namespace):
     return None
 
 
-def setup_cleanup_job(kubernetes_utils, config, environment, team) -> None:
+def setup_cleanup_job(ctx, kubernetes_utils, config, environment) -> None:
     """Set up the CronJob that prunes completed PipelineRuns, in the namespace config names.
 
     This is what `setup_tekton_pipelinerun_cleanup_job.sh` did, in one place instead of two
@@ -340,13 +363,27 @@ def setup_cleanup_job(kubernetes_utils, config, environment, team) -> None:
     `docker-registry-secret` block gets no Secret and a log line instead of one whose every
     field is the string `null`.
 
+    The `Context` is asked for the team before a single cluster object is touched, and the reason
+    it is asked so early is the pull Secret below. That read is the only thing on this path that
+    wants a team, and until `P4-6` dissolved `TektonUtils.__init__` it was the only refusal the
+    path had -- and it came one operation in, after `create_namespace` had already been asked. So a
+    run with no team did not merely fail late, it failed holding a namespace it had just made.
+    Asking first costs this command nothing (the `TEAM` line it prints is the same line, read off
+    the same `Context`) and takes that object back.
+
     Raises:
         kubementat.errors.CleanupJobImageNotConfiguredError: If the CI image cannot be named from configuration.
         KeyError: If `cluster-cronjobs` is not a kubementat component (a typo, not a rename).
         kubementat.errors.CommandExecutionError: Never by this method itself — it calls no
             `kubectl`.
         kubernetes.client.exceptions.ApiException: If the cluster refuses an object.
+        kubementat.errors.TeamNotSuppliedError: If this `Context` was given no team.
     """
+    # Asked first, before the component lookup below, for the reason written in the docstring: the
+    # pull Secret is this path's one team read, it is the next thing this function asks `Config`
+    # for, and the namespace it is addressed at is asked before it.
+    team = ctx.require_team("the credential the cleanup job's pods pull their image with")
+
     # `cluster-cronjobs` is the component, not the answer: the namespace itself is what the
     # environment's static.json gives back, with `constants.DEFAULT_NAMESPACES` underneath.
     namespace = config.component_namespace("cluster-cronjobs")
@@ -479,7 +516,12 @@ def _list_tekton_resource(kubernetes_utils, config, namespace, plural_identifier
     return objects
 
 
-def cleanup_pipeline_runs(kubernetes_utils, config, pipeline_namespace, filter):
+def cleanup_pipeline_runs(kubernetes_utils, config, pipeline_namespace=None, filter=None):
+    """Prune the runs of one team's namespace, with the same namespace default `list` uses."""
+    if pipeline_namespace is None:
+        pipeline_namespace = config.get('team_static').get('PIPELINE_NAMESPACE')
+    if filter is None:
+        filter = "succeeded"
     runs = list_pipeline_runs(kubernetes_utils, config, pipeline_namespace)
     logging.info(f"Cleaning up pipeline runs in namespace: {pipeline_namespace} with filter: {filter}")
 
@@ -562,12 +604,17 @@ def check_running_pipelines(kubernetes_utils, config, pipeline_namespace, pipeli
     return running_pipelines
 
 
-def run_pipeline(kubernetes_utils, config, environment, team, pipeline_run_file_identifier: str,
+def run_pipeline(ctx, kubernetes_utils, config, environment, pipeline_run_file_identifier: str,
                  allow_parallel_run: bool = False):
     """
     Run a Tekton pipeline using the specified parameters.
 
     Args:
+        ctx: The `Context` the command resolved. It is asked for the team as this function's first
+            statement, because the namespace this run is applied into is the team's
+            `PIPELINE_NAMESPACE`, and a run that named no team has no such namespace to run in. That
+            is the refusal `TektonUtils.__init__` performed until `P4-6` dissolved the class, and it
+            belongs ahead of the file read below rather than behind it.
         pipeline_run_file_identifier: Either a path to the run YAML file (`platform_config/dev/dev1/
             tekton/pipeline-runs/foo-run.yml`) or an identifier for it: a bare name in the team's
             directory (`foo-run.yml`, or `smoke/foo-run.yml`), or `global/` plus a name in the
@@ -581,6 +628,12 @@ def run_pipeline(kubernetes_utils, config, environment, team, pipeline_run_file_
         cluster that refused the object. The name is generated here and never derived again, so a
         caller that needs it takes it from the return value and never re-computes a postfix.
     """
+    # The team before the configuration, the configuration before the cluster. This is the one
+    # function of the split that reads a namespace out of `team_static` on its way to an `apply`, so
+    # it is the function the constructor's refusal had to survive in -- and the only user-visible
+    # difference the dissolution makes: the run now says "no team" as its first sentence instead of
+    # as the first thing the class did on the way here.
+    team = ctx.require_team("the namespace the Tekton objects live in")
 
     # Load configuration values
     env_static = config.get('env_static')
@@ -688,7 +741,8 @@ def run_pipeline(kubernetes_utils, config, environment, team, pipeline_run_file_
             plural_identifier="pipelineruns"
         )
 
-        # List pipeline runs using TektonUtils
+        # The listing that answers the question the apply just raised, through the same
+        # `list_pipeline_runs` the `tekton list` command uses.
         logging.info("Pipeline runs in namespace:")
         list_pipeline_runs(kubernetes_utils, config, pipeline_namespace)
         logging.info("######################")

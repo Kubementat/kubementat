@@ -49,7 +49,9 @@ PENDING_KUBECTL_READS = {
     "kubementat/infrastructure/helm.py": 0,
     "kubementat/user_management.py": 0,
     "kubementat/grafana_accounts.py": 0,
-    "kubementat/tekton_utils.py": 0,
+    # `kubementat/tekton_utils.py` is gone, so its zero entry went with the file: the key counted a
+    # module the scanner no longer walks, and a table entry that names a deleted path is not debt,
+    # it is a line that cannot be read.
     # The routing lane was the last module carrying debt here, and it is gone: its three discovery
     # reads used to go through a documented `reader=` seam whose records were argv lists, which is
     # how `ProbeOutcome.argv` stayed the command line a status report prints. That seam still exists,

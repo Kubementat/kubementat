@@ -1,5 +1,101 @@
 # Unreleased
 
+- **`TektonUtils` is deleted, the class is a name the tree no longer has, and the team refusal has
+  been moved to the reads that earn it: `src/kubementat/tekton_utils.py` is gone.** The first ticket
+  of the split (P4-1) through the fifth (P4-5) each carried a group of work out of that file, and what
+  it still held — 43 lines of docstring, one import, and a constructor — is deleted with no
+  replacement, because every name in it had a home before this ticket began. `src/kubementat/infrastructure/tekton/__init__.py`
+  stays exactly as it was: the five modules and no re-exports, per the split's §5 ruling, so every
+  patch seam is still one unambiguous module attribute and nothing here grew a second binding.
+  `python3 .agent-work/import_graph.py src` answers 0 edges pointing at the deleted path, no cycles,
+  no layer violations, and the reverse-edge probe (a `tekton.generation → automations.install.pipelines`
+  line planted in a copy of `src/`) still exits 1 — the checker is not blind, which is the only
+  thing a deletion like this can be checked with.
+
+  **Where a reader repoints to.** The class is not re-exported under any name, so anything that still
+  imports `kubementat.tekton_utils` fails at import and not silently:
+
+  | was | is |
+  |---|---|
+  | `from kubementat.tekton_utils import TektonUtils` | nothing — the module is deleted; reach the module that owns the work (`generation`, `preflight`, `runs`, `install`, `triggers`) |
+  | `TektonUtils(ctx).kubernetes_utils` | `KubernetesUtils(ctx)` (built the same way, from the same `Context`, at the call site — `cli/commands/kubernetes.py` has always built its client that way) |
+  | `TektonUtils(ctx).config`, `.environment`, `.team` | `ctx.config`, `ctx.environment`, `ctx.team` |
+  | `TektonUtils(ctx).pipeline_namespace` | the module that applies reads `config.get('team_static').get('PIPELINE_NAMESPACE')`; `list_all_tekton_resources` and `cleanup_pipeline_runs` now take `pipeline_namespace=None` and read it themselves, the way `wait_for_pipeline_run` already did |
+  | `TektonUtils.run_pipeline(ku, config, env, team, ident, parallel)` | `runs.run_pipeline(ctx, kubernetes_utils, config, environment, ident, parallel)` |
+  | `TektonUtils.setup_cleanup_job(ku, config, env, team)` | `runs.setup_cleanup_job(ctx, kubernetes_utils, config, environment)` |
+  | `TektonUtils.setup_triggers(ctx, ku, config, env, team)` | `triggers.setup_triggers(ctx, kubernetes_utils, config, environment)` — the `team` parameter is gone, because the `Context` it is derived from is already there and one value cannot be both a guard's answer and an argument |
+  | `TektonUtils.generate_*(TektonUtils(ctx).config, …)` | `generation.generate_*(ctx.config, …)` — the generators' signatures are unchanged; only the object that used to be built to hand them a `Config` is gone |
+
+  **The refusal, which is the only behaviour in this ticket that a user can notice.** `__init__` said
+  "this command was not given a team" once, before it had touched anything, and deleting the
+  constructor deletes that sentence with it. Four of the five modules read a team, so the guard is
+  asked by the four functions that read it, each in its own first line: `triggers.setup_triggers` and
+  `runs.run_pipeline` before the `team_static` namespace read,
+  `runs.setup_cleanup_job` before the pull Secret it reads out of `team_static_encrypted`, and —
+  asked inside the pipeline-configuring branch of `install_kubementat`, and therefore not asked of an
+  install that configures no pipelines — before the first release manifest is applied. Three of those
+  are position changes, and they are stated as position changes:
+
+  * `runs.setup_cleanup_job` is refused **earlier than it was**. The team it needs is the registry
+    credential its pod pulls with, and that read sat one operation into the flow: the function asked
+    the cluster for the namespace first and only then went to `team_static_encrypted` for the
+    credential, so a team-less run left the namespace it was about to prune in and *then* refused.
+    It now refuses before the namespace is created.
+  * `install_kubementat` is refused **earlier than it was**, and this is the seam P4-4 reported
+    rather than fixed: a library caller holding a team-less `Context` got three pinned release
+    manifests applied into cluster-wide namespaces, a helmfile apply, and only then the refusal. That
+    is what "the class was doing more than carrying state" means when the class goes, and why the
+    guard is asked two lines ahead of the first write rather than left to the last function in the
+    branch.
+  * `runs.run_pipeline` and `triggers.setup_triggers` are refused **where they were already refused**,
+    and this is worth saying plainly because it is the difference between a guard and a read: both
+    functions read `team_static` as their first act, and `Config` refuses a team-scoped read, so
+    those paths never applied anything. What changed is which sentence the operator reads and which
+    file owns it — `Context.require_team`'s, naming the namespace the objects would have lived in,
+    instead of `Config`'s, naming the category that could not be read. `test_a_team_less_run_is_refused_before_the_first_apply.py`
+    asserts the sentence for exactly that reason: the two refusals are the same exception class and
+    only the noun says where the run stopped.
+  * The three generator commands are the case P4-1 left open. They no longer construct anything to
+    earn a refusal, and they do not need the guard moved into `generation.py` either: a generated
+    manifest is one team's configuration, so the first thing any of them touches that has a team in
+    it is a team-scoped path (`Config.tekton_team_pipeline_dir`, `..._trigger_dir`,
+    `..._pipeline_run_dir`), and a `Config` built for no team refuses that path before a byte is
+    written. The `None` that would have stood in four manifests' team fields is never written, because
+    it is never reached.
+  * Commands that already required `TEAM` print, exit and refuse exactly as they did. The one
+    exception is a library caller, for whom everything above is new — which is the point of the
+    ticket: the refusal is now a property of the library rather than of the object the CLI used to
+    build in front of it.
+
+  **Tests.** Every instantiation site (`TektonUtils(a_context)` followed by a call) is gone — seven
+  of them, in `test_parity_tekton_installs_the_pinned_releases.py`,
+  `test_the_tekton_install_reads_its_configuration_first.py`,
+  `test_the_tekton_install_waits_for_the_webhook_the_next_release_must_call.py`,
+  `test_tekton_install_asserts_the_served_api_versions.py`, both trigger-parity files and
+  `test_the_cleanup_job_is_created_in_the_namespace_the_config_names.py`; each builds its client from
+  the same `Context` the constructor built it from, so nothing about what those tests assert moved.
+  (The DAG said 16 sites in 9 files; the tree at `9bd3f23` has 7, and the count is printed here rather
+  than inherited. `grep -c "TektonUtils(" 9bd3f23 -- tests` answers it.)
+  `test_team_option.py`'s `monkeypatch.setattr(cli.commands.tekton, "TektonUtils", recorder)` retargets
+  to `infrastructure.tekton.runs.setup_cleanup_job` and reads the `(environment, team)` pair off the
+  `Context` the command handed over — the patch is what §3 item 5 named as the one site that could have
+  stayed green while asserting nothing, and it asserts the pair for the reason it asserted it before.
+  The census test's `SURVIVORS` table loses the `src/kubementat/tekton_utils.py` key and gains three
+  (`infrastructure/tekton/triggers.py`, `infrastructure/tekton/runs.py` — twice, a namespace and a
+  credential — and `automations/install/kubementat.py`), so the coverage claim is 5 files / 6 guards
+  where it was 3 files / 3 guards; its read was already an AST walk of `src/`, and it now also
+  asserts that every module of the split is inside the set that walk covers, so a guard in a fifth
+  module of `infrastructure/tekton/` is counted instead of missed. `PENDING_KUBECTL_READS` loses
+  `"kubementat/tekton_utils.py": 0`, which was inert and is now a pointer to a path the scanner does
+  not walk. `test_component_namespaces_come_from_configuration.py`'s package glob was widened in
+  P4-3 and needed no edit here. Six new tests, in
+  `test_a_team_less_run_is_refused_before_the_first_apply.py`: three refusals asserted by their
+  sentence *and* by an empty cluster record, one for the install ordering, one proving the install's
+  guard does not fire on the branch that reads no team, and one that no generator writes the team of
+  a run that named none. Deleting each of the four guards is caught by these tests, which is how
+  their position is known rather than remembered. Suite: **1785 passed / 1 skipped**
+  (1779 before, plus the six).
+
 - **The trigger group leaves `tekton_utils.py`, and the class is a constructor: `src/kubementat/infrastructure/tekton/triggers.py`
   is the fifth and last module of the Tekton split.** Nine names — `setup_triggers`,
   `_setup_trigger_rbac`, `_setup_webhook_secrets`, `_apply_team_trigger_resources` (four methods), and

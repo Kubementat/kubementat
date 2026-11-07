@@ -23,8 +23,8 @@ test for exactly that reason.
 
 from conftest import FIXTURE_ENVIRONMENT, RecordedCall
 from cluster_parity import compare, operations_from_calls
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 from kubementat.infrastructure.tekton import triggers
-from kubementat.tekton_utils import TektonUtils
 from cluster_fixture import configuration_only_cluster, configuration_only_context
 
 # The cluster both sides address, for the same reason the cleanup-job comparison spells it out:
@@ -226,15 +226,13 @@ def the_python_setup(fixture_repo, tokens=None):
     fixture's generated passwords in place.
 
     The `Context` is handed over twice for the reason the two call sites in `src/` hand it over
-    twice: `triggers.setup_triggers` reads the team refusal out of the `TektonUtils` it is given,
-    and builds its own client out of the `Context` for the half that applies a directory.
+    twice: `triggers.setup_triggers` asks it for the team, and builds its own client out of it for
+    the half that applies a directory.
     """
     if tokens is not None:
         fixture_repo.team_static_encrypted(**tokens)
     context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
-    utils = TektonUtils(context)
-    triggers.setup_triggers(context, utils.kubernetes_utils, utils.config, utils.environment,
-                            utils.team)
+    triggers.setup_triggers(context, KubernetesUtils(context), context.config, context.environment)
     return None
 
 

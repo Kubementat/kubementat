@@ -25,11 +25,14 @@ from cli.context import kmt_context
 from cli.helpers import team_option
 from kubementat.automations.install import pipelines as install_pipelines_slice
 from kubementat.automations.uninstall import pipelines as uninstall_pipelines_slice
-from kubementat.tekton_utils import TektonUtils
-# The run path moved out of `tekton_utils.py` (P4-3), so it is reached through the module the same
-# way `generation` is: a name imported past its home is a second binding, and the seam the tests
-# patch is the module the code actually runs. The class stays behind for one thing only -- the
-# state every one of these calls used to read off `self` -- and P4-6 deletes it with the file.
+# What the class that used to sit between these commands and the Tekton modules carried — the
+# client, the configuration, the environment, the team and the namespace the objects are written
+# into — is read off the `Context` now, and where a function needs a piece of it the piece is
+# passed. The team refusal is not here: it moved into the functions that read a team-scoped
+# namespace, so a library caller is refused by the module and not by this file.
+from kubementat.infrastructure.kubernetes import KubernetesUtils
+# The split's modules are reached as modules, never by name: the seam the suite patches is the
+# module the code actually runs, and a name imported past its home is a second binding.
 from kubementat.infrastructure.tekton import generation, runs, triggers
 
 
@@ -69,17 +72,20 @@ def tekton():
 @kmt_context
 def run_pipeline(ctx, environment, team, pipeline_run_identifier, parallel, wait,
                  poll_interval_seconds, timeout_seconds):
-    # What the run path reads is still what a `Context` carries, so the object that carried it is
-    # still built here -- it is also where a run with no team is refused. `runs` does the work.
-    tekton_utils = TektonUtils(ctx)
+    # What the run path reads is what a `Context` answers: the client it applies with, the
+    # configuration the namespace comes out of, and the team whose namespace that is. The refusal
+    # for a run that named no team is not asked of this command -- `runs.run_pipeline` asks it as
+    # its first statement, ahead of the file read and the apply, so a caller that never came
+    # through `kmt` is refused by the same sentence.
     if not pipeline_run_identifier:
-        # List available pipeline runs
-        if team:
-            runs.list_available_pipeline_runs(tekton_utils.config, tekton_utils.team)
+        # No identifier is the listing, and the listing is the one thing on this command that
+        # applies nothing. It still reads a team-scoped directory, so it still refuses a run that
+        # named no team; the guard that used to make that refusal happen before this line is the
+        # class that is gone.
+        runs.list_available_pipeline_runs(ctx.config, ctx.team)
         return 0
 
-    started = runs.run_pipeline(tekton_utils.kubernetes_utils, tekton_utils.config,
-                                tekton_utils.environment, tekton_utils.team,
+    started = runs.run_pipeline(ctx, KubernetesUtils(ctx), ctx.config, ctx.environment,
                                 pipeline_run_identifier, parallel)
     # The first command on this surface that propagates an exit code, and the reason it is worth
     # breaking the pattern for is on the other end of the line: `tekton_ci/tasks/run-tekton-pipeline.yml`
@@ -92,9 +98,13 @@ def run_pipeline(ctx, environment, team, pipeline_run_identifier, parallel, wait
         raise SystemExit(1)
 
     if wait:
+        # The namespace is not spelled out here: `wait_for_pipeline_run` reads the team's
+        # `PIPELINE_NAMESPACE` itself when the caller does not name one, which is the same read
+        # `run_pipeline` just applied into. Two answers to one namespace question is the defect
+        # every namespace row of the census recites.
         raise SystemExit(runs.wait_for_pipeline_run(
-            tekton_utils.kubernetes_utils, tekton_utils.config, started,
-            tekton_utils.pipeline_namespace, poll_interval_seconds, timeout_seconds))
+            KubernetesUtils(ctx), ctx.config, started,
+            poll_interval_seconds=poll_interval_seconds, timeout_seconds=timeout_seconds))
 
 # --------------------------------------------
 # LIST TEKTON RESOURCES
@@ -103,11 +113,10 @@ def run_pipeline(ctx, environment, team, pipeline_run_identifier, parallel, wait
 @click.argument('team',envvar='TEAM')
 @kmt_context
 def list(ctx, environment, team):
-    # The same construction for the same reason: the namespace the four kinds are listed in and the
-    # client they are listed with are both what a `Context` answers through.
-    tekton_utils = TektonUtils(ctx)
-    runs.list_all_tekton_resources(tekton_utils.kubernetes_utils, tekton_utils.config,
-                                   tekton_utils.pipeline_namespace)
+    # The client comes from the `Context` and the namespace from the module: `runs` already reads
+    # the team's `PIPELINE_NAMESPACE` for the four listings that share it, and spelling the read
+    # again here would be a second answer to one namespace question.
+    runs.list_all_tekton_resources(KubernetesUtils(ctx), ctx.config)
 
 # --------------------------------------------
 # CLEANUP PIPELINE RUNS
@@ -119,9 +128,7 @@ def list(ctx, environment, team):
               help="Optional Filter for cleaning up specific pipeline runs. options are: succeeded (default), all")
 @kmt_context
 def cleanup_pipeline_runs(ctx, environment, team, filter):
-    tekton_utils = TektonUtils(ctx)
-    runs.cleanup_pipeline_runs(tekton_utils.kubernetes_utils, tekton_utils.config,
-                               tekton_utils.pipeline_namespace, filter)
+    runs.cleanup_pipeline_runs(KubernetesUtils(ctx), ctx.config, filter=filter)
 
 # --------------------------------------------
 # SETUP PIPELINES
@@ -139,14 +146,12 @@ def setup_pipelines(ctx, environment, team):
 @click.argument('team',envvar='TEAM')
 @kmt_context
 def setup_triggers(ctx, environment, team):
-    # The trigger group moved out of the class (P4-5), and this is the one call on this surface
-    # that still needs the object: the last half of the flow applies the team's directory through
-    # a client it builds from a `Context`, so the raw `Context` goes to the function as well as the
-    # client the class built. `TektonUtils` is constructed here for the reason it is constructed
-    # everywhere else on this file -- it is where a run with no team is refused.
-    tekton_utils = TektonUtils(ctx)
-    triggers.setup_triggers(ctx, tekton_utils.kubernetes_utils, tekton_utils.config,
-                            tekton_utils.environment, tekton_utils.team)
+    # The trigger flow is the one call on this surface that needs the raw `Context` as well as the
+    # client: the last half applies the team's directory through a `KubernetesUtils` it builds from
+    # a `Context`, and building it from anything else says which cluster those manifests land in.
+    # The team refusal is the function's own now -- it is asked before the first RBAC object is
+    # written, which is where `install`'s `--yes`-style library caller learns about it too.
+    triggers.setup_triggers(ctx, KubernetesUtils(ctx), ctx.config, ctx.environment)
 
 # --------------------------------------------
 # SETUP TEKTON CLEANUP JOB
@@ -157,11 +162,11 @@ def setup_triggers(ctx, environment, team):
 @team_option()
 @kmt_context
 def setup_cleanup_job(ctx, environment, team):
-    # `setup_cleanup_job` asks the namespace question of `config` and takes the client from the
-    # `Context`, so the pair of them is what this command hands over.
-    tekton_utils = TektonUtils(ctx)
-    runs.setup_cleanup_job(tekton_utils.kubernetes_utils, tekton_utils.config,
-                           tekton_utils.environment, tekton_utils.team)
+    # The namespace question is asked of `config` by the function and the client comes from the
+    # `Context`, so the pair is what this command hands over. The team the `Context` was given is
+    # what the function refuses a run without -- asked before the namespace it creates, not one
+    # operation later on the way to the pull Secret.
+    runs.setup_cleanup_job(ctx, KubernetesUtils(ctx), ctx.config, ctx.environment)
 
 # --------------------------------------------
 # GENERATE DEPLOY PIPELINE
@@ -185,13 +190,15 @@ def setup_cleanup_job(ctx, environment, team):
 @kmt_context
 def generate_deploy_pipeline(ctx, environment, team, app_name, git_url, git_project_name,
                              git_server_host, git_server_port, git_server_ssh_user):
-    # The generation half moved out of the class, so the call lands on the module and what the
-    # method read from the instance arrives as `Config`. The class is still built first, and only
-    # for its `config`: the team guard is a constructor line until P4-6 dissolves the class, and
-    # skipping the constructor would generate a manifest that says `None` in the team fields
-    # instead of refusing a run that never named one.
+    # The generation half moved out of the class (P4-1), and the object that used to be built here
+    # only ever reached `Config` -- which is the `Context`'s, so it is read off that now. Nothing
+    # else about the call changed, and nothing about the refusal changed either: a generated
+    # manifest is one team's configuration, so the first thing a generator touches is a
+    # team-scoped path (`Config.tekton_team_pipeline_dir`), and a `Config` built for no team
+    # refuses that read by name before a byte is written. The `None` that would otherwise land in
+    # the manifest's team fields is never written, because it is never reached.
     generation.generate_deploy_pipeline(
-        TektonUtils(ctx).config,
+        ctx.config,
         app_name, git_url=git_url, git_project_name=git_project_name,
         git_server_host=git_server_host, git_server_port=git_server_port,
         git_server_ssh_user=git_server_ssh_user)
@@ -210,8 +217,10 @@ def generate_deploy_pipeline(ctx, environment, team, app_name, git_url, git_proj
               help="Which git host's templates to generate from: github or gitlab")
 @kmt_context
 def generate_trigger_configs(ctx, environment, team, app_name, pipeline_name, trigger_type):
-    # Read the note on `generate_deploy_pipeline` — same reason, same shape.
-    generation.generate_trigger_configs(TektonUtils(ctx).config,
+    # Read the note on `generate_deploy_pipeline` — same reason, same shape, and the same
+    # first read: `generate_trigger_configs` opens with `_refuse_obsolete_team_trigger_dir`, which
+    # asks `Config` for the team's trigger directory and is refused first.
+    generation.generate_trigger_configs(ctx.config,
                                         app_name, pipeline_name=pipeline_name,
                                         trigger_type=trigger_type)
 
@@ -227,8 +236,9 @@ def generate_trigger_configs(ctx, environment, team, app_name, pipeline_name, tr
 @click.argument('pipeline_file')
 @kmt_context
 def generate_pipeline_run(ctx, environment, team, pipeline_file):
-    # Read the note on `generate_deploy_pipeline` — same reason, same shape.
-    generation.generate_pipeline_run(TektonUtils(ctx).config, pipeline_file)
+    # Read the note on `generate_deploy_pipeline` — same reason, same shape, and the target file is
+    # the team's own pipeline-run directory, so the refusal lands before the document is written.
+    generation.generate_pipeline_run(ctx.config, pipeline_file)
 
 # --------------------------------------------
 # UNINSTALL PIPELINES

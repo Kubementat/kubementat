@@ -12,15 +12,15 @@ which API it serves — the first is `install`'s, the second `runs`' and `genera
 builds `KubernetesUtils(ctx)` itself on its way into `apply.apply_resources` — it has always done
 that, from a `Context` and not from the client the constructor handed out, because the primitive
 wants a client and the directory walk owns nothing else. So the entry point carries `ctx` as well
-as the state the constructor used to read (`kubernetes_utils`, `config`, `environment`, `team`), and
-handing over the raw `Context` is what keeps that construction the same object it was: a client
-built from the caller's own `Context` addresses the caller's own cluster. A `kubernetes_utils`-only
-signature would have had to build the second client out of something else — the one that was
+as the state the constructor used to read (`kubernetes_utils`, `config`, `environment`).
+Handing over the raw `Context` is what keeps that construction the same object it was: a client
+built from the caller's own `Context` addresses the caller's own cluster. A `kubernetes_utils`-
+only signature would have had to build the second client out of something else — the one that was
 already handed in, or a `ClusterTarget` reconstructed for the purpose — and that changes which
 cluster the trigger manifests land in, which is exactly the kind of seam a move must not move.
-The state stays as parameters rather than being read back off `ctx` because the team refusal lives
-in `TektonUtils.__init__` until P4-6 dissolves it, and a function that read `ctx.config` here would
-be answering the namespace question in a second place.
+The `team` that used to travel beside the `Context` is gone: `P4-6` deleted the constructor that
+produced it, and a value that arrives from `ctx.require_team` cannot also be an argument, because
+then a caller could hand in a team the `Context` says the run was not given.
 
 Two bindings carry weight. `generation` and `apply` are reached module-qualified, never by name:
 the suite patches by module object, and the `:1417` guard call is the one cross-module edge here,
@@ -179,7 +179,7 @@ def trigger_webhook_job_role(team: str):
     )
 
 
-def setup_triggers(ctx, kubernetes_utils, config, environment, team) -> None:
+def setup_triggers(ctx, kubernetes_utils, config, environment) -> None:
     """Give one team's webhook triggers their RBAC, their webhook Secrets, and their resources.
 
     Three parts, in the order the deleted script ran them, because the order is what makes the
@@ -205,12 +205,21 @@ def setup_triggers(ctx, kubernetes_utils, config, environment, team) -> None:
       `Config.tekton_trigger_template_dir`.
 
     Raises:
+        kubementat.errors.TeamNotSuppliedError: If this `Context` was given no team.
         kubementat.errors.PipelineNamespaceNotConfiguredError: If the team's static config has no namespace.
         kubementat.errors.ResourceWithoutNameError: If a trigger manifest has no name.
         kubementat.errors.CommandExecutionError: Never, by this method itself — it calls no
             `kubectl`, which is what the RBAC primitives made unnecessary.
         kubernetes.client.exceptions.ApiException: If the cluster refuses an object.
     """
+    # The team, asked of the `Context` and not handed in. `P4-5` moved this flow with a `team`
+    # parameter beside the `Context` because the refusal that produced the value lived in
+    # `TektonUtils.__init__` and the function had no business duplicating it; `P4-6` deleted the
+    # class, so the sentence and the read belong here, as this function's first statement. The
+    # `team_static` read below is the line that earns the guard: without a team there is no
+    # `PIPELINE_NAMESPACE`, no ServiceAccount name to bind, and no directory to apply.
+    team = ctx.require_team("the namespace the Tekton objects live in")
+
     namespace = config.get('team_static').get('PIPELINE_NAMESPACE')
     if not (isinstance(namespace, str) and namespace.strip()):
         raise errors.PipelineNamespaceNotConfiguredError(

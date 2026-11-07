@@ -26,7 +26,6 @@ from kubementat.infrastructure.kubernetes import KubernetesUtils
 # here because every tekton seam is patched by module object.
 from kubementat.infrastructure.tekton import install as tekton_install
 from kubementat.infrastructure.tekton import preflight, triggers
-from kubementat.tekton_utils import TektonUtils
 
 from kubementat.automations.install.dependencies import (
     KUBEMENTAT_DEPENDENCIES,
@@ -86,12 +85,18 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
     # `infrastructure/tekton/install.py` now (P4-4), called through the module rather than bound
     # here, and it is handed exactly what the class used to read off `self`.
     #
-    # What this line no longer does is construct `TektonUtils`, which used to be how a context with
-    # no team was refused on this path. The refusal itself is untouched (`TektonUtils.__init__`, and
-    # the `setup_triggers` branch below still reaches it), and it is P4-6's to move; the command
-    # itself names `TEAM` as a required argument, so `kmt install` cannot reach this line without
-    # one. That is why dropping the construction here is a drift to report and not one to hide: a
-    # library caller that hands over a team-less `Context` now finds out at `setup_triggers`.
+    # The team guard is asked here, two lines ahead of this call, and it is asked here because
+    # this is where the install's first write happens. `P4-4` stopped building `TektonUtils` on
+    # this path, which left a library caller holding a `Context` with no team three releases deep
+    # before the refusal reached it -- the releases apply into cluster-wide namespaces and read no
+    # team, so nothing below them said anything. `TektonUtils.__init__` used to be what did say
+    # something, and it is gone, so the question is asked where the branch below needs the answer:
+    # `configure_tekton_pipelines` is the half of the install that writes one team's namespaces,
+    # directories and Secrets, so a run that named no team is refused before a manifest is
+    # applied, and a run that asked for none of that half is not refused at all.
+    if configure_tekton_pipelines:
+        ctx.require_team("the namespaces and directories the Tekton configuration is written into")
+
     tekton_install.install(kubernetes_utils, config, environment)
 
     # That the applies succeeded is not the same fact as "the cluster now serves what
@@ -123,14 +128,13 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
         # already there in a shape `kubectl` disliked. Every operation setup_triggers does is
         # now create-or-replace, so a repeat run is the retry, and the retry is gone.
         #
-        # What the class still does for this line is the team refusal in its constructor; what the
-        # function needs is the same state plus the raw `Context`, because the last half of the
-        # flow builds its own client from a `Context` before it hands a directory to `apply`. That
-        # is the seam this call had to keep: a client built from anything else would say which
-        # cluster the team's manifests land in.
-        tekton_utils = TektonUtils(ctx)
-        triggers.setup_triggers(ctx, tekton_utils.kubernetes_utils, tekton_utils.config,
-                                tekton_utils.environment, tekton_utils.team)
+        # The `Context` goes to the function as well as the client this function built from it,
+        # because the last half of the flow builds its own `KubernetesUtils` before it hands a
+        # directory to `apply`: a client built out of anything else says which cluster the team's
+        # manifests land in. The team is not a parameter any more -- `setup_triggers` asks the
+        # `Context` for it, which is the refusal `TektonUtils.__init__` performed until the class
+        # was deleted in P4-6, and it is asked above the first RBAC object it is needed for.
+        triggers.setup_triggers(ctx, kubernetes_utils, config, environment)
     else:
         logging.info("Skipping Tekton pipeline configuration.")
 

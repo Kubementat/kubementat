@@ -35,11 +35,11 @@ from kubementat.errors import TektonWebhookNotReachableError
 # The wait, the Service it asks about and both of its numbers live in `infrastructure/tekton/install.py`
 # now (P4-4). The module is imported as a module for the same reason: the loop reads both numbers as
 # globals of the module it is defined in, so a patch on any other object is a number nobody sees.
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 from kubementat.infrastructure.tekton import install as tekton_install
 from kubementat.infrastructure.tekton.install import (HELM_DEPLOYER_CLUSTER_ROLE_NAME,
                                                       PIPELINE_WEBHOOK_SERVICE_NAME,
                                                       TEKTON_RELEASE_BASE_URL)
-from kubementat.tekton_utils import TektonUtils
 from conftest import is_apply
 from cluster_fixture import configuration_only_context
 
@@ -52,13 +52,13 @@ NAMESPACE = "tekton-pipelines"
 def install_the_pinned_releases(fixture_repo):
     """`tekton_install.install()`, read the way `kmt install` reads it.
 
-    The `Context` is still resolved through the class, because the class still resolves the client
-    the wait asks and still refuses a run with no team (that refusal is P4-6's to move, not this
-    ticket's). The work is the module function's, and the three arguments are what it used to read
-    off the instance.
+    The `Context` carries what the class used to carry: `P4-6` deleted the class, and the client
+    is built from the `Context` the same way the constructor built it. `install` reads no team,
+    so this call asks for none — the refusal a team-less `Context` gets on the install path is
+    `install_kubementat`'s own, ahead of the first apply, and not this function's.
     """
-    utils = TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team))
-    return tekton_install.install(utils.kubernetes_utils, utils.config, utils.environment)
+    context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
+    return tekton_install.install(KubernetesUtils(context), context.config, context.environment)
 
 
 # The URLs, abbreviated: which of these went in is the whole question this file asks.

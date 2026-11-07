@@ -27,8 +27,8 @@ import pytest
 from kubernetes import client
 
 from kubementat.errors import PipelineNamespaceNotConfiguredError, ResourceWithoutNameError
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 from kubementat.infrastructure.tekton import triggers
-from kubementat.tekton_utils import TektonUtils
 from cluster_fixture import configuration_only_context
 
 # The team-level trigger directory: platform_config, under `tekton/`,
@@ -87,17 +87,16 @@ def run_the_setup(fixture_repo, recorded_api, **team_static_overrides):
     """`setup_triggers()`, the way `kmt install` runs it: real config, fake cluster.
 
     The config is the fixture's `platform_config`, read through `Config` the same way the CLI's
-    `kmt tekton setup-triggers` reads it, and the cluster is the recording client. The `Context`
-    is handed to `triggers.setup_triggers` twice over -- as itself, and inside the `TektonUtils`
-    that still refuses a run with no team -- the same way the two call sites in `src/` hand it
-    over, so a test that reaches a namespace the fixture did not write is testing the code and not
-    a mock.
+    `kmt tekton setup-triggers` reads it, and the cluster is the recording client. The `Context` is
+    handed to `triggers.setup_triggers` twice over -- once as itself, once inside the client built
+    from it -- the same way the two call sites in `src/` hand it over, so a test that reaches a
+    namespace the fixture did not write is testing the code and not a mock. The team is not a
+    parameter any more: `setup_triggers` asks the `Context` for it, which is the refusal it carried
+    on the class until P4-6 deleted it.
     """
     fixture_repo.team_static(**team_static_overrides)
     context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
-    utils = TektonUtils(context)
-    triggers.setup_triggers(context, utils.kubernetes_utils, utils.config, utils.environment,
-                            utils.team)
+    triggers.setup_triggers(context, KubernetesUtils(context), context.config, context.environment)
     return recorded_api.operations()
 
 

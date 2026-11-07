@@ -23,10 +23,10 @@ from kubementat.errors import TektonReleaseVersionNotConfiguredError
 # Both names the install is built from moved out with it (P4-4), and the module is imported as a
 # module as well as by name: the role write is patched *on* `install` below, and a name imported past
 # its home is a second binding that patch would miss.
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 from kubementat.infrastructure.tekton import install as tekton_install
 from kubementat.infrastructure.tekton.install import (HELM_DEPLOYER_CLUSTER_ROLE_NAME,
                                                       TEKTON_RELEASE_BASE_URL)
-from kubementat.tekton_utils import TektonUtils
 from conftest import is_apply
 from cluster_fixture import configuration_only_context
 
@@ -47,12 +47,13 @@ def install(fixture_repo, **overrides):
 def install_the_pinned_releases(fixture_repo):
     """The one install every test here runs, and where its arguments now come from.
 
-    The `Context` is still resolved through the class, because the class still builds the client and
-    still refuses a run with no team (that refusal is P4-6's to move, not this ticket's). The work is
-    `tekton_install.install`'s, and the three arguments are what its body used to read off `self`.
+    The `Context` carries what the class carried before `P4-6` deleted it, and the client is built
+    from that `Context` exactly as the constructor built it. Nothing here asks for a team: the
+    install reads none, and the refusal a team-less `Context` is given on this path belongs to
+    `install_kubementat`, ahead of the first apply rather than behind it.
     """
-    utils = TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team))
-    return tekton_install.install(utils.kubernetes_utils, utils.config, utils.environment)
+    context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
+    return tekton_install.install(KubernetesUtils(context), context.config, context.environment)
 
 
 def applied_urls(fake_binaries):

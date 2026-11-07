@@ -27,10 +27,10 @@ record below stays true when a version moves instead of freezing a number here.
 import json
 
 from cluster_parity import ClusterOperation, cluster_named, compare
+from kubementat.infrastructure.kubernetes import KubernetesUtils
 from kubementat.infrastructure.tekton import install as tekton_install
 from kubementat.infrastructure.tekton.install import (HELM_DEPLOYER_CLUSTER_ROLE_NAME,
                                                      TEKTON_RELEASE_BASE_URL)
-from kubementat.tekton_utils import TektonUtils
 from conftest import FIXTURE_ENVIRONMENT, is_apply
 from cluster_fixture import (configuration_only_cluster,
                               configuration_only_context)
@@ -122,10 +122,11 @@ def run_the_python_install(fixture_repo, **env_static_overrides):
     the fake client, the fixture's `platform_config` — is the real thing.
     """
     configured_environment(fixture_repo, **env_static_overrides)
-    # The same `Context`, handed over as the three arguments the function now takes. The class is
-    # still built because it still resolves the client and still refuses a run with no team.
-    utils = TektonUtils(configuration_only_context(fixture_repo.environment, fixture_repo.team))
-    tekton_install.install(utils.kubernetes_utils, utils.config, utils.environment)
+    # The same `Context`, and the three arguments the function takes come out of it: the class that
+    # used to resolve the client is gone (P4-6), and the install never needed the team its
+    # constructor refused a run over.
+    context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
+    tekton_install.install(KubernetesUtils(context), context.config, context.environment)
 
 
 def without_addressing(argv):
