@@ -1,5 +1,14 @@
 # Unreleased
 
+- **The layer gate and the class diagram are now tracked code, not scratch.** The AST import walk was
+  `python3 .agent-work/import_graph.py src` and is now `python3 tools/import_graph.py src`; the diagram
+  generator and its measurement modules moved to `docs/diagram-generator/`, where `README.md` names the three
+  commands. This is not cosmetic: the checker that every verification in this section cites — including the
+  reverse-edge probes that prove it is watching rather than quiet — lived in a gitignored directory and was
+  deleted once with it, taking the enforcement story with it. Nothing under `src/` changed, and the diagram
+  was regenerated from the tree, so its labels are the tree's. A box that draws a path that no longer exists
+  is now reported by `stale_boxes()` when the generator runs, which is the only guard that box names have.
+
 - **`TektonUtils` is deleted, the class is a name the tree no longer has, and the team refusal has
   been moved to the reads that earn it: `src/kubementat/tekton_utils.py` is gone.** The first ticket
   of the split (P4-1) through the fifth (P4-5) each carried a group of work out of that file, and what

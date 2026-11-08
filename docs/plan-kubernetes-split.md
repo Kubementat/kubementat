@@ -359,7 +359,7 @@ two consumers, no test contact, and a job that includes *not* deleting a claim i
   Worse: if `list_pods` had been left in `workloads.py`, the cycle would be an import-time failure only when
   both files are loaded in one process — a ticket that only exercises `exec.py` would not see it. Proof:
   `git grep -c -F 'app.kubernetes.io/instance' src | grep -v core/constants` must show one file; and
-  `exec.py`/`workloads.py` must import each other in exactly one direction (`python3 .agent-work/import_graph.py src`
+  `exec.py`/`workloads.py` must import each other in exactly one direction (`python3 tools/import_graph.py src`
   says "no cycles" — that tool is the gate this phase has been using).
 - **T3.** `wait_namespaces_gone` is un-named by any test, and the test that does drive it sets both wait
   constants to `0`, so a move that quietly re-orders the loop — sleep first, then check — passes every

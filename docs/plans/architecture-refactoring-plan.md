@@ -469,7 +469,7 @@ This section is the result, not a revision of §4–§7, and it is here so that 
 ticket does not have to re-derive the layout from tables written against a tree that no longer exists. The
 tables above stay as they were: they are the plan, dated. Every number below is `wc -l` on the path named.
 
-**Three layers, and the rule is that nothing below may reach up** (`python3 .agent-work/import_graph.py src`
+**Three layers, and the rule is that nothing below may reach up** (`python3 tools/import_graph.py src`
 exits 0, with no cycles and no layer violations at HEAD `15be650`):
 
 - `src/kubementat/core/` — 21 files, 4,528 LOC. `constants.py` (imports nothing), `version.py`,

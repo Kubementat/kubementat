@@ -11,7 +11,7 @@ Every god object is gone and replaced by three layers, and the rule is that noth
     src/kubementat/automations/     23 files, 4,777 LOC   install/, uninstall/, tunnels/, accounts/, routing/, ci.py, ingress.py
     src/kubementat/                  8 files              errors.py, the flat config verb modules, crypto_utils.py
 
-`python3 .agent-work/import_graph.py src` walks the imports and fails on a cycle or a layer violation.
+`python3 tools/import_graph.py src` walks the imports and fails on a cycle or a layer violation.
 
 ## What was removed
 
