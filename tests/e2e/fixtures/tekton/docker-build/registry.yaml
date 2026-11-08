@@ -1,0 +1,71 @@
+# The lane's own registry: the place the build-and-push stage of the product's
+# docker-build pipeline pushes to, and the only image store the lane's checks read.
+#
+# It is a plain `registry:2` and *no more*: a distribution registry put into pull-through
+# cache mode refuses pushes outright, and the one claim this lane makes is that a push
+# landed. Everything the pipeline steps run as is seeded into the node's container store
+# under the exact reference kubelet will name, so nothing in the lane needs the registry
+# to cache anything. As before, the Service is a NodePort rather than the pod's cluster
+# address, because the readers of the pushed image live outside pod networking.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kmt-e2e-dockerbuild
+  labels:
+    kubementat-e2e: dockerbuild
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kmt-e2e-dockerbuild-registry
+  namespace: kmt-e2e-dockerbuild
+  labels:
+    kubementat-e2e: dockerbuild
+    app: kmt-e2e-dockerbuild-registry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kmt-e2e-dockerbuild-registry
+  template:
+    metadata:
+      labels:
+        app: kmt-e2e-dockerbuild-registry
+    spec:
+      containers:
+        - name: registry
+          image: registry:2
+          ports:
+            - containerPort: 5000
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 10m
+            limits:
+              memory: 256Mi
+              cpu: 200m
+          volumeMounts:
+            - name: storage
+              mountPath: /var/lib/registry
+      volumes:
+        - name: storage
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kmt-e2e-dockerbuild-registry
+  namespace: kmt-e2e-dockerbuild
+  labels:
+    kubementat-e2e: dockerbuild
+spec:
+  type: NodePort
+  selector:
+    app: kmt-e2e-dockerbuild-registry
+  ports:
+    - port: 5000
+      targetPort: 5000
+      nodePort: 31500

@@ -26,6 +26,14 @@ PROBE_POD = "kmt-e2e-probe"
 PROBE_CLAIM = "kmt-e2e-probe"
 PIPELINE_RUN = "hello-world-pipeline-run"
 FAILING_RUN = "kmt-e2e-failing-run"
+# The docker-build feature's fixtures: a directory in the guest for the repository and
+# the rendered run file, the `kmt`-suffixed name of the run, the lane-named secret holding
+# its ssh key, and the checkout directory the fixture files are read from. Everything the
+# feature touches is spelled here, so its cleanup can name it.
+DOCKERBUILD = "/var/tmp/kmt-e2e-dockerbuild"
+DOCKERBUILD_RUN = "kmt-e2e-dockerbuild"
+DOCKERBUILD_SSH_SECRET = "kmt-e2e-dockerbuild-ssh-key"
+DOCKERBUILD_FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "tekton" / "docker-build"
 
 # How long the harness waits for a fact it can observe, and how often it looks. Everything here
 # is a deadline plus a poll, never a sleep that ends when it is told to: if one of these needs
@@ -3098,6 +3106,329 @@ print(json.dumps({"declared": dict(constants.PINNED_BINARY_VERSIONS), "observed"
     def _run_finished(self, namespace, name):
         outcome = self._pipelinerun_outcomes(namespace).get(name)
         return outcome in ("True", "False"), "%s Succeeded=%s" % (name, outcome)
+
+    # ------------------------------------- the product's build pipeline, end to end
+    #
+    # The lane-level claim: the docker-build pipeline, as the product ships it, clones a
+    # repository, builds it, and leaves the image in a registry. Everything the run needs is
+    # owned by the lane -- a bare git repository the VM's own sshd serves, a registry running
+    # as a pod of its own, a Dockerfile small enough that the build adds nothing to the
+    # verdict -- so what the asserts measure is the pipeline's plumbing, and nothing else.
+    #
+    # What the builder inside the build step *is* is deliberately not asserted, and that is
+    # not a gap but the shape of the row: the lane hands the run a builder image and reads
+    # back only where the run ended and what the registry holds. A build step replaced inside
+    # the product changes no line here.
+
+    def feature_tekton_docker_build(self):
+        """Build and push one run-unique image through the product's docker-build pipeline."""
+        if self.cluster is None:
+            raise StageFailed("the feature stage ran without a cluster")
+        namespace = self._team_config_value("PIPELINE_NAMESPACE")
+        if not namespace:
+            self.expect("dockerbuild-team-namespace", False,
+                        "PIPELINE_NAMESPACE is not set in the team config, so there is no namespace "
+                        "the pipeline could run in")
+            return
+        node_ip = self._dockerbuild_node_address()
+        if not node_ip:
+            self.expect("dockerbuild-node-address", False,
+                        "no Ready node answers an InternalIP, and the repository, the registry and "
+                        "the image references are all addressed through that one number")
+            return
+        # A tag no earlier run could have written: the registry check then proves *this* run
+        # pushed, which is the difference between an assert and a restock of an old claim.
+        tag = "e2e-" + secrets.token_hex(4)
+        if not self._dockerbuild_fixtures_applied(namespace, node_ip):
+            return
+        try:
+            self._dockerbuild_run_and_assert(namespace, node_ip, tag)
+        finally:
+            self._dockerbuild_fixtures_removed(namespace, node_ip)
+
+    def _dockerbuild_fixtures_applied(self, namespace, node_ip):
+        """The five fixtures the run needs, applied in the order the cluster needs them in.
+
+        The order is deliberate. The repository goes first because nothing costs less to make
+        and nothing else reads it. The registry goes second because the run both pulls its CI
+        image from it and pushes its result there. The seeding comes after the registry's
+        address is known and before anything can reference it, and the run's ssh secret comes
+        last so the one failure mode of the earlier steps -- a fixture that exists but points
+        nowhere -- never has to be read twice.
+
+        The registry is a plain `registry:2` without a pull-through cache, for a reason that
+        is easy to miss: a cache-mode distribution refuses pushes altogether, and a lane that
+        asserts an image landed is a lane that must be able to push one. The CI image the
+        pipeline steps run as is therefore seeded into the node's container store with the
+        exact reference kubelet will ask for, which is also why nothing here touches
+        `registries.yaml` or restarts the node: no reference in this lane is a
+        plain-HTTP-from-the-kubelet reference any more.
+        """
+        if not self._dockerbuild_git_fixture():
+            return False
+        applied = self.cluster.apply((DOCKERBUILD_FIXTURES / "registry.yaml").read_text(), timeout=120)
+        self.expect("dockerbuild-registry-applied", applied.ok, applied.excerpt(200))
+        if not applied.ok:
+            return False
+        answered, detail, _ = self.cluster.wait(
+            "the lane's own registry answers /v2/",
+            lambda: self._dockerbuild_registry_answers(node_ip), timeout=240, interval=5)
+        self.expect("dockerbuild-registry-answers", answered, detail)
+        if not answered:
+            return False
+        if not self._dockerbuild_ci_image_seeded(node_ip):
+            return False
+        secret = self.guest.run(
+            command="kubectl -n %s create secret generic %s --from-file=ssh-privatekey=%s/key "
+                    "--dry-run=client -o yaml | kubectl apply -f -"
+                    % (shlex.quote(namespace), DOCKERBUILD_SSH_SECRET, DOCKERBUILD), timeout=60)
+        self.expect("dockerbuild-ssh-secret", secret.ok, secret.excerpt(200))
+        return secret.ok
+
+    def _dockerbuild_ci_image_seeded(self, node_ip):
+        """Put the CI image under the name kubelet will ask for, so kubelet never pulls it.
+
+        The pipeline spells the CI image reference as
+        `<registry>/<name>:<tag>`, and this lane's registry is plain push-only, so the
+        kubelet's one pull would be a miss. A named-but-not-yet-pulled image is what
+        `IfNotPresent` is for: the seed pulls from the upstream registry the node can already
+        reach over TLS, retags the result to the reference the pipeline will name, and the
+        kubelet satisfies the step from the store instead of asking a registry that has no
+        such tag. Tag rather than copy, and pull is a no-op when the node already cached it.
+        """
+        upstream = "docker.io/%s:%s" % (config.DOCKERBUILD_CI_IMAGE_NAME, config.DOCKERBUILD_CI_IMAGE_TAG)
+        reference = "%s:%d/%s:%s" % (node_ip, config.DOCKERBUILD_REGISTRY_PORT,
+                                     config.DOCKERBUILD_CI_IMAGE_NAME, config.DOCKERBUILD_CI_IMAGE_TAG)
+        result = self.guest.run_script(
+            "set -eu\n"
+            "sudo k3s ctr -n k8s.io images pull %s >/dev/null\n"
+            "sudo k3s ctr -n k8s.io images tag --force %s %s\n"
+            % (shlex.quote(upstream), shlex.quote(upstream), shlex.quote(reference)),
+            timeout=900)
+        self.expect("dockerbuild-ci-image-seeded", result.ok, result.excerpt(300))
+        return result.ok
+
+    def _dockerbuild_git_fixture(self):
+        """A bare repository the VM's own sshd will serve, with the fixture's commit on `main`.
+
+        The lane's sshd is asked because it is already listening, already reachable from the
+        cluster the same way every other address is, and needs nothing installed. The
+        fixture's files are copied out of the guest's own checkout, so the repository the
+        run clones and the fixture a reader can open are the same bytes.
+        """
+        script = """\
+set -eu
+rm -rf %(dir)s
+mkdir -p %(dir)s/work
+ssh-keygen -q -t ed25519 -f %(dir)s/key -N '' -C kmt-e2e-dockerbuild
+chmod 600 %(dir)s/key
+chmod 644 %(dir)s/key.pub
+cd %(dir)s/work
+cp %(tree)s/tests/e2e/fixtures/tekton/docker-build/Dockerfile \\
+   %(tree)s/tests/e2e/fixtures/tekton/docker-build/hello.txt .
+git init -q -b main .
+git config user.email e2e@kubementat.invalid
+git config user.name kmt-e2e-dockerbuild
+git add Dockerfile hello.txt
+git commit -qm 'kubementat e2e docker-build fixture'
+git clone -q --bare . %(dir)s/app.git
+touch %(dir)s/app.git/.kmt-e2e-dockerbuild
+grep -q kmt-e2e-dockerbuild "$HOME/.ssh/authorized_keys" 2>/dev/null \\
+  && sed -i '/kmt-e2e-dockerbuild/d' "$HOME/.ssh/authorized_keys" || true
+cat %(dir)s/key.pub >> "$HOME/.ssh/authorized_keys"
+""" % {"dir": DOCKERBUILD, "tree": config.GUEST_TREE}
+        result = self.guest.run_script(script, timeout=120)
+        self.expect("dockerbuild-git-fixture", result.ok, result.excerpt(300))
+        return result.ok
+
+    def _dockerbuild_registry_answers(self, node_ip):
+        """The Service is up and the registry answers: a pod nobody can reach is not a fixture."""
+        pods = self.cluster.pod_list(namespace=config.DOCKERBUILD_NAMESPACE)
+        ready = any((pod.get("status") or {}).get("phase") == "Running"
+                    and (pod.get("status") or {}).get("containerStatuses")
+                    and all(entry.get("ready") for entry in pod["status"]["containerStatuses"])
+                    for pod in pods)
+        if not ready:
+            return False, "the registry pod is not Running and Ready yet"
+        probe = self.guest.run(
+            command="curl -sf -o /dev/null http://%s:%d/v2/" % (node_ip, config.DOCKERBUILD_REGISTRY_PORT),
+            timeout=30)
+        return probe.ok, ("registry answers /v2/ at %s:%d" % (node_ip, config.DOCKERBUILD_REGISTRY_PORT)
+                          if probe.ok else "registry pod is Ready but /v2/ does not answer: "
+                          + probe.excerpt(120))
+
+    def _dockerbuild_run_and_assert(self, namespace, node_ip, tag):
+        """Render the run, start it, and report the two outcomes that are all this row owns."""
+        try:
+            storage_class = self.cluster.default_storage_class()[0]
+        except asserts.KubectlError:
+            self.expect("dockerbuild-storage-class", False, "the cluster names no default StorageClass")
+            return
+        tokens = {
+            "REGISTRY": "%s:%d" % (node_ip, config.DOCKERBUILD_REGISTRY_PORT),
+            "NODE_IP": node_ip,
+            "CI_IMAGE_NAME": config.DOCKERBUILD_CI_IMAGE_NAME,
+            "CI_IMAGE_TAG": config.DOCKERBUILD_CI_IMAGE_TAG,
+            "GIT_URL": "%s@%s:%s/app.git" % (config.GUEST_USER, node_ip, DOCKERBUILD),
+            "GIT_SSH_USER": config.GUEST_USER,
+            "BUILDER_IMAGE": config.DOCKERBUILD_BUILDER_IMAGE,
+            "IMAGE_TAG": tag,
+            "STORAGE_CLASS": storage_class,
+            "SERVICE_ACCOUNT": self._team_config_value("HELM_DEPLOYER_SERVICE_ACCOUNT_NAME") or "default",
+        }
+        run_doc = (DOCKERBUILD_FIXTURES / "run.yml.tmpl").read_text()
+        for token, value in tokens.items():
+            run_doc = run_doc.replace("{{%s}}" % token, str(value))
+        written = self.guest.write_file(DOCKERBUILD + "/run.yml", run_doc)
+        if not written.ok:
+            self.expect("dockerbuild-run-file", False, written.excerpt(200))
+            return
+        started = self.km("tekton.run-pipeline-file", run_file=DOCKERBUILD + "/run.yml", timeout=180)
+        self.record_result("cap:tekton.run-pipeline-file", "product", started)
+        if not started.ok:
+            self.expect("dockerbuild-run-started", False, started.excerpt(300))
+            return
+        # Well inside the stage budget so a red run lands on this assert with its dump rather
+        # than on the stage-level timeout. Clone, build and push plus the first pull of
+        # everything the run references is the whole window.
+        succeeded, run, detail = self._dockerbuild_wait_run(namespace, 1500)
+        dump = self._dump_pipelinerun(namespace, run or DOCKERBUILD_RUN)
+        if not succeeded and run:
+            dump = dump + self._dump_dockerbuild_taskruns(namespace, run)
+        self.record("assert:dockerbuild-run-succeeded", "product", succeeded, detail, artifacts=dump)
+        if succeeded:
+            self._dockerbuild_expect_image(node_ip, tag)
+
+    def _dump_dockerbuild_taskruns(self, namespace, run):
+        """The task-level detail a failed run leaves out of its own status.
+
+        A PipelineRun that failed often enough shows only which child finished how; the *why*
+        is the TaskRun's termination message and the pod's log, neither of which reaches the
+        run dump. One read per child is enough: the message is written into the TaskRun's
+        step states, and the log is what tells a step that printed nothing apart from a step
+        that never started.
+        """
+        artifacts = []
+        children = self.cluster.kubectl("get", "pipelinerun", run, "-n", namespace,
+                                         "-o", "jsonpath={.status.childReferences[*].name}",
+                                         timeout=30)
+        for name in children.stdout.split():
+            dumped = self.cluster.kubectl("get", "taskrun", name, "-n", namespace,
+                                          "-o", "yaml", timeout=60)
+            artifacts.append(self.artifacts.log(self.stage, "taskrun-%s.yaml" % name,
+                                                dumped.stdout if dumped.ok else dumped.excerpt(400)))
+            pod = self.cluster.kubectl("get", "taskrun", name, "-n", namespace,
+                                       "-o", "jsonpath={.status.podName}", timeout=30)
+            if pod.stdout.strip():
+                logs = self.cluster.kubectl("logs", pod.stdout.strip(), "-n", namespace,
+                                            "--all-containers", "--prefix", "--tail=200",
+                                            timeout=60)
+                artifacts.append(self.artifacts.log(self.stage, "podlog-%s.log" % name,
+                                                    logs.stdout if logs.ok else logs.excerpt(400)))
+        return artifacts
+
+    def _dockerbuild_wait_run(self, namespace, timeout):
+        """Poll the run to a verdict. `Succeeded` is the only pass, and a terminal failure ends
+        the poll instead of running to the end of the window.
+
+        The run is found by prefix: `kmt` names it after the fixture file with a random
+        postfix, so the name is not something this harness pre-computes.
+        """
+        deadline = time.time() + timeout
+        run = ""
+        detail = "no PipelineRun named like %s in %s yet" % (DOCKERBUILD_RUN, namespace)
+        while time.time() < deadline:
+            run = self._latest_pipelinerun(namespace, DOCKERBUILD_RUN) or run
+            if run:
+                raw = self.cluster.kubectl(
+                    "get", "pipelinerun", run, "-n", namespace,
+                    "-o", "jsonpath={.status.conditions[0].status}|{.status.conditions[0].reason}",
+                    timeout=30).stdout.strip()
+                status, _, reason = raw.partition("|")
+                if status == "True" and reason == "Succeeded":
+                    return True, run, "%s Succeeded" % run
+                if status == "False":
+                    return False, run, "%s finished with reason=%s" % (run, reason)
+                detail = "%s is in progress: reason=%s" % (run, reason)
+            time.sleep(10)
+        return False, run, "the run had not finished within %ds: %s" % (timeout, detail)
+
+    def _dockerbuild_expect_image(self, node_ip, tag):
+        """The registry holds this run's tag. The whole of what the build produced, asked of
+        the only place the answer counts.
+
+        Both manifest dialects are offered in the Accept header, and the digest is read back
+        rather than guessed: what is asserted is that the registry serves *this tag* and can
+        name its digest, not what any step along the way logged on its way there.
+        """
+        script = """\
+headers=$(mktemp)
+code=$(curl -s -o /dev/null -D "$headers" -w '%%{http_code}' \\
+  -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \\
+  'http://%s:%d/v2/kmt-e2e/docker-build-app/manifests/%s')
+digest=$(tr -d '\r' < "$headers" | awk 'tolower($1)=="docker-content-digest:" {print $2}')
+rm -f "$headers"
+echo "HTTP=$code DIGEST=$digest"
+""" % (node_ip, config.DOCKERBUILD_REGISTRY_PORT, tag)
+        probe = self.guest.run_script(script, timeout=60)
+        found = dict(token.split("=", 1) for token in probe.stdout.split() if "=" in token)
+        landed = probe.ok and found.get("HTTP") == "200" and found.get("DIGEST", "").startswith("sha256:")
+        self.expect("dockerbuild-image-in-registry", landed,
+                    "registry says HTTP=%s DIGEST=%s for kmt-e2e/docker-build-app:%s" % (
+                        found.get("HTTP", "?"), found.get("DIGEST", "none"), tag))
+
+    def _dockerbuild_fixtures_removed(self, namespace, node_ip):
+        """Everything this feature added leaves no residue for `99-teardown` to trip over.
+
+        The order is the cluster's: the run and the secret first (they live in the team's
+        namespace, which outlives the lane), then the registry's namespace, then the node's
+        mirror file and the guest fixtures. The mirror is deleted and not restored: nothing
+        later in the lane references that host:port, and a mirror that points at a deleted
+        Service is the residue it is worst to leave behind.
+        """
+        self.cluster.kubectl("delete", "secret", DOCKERBUILD_SSH_SECRET, "-n", namespace,
+                             "--ignore-not-found", timeout=60)
+        self.cluster.kubectl("delete", "pipelinerun", "-n", namespace,
+                             "-l", "kubementat-e2e=dockerbuild", "--ignore-not-found", "--wait=false",
+                             timeout=120)
+        self.cluster.delete("namespace/%s" % config.DOCKERBUILD_NAMESPACE, timeout=120)
+        gone = detail = ""
+        deadline = time.time() + NS_GONE_WAIT_S
+        while True:
+            gone = config.DOCKERBUILD_NAMESPACE not in self.cluster.namespaces()
+            detail = "registry namespace gone" if gone else \
+                "the namespace %s is still reported by the cluster" % config.DOCKERBUILD_NAMESPACE
+            if gone or time.time() >= deadline:
+                break
+            time.sleep(2)
+        cleaned = self.guest.run(
+            command="rm -rf %s && { sed -i '/kmt-e2e-dockerbuild/d' ~/.ssh/authorized_keys 2>/dev/null || true; }"
+                    " && sudo k3s ctr -n k8s.io images rm %s >/dev/null 2>&1 || true" % (
+                        DOCKERBUILD,
+                        "%s:%d/%s:%s" % (node_ip, config.DOCKERBUILD_REGISTRY_PORT,
+                                         config.DOCKERBUILD_CI_IMAGE_NAME,
+                                         config.DOCKERBUILD_CI_IMAGE_TAG)),
+            timeout=60)
+        self.expect("dockerbuild-fixtures-removed", gone and cleaned.ok,
+                    (detail if not gone else "guest fixtures removed" if cleaned.ok
+                     else cleaned.excerpt(200)))
+
+    def _dockerbuild_node_address(self):
+        """The InternalIP of the first Ready node: the one address every pod, the kubelet and
+        the sshd under test all agree on."""
+        try:
+            nodes = self.cluster.nodes()["items"]
+        except asserts.KubectlError:
+            return ""
+        for node in nodes:
+            conditions = {condition.get("type"): condition.get("status")
+                          for condition in (node.get("status") or {}).get("conditions") or []}
+            if conditions.get("Ready") != "True":
+                continue
+            for address in (node.get("status") or {}).get("addresses") or []:
+                if address.get("type") == "InternalIP":
+                    return address["address"]
+        return ""
 
     # ------------------------------------------------------------- 99-teardown
 

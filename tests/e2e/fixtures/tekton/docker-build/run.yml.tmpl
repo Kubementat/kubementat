@@ -1,0 +1,65 @@
+# Rendered by the lane's docker-build feature before it is handed to `kmt tekton
+# run-pipeline`. The tokens in double braces are filled in from the live cluster (the
+# node's address, the storage class the cluster actually defaults to, the team's
+# service account) and from the lane's configuration; nothing else in this file is
+# touched.
+#
+# What it asks for is the product's own build pipeline, unchanged: clone over ssh from
+# a repository this lane made, build the fixture's Dockerfile, push the result under a
+# tag that identifies this run.
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: kmt-e2e-dockerbuild
+  labels:
+    kubementat-e2e: dockerbuild
+spec:
+  pipelineRef:
+    name: docker-build-pipeline
+  taskRunTemplate:
+    serviceAccountName: "{{SERVICE_ACCOUNT}}"
+  timeouts:
+    pipeline: 20m
+  workspaces:
+    - name: pipeline-workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          storageClassName: "{{STORAGE_CLASS}}"
+          resources:
+            requests:
+              storage: 100Mi
+  params:
+    - name: docker-registry-base-url
+      value: "{{REGISTRY}}"
+    - name: tekton-ci-image-name
+      value: "{{CI_IMAGE_NAME}}"
+    - name: tekton-ci-image-tag
+      value: "{{CI_IMAGE_TAG}}"
+    - name: app-git-url
+      value: "{{GIT_URL}}"
+    - name: app-git-project-name
+      value: docker-build-app
+    - name: app-git-revision
+      value: main
+    - name: app-git-server-host
+      value: "{{NODE_IP}}"
+    - name: app-git-server-port
+      value: "22"
+    - name: app-git-server-ssh-user
+      value: "{{GIT_SSH_USER}}"
+    - name: app-git-ssh-key-secret-name
+      value: kmt-e2e-dockerbuild-ssh-key
+    - name: builder-image
+      value: "{{BUILDER_IMAGE}}"
+    - name: push-image-name
+      value: kmt-e2e/docker-build-app
+    - name: push-image-tag
+      value: "{{IMAGE_TAG}}"
+    - name: docker-build-context-subpath
+      # The clone's repository root is the context: the fixture's Dockerfile sits at the
+      # commit's top level. The pipeline spells the context as
+      # `/workspace/<project>/<this>`, so this is the one spelling that keeps the fixture's
+      # layout meaningful to the build step.
+      value: "."

@@ -16,6 +16,7 @@ From the repo root (no CI environment variables are read):
 uv run python tests/e2e/suite.py                          # default: --lane smoke --scope install
 uv run python tests/e2e/suite.py --scope full             # every stage, reinstall cycle included
 uv run python tests/e2e/suite.py --lane full --scope full # the big VM, both installed groups, everything
+uv run python tests/e2e/suite.py --lane tekton --scope full # the build pipeline's own lane: clone, build, push
 
 uv run python tests/e2e/suite.py --keep-vm                # leave the VM up to debug
 uv run python tests/e2e/suite.py --dry-run                # preflight only
@@ -67,6 +68,15 @@ change cannot quietly change which OS the suite proves. Image cache:
 |---|---|---|---|---|---|
 | smoke | 4 | 6 GiB | 25 GiB | `standard` | ~16 min |
 | full | 8 | 16 GiB | 50 GiB | `standard` + `routing` | ~75 min |
+| tekton | 4 | 6 GiB | 25 GiB | `standard` | ~25 min |
+
+The tekton lane is not another slice of the install claims: it runs the product's `docker-build-pipeline`
+end to end in stage 05 against fixtures the lane owns — a bare git repository served by the VM's own
+sshd, a `registry:2` pod at the node's NodePort, a `FROM scratch` fixture Dockerfile — and asserts only
+the two outcomes that matter: the run reaches `Succeeded`, and the image tagged for that run exists in
+the registry. Which tool builds inside the build step is the product's to decide; replacing it in
+`src/` should not touch a line of this lane. It needs `--scope full` because the feature stage is where
+its whole subject lives.
 
 The full lane knows about a third group, `extra`, and does not install it. `group=extra` is the
 secret-management release, and installing it exposed that OpenBao comes up uninitialized and never
@@ -161,6 +171,15 @@ command environment is not carrying the variable.
 `sanctioned_mutations` — the files the suite is allowed to write in the guest. Nothing
 else in the guest tree is touched, and the host checkout is never written at all
 (`checkout-untouched` compares the tree before and after).
+
+The `tekton` lane's feature stage additionally touches the guest and the cluster within
+its own stage and cleans up before returning: it hosts a
+`kmt-e2e-dockerbuild` namespace with a push-capable `registry:2`, seeds the node's container
+store with the CI image under the exact reference the run names (so no kubelet pull ever
+touches a plain-HTTP registry), appends a run-generated fixture key to `~/.ssh/authorized_keys`,
+and serves a bare git repository from `/var/tmp/kmt-e2e-dockerbuild`. All four are removed by
+the feature's `finally`, so `99-teardown`'s residue sweep sees the same baseline the other
+lanes see.
 
 ## Which cluster, answered against a real cluster
 

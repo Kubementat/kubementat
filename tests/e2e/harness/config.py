@@ -173,6 +173,36 @@ ROUTING = Lane(
     },
 )
 
+# The lane that answers the question the other lanes leave unasked: does the product's build
+# pipeline actually build and push? It installs a standard cluster, and stage 05 runs one
+# PipelineRun of the product's own docker-build pipeline against fixtures the lane owns -- a git
+# repository the VM's own sshd serves, a registry the cluster itself hosts -- and reports the
+# outcome and nothing else: the run reached Succeeded, and an image tagged for this run exists in
+# the registry. *How* the build step builds is the product's business, and replacing the builder
+# inside the product is supposed to leave this lane's verdict untouched, so no check reads the
+# build step's parameters, images or logs. Heavier than the pipeline run it is named after, so it
+# belongs in stage 05 and is run with `--lane tekton --scope full`; the stage budgets mirror
+# `smoke`'s measured ones for everything the smoke lane already does and one wide window for the
+# build, because that window is where the first-time image pulls land.
+TEKTON = Lane(
+    name="tekton",
+    vcpu=4,
+    ram_gib=6,
+    disk_gib=25,
+    install_groups=("standard",),
+    features=("tekton_docker_build",),
+    timeouts={
+        "01-provision": 600,
+        "02-install": 600,
+        "03-run": 240,
+        "04-rerun": 600,
+        # clone, build, push, plus the first pull of every image the run references; wide until
+        # measured (NFR 6.1).
+        "05-features": 1800,
+        "99-teardown": 1200,
+    },
+)
+
 # The lane that answers the question no other lane answers: does `config init` alone leave a directory
 # somebody could work in, and does `kmt install` then run against it with nothing written by hand in
 # between. It is not cheaper than the others where that costs -- the last assert installs into k3s, so
@@ -204,7 +234,7 @@ BOOTSTRAP = Lane(
     config_dir=f"{GUEST_TREE}-config",
 )
 
-LANES = {"smoke": SMOKE, "full": FULL, "routing": ROUTING, "bootstrap": BOOTSTRAP}
+LANES = {"smoke": SMOKE, "full": FULL, "routing": ROUTING, "tekton": TEKTON, "bootstrap": BOOTSTRAP}
 
 # How much of the lifecycle a run walks, independent of the lane's VM shape and install groups.
 # `install` is the everyday question - does kubementat prepare, install correctly and come off
@@ -258,6 +288,28 @@ CLUSTER_MANAGER_EMAIL = "kmt-e2e@example.invalid"
 CI_IMAGE_NAME = "library/ubuntu"
 CI_IMAGE_TAG = "latest"
 CI_IMAGE = "%s/%s:%s" % (DOCKER_REGISTRY_BASE_URL, CI_IMAGE_NAME, CI_IMAGE_TAG)
+
+# The lane that proves the product's build pipeline builds and pushes owns a registry of its own,
+# and everything that lane is allowed to know about that registry lives here: the fixture image,
+# the port the Service pins to (it is also written in `tests/e2e/fixtures/tekton/docker-build/
+# registry.yaml`, where the cluster objects are spelled), the CI image the pipeline's steps run as,
+# and the image the build step is told to be. The last one is the shape of that swap, not its
+# history: which builder the product's build task currently invokes is a fact the task owns, the
+# lane only hands the image down as a parameter, so replacing it changes one line here and nothing
+# the lane asserts. The CI image has to carry `git`, `ssh` and `bash` for the clone step,
+# which is why it is the git-bearing buildpack image and not the ubuntu one the hello-world
+# task is content with. It is spelled `library/x` and tagged something other than `latest`
+# for one shared reason: the lane seeds it into the node's container store under the exact
+# reference the pipeline names (see `stages.py::_dockerbuild_ci_image_seeded`), and a
+# non-`latest` tag is what lets the kubelet accept the seeded image without pulling again --
+# which is also why the lane's registry is a plain, push-capable `registry:2` and not a
+# pull-through cache: a cache-mode distribution is the same software with pushes switched off.
+DOCKERBUILD_NAMESPACE = "kmt-e2e-dockerbuild"
+DOCKERBUILD_REGISTRY_IMAGE = "registry:2"
+DOCKERBUILD_REGISTRY_PORT = 31500
+DOCKERBUILD_BUILDER_IMAGE = "ghcr.io/osscontainertools/kaniko:v1.29.0-debug"
+DOCKERBUILD_CI_IMAGE_NAME = "library/buildpack-deps"
+DOCKERBUILD_CI_IMAGE_TAG = "scm"
 
 # Grafana's admin pair is not in this table and is not exported to the guest, on two separate
 # decisions. `GRAFANA_ADMIN_PASSWORD` used to be randomized into the guest's environment by
@@ -409,7 +461,8 @@ LANE_PLACEHOLDERS = {
 # in, so it cannot be spelled out in a stage as an argv nobody audited.
 # `answers_document` is a path and not a value: it is the staged JSON document `config set --from-file`
 # reads, which is how a credential stays out of a command line and out of every artifact.
-STAGE_PLACEHOLDERS = ("group", "port", "ns", "name", "pod", "answer", "key", "answers_document")
+STAGE_PLACEHOLDERS = ("group", "port", "ns", "name", "pod", "answer", "key", "answers_document",
+                      "run_file")
 
 # ------------------------------------------------------- capability table
 # Keyed by capability, never by CLI name: the flat commands are being renamed to
@@ -678,6 +731,15 @@ CAPABILITIES = {
     "tekton.run-pipeline": _c(
         capability="tekton.run-pipeline",
         argv=["kmt", "tekton", "run-pipeline", "{env}", "{team}", "global/hello-world-pipeline-run.yml"],
+        mutating=True,
+    ),
+    # The same command, with the run file named by the stage instead of pinned to the hello-world
+    # global. A stage that renders its own run cannot address it through a table row whose third
+    # argument is a constant, and a stage that passes a path is already following the convention the
+    # command's own help states.
+    "tekton.run-pipeline-file": _c(
+        capability="tekton.run-pipeline-file",
+        argv=["kmt", "tekton", "run-pipeline", "{env}", "{team}", "{run_file}"],
         mutating=True,
     ),
     "tekton.list": _c(
