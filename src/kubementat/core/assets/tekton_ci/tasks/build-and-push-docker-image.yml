@@ -8,19 +8,29 @@ spec:
     description: |
       The workspace folder with the dockerfile and context.
     mountPath: /workspace
+  - name: buildkit-runtime
+    description: |
+      Scratch space for the build daemon's content store, its config, and its metadata file, bound
+      as an empty volume. An empty volume is what makes the daemon's own filesystem not be the
+      container's overlay, and that is what decides the snapshotter it can use: a root inside the
+      container's own overlay cannot mount another one, and the build runs on `native` instead of
+      `overlayfs`. Bound or not, nothing goes on the clone's workspace, whose volume is sized for
+      the clone.
+    mountPath: /buildkit
+    optional: true
   params:
     # automation image configuration
     - name: builder-image
       description: The image that should be used for the docker build command
-      default: "gcr.io/kaniko-project/executor:debug"
+      default: "moby/buildkit:v0.34.2-rootless"
     - name: ci-image
       description: The docker image used for executing the script preparation parts (the ci base image)
       default: "julianweberdev/ubuntu-ci-minimal:latest"
 
     - name: path-to-context
-      description: The path to the build context, used by Kaniko
+      description: The path to the build context that buildctl gets as its context directory
     - name: path-to-dockerfile-within-context
-      description: The path to the Dockerfile within the given context, used by Kaniko
+      description: The path to the Dockerfile within the given context, relative to that context
       default: Dockerfile
     - name: push-image-url
       description: Url of image repository for the push
@@ -33,16 +43,30 @@ spec:
     - name: path-to-version-file
       description: A path to the file containing the app version number (used with set-tag-from-version-file)
       default: ""
-    - name: extra-build-args
-      description: You can provide a list of additional build args here
+    - name: buildctl-args
+      description: |
+        Additional arguments to the buildctl build invocation. These are buildctl's own flags; what the
+        builder this task no longer used took for them is not accepted here.
       default: ""
+    - name: cache
+      description: |
+        on: import and export the registry cache, keyed on the pushed image's own repository plus
+        tag, so a rebuild reuses content-addressed steps instead of redoing them. off skips both.
+      default: "on"
     - name: push-retries
-      description: The number of retries when pushes fail
+      description: |
+        The number of retries when the build and push fail. BuildKit solves and pushes in one
+        operation, so a retry is a re-solve; against a running daemon and a warm registry cache
+        that is the cheap half of what a retry costs.
       default: "0"
 
     - name: docker-registry-secret-name
       description: The docker registry secret name for logging into the docker registry
       default: "docker-registry-secret"
+
+  results:
+  - name: image-digest
+    description: The digest of the image that was pushed, read out of the exporter's own response.
 
   steps:
     - name: configure-docker-registry-access
@@ -81,24 +105,56 @@ spec:
         limits:
           memory: 8Gi
           cpu: 2000m
+      # Rootless is what this step is: the daemon is started by uid 1000 inside the step's own
+      # container, nothing in the pod is privileged, and no sidecar is asked for.
+      #
+      # Two of these fields are load-bearing and both were measured rather than reasoned about.
+      # The rootless image's uid-mapping helper carries file capabilities rather than a setuid
+      # bit, and a process that cannot gain privileges is refused execve of it: declaring
+      # no_new_privs (which allowPrivilegeEscalation: false does) leaves rootlesskit unable to
+      # map any uid at all. So escalation is declared on, and the capability bounding set is
+      # closed to what that helper needs, which is why SETUID/SETGID come back after the drop.
+      # The image's only setuid-root binary is fusermount3, so nothing here can reach uid 0.
+      #
+      # Both unconfined profiles are declared rather than left to the kubelet: a pod that asks
+      # for nothing gets whatever the runtime is configured to apply, and that is a fact about
+      # the node and not a guarantee. appArmorProfile needs Kubernetes 1.30; below it the field
+      # is dropped at apply and the node's own profile decides.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        allowPrivilegeEscalation: true
+        capabilities:
+          drop: ["ALL"]
+          add: ["SETUID", "SETGID"]
+        seccompProfile:
+          type: Unconfined
+        appArmorProfile:
+          type: Unconfined
       script: |
-        #!/busybox/sh
+        #!/bin/sh
+        # The builder image is Alpine with busybox ash: no bash, no jq, no curl. Everything here
+        # is POSIX sh and everything a JSON answer is read out of is read out with sed.
         set -eu
 
         echo "###############"
         echo "Build settings:"
-        docker_config_path="$(workspaces.workspace.path)/.docker"
-        DOCKER_CONFIG_FILE="${docker_config_path}/config.json"
+        # The daemon inherits this from the step that starts it, and it is what an authenticated
+        # push is pushed with, so it has to be exported and not merely set.
+        export DOCKER_CONFIG="$(workspaces.workspace.path)/.docker"
         CONTEXT="$(params.path-to-context)"
         DOCKERFILE="$(params.path-to-dockerfile-within-context)"
-        EXTRA_BUILD_ARGS="$(params.extra-build-args)"
+        BUILDCTL_ARGS="$(params.buildctl-args)"
+        CACHE="$(params.cache)"
         SET_TAG_FROM_VERSION_FILE="$(params.set-tag-from-version-file)"
         PATH_TO_VERSION_FILE="$(params.path-to-version-file)"
         PUSH_RETRIES="$(params.push-retries)"
 
-        echo "DOCKER_CONFIG_FILE: $DOCKER_CONFIG_FILE"
+        echo "DOCKER_CONFIG: $DOCKER_CONFIG"
         echo "CONTEXT: $CONTEXT"
         echo "DOCKERFILE: $DOCKERFILE"
+        echo "CACHE: $CACHE"
         echo "SET_TAG_FROM_VERSION_FILE: $SET_TAG_FROM_VERSION_FILE"
         echo "PATH_TO_VERSION_FILE: $PATH_TO_VERSION_FILE"
         echo "PUSH_RETRIES: $PUSH_RETRIES"
@@ -106,28 +162,173 @@ spec:
 
         TAG="$(params.push-image-tag)"
 
-        if [[ "$SET_TAG_FROM_VERSION_FILE" == "true" ]]; then
+        if [ "$SET_TAG_FROM_VERSION_FILE" = "true" ]; then
           echo "Setting tag from version file ..."
-          if [[ "$PATH_TO_VERSION_FILE" == "" ]]; then
+          if [ "$PATH_TO_VERSION_FILE" = "" ]; then
             echo "Configuration ERROR: No path-to-version-file parameter is configured - Aborting build"
             exit 1
           fi
-          TAG="$(cat $PATH_TO_VERSION_FILE)"
-          if [[ "$TAG" == "" ]]; then
+          TAG="$(cat "$PATH_TO_VERSION_FILE")"
+          if [ "$TAG" = "" ]; then
             echo "ERROR: Version file at $PATH_TO_VERSION_FILE did not contain data - Aborting build"
             exit 1
           fi
         fi
+
+        if [ "$CACHE" != "on" ] && [ "$CACHE" != "off" ]; then
+          echo "Configuration ERROR: cache must be on or off, not '$CACHE'"
+          exit 1
+        fi
+
+        case "$PUSH_RETRIES" in
+          ''|*[!0-9]*) echo "Configuration ERROR: push-retries must be a non-negative integer, not '$PUSH_RETRIES'"; exit 1 ;;
+        esac
 
         echo "Pushing tag: $TAG"
         DESTINATION="$(params.push-image-url):$TAG"
         echo "DESTINATION: $DESTINATION"
         echo "###############"
 
-        echo "Building docker image ..."
+        # Where the daemon's root, its config and its metadata live. An empty volume is what a
+        # caller that wants a limit hands over; an unbound optional workspace leaves this step to
+        # its own filesystem, which is just as ephemeral and still not the clone's volume. Nothing
+        # is put under XDG_RUNTIME_DIR, because on some nodes that is memory.
+        if [ -d /buildkit ] && [ -w /buildkit ]; then
+          BUILDKIT_SCRATCH=/buildkit
+        else
+          echo "WARNING: no buildkit-runtime workspace is bound, so the daemon's root goes to" \
+               "$HOME/buildkit-scratch - which is this container's own overlay, where an" \
+               "overlayfs snapshotter cannot mount and the build will run on native instead." \
+               "Bind buildkit-runtime to an empty volume to get overlayfs." >&2
+          BUILDKIT_SCRATCH="$HOME/buildkit-scratch"
+        fi
+        BUILDKIT_ROOT="$BUILDKIT_SCRATCH/root"
+        METADATA_FILE="$BUILDKIT_SCRATCH/meta.json"
+        DAEMON_CONFIG="$BUILDKIT_SCRATCH/buildkitd.toml"
+        # The image sets this and the daemon's socket has to live where the step can write. The
+        # fallback is spelled so a step that did not get the image's environment still finds it.
+        XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
+        export XDG_RUNTIME_DIR
+        SOCKET="$XDG_RUNTIME_DIR/buildkit/buildkitd.sock"
+        ADDR="unix://$SOCKET"
 
-        mkdir -p /kaniko/.docker
-        cp "$DOCKER_CONFIG_FILE" /kaniko/.docker/config.json
-        /kaniko/executor $EXTRA_BUILD_ARGS --dockerfile="$DOCKERFILE" --context="$CONTEXT" --destination="$DESTINATION" --push-retry="$PUSH_RETRIES"
-      securityContext:
-        runAsUser: 0
+        mkdir -p "$BUILDKIT_ROOT" "$XDG_RUNTIME_DIR/buildkit"
+
+        # The registry protocol is decided here, by probing, and not by the operator. BuildKit's
+        # resolver does whatever the daemon's config says and otherwise fails with "server gave
+        # HTTP response to HTTPS client", and writing http=true plus insecure for a host that is
+        # simply unreachable turns a cluster problem into a confusing registry-side answer. So the
+        # first probe that answers anything wins, and one that answers nothing at all is a failure.
+        # A host that answers 401 to /v2/ answers: that is an authenticated registry, not a dead one.
+        REGISTRY_HOST="$(printf '%s' "$(params.push-image-url)" | cut -d/ -f1)"
+        printf '' > "$DAEMON_CONFIG"
+        https_answer="$(wget -S -O /dev/null -T 10 "https://$REGISTRY_HOST/v2/" 2>&1 || true)"
+        case "$https_answer" in
+          *HTTP/*)
+            echo "Registry probe: $REGISTRY_HOST answers over https"
+            ;;
+          *)
+            http_answer="$(wget -S -O /dev/null -T 10 "http://$REGISTRY_HOST/v2/" 2>&1 || true)"
+            case "$http_answer" in
+              *HTTP/*)
+                echo "Registry probe: $REGISTRY_HOST answers over plain http, configuring it so"
+                printf '[registry."%s"]\n  http = true\n' "$REGISTRY_HOST" > "$DAEMON_CONFIG"
+                ;;
+              *)
+                echo "ERROR: no registry answered at $REGISTRY_HOST, over https or over http." >&2
+                echo "https probe said: $(printf '%s' "$https_answer" | tr '\n' ' ')" >&2
+                echo "http probe said: $(printf '%s' "$http_answer" | tr '\n' ' ')" >&2
+                exit 1
+                ;;
+            esac
+            ;;
+        esac
+
+        # The image is rootless because its entrypoint is `rootlesskit buildkitd`, and a step that
+        # supplies a script does not run an entrypoint. Reproducing it is the whole of rootless:
+        # rootlesskit is what puts uid 1000 into a namespace where it can be buildkit's root.
+        # Starting `buildkitd` alone here does not build anything; it exits with a sentence about
+        # mapped root.
+        rootlesskit buildkitd --config="$DAEMON_CONFIG" --root "$BUILDKIT_ROOT" \
+            --addr="$ADDR" --oci-worker-no-process-sandbox > "$BUILDKIT_SCRATCH/daemon.log" 2>&1 &
+        DAEMON=$!
+        cleanup() { kill "$DAEMON" 2>/dev/null || true; }
+        trap cleanup EXIT INT TERM
+
+        # Without this wait the first buildctl answer is "connection refused" and the run's real
+        # complaint is buried under it.
+        waited=0
+        until buildctl --addr="$ADDR" debug workers >/dev/null 2>&1; do
+          waited=$((waited + 1))
+          if [ "$waited" -gt 60 ]; then
+            echo "ERROR: buildkitd did not come up within 60s. Its own output:" >&2
+            cat "$BUILDKIT_SCRATCH/daemon.log" >&2
+            exit 1
+          fi
+          sleep 1
+        done
+        echo "buildkitd is up after ${waited}s."
+
+        # One line each, logged and not asserted: what rootless this step actually is on this
+        # node. Seccomp 0 is unconfined and 2 is filtered, uid_map's first field is non-zero when
+        # the uid is mapped rather than real root, and the last line names the snapshotter the
+        # kernel gave (overlayfs needs a user-namespace-mountable overlayfs, and older kernels get
+        # fuse-overlayfs or native in its place).
+        echo "rootless measurement: uid=$(id -u) seccomp=$(grep -m1 Seccomp /proc/self/status | awk '{print $2}') apparmor=$(cat /proc/self/attr/current 2>/dev/null) uidmap=$(head -1 /proc/self/uid_map)"
+        echo "snapshotter: $(buildctl --addr="$ADDR" debug workers --format '{{range .}}{{.Labels}}{{end}}' 2>/dev/null | sed -n 's/.*worker\.snapshotter:\([a-z-]*\).*/\1/p')"
+
+        CACHE_ARGS=""
+        if [ "$CACHE" = "on" ]; then
+          CACHE_REF="$(params.push-image-url)-buildkit-cache:$TAG"
+          CACHE_ARGS="--import-cache type=registry,ref=$CACHE_REF --export-cache type=registry,ref=$CACHE_REF,mode=max"
+        fi
+
+        # The context is the whole directory and the Dockerfile lives inside it, so the
+        # dockerfile directory is resolved against the context or buildctl is handed this step's
+        # working directory instead.
+        CONTEXT="$(cd "$CONTEXT" && pwd)"
+        DOCKERFILE_DIR="$(cd "$CONTEXT/$(dirname "$DOCKERFILE")" && pwd)"
+        DOCKERFILE_NAME="$(basename "$DOCKERFILE")"
+
+        # BuildKit solves and pushes as one operation, so a retry is a re-solve rather than a
+        # re-push. The daemon stays up between attempts and the registry cache is warm, which is
+        # what makes that cheap.
+        attempt=1
+        max_attempts=$((PUSH_RETRIES + 1))
+        while :; do
+          echo "Build attempt $attempt of $max_attempts"
+          if buildctl --addr="$ADDR" build \
+              --progress plain \
+              --frontend dockerfile.v0 \
+              --local context="$CONTEXT" \
+              --local dockerfile="$DOCKERFILE_DIR" \
+              --opt filename="$DOCKERFILE_NAME" \
+              $CACHE_ARGS \
+              --metadata-file "$METADATA_FILE" \
+              --opt attest:provenance= \
+              $BUILDCTL_ARGS \
+              --output "type=image,name=$DESTINATION,push=true"; then
+            break
+          fi
+          if [ "$attempt" -ge "$max_attempts" ]; then
+            echo "ERROR: build and push failed after $attempt attempt(s). The daemon's own output:" >&2
+            cat "$BUILDKIT_SCRATCH/daemon.log" >&2
+            exit 1
+          fi
+          attempt=$((attempt + 1))
+          sleep 5
+        done
+
+        # The digest is what the exporter answered with, and not something recomputed locally. The
+        # metadata file also carries the cache manifest with its own nested, escaped `digest` line,
+        # and a `sed -n` prints every line that matches, so the cache line is removed before the
+        # match and `head -1` is the guard rather than the answer.
+        DIGEST="$(sed '/"cache\.manifest"/d' "$METADATA_FILE" \
+          | sed -n 's/^.*"containerimage\.digest": "\([^"]*\)".*$/\1/p' | head -1)"
+        if [ "$DIGEST" = "" ]; then
+          echo "ERROR: the build answered no digest. The metadata file said:" >&2
+          cat "$METADATA_FILE" >&2
+          exit 1
+        fi
+        echo "$DIGEST" > "$(results.image-digest.path)"
+        echo "Pushed $DESTINATION @ $DIGEST"

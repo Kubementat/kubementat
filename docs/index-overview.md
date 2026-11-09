@@ -216,8 +216,8 @@ The product's helmfile entry point plus the ten `*.encrypted.yaml` defaults its 
 ### tests/ (2 bash scripts, 81 Python test modules)
 Manual smoke tests plus the unit/lane suite that the migration built. `find tests -name 'test_*.py' | wc -l` → **81** files, all run by `uv run pytest -q`; the two `.sh` files are `tests/e2e/stages/01-provision.sh` (the lane's VM provision stage) and `tests/shims/_recorder.sh` (the parity shims' command recorder). `test_installation.sh` is gone, and what it asserted moved into the lane harness. The sentence below is kept as the 2026-06 state: manual smoke tests only, no unit tests, no pytest, no mocks — the last three words are now the opposite of the truth.
 
-### examples/ (26 files across 3 categories — `find examples -type f | wc -l`)
-Reference implementations: `helm_charts/nginx-example/` (complete Helm chart with deployment, service, ingress, HPA), `kubernetes/` (shell examples for pod exec and node scheduling), `tekton_ci/` (pipeline examples including full deployment orchestrator and Flutter build). Good reference for extending the platform. (The MySQL setup and nginx-reverse-proxy example pipelines were removed 2026-10-27 with the backing-service automation.)
+### examples/ (24 files across 3 categories — `find examples -type f | wc -l`)
+Reference implementations: `helm_charts/nginx-example/` (complete Helm chart with deployment, service, ingress, HPA), `kubernetes/` (shell examples for pod exec and node scheduling), `tekton_ci/` (pipeline examples including the full deployment orchestrator). Good reference for extending the platform. (The MySQL setup and nginx-reverse-proxy example pipelines were removed 2026-10-27 with the backing-service automation, and the Flutter build example went with the image build that replaced kaniko.)
 
 ### helm_charts/ (placeholder only)
 Contains only `.gitkeep`. All actual Helm chart content lives in `examples/helm_charts/nginx-example/`. The root directory is a placeholder with no charts.

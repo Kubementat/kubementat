@@ -14,8 +14,8 @@ Task's own params block is the list of what it accepts, a param outside that lis
 after `a46a7ad` `git-crypt-unlock` was in exactly that position in two shipped example pipelines.
 
 So this guard does one thing: a new undeclared param anywhere in a shipped or example pipeline turns this
-green test red. And it makes the three pre-existing hits visible instead of quietly tolerating them,
-naming each one as *measured and unresolved* rather than as correct.
+green test red. And it makes the pre-existing hits visible instead of quietly tolerating them, naming each
+one as *measured and unresolved* rather than as correct.
 """
 
 import pathlib
@@ -34,17 +34,13 @@ EXAMPLES = pathlib.Path(__file__).resolve().parent.parent / "examples" / "tekton
 # Measured, not curated: every place a pipeline step passes a param its `taskRef` Task does not declare.
 # The key is (file, step); the value is what is handed over that the Task never asks for.
 #
-# Three of these predate this file and were not touched by any ticket in this epic. They are left exactly
-# as they are and reported here, because "we know about these three and have not checked them against a
-# cluster" is the true statement, and pinning them is the only way to keep the set from silently growing
+# What is left here predates this file and was not touched by any ticket that landed since. It is left
+# exactly as it is and reported here, because "we know about this one and have not checked it against a
+# cluster" is the true statement, and pinning it is the only way to keep the set from silently growing
 # past what somebody actually read off the tree. The counts here are a measurement and not a judgement.
 PREEXISTING_UNDECLARED_PARAMS = {
     "pipelines/copy-docker-image-pipeline.yml::skopeo-copy":
         {"environment", "team"},
-    "pipelines/build-pipeline-flutter-example.yml::git-clone-app":
-        {"docker-registry-base-url", "tekton-ci-image-name", "tekton-ci-image-tag"},
-    "pipelines/build-pipeline-flutter-example.yml::build-docker-image":
-        {"docker-registry-base-url", "tekton-ci-image-name", "tekton-ci-image-tag"},
 }
 
 # The two params whose consumer the migration deleted. If either reappears, the deletion was undone and the
@@ -90,7 +86,7 @@ def _rel(path):
 
 
 def test_the_measured_set_of_undeclared_params_is_the_one_recorded_here():
-    """Nothing new may hand a Task a param it never declared, and the known three stay known.
+    """Nothing new may hand a Task a param it never declared, and the known ones stay known.
 
     A set assertion rather than a "no new ones" filter, because a filter that drops what the author did
     not like is how a guard ends up agreeing with whatever the next change does.

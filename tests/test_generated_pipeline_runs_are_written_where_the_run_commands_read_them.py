@@ -274,7 +274,11 @@ def test_a_generated_run_is_the_run_the_pipeline_asks_for(checkout):
                                    "volumeClaimTemplate": {"spec": {
                                        "storageClassName": "fixture-storage",
                                        "accessModes": ["ReadWriteOnce"],
-                                       "resources": {"requests": {"storage": "100Mi"}}}}}]
+                                       "resources": {"requests": {"storage": "100Mi"}}}}},
+                                   # A workspace the pipeline marks optional is bound to an empty volume and
+                                   # not to a claim: sizing something the pipeline says may go unbound is a
+                                   # guess this generator cannot make.
+                                   {"name": "buildkit-runtime", "emptyDir": {}}]
 
 
 def test_a_generated_run_declares_every_parameter_the_pipeline_takes_and_not_one_more(checkout):
@@ -493,6 +497,13 @@ def test_the_generated_run_carries_the_values_the_script_read_off_the_configurat
     except that it did not: it wrote the placeholder tokens and left `run_pipeline` to substitute them.
     So this compares what the two files *mean* once that substitution has happened, which is exactly
     what a run is: a document the same code path resolves before it applies it.
+
+    `workspaces` is the one field the two do not agree on, and not because either is wrong about a
+    value: bash bound one workspace named `pipeline-workspace` to every pipeline whatever that
+    pipeline declared, so for a pipeline that declares a scratch workspace too the script's record
+    simply has one binding fewer. What is compared is therefore the bindings both sides wrote, value
+    for value, and the script's list as it is — a prefix, with the extra one the Python generator
+    read off the declaration rather than out of a habit.
     """
     script_run = run_generator_script(checkout, PIPELINE)
     assert script_run.returncode == 0, script_run.stdout + script_run.stderr
@@ -506,8 +517,17 @@ def test_the_generated_run_carries_the_values_the_script_read_off_the_configurat
     assert script_document["apiVersion"] == python_document["apiVersion"]
     assert script_document["kind"] == python_document["kind"]
     assert script_document["metadata"] == python_document["metadata"]
-    for field in ("pipelineRef", "taskRunTemplate", "timeouts", "workspaces"):
+    for field in ("pipelineRef", "taskRunTemplate", "timeouts"):
         assert script_document["spec"][field] == python_document["spec"][field], field
+
+    script_bindings = script_document["spec"]["workspaces"]
+    python_bindings = python_document["spec"]["workspaces"]
+    assert [binding["name"] for binding in python_bindings][:len(script_bindings)] == [
+        binding["name"] for binding in script_bindings]
+    for script_binding in script_bindings:
+        assert script_binding in python_bindings, script_binding["name"]
+    assert len(python_bindings) > len(script_bindings), (
+        "the script bound the name it always bound; the generator binds what the pipeline declares")
 
 
 def test_both_halves_write_the_same_run_name_in_two_different_places(checkout):

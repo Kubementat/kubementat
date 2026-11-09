@@ -13,10 +13,10 @@
       "destination": "REPLACEME_DOCKER_REGISTRY_BASE_URL/terraform:latest"
     },
     {
-      "name": "kaniko",
-      "description": "Image used for building docker images",
-      "source": "gcr.io/kaniko-project/executor:debug",
-      "destination": "REPLACEME_DOCKER_REGISTRY_BASE_URL/kaniko:debug"
+      "name": "buildkit",
+      "description": "Image used for building docker images: the rootless BuildKit the build task runs. Tag is v0.34.2, whose manifest list is sha256:c8252268760e1baba80780d63d738ef9f260fb7c7c0973c78494cb9ddd99eda1, so a mirrored pull resolves to the same bytes the upstream tag does",
+      "source": "moby/buildkit:v0.34.2-rootless",
+      "destination": "REPLACEME_DOCKER_REGISTRY_BASE_URL/buildkit:v0.34.2-rootless"
     },
     {
       "name": "traefik",

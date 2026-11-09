@@ -28,9 +28,21 @@ spec:
       description: The image tag for the built image
     - name: builder-image
       description: The image that should be used for the docker build command
-      default: gcr.io/kaniko-project/executor:debug
+      default: moby/buildkit:v0.34.2-rootless
+    - name: buildctl-args
+      description: Additional arguments to the buildctl build invocation, spelled in buildctl's terms
+      default: ""
+    - name: cache
+      description: on or off, whether the build imports and exports the registry cache
+      default: "on"
   workspaces:
     - name: pipeline-workspace
+    - name: buildkit-runtime
+      description: |
+        Scratch space for the build daemon's content store, handed to the build task. It is optional
+        and binding nothing is allowed, but the build then runs on the `native` snapshotter instead
+        of `overlayfs`; an empty volume is the right binding.
+      optional: true
   tasks:
 
     # clone automation source repo for build
@@ -62,6 +74,10 @@ spec:
           value: "$(params.builder-image)"
         - name: ci-image
           value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+        - name: buildctl-args
+          value: "$(params.buildctl-args)"
+        - name: cache
+          value: "$(params.cache)"
         - name: path-to-context
           value: "/workspace/$(params.automation-git-project-name)/docker_files/ci_images/ubuntu_ci_minimal"
         - name: path-to-dockerfile-within-context
@@ -73,3 +89,5 @@ spec:
       workspaces:
         - name: workspace
           workspace: pipeline-workspace
+        - name: buildkit-runtime
+          workspace: buildkit-runtime

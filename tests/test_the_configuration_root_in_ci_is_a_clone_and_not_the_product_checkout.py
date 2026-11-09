@@ -54,10 +54,10 @@ EXAMPLES = Path(__file__).resolve().parent.parent / "examples" / "tekton_ci" / "
 # failure class every sibling guard file in this suite has written down.
 CLONING_PIPELINE_TEMPLATES = {"template-deploy-pipeline.yml"}
 
-# The shipped examples that clone, measured the same way: `build-pipeline-flutter-example.yml` clones an
-# app and reads no configuration, so it is not in this set, and neither is the hello-world pipeline that
-# clones nothing. Those two absences are the assertion below's other half -- the walk finds what clones
-# and not what merely exists.
+# The shipped examples that clone, measured the same way: the hello-world example clones nothing, so it
+# is not in this set, and neither is any example that clones an app without reading a configuration.
+# Those absences are the assertion below's other half -- the walk finds what clones and not what merely
+# exists.
 CLONING_EXAMPLE_PIPELINES = {"01-full-deployment-pipeline.yml", "deploy-pipeline-nginx-example.yml"}
 
 # The code clone's local directory name, as the shipped default says.

@@ -69,8 +69,13 @@ TRIGGERS_VERSION = "v1beta1"
 # other one: `git-crypt-unlock.yml` is one step carrying one block. Measured and not guessed, which is why
 # the sentence says so -- this is the one count in the file a *new* file is allowed to move, so a bump here
 # has to arrive with the file that caused it and not by somebody rounding to make it green.
-PIPELINE_RUNS_EXPECTED = 13
-VOLUME_CLAIM_TEMPLATES_EXPECTED = 9
+PIPELINE_RUNS_EXPECTED = 12
+# It is 12 now, and 8 volumeClaimTemplates, because one shipped `PipelineRun` left the tree: the
+# Flutter build example was deleted with the image builder it was written for, and its run file went
+# with it. Measured off `git show HEAD` on the same day as every other number here, which is the
+# tradition this file's counts follow — a bump arrives with the file that caused it, not by somebody
+# rounding to make it green.
+VOLUME_CLAIM_TEMPLATES_EXPECTED = 8
 STEP_COMPUTE_RESOURCES_EXPECTED = 19
 TRIGGER_TEMPLATE_FILES_EXPECTED = 6
 

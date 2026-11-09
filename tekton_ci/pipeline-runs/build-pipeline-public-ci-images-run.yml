@@ -30,3 +30,8 @@ spec:
           resources:
             requests:
               storage: 100Mi
+    # Scratch space for the build daemon's content store. Optional, and an empty volume is what it
+    # wants: the build falls back to the `native` snapshotter when it is not bound, and a claim for
+    # it would be a volume sized for something the pipeline itself marks optional.
+    - name: buildkit-runtime
+      emptyDir: {}

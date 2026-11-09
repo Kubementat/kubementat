@@ -1,5 +1,136 @@
 # Unreleased
 
+- **The image build in the pipeline is rootless BuildKit, and kaniko is gone.**
+  `build-and-push-docker-image` now runs `moby/buildkit:v0.34.2-rootless` as uid 1000 inside the
+  step's own container, in the same TaskRun pod, with no sidecar daemon and nothing privileged.
+
+  **Why, said straight.** The default every shipped pipeline carried,
+  `gcr.io/kaniko-project/executor:debug`, comes from a repository Google archived on 2025-06-03, and
+  the image is frozen. That is not the same claim as "the lane is unpatched": kaniko was forked and is
+  maintained (`github.com/osscontainertools/kaniko`), and this repository's own e2e harness was building
+  with that fork until this change. What moved is that BuildKit caches **content-addressed build steps**
+  rather than the layers `COPY`/`RUN` create, attaches an attestation, and reports the digest it pushed —
+  and that one shipped default is frozen while nobody is writing those capabilities into kaniko.
+
+  **The pin.** `moby/buildkit:v0.34.2-rootless` everywhere the image appears, including
+  `mirrored_docker_images.json`, where the row lost `kaniko` and gained `buildkit`; that tag's manifest
+  list is `sha256:c8252268760e1baba80780d63d738ef9f260fb7c7c0973c78494cb9ddd99eda1`, which is written into
+  the row so the mirror and upstream are the same bytes. A tag+digest reference is not something skopeo
+  can copy, so the row pins the tag and names the digest in its description.
+
+  **What a team has to change.** `extra-build-args` is `buildctl-args`. It is buildctl's own argument
+  surface and it takes buildctl's flags: kaniko's `--skip-tls-verify-registry`, `--insecure`,
+  `--single-snapshotter` and kaniko's cache flags are not accepted and nothing translates them, because a
+  shim that guesses at a dead upstream's syntax is how a build goes wrong quietly. `cache` is new and
+  defaults to `on`; `push-retries` kept its name. A run that still passes `extra-build-args`, or a
+  pipeline that kept its kaniko default, fails in the first minutes of the step rather than producing a
+  wrong image — which is the whole reason the task and its three pipelines moved together and the
+  `docker-build-pipeline` example run with them.
+
+  **Cache is on, not an option.** Each build imports and exports a registry cache at
+  `<push-image-url>-buildkit-cache:<tag>` with `mode=max`, so multi-stage intermediates are cached as
+  well, and `cache=off` is the opt-out. It lives in the registry the image lives in, so a warm cache
+  travels to every node and every later run rather than living on one warm pod. Two things to know: the
+  registry has to accept a new repository per image name, which a plain `registry:2` does and some
+  read-only endpoints do not; and because BuildKit solves and pushes as one operation, `push-retries` now
+  retries a *re-solve* rather than a re-push — for a build task that already runs under `retries: 1` or
+  `retries: 2` in every pipeline that uses it, that is today's behaviour, and it is the cheap half of
+  what kaniko retried.
+
+  **An attestation, and no more than that.** `--opt attest:provenance=` attaches an inline, **unsigned**
+  SLSA-format attestation to the pushed image: the inputs, the environment, the source revision, which
+  step produced which layer. It records faithfully what BuildKit saw. It does not prove to a third party
+  that the build happened as described; BuildKit's own `builder.id` is empty in this shape, and a signed
+  lineage needs a signing identity, which is a different ticket than this one.
+
+  **The digest is now a result.** `containerimage.digest` from the exporter's own answer lands in the
+  task's `image-digest` result, read out of what the registry was given rather than recomputed
+  locally. The lane reads outcomes and not results, so this is invisible to a green check exactly as it
+  should be.
+
+  **There is no new parameter for the registry protocol, and that was the point.** Before the daemon
+  builds, the step probes `https://<host>/v2/`, then `http://<host>/v2/`, and writes the daemon's
+  registry stanza for whichever one answered; if neither answers, the run fails carrying both probes'
+  output. BuildKit's resolver otherwise fails with `server gave HTTP response to HTTPS client`, and the
+  tempting fix — `http = true` plus `insecure` for one host — is what turns a cluster problem into a
+  registry-side 404. Writing both is not what this does, and a registry that is simply unreachable is no
+  longer downgraded to plain HTTP on the way to a confusing failure. A registry that needs `insecure` for
+  a self-signed HTTPS certificate is a `registry-ca` ticket, not a regression this one leaves behind.
+
+  **Rootless is the supported posture, declared in the step and not a knob.** The step says
+  `runAsUser: 1000`, `runAsNonRoot: true`, `drop: [ALL]` with `SETUID` and `SETGID` back, `seccompProfile:
+  Unconfined` and `appArmorProfile: Unconfined`. Two of those were measured and not reasoned about, and
+  both are load-bearing. `rootlesskit` is what puts uid 1000 into a namespace where it can be buildkit's
+  root, and a step that hands the container a script does not run the image's entrypoint, so the script
+  starts `rootlesskit buildkitd` itself — starting `buildkitd` alone answers a sentence about mapped
+  root. And the uid-mapping helper carries *file capabilities* rather than a setuid bit: with
+  `allowPrivilegeEscalation: false` — which is what a pod security profile that calls this step
+  `restricted` requires — the kernel refuses to exec it and nothing maps any uid, so escalation is
+  declared **on** and the bounding set is closed to what that helper needs instead. That is not a
+  hedge: the image's only setuid-root binary is `fusermount3`, so nothing reachable here can get to
+  uid 0. Both unconfined profiles are written down rather than left to the kubelet, because the kubelet
+  applies a default seccomp profile only if it was started with `--seccomp-default`, which k3s is not,
+  and that is an accident of an installation rather than a guarantee. `appArmorProfile` needs **Kubernetes
+  1.30**, which is this step's floor and belongs to the product rather than a detail: below it the field
+  is dropped at apply and the node's own AppArmor profile decides.
+
+  **Where rootless is not available is a cluster statement, and there is no flag for it.** A namespace
+  under PodSecurity `restricted` rejects this step at admission — twice, on `seccompProfile: Unconfined`
+  and on `allowPrivilegeEscalation: true` — and the fix is a
+  `pod-security.kubernetes.io/exempt-*` exemption on that namespace or a posture that is not
+  `restricted`. The same for `user.max_user_namespaces`, and for kernels where overlayfs cannot be
+  mounted inside a user namespace. kubementat documents those; it does not ship a privileged step to
+  everybody because one environment has not been fixed. The task cannot hedge either way: Tekton
+  substitutes variables into a step's `image`, `command`, `args`, `script`, `env` and `workingDir` but
+  **not** its `securityContext`, so a `builder-mode=rootless|rootful` parameter is not implementable and
+  would be a lie in the parameter list.
+
+  **The lane is the swap's proof, and on the harness it is one line.** `DOCKERBUILD_BUILDER_IMAGE` in
+  `tests/e2e/harness/config.py` is now the pinned BuildKit image; what the fixture hands the pipeline is
+  still the `builder-image` parameter and nothing else, and the lane reads nothing in `src/` about
+  BuildKit — which is what makes a green `--lane tekton --scope full` the swap's proof rather than a second
+  implementation.
+
+  **One thing that was wrong in the plan and right in the run.** The plan asked for a second workspace
+  bound `emptyWorkspace: true`; that field does not exist on a Task's workspace declaration in the Tekton
+  this tree installs (the empty volume is spelled `emptyDir`, and only on the *binding* side), so the
+  mechanism is: the task declares `buildkit-runtime` as an optional workspace mounted at `/buildkit`, the
+  shipped pipelines and their run manifests bind it to an empty volume, and the generator binds an
+  optional workspace with `emptyDir` instead of a claim. What is being bought is not disk accounting and
+  not the clone's volume: put the daemon's root on the container's own overlay and the daemon silently
+  falls back from `overlayfs` to `native`, because an overlay cannot mount inside itself. The step
+  therefore logs the snapshotter it ended up on, and says in its log what binding to give it when nothing
+  is bound.
+
+  **What left the tree.** `examples/tekton_ci/pipelines/build-pipeline-flutter-example.yml` and its run
+  file, deleted and not migrated: it passed `docker-registry-base-url`, `tekton-ci-image-name` and
+  `tekton-ci-image-tag` to a task that declares none of them, so it could not run at any version of this
+  task, and the migration is not a chance to keep a known-bad shape in sync. Two files that read the tree
+  moved with it — `tests/test_a_step_only_passes_params_the_task_it_calls_declares.py` drops its two
+  entries for those files, which is what keeps that file's claim that it measures the tree true, and the
+  beta-tree counts in `tests/test_tekton_manifest_api_versions.py` go from 13 `PipelineRun` manifests and
+  9 `volumeClaimTemplate` blocks to 12 and 8, one of each having left with the deleted run. No floor was
+  lowered.
+
+  **Evidence.** `uv run pytest -q` → **1785 passed, 1 skipped** (the count this change lands with, after
+  the two guards above were re-measured and the generated-run parity comparison was told about the
+  optional-workspace binding). The rootless build was run against a real cluster — a TaskRun of this
+  task on k3s 1.36 with the step's `securityContext` — and its own log answers the questions the spike
+  was for: `uid=1000`, `Seccomp: 0`, `apparmor=unconfined`, `snapshotter: overlayfs`, the probe choosing
+  plain HTTP for a `registry:2` on a NodePort, the cache importing on the second run, and the digest
+  arriving as a task result. The `image-digest` result, the probe's three branches and the credential
+  path were each run against a real cluster: a TaskRun of this task, an authenticated HTTP registry whose
+  Secret step one had to be allowed to read, and a host that answers neither probe. The credentials are
+  read by the daemon the step started, which is why `DOCKER_CONFIG` is exported and not merely set.
+
+  The lane is the other half, and it is green: `uv run python tests/e2e/suite.py --lane tekton --scope
+  full` → **87 assertions, 0 failed**, reading nothing in `src/` about BuildKit. The feature stage's own
+  number: the pipeline's clone, build and push closed in 24 seconds. On that same cluster the task ran
+  again with the registry cache warm from the run before it and answered `CACHED` for the steps it had
+  solved the first time, in 7 seconds of wall clock — and `cache=off` on the same fixture measured the
+  same 7 seconds, which is what the plan said to expect of a one-`COPY` image and what was measured
+  rather than asserted.
+
 - **The four `tekton-*` commands that were still flat are verbs on `kmt tekton`, and the flat names
   are dead.** `kmt tekton-setup-cleanup-job` is `kmt tekton setup-cleanup-job`,
   `kmt tekton-generate-deploy-pipeline` is `kmt tekton generate-deploy-pipeline`,

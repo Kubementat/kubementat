@@ -30,6 +30,10 @@ spec:
           resources:
             requests:
               storage: 100Mi
+    # Scratch space for the build daemon's own content store, which is what decides the snapshotter
+    # the build gets. The clone's volume above stays sized for the clone.
+    - name: buildkit-runtime
+      emptyDir: {}
   params:
     - name: docker-registry-base-url
       value: "{{REGISTRY}}"

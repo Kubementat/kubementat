@@ -396,6 +396,76 @@ tone to tell these apart:
 Already-unlocked is a fourth case and it is silent: git-crypt exits 0 and prints nothing, so a green step is
 evidence the tree is readable from that point onward and nothing more.
 
+## Building and pushing a container image (rootless BuildKit)
+
+`build-pipeline-ci-images`, `build-pipeline-public-ci-images` and `docker-build-pipeline` all hand the
+image build to the `build-and-push-docker-image` task, and that task runs
+[`moby/buildkit:v0.34.2-rootless`](https://github.com/moby/buildkit) as uid 1000 inside the step's own
+container. `gcr.io/kaniko-project/executor:debug`, what every shipped pipeline used to pass, comes from a
+repository Google archived on 2025-06-03; BuildKit is what replaced it, and the honest reason is that it
+caches content-addressed build steps instead of layers, reports a digest it pushed, and is maintained.
+Nothing in the TaskRun pod is privileged and there is no sidecar daemon.
+
+**Kubernetes 1.30 is this step's floor**, because that is the version that introduced
+`securityContext.appArmorProfile`, which the step declares. Below 1.30 the field is dropped when the
+manifest is applied and the node's own AppArmor profile decides what the build gets.
+
+**A namespace that enforces the `restricted` PodSecurity profile will refuse this step at admission** —
+not fail the build, reject the pod. `restricted` requires a `RuntimeDefault` or localhost
+`seccompProfile` (here `Unconfined`, because rootlesskit needs `clone` and `unshare` calls no default
+profile lets through) and requires `allowPrivilegeEscalation: false` (here `true`, because the image maps
+uids through a helper that carries file capabilities, and a process that cannot gain privileges is refused
+exec of it — leaving it false does not make the step safer, it makes the build impossible). The fix is on
+the cluster and not in a parameter: put a `pod-security.kubernetes.io/exempt-*` exemption on the CI
+namespace, or do not mark that namespace `restricted`. Neither is a kubementat knob, and the task cannot
+hedge: Tekton substitutes variables into a step's `image`, `command`, `args`, `script`, `env` and
+`workingDir`, but not into its `securityContext`, so no `builder-mode` could switch between rootless and
+rootful.
+
+Everything else the step cannot control is a node setting, and a red run names it:
+
+| What the node is missing | What the step says |
+|---|---|
+| `user.max_user_namespaces` is 0 | `buildkitd` does not come up, and its own output is in the step's log |
+| `kernel.apparmor_restrict_unprivileged_userns=1`, on the kernels that need it | `rootlesskit` fails at the uid map and says so |
+| A scratch volume for the daemon's content store | the step warns, and the build runs on `native` instead of `overlayfs` |
+| World-readable files in the clone | buildctl's context read fails with `permission denied`, and the fix is at the clone step |
+
+Neither of the first two was a thing this build needed changing. The measured node is k3s 1.36 on Ubuntu
+26.04, with `kernel.apparmor_restrict_unprivileged_userns=1` and `user.max_user_namespaces` non-zero, and
+it built — so the honest reading of that table is "what to look for when the build fails", not a
+preparation checklist. What the step itself always states is in its log: the uid, the seccomp and AppArmor
+state, the uid map, and the snapshotter.
+
+**The task has a second workspace now, and it is what makes the build fast.** `buildkit-runtime` holds
+the daemon's content store, its config, and its metadata file, and it is bound as an *empty* volume. The
+reason is not disk accounting: the daemon's root must not be the container's own overlay, because an
+overlay cannot mount inside itself and BuildKit then falls back from `overlayfs` to `native` without
+saying so. The shipped run manifests bind it, a generated run binds an optional workspace to an empty
+volume rather than to a claim, and the step prints the snapshotter it landed on — plus a warning naming
+the binding it did not get — so the difference is a line in the log rather than a slow surprise.
+
+**What the parameters are called now.** `extra-build-args` is `buildctl-args`, spelled in buildctl's
+terms, and kaniko's own flags (`--skip-tls-verify-registry`, `--insecure`, `--single-snapshotter`,
+kaniko's cache flags) are not accepted in it. `cache` is new and defaults to `on`: the build imports and
+exports a registry cache at `<push-image-url>-buildkit-cache:<tag>`, with `mode=max` so multi-stage
+intermediates are cached too, and `cache=off` opts out. `push-retries` kept its name and its intent, but
+BuildKit solves and pushes as one operation, so a retry is a re-solve rather than a re-push; against a
+running daemon and a warm cache that is the cheap half of what it used to cost. The task also publishes an
+`image-digest` result, which is what the registry answered and not something recomputed locally.
+
+**There is no `registry-protocol` parameter and there should not be.** The step probes
+`https://<host>/v2/`, then `http://<host>/v2/`, writes the daemon's registry stanza only if plain HTTP is
+what answered, and fails the run with both probes' output if neither answers. A registry that is simply
+unreachable is therefore never quietly downgraded to plain HTTP. The day one genuinely needs `insecure`
+for a self-signed HTTPS certificate is a ticket for a `registry-ca` parameter.
+
+**What the attestation is, and what it is not.** `--opt attest:provenance=` puts an inline, *unsigned*
+SLSA-format attestation next to the pushed image: what the build read, the environment, the source
+revision, which step produced which layer. It records what BuildKit saw, faithfully. It does not prove to
+a third party that the build happened the way it says; a signed lineage needs a signing identity, which
+is its own ticket.
+
 ## Adding new tekton triggers
 `uv run kmt tekton generate-triggers <ENVIRONMENT> <TEAM> <APP_NAME> --pipeline-name <NAME> --trigger-type github|gitlab` — see the section of the same name above under "Installing / configuring tekton", which is where the whole flow is written up.
 
@@ -622,7 +692,7 @@ tkn pipelinerun delete hello-world-pipeline-run
 - Tutorial: https://github.com/tektoncd/pipeline/blob/master/docs/tutorial.md
 - Tekton Examples: https://github.com/tektoncd/pipeline/tree/master/examples
 - Tekton task catalog: https://github.com/tektoncd/catalog
-- kaniko - build docker images in k8s - https://github.com/GoogleContainerTools/kaniko
+- BuildKit, rootless in a container - https://github.com/moby/buildkit
 - Tekton tutorial VMWare
   - https://tanzu.vmware.com/developer/guides/ci-cd/tekton-gs-p1/
   - https://tanzu.vmware.com/developer/guides/ci-cd/tekton-gs-p2/

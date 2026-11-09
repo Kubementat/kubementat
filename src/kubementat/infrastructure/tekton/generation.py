@@ -711,14 +711,14 @@ def _pipeline_run_parameter_value(name: str) -> str:
     return f"{placeholder}_PLACEHOLDER" if placeholder else PIPELINE_RUN_UNFILLED_PARAMETER
 
 def _declared_pipeline_workspaces(workspaces, source: Path) -> list:
-    """The workspace names the generated run must bind, in declaration order.
+    """The workspaces the generated run must bind, in declaration order, each marked optional.
 
-    bash always bound one workspace named `pipeline-workspace`, whatever the pipeline declared,
-    so a run of a pipeline with no workspaces at all (every Task-only pipeline in
+    bash always bound one workspace named `pipeline-workspace`, whatever the pipeline declared, so
+    a run of a pipeline with no workspaces at all (every Task-only pipeline in
     `tekton_ci/pipelines/`) declared a binding the pipeline never asked for, and a pipeline that
-    declared two got one. The names come from the source now; what does not change is that each
-    is a `volumeClaimTemplate`, because that is the only binding this generator can write without
-    knowing what the tasks read.
+    declared two got one. The names come from the source now, and so does whether each one is
+    required: what the tasks can do without is bound differently from what they cannot, and the
+    difference is a fact the declaration states rather than one the generator guesses.
     """
     if workspaces is None:
         return []
@@ -726,15 +726,33 @@ def _declared_pipeline_workspaces(workspaces, source: Path) -> list:
         raise errors.GenerationInputNotUsableError(
             f"{source} declares spec.workspaces as a {type(workspaces).__name__}, not a list, so "
             f"kubementat cannot tell what the pipeline needs mounted. Nothing was written.")
-    names = []
+    declared = []
     for entry in workspaces:
         name = entry.get("name") if isinstance(entry, dict) else None
         if not _is_supplied(name):
             raise errors.GenerationInputNotUsableError(
                 f"{source} declares a workspace with no name, so a generated run could not bind "
                 f"it. Nothing was written.")
-        names.append(str(name))
-    return names
+        declared.append({"name": str(name),
+                         "optional": bool(isinstance(entry, dict) and entry.get("optional"))})
+    return declared
+
+def _workspace_binding(workspace: dict) -> dict:
+    """The binding a generated run writes for one declared workspace.
+
+    Required workspaces get a `volumeClaimTemplate`, which is the only binding this generator can
+    write without knowing what the tasks read. Optional ones get an empty volume: the pipeline says
+    the build can do without them, so sizing one is a guess, and a claim would be a volume nobody
+    asked for.
+    """
+    name = {"name": workspace["name"]}
+    if workspace["optional"]:
+        return dict(name, emptyDir={})
+    return dict(name, volumeClaimTemplate={"spec": {
+        "storageClassName": "STORAGE_CLASS_PLACEHOLDER",
+        "accessModes": [PIPELINE_RUN_WORKSPACE_ACCESS_MODE],
+        "resources": {"requests": {"storage": PIPELINE_RUN_WORKSPACE_STORAGE}},
+    }})
 
 def _pipeline_run_document(config, pipeline_name: str, run_name: str, declared: dict,
                            workspaces: list) -> dict:
@@ -755,16 +773,7 @@ def _pipeline_run_document(config, pipeline_name: str, run_name: str, declared: 
         "timeouts": {"pipeline": PIPELINE_RUN_TIMEOUT},
     }
     if workspaces:
-        spec["workspaces"] = [{
-            "name": name,
-            "volumeClaimTemplate": {
-                "spec": {
-                    "storageClassName": "STORAGE_CLASS_PLACEHOLDER",
-                    "accessModes": [PIPELINE_RUN_WORKSPACE_ACCESS_MODE],
-                    "resources": {"requests": {"storage": PIPELINE_RUN_WORKSPACE_STORAGE}},
-                },
-            },
-        } for name in workspaces]
+        spec["workspaces"] = [_workspace_binding(workspace) for workspace in workspaces]
     spec["params"] = [{"name": name, "value": value} for name, value in declared.items()]
 
     document = {
