@@ -19,7 +19,7 @@ rows:
 * no `config secrets` -- `config validate` is what answers "are these secrets fine", and it does it
   by reading the tree. A `secrets` verb would be a second opinion about the same file, which is how
   two answers get written and only one is read.
-* no `config generate` -- `kmt tekton-generate-*` are those verbs, and they already name the kind of
+* no `config generate` -- `kmt tekton generate-*` are those verbs, and they already name the kind of
   artifact they emit. A `config generate` would say only that something is emitted.
 
 `init` is on the group for this reason: creating a tree is the one configuration act that
@@ -58,7 +58,7 @@ from kubementat import config_answers, config_bootstrap, config_init, config_key
                   'no answers, because config set is the verb that answers one key and config unset '
                   'is the verb that takes one away. What is not here is deliberate: no config unlock '
                   '(kubementat never unlocks), no config secrets (config validate answers '
-                  'that), no config generate (kmt tekton-generate-* is that verb).')
+                  'that), no config generate (kmt tekton generate-* is that verb).')
 def config():
     pass
 

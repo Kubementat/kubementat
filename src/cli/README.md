@@ -18,5 +18,5 @@ uv sync
 uv run kmt --help
 
 # e.g.
-uv run kmt tunnel-grafana
+uv run kmt tunnel grafana
 ```

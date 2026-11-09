@@ -134,7 +134,7 @@ The directories structure is as follows:
     - 'tekton' directory - contains team specific pipelines and tasks in the according directories (optional)
     - contains helm deployment configurations for the according team namespace
 
-For tekton pipelines and tasks the load order when executing the tekton-setup-pipelines function via kmt is as follows:
+For tekton pipelines and tasks the load order when executing `kmt tekton setup-pipelines` is as follows:
 - Kubementat default resources
 - Environment resources (in platform_config/{ENVIRONMENT_NAME}/tekton)
 - Team resources (in platform_config/{ENVIRONMENT_NAME}/{TEAM_NAME}/tekton)
@@ -300,7 +300,7 @@ uv run kmt setup-secrets dev dev1 --config-dir ~/kmt-config
 # Configure cluster wide auto cleanup of finished tekton pipeline runs
 # This is implemented via Kubernetes cronjob, in the namespace the environment's
 # CLUSTER_CRONJOBS_DEPLOYMENT_NAMESPACE names
-uv run kmt tekton-setup-cleanup-job dev --team dev1
+uv run kmt tekton setup-cleanup-job dev --team dev1
 
 # Test run a pipeline via tekton
 uv run kmt tekton run-pipeline dev dev1 ../../examples/tekton_ci/pipeline-runs/hello-world-pipeline-run.yml

@@ -1,5 +1,56 @@
 # Unreleased
 
+- **The four `tekton-*` commands that were still flat are verbs on `kmt tekton`, and the flat names
+  are dead.** `kmt tekton-setup-cleanup-job` is `kmt tekton setup-cleanup-job`,
+  `kmt tekton-generate-deploy-pipeline` is `kmt tekton generate-deploy-pipeline`,
+  `kmt tekton-generate-triggers` is `kmt tekton generate-triggers`, and
+  `kmt tekton-generate-pipeline-run` is `kmt tekton generate-pipeline-run`. No alias, no shim, no
+  "did you mean": the old names answer `No such command` and exit 2.
+
+  They were left flat by the 2026-10-30 grouping on the argument that nothing measured them, and a
+  rename nothing measures is a rename nobody can tell the difference about. That argument held while
+  the six measured tekton commands were flat beside them and stopped holding the moment `kmt tekton`
+  existed: four commands whose first word is already the group's name, printed as `tekton-<verb>`
+  while their nine siblings print as `tekton <verb>`, describe a rule the surface does not follow.
+  What keeps the difference measurable is the surface test rather than a capability row, so the check
+  is the shipped entry point being asked whether the old name resolves.
+
+  **What an operator notices is the argv and nothing else.** Each command takes exactly what it
+  took: the generators keep environment, team and their own positional (the app name, or the
+  pipeline file), and `setup-cleanup-job` keeps the environment as a positional with the team behind
+  `--team`, because the team it needs is the registry credential its pod pulls with and not a
+  directory it selects. Grouping a command may not change what it takes, and here it did not. Nothing
+  about a refusal, an exit code, an output directory or a namespace changed.
+
+  **Where the four lines moved.** `src/cli/commands/tekton.py` (the decorators, and the module's
+  docstring stops describing a partially grouped surface); `src/cli/kmt.py`, which no longer registers
+  them on the root group because `kmt tekton` does it from the command module; the
+  `task.cleanup-job` row of `tests/e2e/harness/config.py`, whose argv is
+  `kmt tekton setup-cleanup-job {env} --team {team}`; the two messages the generators print when they
+  need an argument or find no triggers (`generation.py`, `triggers.py`); and `README.md`,
+  `docs/README_TEKTON.md`, `docs/index-overview.md` and
+  `docs/specifications/config-code-separation-spec.md`. `docs/plans/`, `TODOs.md` and the older
+  CHANGELOG entries keep the old names: they record what was true on a date, and no rename has ever
+  rewritten one of them.
+
+  **Evidence.** `uv run pytest -q` → **1785 passed, 1 skipped**, one of which is
+  `test_the_tekton_group_holds_the_ten_commands_and_their_flat_names_are_dead`, which checks the ten
+  verbs, each command's exact parameter set, the group's own listing, and that each flat name exits 2
+  with `No such command`. `uv run kmt --help` → **23** commands, four fewer, and
+  `uv run kmt tekton --help` → **10** verbs. `git grep -n 'tekton-setup-cleanup-job\|tekton-generate-'
+  -- .`, excluding the historical files above, answers nothing.
+
+  And a real cluster: `uv run python tests/e2e/suite.py --lane full --scope full` → **128 assertions,
+  0 failed** (run `20261109T085938Z-full-full`, two retries on cluster-readiness asserts and nothing
+  else). It matters which row that number contains: `cap:task.cleanup-job` is the one capability that
+  reaches any of the four, it now runs
+  `kmt tekton setup-cleanup-job {env} --team {team}` through `run_capability`, and the stage then reads
+  the cluster for what the command wrote — `assert:cleanup-cronjob-exists` found
+  `cleanup-tekton-pipelineruns` in `cluster-cronjobs` and `assert:cleanup-cronjob-scheduled` read its
+  schedule. The three generators stay lane-unmeasured, as they were before the move, so nothing here
+  claims a generated manifest applied and started a pipeline; the unit suite's own claims about
+  generated output are byte-and-path claims and are unchanged by this ticket.
+
 - **The layer gate and the class diagram are now tracked code, not scratch.** The AST import walk was
   `python3 .agent-work/import_graph.py src` and is now `python3 tools/import_graph.py src`; the diagram
   generator and its measurement modules moved to `docs/diagram-generator/`, where `README.md` names the three

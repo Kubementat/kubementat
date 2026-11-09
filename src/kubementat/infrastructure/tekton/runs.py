@@ -251,7 +251,7 @@ def _resolve_pipeline_run_file_path(identifier: str, config) -> Path:
     to callers this file does not own:
 
     * a **bare file name** (`foo-run.yml`) is a team identifier and resolves under
-      `Config.tekton_team_pipeline_run_dir`, which is what the `kmt tekton-generate-pipeline-run`
+      `Config.tekton_team_pipeline_run_dir`, which is what the `kmt tekton generate-pipeline-run`
       output and `list_available_pipeline_runs` both use;
     * a **`global/` prefix** resolves under `tekton_ci/pipeline-runs`, the long-standing way of
       pointing at a run that belongs to no team;

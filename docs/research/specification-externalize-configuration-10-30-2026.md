@@ -345,7 +345,7 @@ working tree and the product's plaintext templates do not disagree about what is
 * kubementat applies what it ships; it does **not** prune operator objects it no longer ships. (The
   "no pruning" ruling from ledger row 11b carries over: deleting something the operator wrote is not a
   kubementat decision.)
-*Done when:* the lane that runs `kmt tekton-setup-pipelines` reports both a product Task and a config
+*Done when:* the lane that runs `kmt tekton setup-pipelines` reports both a product Task and a config
 Task of the operator's own by name, and the unit suite proves the name-match precedence without a cluster.
 
 ---

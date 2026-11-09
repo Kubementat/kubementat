@@ -375,7 +375,7 @@ def _apply_team_trigger_resources(ctx, config, namespace: str, team) -> None:
     if not trigger_dir.is_dir():
         logging.info(f"No trigger directory at {trigger_dir}, so no triggers are configured "
                      f"for team {team}. Generate some with "
-                     f"`kmt tekton-generate-triggers`, or apply manifests here by hand.")
+                     f"`kmt tekton generate-triggers`, or apply manifests here by hand.")
         return
 
     # The primitive walks the directory and answers for every document in it; the object it

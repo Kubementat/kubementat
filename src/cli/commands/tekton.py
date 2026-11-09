@@ -7,16 +7,25 @@ is the shape `kmt users`, `kmt routing` and `kmt component` already have.
 
 **Renames, no aliases.** The old flat names are gone rather than shadowed: no hidden command, no
 `deprecated` branch, no "did you mean" translator. This file is where that rule bites
-hardest, because `kmt tekton-run-pipeline` is what a Tekton Task runs
+hardest, because `kmt tekton run-pipeline` is what a Tekton Task runs
 (`tekton_ci/tasks/run-tekton-pipeline.yml`) -- a command that answers to two names is a Task that can
 silently keep running the old one, which is the only way this migration has of making a lie out of a
 capability report.
 
-Six of the ten commands here were renamed by the grouping, because six are what the lane measures as
-flat; the
-cleanup job and the three generators stay under their old names for now, the same reason
-`helm-version` gives on its own module -- no marker pins them, and a rename nothing measures is a
-rename nobody can tell the difference about.
+All ten commands here are on the group. They were not: the cleanup job and the three generators kept
+their flat `tekton-*` names beside the group, on the argument that no marker measured them and a
+rename nothing measures is a rename nobody can tell the difference about. That argument only ever
+applied while the rest of the surface was flat beside it; once `kmt tekton` existed, four commands
+whose first word was already `tekton` answering to a flat name was a surface that said one thing and
+did another, so they are verbs on the group now -- `setup-cleanup-job`, `generate-deploy-pipeline`,
+`generate-triggers`, `generate-pipeline-run` -- and their flat names are dead in the same way the
+first six's were.
+
+What the move did not touch is what each command takes. `setup-cleanup-job` still wants the
+environment as a positional and the team as `--team`, because it addresses one namespace and no
+team-scoped path; the three generators still take environment, team and their own positional. An
+argv that means the same thing in two shapes is the defect grouping is supposed to remove, not
+introduce.
 """
 
 import click
@@ -155,9 +164,13 @@ def setup_triggers(ctx, environment, team):
 
 # --------------------------------------------
 # SETUP TEKTON CLEANUP JOB
-@click.command(name='tekton-setup-cleanup-job',
-               help='Setup the cronjob that prunes completed pipelineruns, in the namespace the '
-                    'environment config names for cluster cronjobs')
+# The team stays an option and not a positional here, which is the one shape on this group that
+# differs from its neighbours: this command creates nothing in a team's own directory and writes one
+# cluster-scoped CronJob, so the team is the credential the job pulls with and not a directory it
+# picks.
+@tekton.command(name='setup-cleanup-job',
+                help='Setup the cronjob that prunes completed pipelineruns, in the namespace the '
+                     'environment config names for cluster cronjobs')
 @click.argument('environment',envvar='ENVIRONMENT')
 @team_option()
 @kmt_context
@@ -170,10 +183,10 @@ def setup_cleanup_job(ctx, environment, team):
 
 # --------------------------------------------
 # GENERATE DEPLOY PIPELINE
-@click.command(name='tekton-generate-deploy-pipeline',
-               help='Generate a deploy pipeline for an app from the template, into the team\'s own '
-                    'pipeline directory. Review it: the generator cannot know what the app\'s '
-                    'database setup and seeding need.')
+@tekton.command(name='generate-deploy-pipeline',
+                help='Generate a deploy pipeline for an app from the template, into the team\'s own '
+                     'pipeline directory. Review it: the generator cannot know what the app\'s '
+                     'database setup and seeding need.')
 @click.argument('environment',envvar='ENVIRONMENT')
 @click.argument('team',envvar='TEAM')
 @click.argument('app_name')
@@ -205,9 +218,9 @@ def generate_deploy_pipeline(ctx, environment, team, app_name, git_url, git_proj
 
 # --------------------------------------------
 # GENERATE TRIGGER CONFIGURATION
-@click.command(name='tekton-generate-triggers',
-               help='Generate an app\'s webhook trigger manifests from the git host templates, into '
-                    'the team\'s trigger directory that tekton-setup-triggers then reads.')
+@tekton.command(name='generate-triggers',
+                help='Generate an app\'s webhook trigger manifests from the git host templates, into '
+                     'the team\'s trigger directory that `kmt tekton setup-triggers` then reads.')
 @click.argument('environment',envvar='ENVIRONMENT')
 @click.argument('team',envvar='TEAM')
 @click.argument('app_name')
@@ -226,11 +239,11 @@ def generate_trigger_configs(ctx, environment, team, app_name, pipeline_name, tr
 
 # --------------------------------------------
 # GENERATE PIPELINE RUN
-@click.command(name='tekton-generate-pipeline-run',
-               help='Generate a pipeline run for a pipeline the checkout has, into the team\'s own '
-                    'pipeline-run directory that tekton-run-pipeline then reads. Review it: the '
-                    'parameters that belong to the app rather than to the platform are written as '
-                    'TODO, because kubementat cannot know them.')
+@tekton.command(name='generate-pipeline-run',
+                help='Generate a pipeline run for a pipeline the checkout has, into the team\'s own '
+                     'pipeline-run directory that `kmt tekton run-pipeline` then reads. Review it: the '
+                     'parameters that belong to the app rather than to the platform are written as '
+                     'TODO, because kubementat cannot know them.')
 @click.argument('environment', envvar='ENVIRONMENT')
 @click.argument('team', envvar='TEAM')
 @click.argument('pipeline_file')

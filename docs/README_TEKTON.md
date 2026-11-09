@@ -206,17 +206,17 @@ It runs as part of `kmt install`, so it is rarely needed by hand.
 This will setup a skeleton trigger template and other needed resources as a starting point for further customization. The generated files land in `platform_config/<ENVIRONMENT>/<TEAM>/tekton/triggers/<APP_NAME>/` (the command prints every file it wrote, and the exact directory it used), where `kmt tekton setup-triggers` reads them from. This was `scripts/automation/tekton/generate_trigger_config_from_templates.sh` until 2026-10-28; the script is deleted and the command is the only way to run it.
 
 ```
-uv run kmt tekton-generate-triggers dev dev1 nginx-example \
+uv run kmt tekton generate-triggers dev dev1 nginx-example \
     --pipeline-name build-pipeline-nginx-example --trigger-type github
 ```
 
 `--trigger-type` chooses which templates are read (`github` or `gitlab`), and everything else it needs is read from `platform_config`: `BASE_DOMAIN` from the environment's `static.json`, `HELM_DEPLOYER_SERVICE_ACCOUNT_NAME` from the team's. **A key it cannot read is an error, not a manifest** — the command names the key and the file to fix it in, and writes nothing. The four generated files are the Ingress, the EventListener, the TriggerBinding and the TriggerTemplate; the command prints the webhook URL the generated Ingress answers for, and the `static.encrypted.json` key the secret has to come from.
 
 ## Generating a deploy pipeline for a new app
-`kmt tekton-generate-deploy-pipeline <ENVIRONMENT> <TEAM> <APP_NAME>` generates a helm-deploy pipeline from the deploy-pipeline template this kmt ships (`Config.tekton_pipeline_template_dir`) into `platform_config/<ENVIRONMENT>/<TEAM>/tekton/pipelines/deploy-pipeline-<APP_NAME>.yml`, which is the directory `kmt tekton setup-pipelines` applies. This was `scripts/automation/tekton/generate_deploy_pipeline_from_template.sh` until 2026-10-28 — deleted, and note that the **output moved**: it used to be written beside the template in `tekton_ci/pipelines/`.
+`kmt tekton generate-deploy-pipeline <ENVIRONMENT> <TEAM> <APP_NAME>` generates a helm-deploy pipeline from the deploy-pipeline template this kmt ships (`Config.tekton_pipeline_template_dir`) into `platform_config/<ENVIRONMENT>/<TEAM>/tekton/pipelines/deploy-pipeline-<APP_NAME>.yml`, which is the directory `kmt tekton setup-pipelines` applies. This was `scripts/automation/tekton/generate_deploy_pipeline_from_template.sh` until 2026-10-28 — deleted, and note that the **output moved**: it used to be written beside the template in `tekton_ci/pipelines/`.
 
 ```
-uv run kmt tekton-generate-deploy-pipeline dev dev1 nginx-example \
+uv run kmt tekton generate-deploy-pipeline dev dev1 nginx-example \
     --git-url ssh://github.com/julweber/nginx-example.git \
     --git-project-name nginx-example --git-server-host github.com \
     --git-server-port 22 --git-server-ssh-user git
@@ -397,19 +397,19 @@ Already-unlocked is a fourth case and it is silent: git-crypt exits 0 and prints
 evidence the tree is readable from that point onward and nothing more.
 
 ## Adding new tekton triggers
-`uv run kmt tekton-generate-triggers <ENVIRONMENT> <TEAM> <APP_NAME> --pipeline-name <NAME> --trigger-type github|gitlab` — see the section of the same name above under "Installing / configuring tekton", which is where the whole flow is written up.
+`uv run kmt tekton generate-triggers <ENVIRONMENT> <TEAM> <APP_NAME> --pipeline-name <NAME> --trigger-type github|gitlab` — see the section of the same name above under "Installing / configuring tekton", which is where the whole flow is written up.
 
 ## Adding pipeline run configuration yml files easily
-`kmt tekton-generate-pipeline-run <ENVIRONMENT> <TEAM> <PIPELINE_FILE>` writes a pipeline-run manifest
+`kmt tekton generate-pipeline-run <ENVIRONMENT> <TEAM> <PIPELINE_FILE>` writes a pipeline-run manifest
 for a pipeline the checkout has. It is the replacement for `generate_pipeline_run.sh`, which is
 **deleted** — no `./generate_pipeline_run.sh` exists at the repository root any more, and running the
 command is the only way to make the file.
 
 ```
 # General
-uv run kmt tekton-generate-pipeline-run <ENVIRONMENT> <TEAM> <PIPELINE_YML_FILE>
+uv run kmt tekton generate-pipeline-run <ENVIRONMENT> <TEAM> <PIPELINE_YML_FILE>
 # e.g. -- the path of the pipeline file, resolved against the working directory:
-uv run kmt tekton-generate-pipeline-run dev dev2 \
+uv run kmt tekton generate-pipeline-run dev dev2 \
     src/kubementat/core/assets/tekton_ci/pipelines/build-pipeline-ci-images.yml
 ```
 

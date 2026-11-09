@@ -350,7 +350,7 @@ three is deprecated or hidden behind a flag; all three were deleted, and their a
 **Three verbs that were considered and declined**, because a surface is defined by what is not in it: `config unlock` (kubementat never unlocks, R-11.7; a locked tree is validate's problem, §11.7.1),
 `config secrets` (what exists and what is missing is `validate`'s job and R-11.8's refusal — a second verb
 for the same answer is how two answers appear), and `config generate` (§9's generation already has
-`kmt tekton-generate-*`; a config-side alias would be a second name for one mechanism).
+`kmt tekton generate-*`; a config-side alias would be a second name for one mechanism).
 
 Every existing `kmt` command gains `--config-dir`, with no default (R-3.4). Where v2 dropped `--team` from
 eight commands, `kmt config` does not put it back: `config set --team` writes to a layer, it does not
@@ -431,9 +431,9 @@ listing and the collision check used root A.
 * Custom PipelineRuns live in the config, not `tekton_ci/pipeline-runs`; the product's `examples/` stay
   product-side.
 * **Generated output is written into the layer's `tekton/` directory and is tracked by git.**
-  `kmt tekton-generate-deploy-pipeline` → `<team>/tekton/pipelines/deploy-pipeline-<app>.yml`;
-  `kmt tekton-generate-triggers` → `<team>/tekton/triggers/<app>/` (binding, trigger template, event
-  listener, event listener ingress); `kmt tekton-generate-pipeline-run` →
+  `kmt tekton generate-deploy-pipeline` → `<team>/tekton/pipelines/deploy-pipeline-<app>.yml`;
+  `kmt tekton generate-triggers` → `<team>/tekton/triggers/<app>/` (binding, trigger template, event
+  listener, event listener ingress); `kmt tekton generate-pipeline-run` →
   `<layer>/tekton/pipeline-runs/<pipeline>-run.yml`. Generation and reading stay in one layer — that is
   the FIN-22/23 requirement, and §13.3 records no table that could carry the entry any more.
   **N-6's honesty:** today's triggers are written to `<team>/triggers/`
@@ -445,7 +445,7 @@ listing and the collision check used root A.
   generator template is "these regenerate", not "the cluster changed". What no longer exists is a command
   that reports the distinction before the run; the distinction itself is still the rule.
 * kubementat applies what it ships and does **not** prune operator objects it no longer ships.
-*Done when:* a lane that runs `kmt tekton-setup-pipelines` reports both a product Task and the operator's
+*Done when:* a lane that runs `kmt tekton setup-pipelines` reports both a product Task and the operator's
 own by name; the unit suite proves name-match precedence without a cluster; `git status` in a config repo
 after a full generation is clean except for what the operator changed.
 
@@ -979,7 +979,7 @@ Two dependencies this table has to state rather than discover:
 2. **Is one `kubementat.yaml` at the root enough when a config repo is shared between two products?** Two
    kubementat installs pointing at one tree is legal today (both read `KUBEMENTAT_PLATFORM_CONFIG_DIR`).
    R-5.4 says one manifest per root; nothing says one root per product.
-3. **Do generated manifests get committed by `kmt tekton-generate-*`, or does the operator commit after
+3. **Do generated manifests get committed by `kmt tekton generate-*`, or does the operator commit after
    generating?** §9 says tracked, not that kubementat commits; the same question §11.3 answers for `init`
    in the other direction.
 4. **`kmt config set --generate`** (R-11.8's team-level secrets): a verb, or an option on `config init`'s

@@ -370,7 +370,7 @@ def generate_deploy_pipeline(config, app_name: str, git_url: str = None,
             f"{', '.join(f'`{option_names[key]}`' for key in missing)}. Those belong to the app "
             f"repository rather than to the platform, kubementat reads no configuration key for "
             f"them, and the template leaves them as placeholders until they are supplied. For "
-            f"example:\n  kmt tekton-generate-deploy-pipeline {config.environment} "
+            f"example:\n  kmt tekton generate-deploy-pipeline {config.environment} "
             f"{config.team} {app_name} "
             f"--git-url ssh://github.com/julweber/{app_name}.git "
             f"--git-project-name {app_name} --git-server-host github.com "

@@ -131,7 +131,7 @@ Measured on the smoke lane, warm image cache, one run:
 | 02-install | 109 | `config init` + the `standard` group (5 releases) + secrets + registry access |
 | 03-run | 21 | apply the hello-world pipeline and poll it to `Succeeded` |
 | 04-rerun | 46 | every mutating capability a second time, hashed before/after |
-| 05-features | 2 | the openbao tunnel negative, `tekton-list` |
+| 05-features | 2 | the openbao tunnel negative, `tekton list` |
 | 99-teardown | 135 | two uninstalls plus the residue sweep |
 | **total** | **~490 (8.2 min)** | |
 

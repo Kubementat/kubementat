@@ -59,18 +59,11 @@ EXPECTED_COMMANDS = {
     "run-ci-container",
     "setup-docker-registry-access",
     "setup-secrets",
-    # Six of the ten tekton commands are on the `tekton` group, so their flat names are off
-    # this list. The cleanup job and the three generators keep theirs: nothing on the lane measures
-    # them, and a rename nothing measures is a rename nobody can tell the difference about.
+    # The whole tekton surface is the group, so no tekton name is on this list. The cleanup job and
+    # the three generators used to keep flat names beside it on the argument that nothing measured
+    # them; once the other six were verbs, four commands whose first word is the group's name
+    # answering to a hyphen was the inconsistency, so they joined the group and their flat names died.
     "tekton",
-    "tekton-setup-cleanup-job",
-    # The three generators. Both scripts behind the first two had no caller
-    # anywhere in `src/` -- they were only ever reachable by hand -- so a command is the whole point
-    # of migrating them rather than just a library call. No aliases: the scripts are deleted in the
-    # same commit.
-    "tekton-generate-deploy-pipeline",
-    "tekton-generate-triggers",
-    "tekton-generate-pipeline-run",
     # The tunnel surface is the `tunnel` group and nothing else: the four
     # measured verbs on the group, and the two flat names that were never on it -- `tunnel-polaris`
     # and `tunnel-mysql` -- retired, so their absence from this list is the assertion now.
@@ -218,16 +211,19 @@ EXPECTED_COMPONENT_COMMAND_PARAMS = {
 # ------------------------------------------------------------------------------------------
 # The three groups: `tunnel`, `tekton`, `helm`
 #
-# Three groups, eleven commands, no aliases. What is pinned below is the *subcommand* side of the
+# Three groups, fourteen commands, no aliases. What is pinned below is the *subcommand* side of the
 # name, because that is the half a group has to get right: `tunnel` is the group and `pod` is the
 # verb, which together say the same thing `tunnel-pod` said on its own line.
 #
-# The grouping list is the 11 commands the lane's capability table measures as still flat. Four tunnels,
-# six tekton commands and one helm apply -- and of the commands those 11 do not include, the two flat
-# tunnels (`tunnel-polaris`, `tunnel-mysql`) were retired rather than grouped (row 25), while the
-# cleanup job, the three generators and `helm-version` keep their flat names on `EXPECTED_COMMANDS`
-# rather than joining a group nothing measures them against. That is the shape of
-# a partial grouping, stated where someone reading the surface will find it instead of in a ticket.
+# The grouping list started as the 11 commands the lane's capability table measures as still flat --
+# four tunnels, six tekton commands and one helm apply. Of the commands that list did not include,
+# the two flat tunnels (`tunnel-polaris`, `tunnel-mysql`) were retired rather than grouped (row 25)
+# and `helm-version` kept its flat name. The cleanup job and the three generators joined the `tekton`
+# group on 2026-11-11 for the reason the other nine had, except that no marker measured these four:
+# `kmt tekton` already existed, so commands that read `tekton-<verb>` on the flat surface beside
+# verbs that read `tekton <verb>` were a surface describing a rule it did not follow. What keeps a
+# rename nothing measures honest is the check below, which asks the shipped entry point whether the
+# flat name still answers, and not a capability row that was never going to run them.
 # ------------------------------------------------------------------------------------------
 
 EXPECTED_TUNNEL_COMMANDS = {"pod", "grafana", "tekton", "openbao-ui"}
@@ -248,8 +244,13 @@ EXPECTED_TUNNEL_COMMAND_PARAMS = {
     "openbao-ui": {"environment", "local_port", "remote_port", "host"} | RESOLUTION_FLAGS,
 }
 
+# The whole tekton surface, which is the assertion now: the four verbs that joined late
+# (`setup-cleanup-job`, the three `generate-*`) replace flat names of exactly the form `_flat_forms`
+# builds, so the check below asks whether the old names still answer, and they must not.
 EXPECTED_TEKTON_COMMANDS = {"run-pipeline", "list", "cleanup-pipeline-runs", "setup-pipelines",
-                            "setup-triggers", "uninstall-pipelines"}
+                            "setup-triggers", "uninstall-pipelines", "setup-cleanup-job",
+                            "generate-deploy-pipeline", "generate-triggers",
+                            "generate-pipeline-run"}
 
 EXPECTED_TEKTON_COMMAND_PARAMS = {
     "run-pipeline": {"environment", "team", "pipeline_run_identifier", "parallel", "wait",
@@ -259,6 +260,20 @@ EXPECTED_TEKTON_COMMAND_PARAMS = {
     "setup-pipelines": {"environment", "team"} | RESOLUTION_FLAGS,
     "setup-triggers": {"environment", "team"} | RESOLUTION_FLAGS,
     "uninstall-pipelines": {"environment", "team", "yes"} | RESOLUTION_FLAGS,
+    # The team is an option here and a positional on every other verb of this group, and that is a
+    # decision and not an accident: the cleanup job writes one CronJob into the cluster-scoped
+    # namespace the environment config names, so the team it wants is the credential its pod pulls
+    # with rather than a directory it selects. Grouping a command may not change what it takes, so
+    # the move left this shape exactly where it was.
+    "setup-cleanup-job": {"environment", "team"} | RESOLUTION_FLAGS,
+    # The generators write into the team's own `platform_config` tree and open no socket of their
+    # own, which is why they take the pair as positionals like their neighbours do.
+    "generate-deploy-pipeline": {"environment", "team", "app_name", "git_url", "git_project_name",
+                                 "git_server_host", "git_server_port",
+                                 "git_server_ssh_user"} | RESOLUTION_FLAGS,
+    "generate-triggers": {"environment", "team", "app_name", "pipeline_name",
+                          "trigger_type"} | RESOLUTION_FLAGS,
+    "generate-pipeline-run": {"environment", "team", "pipeline_file"} | RESOLUTION_FLAGS,
 }
 
 EXPECTED_HELM_COMMANDS = {"apply"}
@@ -280,7 +295,7 @@ EXPECTED_HELM_COMMAND_PARAMS = {
 # What is on `kmt config`: the verb that lays a tree down, the two verbs that add one layer to a tree,
 # the two that put one answer on one layer of it, and the two that read the result back. `config unlock`
 # kubementat never unlocks a configuration), `config secrets` (`validate` answers that) and `config
-# generate` (`kmt tekton-generate-*` is that verb) are refused by the surface itself -- the exact set
+# generate` (`kmt tekton generate-*` is that verb) are refused by the surface itself -- the exact set
 # below is what keeps a well-intentioned fifth verb from arriving without anyone deciding it should.
 # `config diff` and `config migrate` were on the group and are deleted, on owner instruction of
 # 2026-11-05: kubementat rewrites no operator tree, so there is no rename table to apply and nothing
@@ -411,9 +426,10 @@ def commands_from_help(text):
     """The command names `--help` prints, parsed out of its own output.
 
     Click writes each name at two spaces and pads the help column out, so a name longer than the
-    column (three words of `tekton-generate-deploy-pipeline`, say) gets a line of its own and its
-    help starts on the following line, indented to the help column. Reading "any indented word" as a
-    name read the first word of that help as a command too, so only the two-space column is one.
+    column (`setup-cleanup-job`, or three words of a `kmt config` help line, say) gets a line of its
+    own and its help starts on the following line, indented to the help column. Reading "any
+    indented word" as a name read the first word of that help as a command too, so only the
+    two-space column is one.
     """
     listing = text.split("Commands:\n", 1)[1]
     return {line.split()[0] for line in listing.splitlines() if re.match(r"^ {2}\S", line)}
@@ -761,12 +777,19 @@ def test_the_tunnel_group_holds_the_four_tunnels_and_their_flat_names_are_dead()
                 EXPECTED_TUNNEL_COMMAND_PARAMS)
 
 
-def test_the_tekton_group_holds_the_six_commands_and_their_flat_names_are_dead():
-    """The six measured tekton commands live under `kmt tekton`.
+def test_the_tekton_group_holds_the_ten_commands_and_their_flat_names_are_dead():
+    """The whole tekton surface lives under `kmt tekton`.
 
-    `run-pipeline` is the one that makes this check matter, because it is the command a Tekton Task
+    `run-pipeline` is the command that makes this check matter, because it is the one a Tekton Task
     runs (`tekton_ci/tasks/run-tekton-pipeline.yml`): a flat `tekton-run-pipeline` left reachable
     next to the group would be a Task that keeps running a name no report mentions.
+
+    The four that joined the group late matter for the mirror-image reason, and it is worth writing
+    down because their absence from the capability table is exactly what a reader here will ask
+    about. Nothing on the lane runs the generators or the cleanup job, so no row would notice a flat
+    name still answering beside the group -- and two routes to one generator is how a manifest ends
+    up written where a different command already decided it belongs. What makes that rename verifiable
+    is this test's third check, not a marker.
     """
     from cli.commands import tekton
 

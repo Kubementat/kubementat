@@ -463,7 +463,7 @@ def test_the_command_generates_the_trigger_set_into_the_team_directory(checkout,
     `kmt --help` listing the name is not the same claim as a command that runs, so the CLI is run
     here the way an operator runs it, against the same fixture checkout.
     """
-    result = run_kmt(["tekton-generate-triggers", "dev", "fixture", APP,
+    result = run_kmt(["tekton", "generate-triggers", "dev", "fixture", APP,
                       "--pipeline-name", PIPELINE, "--trigger-type", "github"], dry_run_env)
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -481,7 +481,7 @@ def test_the_command_refuses_a_deploy_pipeline_with_no_git_coordinates(checkout,
     Exit code and all: a bare traceback would be the answer bash gave, and `kmt` is what an operator
     reads.
     """
-    result = run_kmt(["tekton-generate-deploy-pipeline", "dev", "fixture", APP], dry_run_env)
+    result = run_kmt(["tekton", "generate-deploy-pipeline", "dev", "fixture", APP], dry_run_env)
 
     assert result.returncode != 0
     assert "--git-url" in result.stderr + result.stdout

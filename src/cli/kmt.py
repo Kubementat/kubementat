@@ -93,21 +93,16 @@ def main():
     # nothing else here moved, so the group is the whole tunnel surface now.
     cli.add_command(tunnels.tunnel)
 
-    # tekton: six of the ten commands here are on the `kmt tekton` group. The cleanup job and the
-    # three generators keep their flat names for the same reason the parity record leaves them out.
+    # tekton: the whole tekton surface is the `tekton` group. The cleanup job and the three
+    # generators kept flat names beside it for as long as the rest of them were flat, but a command
+    # whose first word is the group's name and that answers to a hyphen instead of a space is a
+    # surface that says one thing and does another, so they moved in and their flat names went.
     cli.add_command(tekton.tekton)
-    cli.add_command(tekton.setup_cleanup_job)
-    cli.add_command(tekton.generate_deploy_pipeline)
-    cli.add_command(tekton.generate_trigger_configs)
-    # The last generator on the tekton path (`generate_pipeline_run.sh`, deleted in the same commit).
-    # It had no caller in `src/`, so the only way to reach it was to know its name and stand in the
-    # right directory; a command is how that stops being true.
-    cli.add_command(tekton.generate_pipeline_run)
 
-    # helm: `kmt helm apply` is this group's row. `helm-version` stays flat for the same
-    # reason the unmeasured commands above do -- no marker measures it -- and the fact that a `helm`
-    # group now answers to an apply that used to be its only helm command is exactly what the grouping
-    # was for.
+    # helm: `kmt helm apply` is this group's row. `helm-version` is the one command that stays flat
+    # for that reason and no other: no marker measures it, and -- unlike the tekton generators that
+    # moved in -- there is no group beside it whose spelling rule it contradicts. It is flat, and
+    # `kmt --help` says so in one line instead of two.
     cli.add_command(helm.helm)
     # The flat one-component uninstall is not registered here either: that command is now
     # `kmt component uninstall`, wired in with the install half below. Renamed outright -- no alias,

@@ -888,7 +888,7 @@ CAPABILITIES = {
     ),
     "task.cleanup-job": _c(
         capability="task.cleanup-job",
-        argv=["kmt", "tekton-setup-cleanup-job", "{env}", "--team", "{team}"],
+        argv=["kmt", "tekton", "setup-cleanup-job", "{env}", "--team", "{team}"],
         lanes="F",
         mutating=True,
         note="the namespace is read from CLUSTER_CRONJOBS_DEPLOYMENT_NAMESPACE, so a run that "

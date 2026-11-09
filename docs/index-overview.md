@@ -110,7 +110,7 @@ The paragraph below is the 2026-06 description of this directory and is kept as 
 
 **2026-10-28 correction.** The two generator scripts this section used to name —
 `generate_deploy_pipeline_from_template.sh` (71) and `generate_trigger_config_from_templates.sh` (123) —
-are deleted. `kmt tekton-generate-deploy-pipeline` and `kmt tekton-generate-triggers` are their
+are deleted. `kmt tekton generate-deploy-pipeline` and `kmt tekton generate-triggers` are their
 replacements (`src/cli/commands/tekton.py`, `generate_deploy_pipeline()` /
 `generate_trigger_configs()` in `src/kubementat/infrastructure/tekton/generation.py`), and neither
 script had a caller
@@ -244,15 +244,16 @@ Contains only `.gitkeep`. All actual Helm chart content lives in `examples/helm_
 7. ~~**Flat CLI structure** — no Click groups.~~ **Fixed 2026-10-30 (`02cd932`, FIN-61/62), and this line
    was a fixed defect describing itself as open until 2026-10-30.** `tunnel`, `tekton` and `helm` are
    Click groups now, registered one-per-group in `src/cli/kmt.py` the way `routing`, `users` and
-   `component` already were, and the 11 commands that read as flat live under them: `tunnel
-   pod|grafana|tekton|vault-ui`, `tekton
-   run-pipeline|list|cleanup-pipeline-runs|setup-pipelines|setup-triggers|uninstall-pipelines`,
-   `helm apply`. The renames ship **with no aliases and no compatibility shim**: `kmt tekton-list`,
-   `kmt tunnel-grafana` and `kmt helmfile-apply` answer `No such command` and exit 2, and a test
-   asserts that rather than asserting it informally. What deliberately stays flat is
-   `kmt tekton-setup-cleanup-job`, the `kmt tekton-generate-*` commands and `kmt helm-version`: group-looking
-   prefixes, no group behind them, so `uv run kmt --help` lists 27 entries and not a smaller,
-   coherent number.
+   `component` already were: `tunnel pod|grafana|tekton|openbao-ui`, `helm apply`, and the whole
+   tekton surface — `tekton run-pipeline|list|cleanup-pipeline-runs|setup-pipelines|setup-triggers|uninstall-pipelines`,
+   and since 2026-11-11 also `tekton setup-cleanup-job` and the three `tekton generate-*` verbs, which
+   had kept flat `tekton-*` names beside the group on the argument that no marker measured them. That
+   argument stopped holding once the group existed: a command that reads `tekton-<verb>` while its
+   nine siblings read `tekton <verb>` is a surface describing a rule it does not follow, and nothing
+   but the surface test can tell a grouped rename from a second name that still answers. The renames
+   ship **with no aliases and no compatibility shim**: the flat names answer `No such command` and
+   exit 2, and a test asserts that rather than asserting it informally. What deliberately stays flat
+   is `kmt helm-version`, so `uv run kmt --help` lists 23 entries.
 8. **Hardcoded config paths** — many paths are relative strings (`scripts/utilities`, `scripts/automation/tekton`) that could break with reorganization.
 9. **`utils.py` is empty** — lib has an empty `utils.py` module suggesting planned refactoring that was never completed.
 10. **`helm_charts/` is a placeholder** — confusing directory that collects nothing; all Helm content is in `examples/` and `platform_config/`.
@@ -352,7 +353,7 @@ User → kmt CLI → src/kubementat/ → Kubernetes Cluster
 | 6 | `src/kubementat/infrastructure/tekton/` | 6 files and 2,598 LOC. `generation.py` holds the placeholder table and the two generators; `runs.py` the run lifecycle and cleanup; `install.py` and `triggers.py` what a cluster gets; `preflight.py` the api-version read |
 | 8 | `pyproject.toml` | Project config — entry point, dependencies |
 | 9 | `src/cli/commands/tekton.py` | Tekton CLI — still calls shell scripts |
-| 10 | ~~`scripts/automation/tekton/generate_trigger_config_from_templates.sh`~~ | **Deleted 2026-10-28 (FIN-23)**, along with `generate_deploy_pipeline_from_template.sh` (FIN-22) — both had no caller in `src/`. The migration targets are now `kmt tekton-generate-triggers` and `kmt tekton-generate-deploy-pipeline`, backed by `generate_trigger_configs()` / `generate_deploy_pipeline()` in `src/kubementat/infrastructure/tekton/generation.py` |
+| 10 | ~~`scripts/automation/tekton/generate_trigger_config_from_templates.sh`~~ | **Deleted 2026-10-28 (FIN-23)**, along with `generate_deploy_pipeline_from_template.sh` (FIN-22) — both had no caller in `src/`. The migration targets are now `kmt tekton generate-triggers` and `kmt tekton generate-deploy-pipeline`, backed by `generate_trigger_configs()` / `generate_deploy_pipeline()` in `src/kubementat/infrastructure/tekton/generation.py` |
 
 ---
 

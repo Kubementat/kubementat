@@ -238,12 +238,12 @@ def test_a_generated_run_lands_where_the_run_commands_read_it(checkout):
 def test_the_command_generates_a_run_and_lists_it_by_name_alone(checkout, dry_run_env):
     """Both halves of "reachable", run the way an operator runs them rather than imported.
 
-    `kmt tekton-generate-pipeline-run` is the command this ticket exists to add, and
+    `kmt tekton generate-pipeline-run` is the command this ticket exists to add, and
     `kmt tekton run-pipeline <env> <team>` with no identifier prints what can be started. The script
     wrote into the global directory, where that listing does not look, so the file it generated never
     appeared in its own tool's answer.
     """
-    generated = run_kmt(["tekton-generate-pipeline-run", checkout.environment, checkout.team,
+    generated = run_kmt(["tekton", "generate-pipeline-run", checkout.environment, checkout.team,
                          str(pipeline_source(checkout, PIPELINE))], dry_run_env)
     assert generated.returncode == 0, generated.stdout + generated.stderr
     assert (checkout.root / TEAM_PIPELINE_RUN_DIR / f"{PIPELINE}-run.yml").is_file()
