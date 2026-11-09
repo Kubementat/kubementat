@@ -51,7 +51,7 @@ from kubementat.errors import IngressPortNotUsableError
 from kubementat.automations.ingress import IngressGenerator
 
 def generator(environment: str) -> IngressGenerator:
-    """The Python side of the comparison, built the way `kmt create-ingress` builds it.
+    """The Python side of the comparison, built the way `kmt kubernetes create-ingress` builds it.
 
     The `Config` inside is the real one for `environment` -- the read that answers the class is the
     half being compared -- and the `Context` is the configuration-only shape from

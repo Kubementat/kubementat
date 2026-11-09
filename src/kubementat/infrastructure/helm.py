@@ -108,7 +108,7 @@ class HelmUtils:
         self.config = ctx.config
         # The cluster this class addresses, kept for the one thing the configuration cannot say.
         # helm and helmfile need it on their command line, and it is read lazily so a
-        # helm-only command (`kmt helm-version`) never pays for a target it does not use.
+        # helm-only command (`kmt helm latest-version`) never pays for a target it does not use.
         self.ctx = ctx
         # A release's claims are deleted through the client, and the same question is
         # already asked that way by `delete_claims_in` in `automations/uninstall/residue.py`. One
@@ -691,8 +691,8 @@ class HelmUtils:
         if not chart:
             raise click.ClickException(
                 "No chart was named, so there is no version to look up. "
-                "The form is `kmt helm-version <ENVIRONMENT> <repo>/<chart>`, e.g. "
-                "`kmt helm-version dev prometheus-community/prometheus`.")
+                "The form is `kmt helm latest-version <ENVIRONMENT> <repo>/<chart>`, e.g. "
+                "`kmt helm latest-version dev prometheus-community/prometheus`.")
         target = f"{repo}/{chart}" if repo else chart
 
         search = shell.run(["helm", "search", "repo", target, "--output", "json"],
@@ -720,7 +720,7 @@ class HelmUtils:
             f"helm found no chart named '{target}'."
             + (" Check the chart name, or update the repository index (`helm repo update`), "
                "which is what makes a chart that exists upstream visible here."
-               if repo else " Point it at the repo it lives in: `kmt helm-version <ENVIRONMENT> "
+               if repo else " Point it at the repo it lives in: `kmt helm latest-version <ENVIRONMENT> "
                             "<repo>/<chart>`."))
 
     def _helm_repo_names(self) -> set:

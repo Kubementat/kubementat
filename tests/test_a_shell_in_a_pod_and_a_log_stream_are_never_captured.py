@@ -232,7 +232,7 @@ def test_the_cli_answers_a_missing_namespace_in_one_line(recorded_api):
     """
     recorded_api.answer("read_namespace", ApiException(status=404, reason="not found"))
 
-    for command in (kubernetes.deploy_logs, kubernetes.deploy_ssh):
+    for command in (kubernetes.deployment_logs, kubernetes.deployment_ssh):
         result = CliRunner().invoke(command, [FIXTURE_ENVIRONMENT, NAMESPACE, DEPLOYMENT])
         assert result.exit_code == 1, result.output
         assert "does not exist" in result.output
@@ -253,7 +253,7 @@ def test_a_kubectl_that_fails_on_the_way_in_is_answered_as_an_error(fake_binarie
     recorded_api.answer("list_namespaced_pod", lambda **kwargs: SimpleNamespace(
         items=[SimpleNamespace(metadata=SimpleNamespace(name=POD))]))
 
-    result = CliRunner().invoke(kubernetes.deploy_ssh,
+    result = CliRunner().invoke(kubernetes.deployment_ssh,
                                 [FIXTURE_ENVIRONMENT, NAMESPACE, DEPLOYMENT])
 
     assert result.exit_code == 1, result.output
@@ -276,7 +276,7 @@ def test_the_log_command_takes_a_container_and_a_tail_without_losing_either(fake
     recorded_api.answer("read_namespace", SimpleNamespace(metadata=SimpleNamespace(
         name=NAMESPACE)))
 
-    result = CliRunner().invoke(kubernetes.deploy_logs,
+    result = CliRunner().invoke(kubernetes.deployment_logs,
                                 [FIXTURE_ENVIRONMENT, NAMESPACE, DEPLOYMENT, "sidecar",
                                  "--tail", "25"])
 

@@ -14,7 +14,7 @@ import pytest
 from click.testing import CliRunner
 
 from cli import helpers
-from cli.commands import (component, helm, kubementat, routing, tekton, tunnels,
+from cli.commands import (component, helm, kubernetes, kubementat, routing, tekton, tunnels,
                            users, utilities)
 from kubementat.errors import TeamNotSuppliedError
 # The run path's verbs are module functions now (P4-3), so this is the seam to intercept.
@@ -53,11 +53,11 @@ TEAM_LESS_COMMANDS = [
     # rather than in the command, so the refusal arrived before the code that could have read a
     # team found out it had nothing to read.
     (helm.helmfile_apply, ("dev",)),
-    (helm.helm_version, ("dev", "prometheus-community/prometheus")),
+    (helm.latest_version, ("dev", "prometheus-community/prometheus")),
     (component.install, ("dev", "grafana")),
     (component.uninstall, ("dev", "grafana")),
     (routing.install, ("dev",)),
-    (utilities.create_ingress, ("dev", "svc.example.test", "the-service", "80")),
+    (kubernetes.create_ingress, ("dev", "svc.example.test", "the-service", "80")),
     (users.create_grafana_accounts, ("dev", "--yes")),
     (users.create_grafana_read_only_account, ("dev", "someone@something.test")),
 ]
@@ -279,7 +279,7 @@ def test_no_team_is_hardcoded_in_the_command_modules():
     """The whole point of both rules together: no command gets to remember a team."""
     hardcoded_team = re.compile(r"['\"]dev1['\"]")
     offenders = []
-    for module in (helm, tunnels, tekton, kubementat, utilities):
+    for module in (helm, tunnels, tekton, kubementat, utilities, kubernetes):
         with open(module.__file__) as source_file:
             for line in source_file:
                 code = line.split("#")[0]

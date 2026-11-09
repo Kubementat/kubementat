@@ -1,6 +1,6 @@
 r"""A Secret's data entries are written from a flat JSON file, by a command and not by a shell.
 
-`kmt create-secret-from-json <ENVIRONMENT> <NAMESPACE> <SECRET_NAME> <JSON_FILE_PATH>`
+`kmt kubernetes create-secret-from-json <ENVIRONMENT> <NAMESPACE> <SECRET_NAME> <JSON_FILE_PATH>`
 replaces `scripts/secret_management/create_secret_from_json.sh`, whose only caller was
 `tekton_ci/tasks/create-secret-from-json.yml`. What the script ran was:
 

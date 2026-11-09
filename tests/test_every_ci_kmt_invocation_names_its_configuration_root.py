@@ -6,7 +6,7 @@ nothing else, and raises when it is unset. `KUBEMENTAT_HOME` is not the other sp
 tree a checkout hangs its *output* off, which is why both shipped Tasks can set it and still hand their
 command no root. Measured on this checkout:
 
-    env -u KUBEMENTAT_PLATFORM_CONFIG_DIR uv run kmt create-secret-from-json dev ns sec /tmp/nope.json
+    env -u KUBEMENTAT_PLATFORM_CONFIG_DIR uv run kmt kubernetes create-secret-from-json dev ns sec /tmp/nope.json
     → Error: no configuration root is named. … it has no default root to fall back to.
 
 So the CI lane's own `kmt` step could not run: `KUBEMENTAT_PLATFORM_CONFIG_DIR` appears in zero places

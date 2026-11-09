@@ -138,7 +138,7 @@ and the ledger rows that name the tickets are §2.1 and §7 of
 an easy deletion and one of them was a claim that needed re-reading: the library had exactly one
 consumer left, `create_secret_from_json.sh`, which `source`d it and never called the one function
 it defines, so deleting the script orphaned the library rather than the reverse. The script itself
-is `kmt create-secret-from-json` now, which is what the Tekton task that ran it calls inside the
+is `kmt kubernetes create-secret-from-json` now, which is what the Tekton task that ran it calls inside the
 pipeline pod. Both deletions are held by stays-deleted guards —
 `tests/test_the_secret_json_scripts_are_gone_and_the_task_runs_the_command.py` — and the pair takes
 the empty `scripts/secret_management/` directory with them. `user_management/` no longer exists
@@ -241,19 +241,26 @@ Contains only `.gitkeep`. All actual Helm chart content lives in `examples/helm_
 4. **Bug: `tunnel-vault-ui`** in `src/cli/commands/tunnels.py` — decorated function named `tunnel_polaris` that calls `open_tunnel_vault` but the decorator name is wrong; also the entry point `kmt` doesn't register this command.
 5. **Duplicate entry points** — `kmt` and `kmt.py` are functionally identical.
 6. **`sys.path` manipulation** — each command module manually adds `../../lib` to path instead of using installed package imports.
-7. ~~**Flat CLI structure** — no Click groups.~~ **Fixed 2026-10-30 (`02cd932`, FIN-61/62), and this line
-   was a fixed defect describing itself as open until 2026-10-30.** `tunnel`, `tekton` and `helm` are
-   Click groups now, registered one-per-group in `src/cli/kmt.py` the way `routing`, `users` and
-   `component` already were: `tunnel pod|grafana|tekton|openbao-ui`, `helm apply`, and the whole
-   tekton surface — `tekton run-pipeline|list|cleanup-pipeline-runs|setup-pipelines|setup-triggers|uninstall-pipelines`,
+7. ~~**Flat CLI structure** — no Click groups.~~ **Fixed 2026-10-30 (`02cd932`, FIN-61/62), and this
+   line was a fixed defect describing itself as open until 2026-10-30.** `tunnel`, `tekton` and `helm`
+   are Click groups now, registered one-per-group in `src/cli/kmt.py` the way `routing`, `users` and
+   `component` already were: `tunnel pod|grafana|tekton|openbao-ui`, `helm apply|latest-version`, and
+   the whole tekton surface — `tekton run-pipeline|list|cleanup-pipeline-runs|setup-pipelines|setup-triggers|uninstall-pipelines`,
    and since 2026-11-11 also `tekton setup-cleanup-job` and the three `tekton generate-*` verbs, which
    had kept flat `tekton-*` names beside the group on the argument that no marker measured them. That
    argument stopped holding once the group existed: a command that reads `tekton-<verb>` while its
    nine siblings read `tekton <verb>` is a surface describing a rule it does not follow, and nothing
    but the surface test can tell a grouped rename from a second name that still answers. The renames
    ship **with no aliases and no compatibility shim**: the flat names answer `No such command` and
-   exit 2, and a test asserts that rather than asserting it informally. What deliberately stays flat
-   is `kmt helm-version`, so `uv run kmt --help` lists 23 entries.
+   exit 2, and a test asserts that rather than asserting it informally.
+
+   The same reasoning finished the job 2026-11-09. Nine cluster verbs that had no group at all became
+   `kmt kubernetes <verb>` — `analyze-deployment`, `cluster-capacity`, `create-ingress`,
+   `create-secret-from-json`, `deployment-logs`, `deployment-ssh`, `pod-images`, `pvc-usage`,
+   `service-account-token` — and the one flat helm read joined its own group as
+   `kmt helm latest-version`. Two commands that address a cluster are deliberately still flat:
+   `setup-secrets` and `setup-docker-registry-access` belong to the install that creates what the
+   `kubernetes` group reads. `uv run kmt --help` now lists 14 entries.
 8. **Hardcoded config paths** — many paths are relative strings (`scripts/utilities`, `scripts/automation/tekton`) that could break with reorganization.
 9. **`utils.py` is empty** — lib has an empty `utils.py` module suggesting planned refactoring that was never completed.
 10. **`helm_charts/` is a placeholder** — confusing directory that collects nothing; all Helm content is in `examples/` and `platform_config/`.

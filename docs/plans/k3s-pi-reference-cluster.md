@@ -33,11 +33,14 @@ controllers: cpuset cpu io pids          ← no memory
 
 The capacity claim comes from the harness's own lane table, not from optimism:
 
-| lane | vcpu | RAM | disk | groups |
+From `tests/e2e/harness/config.py`, whose four lanes are the whole table:
+
+| lane | vcpu | RAM | disk | what it applies |
 |---|---|---|---|---|
-| `smoke` | 4 | 6 GiB | 25 GiB | `standard` |
-| `full` | 8 | 16 GiB | 50 GiB | `standard` + `routing` |
-| `routing` | 8 | 16 GiB | 50 GiB | `standard` + routing features |
+| `smoke` | 4 | 6 GiB | 25 GiB | the `standard` group |
+| `full` | 8 | 16 GiB | 50 GiB | `standard`, then `routing` through `kmt routing install` |
+| `routing` | 8 | 16 GiB | 50 GiB | `standard`, plus the `routing_ingress` and `routing_guard` features |
+| `bootstrap` | 4 | 6 GiB | 25 GiB | `standard` once, with nothing written by hand in between |
 | **raspberry4** | **4** | **7.4 GiB usable** | **110 GiB** | — |
 
 So: **the Pi is a `smoke`-shaped fixture and not a `full`/`routing` substitute.** It runs the
@@ -85,9 +88,10 @@ package, which generates its units from `/etc/rpi/swap.conf` (`Mechanism=auto` �
 supported knob is a drop-in setting `Mechanism=none`, which also removes `/var/swap`. The reboot is
 what proves it.
 
-**D7 — storage stays `local-path`.** k3s's built-in provisioner is what
-`TEKTON_KUBERNETES_STORAGE_CLASS` and the `KUBERNETES_DEFAULT_STORAGE_CLASS` → MySQL/Redis path
-already name, so nothing needs installing. Longhorn/TopoLVM on a USB-attached SSD on a 4-core A72
+**D7 — storage stays `local-path`.** k3s's built-in provisioner is what the storage-class keys already
+name: `TEKTON_KUBERNETES_STORAGE_CLASS` answered by the environment layer and by `constants.py`, and
+`MYSQL_VOLUME_STORAGE_CLASS` / `REDIS_VOLUME_STORAGE_CLASS` spelled in the team template. All three
+carry `local-path`, so nothing needs installing. Longhorn/TopoLVM on a USB-attached SSD on a 4-core A72
 is a second failure mode, not a feature.
 
 **D8 — k3s version is pinned and checked. Amended 2026-11-05; it used to read "recorded, not
@@ -103,7 +107,7 @@ pointing accurately at a change nobody had chosen. Recording had been the whole 
 had never been read by anything. The lane already pins helm and helmfile for the same reason, so k3s was
 the exception rather than the rule.
 
-So: `01-provision.sh` pins, the install stage asserts the guest's answer against that pin, and the
+So: `01-provision.sh` pins, the provision stage asserts the guest's answer against that pin, and the
 version still lands in the facts file. Which version is pinned is a separate question from whether to
 pin, and the answer stays the one this document should always give — the release the last green full run
 recorded, not the newest one. The Pi keeps its own version and is checked against the lane's, so
@@ -154,10 +158,13 @@ examples/k3s/kubeconfig-client.md    # exporting 6443 to a control machine (shor
 Order of operations, each one verified against the resulting artefact:
 
 1. Assert arch/platform and that `/srv` is a mount (`findmnt /srv` → `sda1[/srv]`).
-2. Assert memory cgroup (§5.1 of D5) — abort with the fix.
+2. Assert memory cgroup (D5) — abort with the fix.
 3. Swap off via the `rpi-swap` drop-in (`Mechanism=none`), `swapon --show` empty.
-4. Tooling that kubementat's dependency check needs: `helm`, `helmfile` (pinned 1.8.2 as the
-   provisioner does), `tkn`, `yq`, `git-crypt`, `jq`, `gpg`.
+4. Tooling that kubementat's dependency check needs: `helm`, `helmfile`, `tkn`, `kubectl`, `git`,
+   `gpg`, `python3`, `pip`. The helm and helmfile versions come from `PINNED_BINARY_VERSIONS` in
+   `src/kubementat/core/constants.py` read out of the checkout, exactly as `01-provision.sh` does, and
+   never from a literal in this script. `git-crypt` is not in the dependency check and is still needed
+   by `config init`; `yq` and `jq` are installed by the provisioner and are not needed by kubementat.
 5. k3s from `get.k3s.io`, then `/etc/rancher/k3s/config.yaml` with `data-dir`,
    `write-kubeconfig-mode: 644`, `disable: ["traefik"]`, then the drop-in, then restart.
 6. kubeconfig: `write-kubeconfig-mode: 644` (the provisioner's own fix — `k3s.yaml` is reset to 0600
@@ -181,7 +188,7 @@ so the script reads back: controllers, `swapon`, `findmnt /srv`, `systemctl show
 | arch | `kubectl get nodes -o jsonpath='{...arch}'` | `arm64` |
 | storage | `kubectl get sc` | `local-path` and it is the default |
 | routing is clean | `kmt routing status <env>` | classification `none`, and says so |
-| end-to-end | `kmt initialize` → `install` → `uninstall` | cluster empty afterwards, checked by the same sweep the harness uses |
+| end-to-end | `kmt config init` → `install` → `uninstall` | cluster empty afterwards, checked by the same sweep the harness uses |
 | persistence | reboot twice, re-run the verification block | all rows still pass |
 
 Boundary test (D1): a file that fails if `src/**` mentions `examples/k3s`, or if
@@ -194,7 +201,7 @@ thing in this plan that keeps the next person from quietly making the fixture a 
 |---|---|---|---|
 | 0 | ✅ done 2026-10-30: `cgroup_enable=memory` + `rpi-swap Mechanism=none`, reboot ×2 | `cgroup.controllers` lists `memory`, OOM limit enforced, 0 failed units | done |
 | 1 | ✅ done 2026-10-30: k3s v1.36.5+k3s1, `data-dir=/srv/k3s`, traefik disabled, drop-in | `raspberry4 Ready` arm64, no traefik pods, survives reboot | done |
-| 2 | kubementat: `initialize`, `install` (standard group), `routing install`, `uninstall` | the §6 table passes; Pi is empty again | 1–2 h, mostly waiting |
+| 2 | kubementat: `config init`, `install` (standard group), `routing install`, `uninstall` | the §6 table passes; Pi is empty again | 1–2 h, mostly waiting |
 | 3 | Write `examples/k3s/` from what actually worked, not from the notes | script reproduces phase 1–2 on a re-run | 1 h |
 | 4 | Boundary test + README | test green, README states the fixture boundary | 30 min |
 | 5 | ✅ done 2026-10-30: state bundle (SQLite, not etcd) + daily timer → evobox | off-box bundle exists, `state.db` sha256 = manifest, `integrity_check=ok`, timer armed |

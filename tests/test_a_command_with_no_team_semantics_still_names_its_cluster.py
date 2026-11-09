@@ -167,7 +167,7 @@ def test_the_team_less_commands_carry_no_team_flag_and_still_resolve(tmp_path, m
         params = {param.name for param in command.params}
         assert "team" not in params, f"kmt {command.name} offers a team it cannot act on"
 
-    # ...and `kmt cluster-capacity`, whose one argument is the environment and nothing else, still
+    # ...and `kmt kubernetes cluster-capacity`, whose one argument is the environment and nothing else, still
     # says which cluster it read. It is run here without naming it, because `ENVIRONMENT` is pinned
     # above — the argument carries an `envvar`, and which of the two a command reads is worth one
     # more assertion on the cheapest command on the surface.

@@ -1,6 +1,6 @@
 """Tests for the reporting and debugging helpers: exec, logs, pods, nodes, api-resources.
 
-`kmt deploy-ssh`, `kmt deploy-logs`, `kmt pvc-usage` and the uninstall's "here is the
+`kmt kubernetes deployment-ssh`, `kmt kubernetes deployment-logs`, `kmt kubernetes pvc-usage` and the uninstall's "here is the
 cluster you are about to wipe" prompt all read through these, so what they replace is a
 hand-written `kubectl` command line per script. The contract that makes that safe is the
 one these tests pin:

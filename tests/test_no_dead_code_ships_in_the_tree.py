@@ -175,7 +175,7 @@ def test_the_team_account_bash_scripts_are_gone():
 
 
 def test_the_pvc_usage_script_is_gone_and_nothing_reaches_for_it():
-    """`kmt pvc-usage` replaced the script that started a proxy to ask, and the script is deleted.
+    """`kmt kubernetes pvc-usage` replaced the script that started a proxy to ask, and the script is deleted.
 
     `list_pvc_usage.sh` was the fourth of the `scripts/utilities/kubernetes/` reads and the last of
     them that anyone reached by standing in a directory and typing a filename: it backgrounded
@@ -213,7 +213,7 @@ def test_the_pvc_usage_script_is_gone_and_nothing_reaches_for_it():
     assert strays == [], f"the script that started a proxy is still shipping: {strays}"
     assert named_by == [], (
         f"something carries the path of the deleted script and could still run it: {named_by}; "
-        f"the command is kmt pvc-usage. A bare `list_pvc_usage.sh` in a comment naming what a "
+        f"the command is kmt kubernetes pvc-usage. A bare `list_pvc_usage.sh` in a comment naming what a "
         f"command replaced is prose, not a caller, which is why this looks for the path and not "
         f"the word")
 
@@ -252,7 +252,7 @@ def test_the_ingress_manifest_script_is_gone_and_the_command_answers_for_it():
     assert strays == [], f"the manifest printer is still shipping: {strays}"
     assert named_by == [], (
         f"something carries the path of the deleted script and could still run it: {named_by}; "
-        f"the command is kmt create-ingress, and the class it writes is answered by "
+        f"the command is kmt kubernetes create-ingress, and the class it writes is answered by "
         f"src/kubementat/automations/ingress.py")
 
 

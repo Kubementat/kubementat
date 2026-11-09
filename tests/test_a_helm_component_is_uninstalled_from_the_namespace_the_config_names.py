@@ -533,10 +533,11 @@ def test_the_uninstall_shows_up_once_and_under_the_group_name():
 
     assert "component" in names, sorted(names)
     assert [name for name in names if "component-uninstall" in name] == [], sorted(names)
-    # `helm` has a group of its own now (`kmt helm apply`), so "there is no helm subgroup" is no
-    # longer a true sentence and was never the real claim. What this guards is the hiding place: the
-    # group's own listing is apply and nothing else, so no component verb can live inside it.
-    assert commands_from_help(run_help("kmt", "helm", "--help")) == {"apply"}, sorted(names)
+    # `helm` has a group of its own now, so "there is no helm subgroup" is no longer a true sentence
+    # and was never the real claim. What this guards is the hiding place: the group's own listing is
+    # the apply and the chart read, and nothing that takes a component off.
+    assert commands_from_help(run_help("kmt", "helm", "--help")) == {"apply", "latest-version"}, \
+        sorted(names)
     assert [name for name in names if "component" in name] == ["component"], sorted(names)
 
 

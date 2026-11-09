@@ -1,21 +1,31 @@
-"""Read-only Kubernetes diagnostics commands, plus the two
-helm-deployment sessions that were scripts under `scripts/utilities/helm/`.
+"""`kmt kubernetes` -- the cluster behind an environment, read and written.
 
-These are the kubernetes reads that lived as scripts under
-`scripts/utilities/kubernetes/`. Nothing here writes to the cluster, and nothing here
-starts `kubectl` for the report: the calls go through the Kubernetes client, and the one
-question the client cannot answer alone — whether metrics-server is serving — is answered
-gracefully, because a cluster without it is an ordinary cluster, not a traceback.
+Nine verbs, all of them reached the same way: the environment names the cluster and the next
+positionals say what in it. All nine replaced scripts -- five under
+`scripts/utilities/kubernetes/`, two under `scripts/utilities/helm/` and two under
+`scripts/secret_management/` -- and the grouping changed nothing but the argv that reaches
+them. Nothing here starts `kubectl` to produce a report: the calls go through the Kubernetes
+client, and the one question the client cannot answer alone -- whether metrics-server is
+serving -- is answered gracefully, because a cluster without it is an ordinary cluster, not a
+traceback.
 
-`service-account-token` is the other read, and the script it replaces
-(`scripts/secret_management/retrieve_token_for_service_account.sh`) was the one of the
-retired set that had a *use* rather than a caller: a token is a credential, so it is printed
-on stdout and nothing else, and the absences it can meet on the way there say so in one line.
+What each verb does is stated here because a reader of this file should not have to diff the
+surface to find out. `deployment-ssh` hands the terminal to a pod and `deployment-logs`
+follows a stream; both end when the operator does, and neither captures. `create-secret-from-json`
+is the only one that changes the cluster, and its only caller is a Tekton Task. The other six
+read, and one of them -- `create-ingress` -- writes a manifest to stdout or a file and asks the
+cluster nothing, though it still names which cluster that manifest is meant for; it sits here
+because the ingress class it resolves comes from the environment, which is the same answer every
+verb on this group reads first.
 
-`create-secret-from-json` is the write in this file, and it is here for the same reason
-`service-account-token` is: the script it replaces (`create_secret_from_json.sh`) was a
-secret_management script that a Tekton Task ran. It is the only command here that
-changes anything; the four paragraphs above are about the reads and nothing here claims they do not.
+`service-account-token` is the read that had a *use* rather than a caller: a token is a
+credential, so it is printed on stdout and nothing else, and the absences it can meet on the
+way there say so in one line.
+
+`setup-secrets` and `setup-docker-registry-access` still answer to their flat names. They are
+cluster writes, but they belong to the install that lays a cluster down rather than to
+reading one that already exists, so they were left where they are and this is stated rather
+than tidied away.
 """
 
 import json
@@ -25,11 +35,20 @@ import click
 from kubernetes.client.exceptions import ApiException
 
 from kubementat import errors
-from kubementat.errors import (NamespaceNotFoundError,
+from kubementat.automations.ingress import IngressGenerator
+from kubementat.errors import (IngressArgumentNotSuppliedError, IngressPortNotUsableError,
+                               IngressTargetExistsError, NamespaceNotFoundError,
                                PodNotFoundError, ServiceAccountTokenNotFoundError)
 from kubementat.core.quantities import parse_memory
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 from cli.context import kmt_context
+
+
+@click.group(name='kubernetes',
+             help='Read and change what runs in the cluster an environment names: its '
+                  'deployments, claims, images, service accounts and Secrets.')
+def kubernetes():
+    pass
 
 
 def _print_pod_table(header, pods):
@@ -46,8 +65,8 @@ def _memory_gigabytes(quantity):
     return f"{quantity / (1024 ** 3):.1f}Gi"
 
 
-@click.command(name='analyze-deployment',
-               help='Analyze a deployment: its pods, their status, and their logs.')
+@kubernetes.command(name='analyze-deployment',
+                    help='Analyze a deployment: its pods, their status, and their logs.')
 @click.argument('environment', envvar='ENVIRONMENT')
 @click.argument('namespace')
 @click.argument('deployment')
@@ -65,8 +84,8 @@ def analyze_deployment(ctx, environment, namespace, deployment):
         click.echo(log)
 
 
-@click.command(name='pod-images',
-               help='List the pods in a namespace and every image they run.')
+@kubernetes.command(name='pod-images',
+                     help='List the pods in a namespace and every image they run.')
 @click.argument('environment', envvar='ENVIRONMENT')
 @click.argument('namespace')
 @kmt_context
@@ -80,9 +99,9 @@ def pod_images(ctx, environment, namespace):
         click.echo(f"  {image}")
 
 
-@click.command(name='cluster-capacity',
-               help='Cluster capacity: requested versus allocatable per node, plus usage '
-                    'when metrics-server is installed.')
+@kubernetes.command(name='cluster-capacity',
+                     help='Cluster capacity: requested versus allocatable per node, plus usage '
+                          'when metrics-server is installed.')
 @click.argument('environment', envvar='ENVIRONMENT')
 @kmt_context
 def cluster_capacity(ctx, environment):
@@ -171,12 +190,14 @@ def _print_pvc_table(rows, human):
         click.echo("  " + render(cells))
 
 
-@click.command(name='pvc-usage',
-               help='Disk usage of every claim the kubelets report: one row per PVC, per node.\n\n'
-                    "Each node's own stats summary is read through the client, so no local proxy "
-                    "is started and no size is a guess. Sizes are bytes unless --human (-h) is "
-                    "given: that flag is the script's -h, which meant human-readable and not "
-                    "help. A node that answers nothing is named, not skipped in silence.")
+@kubernetes.command(name='pvc-usage',
+                     help='Disk usage of every claim the kubelets report: one row per PVC, '
+                          'per node.\n\n'
+                          "Each node's own stats summary is read through the client, so no local "
+                          "proxy is started and no size is a guess. Sizes are bytes unless --human "
+                          "(-h) is given: that flag is the script's -h, which meant human-readable "
+                          "and not help. A node that answers nothing is named, not skipped in "
+                          "silence.")
 @click.argument('environment', envvar='ENVIRONMENT')
 @click.option('--human', '-h', is_flag=True,
               help='Print the sizes as Ki/Mi/Gi instead of bytes.')
@@ -221,9 +242,10 @@ def _read(read, *args):
 def _attach(action, *args):
     """Hand the terminal over, turning the two absences into one-line answers.
 
-    `deploy-ssh` and `deploy-logs` do not return until the operator is done with them, so all
-    three ways they can fail before that are answered here rather than at the next frame of a
-    traceback: a namespace that was never created, the deployment that is not installed in it,
+    `deployment-ssh` and `deployment-logs` do not return until the operator is done with them,
+    so all three ways they can fail before that are answered here rather than at the next frame
+    of a traceback: a namespace that was never created, the deployment that is not installed in
+    it,
     and the `kubectl` that failed on the way in. The last one is the case a distroless image
     creates -- the pod is fine, the binary is not, and kubectl says so in one line that is worth
     more than a Python frame.
@@ -236,14 +258,14 @@ def _attach(action, *args):
         raise click.ClickException(str(error))
 
 
-@click.command(name='deploy-ssh',
-               help='Open a shell in one pod of a helm deployment. Ends when you exit it.')
+@kubernetes.command(name='deployment-ssh',
+                    help='Open a shell in one pod of a deployment. Ends when you exit it.')
 @click.argument('environment', envvar='ENVIRONMENT')
 @click.argument('namespace')
 @click.argument('deployment')
 @click.argument('container', required=False)
 @kmt_context
-def deploy_ssh(ctx, environment, namespace, deployment, container):
+def deployment_ssh(ctx, environment, namespace, deployment, container):
     # No command option here: what the command runs is /bin/bash, and an escape hatch to any
     # argv would be a way to run anything in any pod from a command whose stated job is looking
     # at one. `KubernetesUtils.open_deployment_shell` takes the command for callers that mean
@@ -251,8 +273,8 @@ def deploy_ssh(ctx, environment, namespace, deployment, container):
     _attach(KubernetesUtils(ctx).open_deployment_shell, namespace, deployment, container)
 
 
-@click.command(name='service-account-token',
-               help="Print the token a service account authenticates with.")
+@kubernetes.command(name='service-account-token',
+                    help="Print the token a service account authenticates with.")
 @click.argument('environment', envvar='ENVIRONMENT')
 @click.argument('namespace')
 @click.argument('service_account_name')
@@ -360,8 +382,9 @@ def _string_data_from_json_file(json_file_path):
     return string_data
 
 
-@click.command(name='create-secret-from-json',
-               help='Create or replace a Secret whose data entries are the keys of a JSON file.')
+@kubernetes.command(name='create-secret-from-json',
+                    help='Create or replace a Secret whose data entries are the keys of a JSON '
+                         'file.')
 @click.argument('environment', envvar='ENVIRONMENT')
 @click.argument('namespace')
 @click.argument('secret_name')
@@ -408,8 +431,57 @@ def create_secret_from_json(ctx, environment, namespace, secret_name, json_file_
                f"with {len(string_data)} key(s): {', '.join(sorted(string_data))}")
 
 
-@click.command(name='deploy-logs',
-               help="Follow the logs of a helm deployment's pods (Ctrl+C to stop).")
+# No `--team` on `create-ingress`: the class the manifest names is `TRAEFIK_INGRESS_CLASS`, which
+# is read out of the environment's own `static.json`, and nothing else on that path touches
+# configuration. The comment that used to sit beside the flat command said the option belonged
+# because a `Config` needs a team to be pointed at -- true of the paths `Config` derives, but
+# `Config._team_scoped_path` refuses those at the read now, and this command reads none of them.
+@kubernetes.command(name='create-ingress',
+                    help='Generate an Ingress manifest for a service, and say which ingress class '
+                         'it routes through.\n\n'
+                         'The manifest goes to stdout so it can be piped or redirected, and any '
+                         'warning about the class goes to stderr so it cannot land in the YAML. '
+                         'The class is read from TRAEFIK_INGRESS_CLASS for the environment; when '
+                         'nothing answers, kubementat writes its own default and says so.')
+@click.argument('environment', envvar='ENVIRONMENT')
+@click.argument('domain')
+@click.argument('service_name')
+@click.argument('service_port')
+@click.option('--output', '-o', 'output_path', type=click.Path(dir_okay=False, path_type=Path),
+              default=None,
+              help='Write the manifest to this file instead of stdout. Refuses if the file exists.')
+@kmt_context
+def create_ingress(ctx, environment, domain, service_name, service_port, output_path):
+    # The script this verb replaced (`create_ingress_yml.sh`) resolved `../../../platform_config`
+    # against its own location, so reaching it meant knowing the filename and standing at the right
+    # depth. It is a command and not a path handed to a runner for that reason, and because no
+    # shipped script is left for the CLI to run.
+    #
+    # The environment is first and required: the class this manifest names is read from that
+    # environment's `static.json`, so an empty one used to be a default the command had dropped
+    # rather than a decision it made. `@kmt_context` refuses that state now, and the generator's own
+    # "no environment" branch survives only for library callers.
+    generator = IngressGenerator(ctx)
+    try:
+        generated = generator.generate(domain, service_name, service_port)
+    except (IngressArgumentNotSuppliedError, IngressPortNotUsableError) as error:
+        raise click.ClickException(str(error))
+
+    for warning in generated.warnings:
+        click.echo(f"WARNING: {warning}", err=True)
+
+    if output_path is None:
+        click.echo(generated.text(), nl=False)
+        return
+    try:
+        generator.write(generated, Path(output_path))
+    except IngressTargetExistsError as error:
+        raise click.ClickException(str(error))
+    click.echo(f"wrote {output_path}", err=True)
+
+
+@kubernetes.command(name='deployment-logs',
+                    help="Follow the logs of a deployment's pods (Ctrl+C to stop).")
 @click.argument('environment', envvar='ENVIRONMENT')
 @click.argument('namespace')
 @click.argument('deployment')
@@ -417,7 +489,7 @@ def create_secret_from_json(ctx, environment, namespace, secret_name, json_file_
 @click.option('--tail', 'tail_lines', default=None, type=int,
               help='Start this many lines from the end instead of from the beginning.')
 @kmt_context
-def deploy_logs(ctx, environment, namespace, deployment, container, tail_lines=None):
+def deployment_logs(ctx, environment, namespace, deployment, container, tail_lines=None):
     # The timestamps the script always asked for are on in the primitive and not a flag here,
     # for the same reason `--follow` is not one: a log line that says when is the half of a
     # "why did it restart twice" answer that is free.

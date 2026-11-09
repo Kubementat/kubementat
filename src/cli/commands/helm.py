@@ -1,21 +1,14 @@
 """`kmt helm` -- what helm does for an environment, and the newest version of one chart.
 
-The grouping put this surface under `helm`, and `helm` is the group where a name that already said
-*how* it is done could hide the thing it does: `helmfile-apply` is one command out of a family of
-helm reads and applies, and it is the apply half of a group that now has a place to sit next to the
-others.
+Two verbs, both spelled without the word `helmfile`: `apply` is what the group is for, and
+`latest-version` is the read that had a flat name of its own before it joined.
 
-**The rename is a rename.** `kmt helmfile-apply` is gone rather than aliased, by the rule against
-aliases and by the grouping's own rule: a command with two names is a command with two answers, and
-this one
-deletes and re-creates releases. The pinned future argv lives in the lane's capability table
-(`tests/e2e/harness/config.py`, row `helm.helmfile-apply`), and it says `helm apply` -- the verb is
-the answer, `helmfile` is the mechanism, and the `--helmfile-*` options on the command keep naming
-the mechanism for anyone who needs it.
-
-`helm-version` is deliberately not here: the grouping's list is the 11 commands the lane measures
-as still flat, and that read is not one of them. It stays flat rather than joining a group it was
-never asked to join, which is the honest half of a partial grouping -- see the report.
+**Both renames are renames.** `kmt helmfile-apply` and `kmt helm-version` are gone rather than
+aliased, by the rule against aliases and by the group's own rule: a command with two names is a
+command with two answers, and the first one deletes and re-creates releases. The pinned future argv
+lives in the lane's capability table (`tests/e2e/harness/config.py`, row `helm.helmfile-apply`), and
+it says `helm apply` -- the verb is the answer, `helmfile` is the mechanism, and the `--helmfile-*`
+options on the command keep naming the mechanism for anyone who needs it.
 """
 
 import sys
@@ -31,21 +24,21 @@ from cli.context import kmt_context
 def helm():
     pass
 
-# The latest version of a chart, printed and nothing else. It is named `helm-version`
-# rather than `helm-latest-version` because the surface says "what is the version", and the
-# answer is always the newest one helm can see -- an option for "give me 1.x" would be a second
-# command, and the script it replaces had the same single question.
+# The latest version of a chart, printed and nothing else. Under the `helm` group the verb is all
+# the name needs: the group already says helm, so `latest-version` says the rest, and the answer is
+# always the newest one helm can see -- an option for "give me 1.x" would be a second command, and
+# the script it replaced had the same single question.
 #
 # No `--team`, and the reasoning is the same one applied one layer down: `get_latest_chart_version`
 # runs `helm repo list` and `helm search`, reads no `Config` category at all, and never asks what a
 # team is. An option here was a question the command cannot answer, and a command that cannot
 # act on a team does not accept one.
-@click.command(name='helm-version',
-               help='Print the newest version of a helm chart that this machine can see.')
+@helm.command(name='latest-version',
+              help='Print the newest version of a helm chart that this machine can see.')
 @click.argument('environment', envvar='ENVIRONMENT')
 @click.argument('chart_path')
 @kmt_context
-def helm_version(ctx, environment, chart_path):
+def latest_version(ctx, environment, chart_path):
     # The argument keeps the script's shape (`repo/chart`) because that is what a reader of the
     # old usage line already knows, and because a chart has one address. Where it is split is
     # this command's business: HelmUtils answers a repo and a chart separately, so that a
@@ -59,8 +52,8 @@ def helm_version(ctx, environment, chart_path):
     if not chart:
         raise click.ClickException(
             f"'{chart_path}' does not name a chart. The form is "
-            f"`kmt helm-version <ENVIRONMENT> <repo>/<chart>`, e.g. "
-            f"`kmt helm-version dev prometheus-community/prometheus`.")
+            f"`kmt helm latest-version <ENVIRONMENT> <repo>/<chart>`, e.g. "
+            f"`kmt helm latest-version dev prometheus-community/prometheus`.")
     click.echo(f"environment: {environment}")
     version = HelmUtils(ctx).get_latest_chart_version(chart, repo)
     click.echo(version)

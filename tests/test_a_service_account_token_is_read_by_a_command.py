@@ -186,16 +186,21 @@ def test_a_namespace_that_was_never_created_names_the_namespace(recorded_api):
 def test_the_command_is_on_the_surface_once_and_under_one_name():
     """`kmt --help` is the truth about reachability, and there is exactly one route to a token.
 
-    Flat, like every command on this surface except `users`: no `kmt secrets` subgroup would be
-    consistent with what is already there, and no alias would be a second place to agree about what
-    the command is called.
+    The verb sits on the `kubernetes` group, which is where everything that addresses a cluster
+    already lives; no `kmt secrets` subgroup would be consistent with the surface, and no alias would
+    be a second place to agree about what the command is called. What this checks is that the move
+    left no route behind: no name printed at the top level reads like a token, and the group holds the
+    verb once.
     """
-    from test_cli_surface import commands_from_help, help_output
+    from test_cli_surface import commands_from_help, help_output, run_help
 
     names = commands_from_help(help_output())
+    group = commands_from_help(run_help("kmt", "kubernetes", "--help"))
 
-    assert "service-account-token" in names, sorted(names)
-    assert [name for name in names if "token" in name] == ["service-account-token"], sorted(names)
+    assert "kubernetes" in names, sorted(names)
+    assert "service-account-token" in group, sorted(group)
+    assert [name for name in names if "token" in name] == [], sorted(names)
+    assert [name for name in group if "token" in name] == ["service-account-token"], sorted(group)
 
 
 def test_the_script_found_the_token_by_a_name_and_this_finds_it_by_an_annotation():

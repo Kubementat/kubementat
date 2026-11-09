@@ -163,7 +163,7 @@ def test_an_undeclared_chart_is_refused_before_helm_is_asked(fixture_repo, monke
 # ---------------------------------------------------------------------------
 def test_the_command_prints_the_version_and_nothing_else(helm_on_the_path, fixture_repo,
                                                          monkeypatch, tmp_path):
-    """`kmt helm-version <environment> <repo>/<chart>` answers a version, on one line.
+    """`kmt helm latest-version <environment> <repo>/<chart>` answers a version, on one line.
 
     The environment is the first positional — this command reads no cluster, but it answers the
     question for an environment, and the rule admits no exception. The address the script took is kept
@@ -177,7 +177,7 @@ def test_the_command_prints_the_version_and_nothing_else(helm_on_the_path, fixtu
     helm_on_the_path.respond("helm", search_rows([(CHART, "25.8.0", "2.47.0")]),
                              subcommand="search")
 
-    result = CliRunner().invoke(helm.helm_version,
+    result = CliRunner().invoke(helm.latest_version,
                                 [fixture_repo.environment, TARGET])
 
     assert result.exit_code == 0, result.output
@@ -198,7 +198,7 @@ def test_an_address_that_is_not_an_address_is_answered_before_helm_runs(helm_on_
     helm_on_the_path.respond("helm", search_rows([(CHART, "25.8.0", "2.47.0")]),
                              subcommand="search")
 
-    result = CliRunner().invoke(helm.helm_version, [fixture_repo.environment, CHART])
+    result = CliRunner().invoke(helm.latest_version, [fixture_repo.environment, CHART])
 
     assert result.exit_code == 1, result.output
     assert TARGET in result.output

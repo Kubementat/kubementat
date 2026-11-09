@@ -41,7 +41,7 @@ def resolving_root(tmp_path, monkeypatch, environments=(("dev", DEV_SERVER),)):
 
 
 def run(*arguments):
-    """`kmt pod-images dev <namespace>`, which takes a namespace and nothing else.
+    """`kmt kubernetes pod-images dev <namespace>`, which takes a namespace and nothing else.
 
     It is the cheapest command on the surface that reaches a cluster: one list call, answered by the
     recorder, and no team — so every assertion here is about the cluster and none of it is about a

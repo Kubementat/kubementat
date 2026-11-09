@@ -1,5 +1,81 @@
 # Unreleased
 
+- **Ten cluster verbs move off the flat surface: nine become `kmt kubernetes <verb>`, and
+  `helm-version` becomes `kmt helm latest-version`. The flat names are dead.**
+  `kmt analyze-deployment` is `kmt kubernetes analyze-deployment`,
+  `kmt cluster-capacity` is `kmt kubernetes cluster-capacity`,
+  `kmt pod-images` is `kmt kubernetes pod-images`, `kmt pvc-usage` is `kmt kubernetes pvc-usage`,
+  `kmt service-account-token` is `kmt kubernetes service-account-token`,
+  `kmt create-ingress` is `kmt kubernetes create-ingress`,
+  `kmt create-secret-from-json` is `kmt kubernetes create-secret-from-json`, and the two pod
+  sessions are renamed as they move: `kmt deploy-ssh` is `kmt kubernetes deployment-ssh` and
+  `kmt deploy-logs` is `kmt kubernetes deployment-logs`. `kmt helm-version` is
+  `kmt helm latest-version`. No alias, no shim, no "did you mean": every old name answers
+  `No such command` and exits 2.
+
+  **Why the grouping is worth having.** Ten verbs that all take an environment first and then say
+  what in that cluster they mean were printed on `kmt --help` as ten unrelated lines, six of them
+  named after the scripts they had replaced. `helm` already had a group with one verb on it, and the
+  same argument the four late `tekton-*` commands moved on applies here: a command whose first word is
+  a group's name, answering to a hyphen beside verbs that answer to a space, describes a rule the
+  surface does not follow. The rename of the two sessions is the other half of the same point --
+  `deploy-ssh` said "helm deployment" and touched no helm at all, so `deployment-ssh` is the more
+  honest name and not merely a prefixed one.
+
+  **What deliberately did not move.** `setup-secrets` and `setup-docker-registry-access` stay flat.
+  They address a cluster, but they run during the install that creates what this group reads, and a
+  verb that arrives before there is anything to read does not belong to a group named after the
+  reading. The surface test asserts both directions: that they are not on the `kubernetes` group, and
+  that they are still on `kmt --help`.
+
+  **What an operator notices is the argv and nothing else.** Each command takes exactly what it
+  took -- same positionals in the same order, same options, same refusals, same exit codes. Grouping a
+  command may not change what it takes, and here it did not: no `--team` appeared on any of the ten,
+  no flag left, and the one option that came along (`create-ingress`'s `--output`) is the one it
+  already had. The only text that changed is the argv inside the
+  `create-secret-from-json` Tekton Task and the two sentences that name a command whose form an
+  operator has to type.
+
+  **Where the lines moved.** `src/cli/commands/kubernetes.py`, which is a group now and also holds the
+  Ingress generator it had no business holding until a group existed to hold it in; `src/cli/commands/utilities.py`,
+  which is left with the one command that was never a cluster verb; `src/cli/commands/helm.py`, where the
+  version read joins the apply; `src/cli/kmt.py`, which registers two groups instead of ten flat
+  commands; the Task's step line in
+  `src/kubementat/core/assets/tekton_ci/tasks/create-secret-from-json.yml`; the usage strings in
+  `src/kubementat/automations/ingress.py`, `src/kubementat/infrastructure/helm.py`,
+  `src/kubementat/infrastructure/kubernetes/exec.py` and `src/cli/context.py`; and
+  `docs/index-overview.md`, `docs/README_TEKTON.md`,
+  `docs/README_PLATFORM_CONFIG.md` and `docs/specifications/cluster-config-v2.md`.
+  `docs/plans/`, `TODOs.md` and the older CHANGELOG entries keep the old names: they record what was
+  true on a date, and no rename has ever rewritten one of them.
+
+  **Evidence.** `uv run pytest -q` → **1786 passed, 1 skipped**, including the new
+  `test_the_kubernetes_group_holds_the_nine_cluster_verbs_and_their_flat_names_are_dead`, the rewritten
+  `test_the_helm_group_holds_the_apply_and_the_version_read_and_their_flat_names_are_dead`, and the
+  check that reads the shipped Task's own argv and resolves it against the command tree.
+  `uv run kmt --help` → **14** entries, ten fewer and two groups more;
+  `uv run kmt kubernetes --help` → **9** verbs; `uv run kmt helm --help` → **2**. Asking the shipped
+  entry point for each of the ten flat names answers `No such command` with exit 2, which is the
+  assertion rather than a comment saying it.
+
+  **What the lane owes.** No capability row changed, because no row has ever run any of the ten or the
+  version read -- so the unit suite is the only thing standing between this rename and a regression,
+  and the check that closes the gap is the Task's own argv being resolved instead of remembered. The
+  ten reads and the version read remain unmeasured by the lane exactly as they were before the move,
+  so nothing here claims a cluster answered any of them; the claim is that the same code is now
+  reached by a different argv, which is what the surface and the Task checks prove.
+
+  And a real cluster: `uv run python tests/e2e/suite.py --lane full --scope full` → **128 assertions,
+  0 failed** (run `20261109T112611Z-full-full-bc075c3`, 898 s, three cluster-readiness asserts needing
+  retries and nothing else). What that number is evidence *for* is narrower than it looks, so it is
+  worth naming: the lane installs a cluster, runs pipelines, opens tunnels and uninstalls, and it never
+  invokes a single one of the ten verbs -- no capability row of the table calls any of them, and no
+  shipped example or stage does either, so the run proves that the surface still registers and still
+  answers in the guest (`kmt-help-unprivileged`, `cap:secrets.setup` and `cap:registry.access` are the
+  rows that touch the CLI wiring) and proves nothing about what the nine cluster verbs print. A real
+  `kmt kubernetes pvc-usage` on a node that binds claims, and a `kmt helm latest-version` against a
+  real helm index, are still owed by the rows that own them.
+
 - **The image build in the pipeline is rootless BuildKit, and kaniko is gone.**
   `build-and-push-docker-image` now runs `moby/buildkit:v0.34.2-rootless` as uid 1000 inside the
   step's own container, in the same TaskRun pod, with no sidecar daemon and nothing privileged.

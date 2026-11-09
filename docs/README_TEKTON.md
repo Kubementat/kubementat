@@ -586,7 +586,7 @@ kubectl get pods --namespace tekton-pipelines --watch
 >   behaves the same way one key over: `CERT_MANAGER_DEPLOYMENT_NAMESPACE`, `component_name=cert-manager`.
 > - **Which class it serves.** `TRAEFIK_INGRESS_CLASS` (default `traefik`) names the `IngressClass` the
 >   controller creates, and the same key is what the two `ClusterIssuer` HTTP-01 solvers and every
->   manifest `kmt create-ingress` writes name. A class no controller serves is accepted by the API and
+>   manifest `kmt kubernetes create-ingress` writes name. A class no controller serves is accepted by the API and
 >   served by nobody, which is why one key and not two answers this.
 > - **How to read it, not guess it.** `uv run kmt routing status <environment>` reads the cluster and
 >   reports which Traefik it is running, whose it is, and what `kmt routing install` would do with it.
@@ -597,7 +597,7 @@ kubectl get pods --namespace tekton-pipelines --watch
 > Ingress written for a controller that brought its own `nginx` class and
 > `nginx.ingress.kubernetes.io/*` annotations. On a kubementat cluster neither of those routes, because
 > the class here is `traefik` and kubementat ships no nginx annotation compatibility; the supported way
-> to get that manifest is `uv run kmt create-ingress <environment> <domain> <service> <port>`, which
+> to get that manifest is `uv run kmt kubernetes create-ingress <environment> <domain> <service> <port>`, which
 > writes the class `TRAEFIK_INGRESS_CLASS` names and no nginx annotations at all.
 
 ```

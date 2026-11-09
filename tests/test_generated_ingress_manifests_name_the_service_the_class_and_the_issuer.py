@@ -1,7 +1,7 @@
 """The Ingress generator: what the document contains, where its class came from, and what is said
 when it could not look.
 
-`kmt create-ingress` replaced a script whose whole job was to print one YAML document, so the tests
+`kmt kubernetes create-ingress` replaced a script whose whole job was to print one YAML document, so the tests
 here are about that document and the three things that decide it: the service the caller named, the
 class the environment's configuration answers, and the issuer the certificate is asked of. The
 parity file compares this to the deleted script's own output; this file owns the parts that
@@ -17,7 +17,7 @@ import yaml
 from click.testing import CliRunner
 from kubernetes import client, utils
 
-from cli.commands.utilities import create_ingress
+from cli.commands.kubernetes import create_ingress
 from conftest import FIXTURE_TEAM
 from cluster_fixture import configuration_only_context
 from kubementat.core.config.config import Config
@@ -36,7 +36,7 @@ DOMAIN = "nginx-example.dev1.example.com"
 DEFAULT_CLASS = "traefik"
 
 def generator(environment: str = "dev") -> IngressGenerator:
-    """The generator the way `kmt create-ingress` builds it, from one `Context`.
+    """The generator the way `kmt kubernetes create-ingress` builds it, from one `Context`.
 
     The `Context` comes from `cluster_fixture.configuration_only_context` rather than
     `Context.build` because this file asserts about a YAML document: what it needs is the real

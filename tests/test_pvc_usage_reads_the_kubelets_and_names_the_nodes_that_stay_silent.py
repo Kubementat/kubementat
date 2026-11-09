@@ -1,6 +1,6 @@
-"""The kubelet read behind `kmt pvc-usage`: what answered, from which node, and what did not.
+"""The kubelet read behind `kmt kubernetes pvc-usage`: what answered, from which node, and what did not.
 
-The `kmt pvc-usage` command replaces `scripts/utilities/kubernetes/list_pvc_usage.sh`, which
+The `kmt kubernetes pvc-usage` command replaces `scripts/utilities/kubernetes/list_pvc_usage.sh`, which
 reached a node's
 `/stats/summary` by starting `kubectl proxy`, `sleep 2`, curling `127.0.0.1:8001` and then
 `pkill -9`ing the proxy. The comparison against that script is
@@ -350,7 +350,7 @@ def test_a_cluster_with_no_claims_says_so_instead_of_printing_an_empty_table(rec
 
 @pytest.fixture(autouse=True)
 def _an_environment_the_command_can_resolve(resolvable_environment):
-    """`kmt pvc-usage` now resolves the cluster it reads, so this module declares one.
+    """`kmt kubernetes pvc-usage` now resolves the cluster it reads, so this module declares one.
 
     The read itself is per-node and asks no namespace question, so the fixture only has to make
     `environment: dev` mean something; what the test asserts stays the kubelet's answer.

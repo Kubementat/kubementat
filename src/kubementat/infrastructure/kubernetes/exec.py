@@ -21,7 +21,7 @@ from kubementat.infrastructure.kubernetes.constants import DEPLOYMENT_LABEL
 from kubementat.infrastructure.kubernetes.workloads import KubernetesWorkloads
 
 
-# What `kmt deploy-ssh` hands the pod when the operator does not name a command: bash, under
+# What `kmt kubernetes deployment-ssh` hands the pod when the operator does not name a command: bash, under
 # the path every kubementat image has shipped. It is a path and not `sh -c ...` for the same
 # reason the script it replaced was written that way -- a one-token argv entry cannot be
 # re-parsed by a shell that is not there.

@@ -49,9 +49,13 @@ from asset_paths import tekton_ci_path
 # this list and the CLI disagree, one of them is wrong — which is the whole point of having
 # the list.
 EXPECTED_COMMANDS = {
-    # `helm` is a group now, so `helmfile-apply` is off this list -- it answers to
-    # `kmt helm apply` and to nothing else. See `test_the_helm_group_holds_the_apply_the_surface_had`.
+    # `helm` is a group, so neither `helmfile-apply` nor `helm-version` is on this list -- they answer
+    # to `kmt helm apply`, `kmt helm latest-version`, and to nothing else. See
+    # `test_the_helm_group_holds_the_apply_and_the_version_read_and_their_flat_names_are_dead`.
     "helm",
+    # `kubernetes` is a group, so none of the nine cluster verbs it took is on this list. See
+    # `test_the_kubernetes_group_holds_the_nine_cluster_verbs_and_their_flat_names_are_dead`.
+    "kubernetes",
     "component",
     # `initialize` is deleted outright: `kmt config init` is the verb that prepares a
     # configuration directory, and no row here answers to the old name.
@@ -72,34 +76,6 @@ EXPECTED_COMMANDS = {
     # `users` is a group: its own commands (`create-team-account`, the read-only variant,
     # `delete-team-account`) show up under `kmt users --help`, not here.
     "users",
-    # Cluster reads: the diagnostics that were scripts under `scripts/utilities/kubernetes/`.
-    # No aliases, no shims: the scripts are deleted in the same commit.
-    "analyze-deployment",
-    "pod-images",
-    "cluster-capacity",
-    # The fourth of those reads, and the last one that needed a command to exist. No
-    # alias: `list_pvc_usage.sh` is deleted here and nothing in `src/` or `tekton_ci/` ever called
-    # it, so what landed is a command rather than a port of a script somebody typed.
-    "pvc-usage",
-    # The two helm-deployment sessions that were scripts under `scripts/utilities/helm/`
-    # two of them: a shell in a pod, and the deployment's logs. Both stream, neither captures.
-    "deploy-ssh",
-    "deploy-logs",
-    # The newest version of a chart, from helm's own search output. It is not on the `helm`
-    # group, because the regrouping list is the 11 commands the lane measures as flat and this read is not
-    # one of them -- so the surface currently has a `helm` group and a flat `helm-version` beside it.
-    "helm-version",
-    # A service account's token, read through the client; the script it replaces was the one
-    # script under `scripts/secret_management/` that a caller never reached but an operator did.
-    "service-account-token",
-    # The Ingress manifest generator: the last script that answered a configuration question
-    # by `jq`-ing a file out from under the directory it happened to be run in. Flat, no alias, and
-    # deleted in the same commit -- reaching it meant knowing the filename.
-    "create-ingress",
-    # The Secret write that the last running script under `scripts/secret_management/` became.
-    # Three positionals and no options, the same shape the script took and the only shape the Tekton
-    # Task that called it could pass. Flat, no alias, script deleted in the same commit.
-    "create-secret-from-json",
     # Routing is its own group because it is its own decision: `kmt install` neither installs it
     # nor takes `--update`, so the group is what the harness capability table calls.
     # Its commands live under `kmt routing --help`, the same way `users`' do.
@@ -117,6 +93,9 @@ EXPECTED_COMMANDS = {
     "config",
 }
 
+# What is on `kmt kubernetes`: the nine verbs that address a cluster that already exists. The set is
+# the assertion, so a tenth verb cannot arrive on the group without being decided twice: once as a
+# command, and once here, where the comment says what it reads or writes.
 # What is on `kmt environments`: the listing, and nothing else. It sits on the
 # `EnvironmentRegistry` primitive the 1:1 check resolves against, so the command and the
 # check cannot disagree about what is configured -- and a second verb that resolved its own answer
@@ -158,6 +137,54 @@ EXPECTED_ROUTING_COMMANDS = {
 # ------------------------------------------------------------------------------------------
 
 RESOLUTION_FLAGS = {"context", "kubeconfig", "config_dir"}
+
+
+EXPECTED_KUBERNETES_COMMANDS = {
+    "analyze-deployment",
+    "cluster-capacity",
+    "create-ingress",
+    "create-secret-from-json",
+    "deployment-logs",
+    "deployment-ssh",
+    "pod-images",
+    "pvc-usage",
+    "service-account-token",
+}
+
+# The exact parameters of each verb, by set equality. Grouping a command may not change what it
+# takes, and that is the sentence this table exists to check: an option that drifted off
+# `create-ingress` during the move is an option the operator now has to pass some other way, and a
+# `--team` that drifted onto any of them is a flag that resolves nothing.
+#
+# None of the nine takes `--team`. Each decides what it edits out of the *environment's* own files
+# plus the positionals the operator typed: the namespace is a positional, the cluster is what the
+# environment's `static.json` names, and the one team-scoped key anywhere on this group's path
+# (`DOCKER_REGISTRY_CREDENTIALS`) belongs to the flat `setup-docker-registry-access`, which did not
+# move.
+EXPECTED_KUBERNETES_COMMAND_PARAMS = {
+    # The reads that were scripts under `scripts/utilities/kubernetes/`.
+    "analyze-deployment": {"environment", "namespace", "deployment"} | RESOLUTION_FLAGS,
+    "cluster-capacity": {"environment"} | RESOLUTION_FLAGS,
+    "pod-images": {"environment", "namespace"} | RESOLUTION_FLAGS,
+    # `--human` is the script's `-h`, which meant human-readable and not help.
+    "pvc-usage": {"environment", "human"} | RESOLUTION_FLAGS,
+    # The two sessions: a shell in a pod, and the log stream. Both take the container as an optional
+    # positional, and `--tail` is the one option the stream needs.
+    "deployment-ssh": {"environment", "namespace", "deployment",
+                       "container"} | RESOLUTION_FLAGS,
+    "deployment-logs": {"environment", "namespace", "deployment", "container",
+                        "tail_lines"} | RESOLUTION_FLAGS,
+    # A credential printed on stdout and nothing else, so no flag redirects it into a file.
+    "service-account-token": {"environment", "namespace",
+                              "service_account_name"} | RESOLUTION_FLAGS,
+    # Four positionals and no options: the shape the Tekton Task that runs this command passes.
+    "create-secret-from-json": {"environment", "namespace", "secret_name",
+                                "json_file_path"} | RESOLUTION_FLAGS,
+    # `--output` is the only option, and it is the one the flat command carried before the move.
+    "create-ingress": {"environment", "domain", "service_name", "service_port",
+                       "output_path"} | RESOLUTION_FLAGS,
+}
+
 
 
 # The flags each command on the group carries, and by exact set equality, the ones it must not.
@@ -276,9 +303,11 @@ EXPECTED_TEKTON_COMMAND_PARAMS = {
     "generate-pipeline-run": {"environment", "team", "pipeline_file"} | RESOLUTION_FLAGS,
 }
 
-EXPECTED_HELM_COMMANDS = {"apply"}
+# What is on `kmt helm`: the apply, and the one read that had a flat name of its own until the group
+# took more than one verb.
+EXPECTED_HELM_COMMANDS = {"apply", "latest-version"}
 
-# The exact set the apply command must still carry. `helmfile-apply` took environment, the label
+# The exact set each verb must still carry. `helmfile-apply` took environment, the label
 # filter, the confirmation escape hatch and the two paths that decide where helmfile runs, and
 # grouping it changed none of that: an option that drifted off the command during the move is an
 # option the operator has to pass in a different way, which is the whole thing a rename must not do.
@@ -286,10 +315,12 @@ EXPECTED_HELM_COMMANDS = {"apply"}
 # `--team` is the exception, and it drifted off on purpose: everything helmfile is handed here comes
 # from the environment's `static.json` and `static.encrypted.json`, so the option resolved nothing
 # and the `require_team` behind it refused an apply that was about to read one file, so it went off on
-# purpose.
+# purpose. The version read never had one: `get_latest_chart_version` runs `helm repo list` and `helm
+# search` and reads no configuration category at all.
 EXPECTED_HELM_COMMAND_PARAMS = {
     "apply": {"environment", "helmfile_label_filter", "yes",
               "helmfile_working_directory", "helmfile_path"} | RESOLUTION_FLAGS,
+    "latest-version": {"environment", "chart_path"} | RESOLUTION_FLAGS,
 }
 
 # What is on `kmt config`: the verb that lays a tree down, the two verbs that add one layer to a tree,
@@ -657,12 +688,19 @@ def _command_answers_to(name):
     return result.exit_code, result.output
 
 
-def check_group(group_name, commands, expected_commands, expected_params, mechanism=None):
+def check_group(group_name, commands, expected_commands, expected_params, mechanism=None,
+                flat_names=None):
     """The three checks every group that replaced flat names gets, in the order a reader would want
     them.
 
     Same shape as `users`, `routing` and `component` above: what is on the group, what each command
     takes, and what the flat names it replaces now do when asked.
+
+    `flat_names` is for a group whose old names did not read `<group>-<verb>`. `kmt kubernetes
+    analyze-deployment` replaced a verb that was already called `analyze-deployment`, so building the
+    dead name from the group would assert only that `kmt kubernetes-analyze-deployment` is gone --
+    true, and not the thing anyone would want to know. A group that passes `flat_names` states the
+    whole list of dead names itself, so the built forms are not consulted for it.
     """
     names = set(commands)
     assert names == expected_commands, (
@@ -683,7 +721,9 @@ def check_group(group_name, commands, expected_commands, expected_params, mechan
     assert commands_from_help(run_help("kmt", group_name, "--help")) == expected_commands, (
         f"the group's own listing is not the verbs it is supposed to be")
 
-    for verb, flat_name in sorted(_flat_forms(group_name, expected_commands, mechanism).items()):
+    forms = flat_names if flat_names is not None else _flat_forms(
+        group_name, expected_commands, mechanism)
+    for verb, flat_name in sorted(forms.items()):
         assert flat_name not in listed, f"kmt {flat_name} is still printed on kmt --help"
         exit_code, output = _command_answers_to(flat_name)
         assert exit_code == 2 and "No such command" in output, (
@@ -797,22 +837,59 @@ def test_the_tekton_group_holds_the_ten_commands_and_their_flat_names_are_dead()
                 EXPECTED_TEKTON_COMMAND_PARAMS)
 
 
-def test_the_helm_group_holds_the_apply_the_surface_had_and_its_flat_name_is_dead():
-    """The apply that had a flat line of its own is `kmt helm apply`, alone on the group.
+def test_the_helm_group_holds_the_apply_and_the_version_read_and_their_flat_names_are_dead():
+    """The two helm verbs sit on the group, and both flat names they had answer to nothing.
 
     Why `apply` and not `helmfile-apply`: the lane pins the future argv for this row in its own
     capability table, and it pins the verb. `helmfile` is the mechanism the `--helmfile-*` options
     still name; `apply` is the answer.
 
-    `helm-version` is deliberately not on this group. The regrouping list is what the lane measures,
-    and this read is not in it, so a command that moved with no marker pinning it is a command whose
-    rename nobody can verify -- so the surface has one group and one flat helm command beside it, stated
-    here rather than tidied away.
+    `helm-version` joined for the reason the four late tekton verbs joined: a command whose first word
+    is a group's name, answering to a hyphen beside verbs that answer to a space, is a surface
+    describing a rule it does not follow. The lane measures only the apply, so nothing pins this
+    rename from outside -- which is exactly why the dead name is checked by asking the shipped entry
+    point what it answers to, and not by a capability row that was never going to run it.
     """
     from cli.commands import helm
 
     check_group("helm", helm.helm.commands, EXPECTED_HELM_COMMANDS,
-                EXPECTED_HELM_COMMAND_PARAMS, mechanism="helmfile")
+                EXPECTED_HELM_COMMAND_PARAMS,
+                flat_names={"apply": "helmfile-apply",
+                            "latest-version": "helm-version"})
+
+
+def test_the_kubernetes_group_holds_the_nine_cluster_verbs_and_their_flat_names_are_dead():
+    """Every verb that addresses a cluster that already exists is `kmt kubernetes <verb>`.
+
+    The nine came from three different flat blocks on the surface: four diagnostics, the two pod
+    sessions, and three that were scattered as a token read, a manifest generator and a Secret write.
+    What they share is a cluster behind the first positional, and one word for that on `kmt --help` is
+    what the group buys.
+
+    The dead names are not built from the group, and that is the half of this check a reader will want
+    stated. Eight of the nine kept their verb through the move, so the name to prove dead is the verb
+    alone; the two sessions are the exception, because `deploy-ssh` and `deploy-logs` said what the new
+    verb says less precisely and so were renamed rather than prefixed.
+
+    `setup-secrets` and `setup-docker-registry-access` are deliberately absent, and what is asserted is
+    that they are *not* on the group: they write the cluster this group reads, during the install that
+    creates it, so a verb that runs before there is anything to read does not belong to a group named
+    after the reading.
+    """
+    from cli.commands import kubernetes
+
+    dead = {verb: verb for verb in EXPECTED_KUBERNETES_COMMANDS}
+    dead["deployment-ssh"] = "deploy-ssh"
+    dead["deployment-logs"] = "deploy-logs"
+
+    check_group("kubernetes", kubernetes.kubernetes.commands, EXPECTED_KUBERNETES_COMMANDS,
+                EXPECTED_KUBERNETES_COMMAND_PARAMS, flat_names=dead)
+
+    # The two flat writes that did not move are still on the surface, so they cannot have drifted in.
+    listed = commands_from_help(help_output())
+    assert "setup-secrets" in listed and "setup-docker-registry-access" in listed
+    assert "setup-secrets" not in kubernetes.kubernetes.commands
+    assert "setup-docker-registry-access" not in kubernetes.kubernetes.commands
 
 
 def test_the_update_flag_reaches_the_function_that_decides(monkeypatch, resolvable_environment):
@@ -935,24 +1012,30 @@ def test_every_command_documented_itself(registrations):
 #
 # The table is the whole surface plus the two commands that were already there and had to be moved
 # into line -- `create-ingress`, whose environment used to be an optional fifth argument, and
-# `helm-version`, whose environment used to be second. `create-ingress` is on this list for the
-# rule and not for the cluster: it writes a manifest and reads no socket. The rule admits no
+# `helm latest-version`, whose environment used to be second. The manifest generator is on this list
+# for the rule and not for the cluster: it writes a file and reads no socket. The rule admits no
 # exception, because a rule with one exception is a rule somebody has to remember.
+#
+# The keys are the argv that reaches the command, so a command under a group is keyed with the group
+# first. That is not decoration: this table is read by the Task check below, which resolves a step's
+# own argv against the command tree, and a key that left the group out would resolve to nothing and
+# check nothing.
 # ------------------------------------------------------------------------------------------
 
 CLUSTER_TOUCHING_POSITIONALS = {
-    "analyze-deployment": ["environment", "namespace", "deployment"],
-    "pod-images": ["environment", "namespace"],
-    "cluster-capacity": ["environment"],
-    "pvc-usage": ["environment"],
-    "deploy-ssh": ["environment", "namespace", "deployment", "container"],
-    "deploy-logs": ["environment", "namespace", "deployment", "container"],
-    "service-account-token": ["environment", "namespace", "service_account_name"],
-    "create-secret-from-json": ["environment", "namespace", "secret_name", "json_file_path"],
+    "kubernetes analyze-deployment": ["environment", "namespace", "deployment"],
+    "kubernetes pod-images": ["environment", "namespace"],
+    "kubernetes cluster-capacity": ["environment"],
+    "kubernetes pvc-usage": ["environment"],
+    "kubernetes deployment-ssh": ["environment", "namespace", "deployment", "container"],
+    "kubernetes deployment-logs": ["environment", "namespace", "deployment", "container"],
+    "kubernetes service-account-token": ["environment", "namespace", "service_account_name"],
+    "kubernetes create-secret-from-json": ["environment", "namespace", "secret_name",
+                                           "json_file_path"],
     # The grouped ones are addressed by the argv an operator types, group first.
     "tunnel pod": ["environment", "namespace", "pod_name"],
-    "create-ingress": ["environment", "domain", "service_name", "service_port"],
-    "helm-version": ["environment", "chart_path"],
+    "kubernetes create-ingress": ["environment", "domain", "service_name", "service_port"],
+    "helm latest-version": ["environment", "chart_path"],
 }
 
 # What an argument carries that makes "the first positional" mean the same thing everywhere: the

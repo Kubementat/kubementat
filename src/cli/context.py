@@ -14,11 +14,11 @@ the stack: it goes *under* the command's options, exactly where `helpers.team_op
 by the time it runs the environment is a parsed value and not a guess.
 
 **Why the report goes to stderr.** Every command prints what it resolved before it writes
-anything, and where it prints is not free: `kmt create-ingress` puts a manifest on stdout so it can
-be piped and sends its warnings to stderr for exactly that reason, and `kmt service-account-token`
-prints a credential and nothing else. A resolution line in front of either is a command lying about
-the shape of its own output. So the report is informational in Click's sense — `err=True`, always
-there on a terminal, never inside a pipe.
+anything, and where it prints is not free: `kmt kubernetes create-ingress` puts a manifest on stdout
+so it can be piped and sends its warnings to stderr for exactly that reason, and
+`kmt kubernetes service-account-token` prints a credential and nothing else. A resolution line in
+front of either is a command lying about the shape of its own output. So the report is informational
+in Click's sense — `err=True`, always there on a terminal, never inside a pipe.
 
 **Two rules this file's shape encodes.**
 

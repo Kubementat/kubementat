@@ -2,8 +2,8 @@
 
 Ticket 3 said "call `require_team` where a class reads team configuration". Applied to classes that
 read none, that produced nine guards, six of which refused work they had no business refusing:
-`kmt helm apply <env>`, `kmt helm-version <env> <chart>`, `kmt component install/uninstall <env>
-<component>`, `kmt routing install <env>`, `kmt create-ingress <env> ...` and the two
+`kmt helm apply <env>`, `kmt helm latest-version <env> <chart>`, `kmt component install/uninstall <env>
+<component>`, `kmt routing install <env>`, `kmt kubernetes create-ingress <env> ...` and the two
 `kmt users create-grafana-*` commands all declined a team they never consulted, and then declined
 to do anything about the environment they had been pointed at.
 
@@ -38,7 +38,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from cli.commands import component, helm, routing, utilities
+from cli.commands import component, helm, kubernetes, routing
 from kubementat.automations.routing import routing as routing_module
 from kubementat.core.identity.context import Context
 
@@ -77,10 +77,10 @@ TEKTON_PACKAGE = "src/kubementat/infrastructure/tekton"
 # The commands this ticket took `--team` off. The four 11b made the finding for already live in
 # `test_team_option.py`; these are the ones whose guard was one layer down, in a service constructor.
 TEAM_LESS_RUNS = [
-    (helm.helm_version, [ENVIRONMENT, "prometheus-community/prometheus"]),
+    (helm.latest_version, [ENVIRONMENT, "prometheus-community/prometheus"]),
     (component.install, [ENVIRONMENT, "grafana"]),
     (component.uninstall, [ENVIRONMENT, "grafana"]),
-    (utilities.create_ingress, [ENVIRONMENT, "svc.example.test", "the-service", "80"]),
+    (kubernetes.create_ingress, [ENVIRONMENT, "svc.example.test", "the-service", "80"]),
     (routing.install, [ENVIRONMENT, "--yes"]),
 ]
 
@@ -272,14 +272,14 @@ def test_a_team_less_run_names_the_cluster_and_is_not_a_refusal(command, argv,
 def test_the_chart_version_command_prints_the_version_it_searched_for(helm_on_the_path):
     """The cheapest of the seven, so the cheapest place to see the whole shape.
 
-    `helm-version` reads no cluster and no team -- it is `helm search repo` and a resolved
+    `kmt helm latest-version` reads no cluster and no team -- it is `helm search repo` and a resolved
     environment. Before this ticket it still refused a run that named no team, on the argument that
     a `Config` needs a team to be pointed at: true of the paths `Config` derives, irrelevant to a
     command that asks it for nothing.
     """
     helm_on_the_path.respond("helm", PROMETHEUS_SEARCH, subcommand="search")
 
-    result = CliRunner(mix_stderr=False).invoke(helm.helm_version,
+    result = CliRunner(mix_stderr=False).invoke(helm.latest_version,
                                                 [ENVIRONMENT, "prometheus-community/prometheus"])
 
     assert result.exit_code == 0, the_report(result)
@@ -351,14 +351,14 @@ def test_a_component_uninstall_needs_no_team_and_reports_the_namespace_it_looked
 
 def test_generating_a_manifest_with_no_team_names_the_class_and_the_environment(
         environment_only, fake_binaries):
-    """`kmt create-ingress <env> ...`: one key is read, it is `TRAEFIK_INGRESS_CLASS`, it is environment-level.
+    """`kmt kubernetes create-ingress <env> ...`: one key is read, it is `TRAEFIK_INGRESS_CLASS`, it is environment-level.
 
     The comment that justified the option here said a `Config` needs a team to be pointed at. That is
     true of `Config`'s team-scoped paths, which `_team_scoped_path` refuses at the read, and false of
     a generator that reads one key out of the environment's `static.json` and writes a document.
     """
     result = CliRunner(mix_stderr=False).invoke(
-        utilities.create_ingress,
+        kubernetes.create_ingress,
         [ENVIRONMENT, "svc.example.test", "the-service", "80"])
 
     assert result.exit_code == 0, the_report(result)

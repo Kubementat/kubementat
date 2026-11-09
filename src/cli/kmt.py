@@ -83,6 +83,8 @@ def main():
     configure_logging()
     cli.add_command(kubementat.install)
     cli.add_command(kubementat.uninstall)
+    # Two cluster writes that belong to laying a cluster down rather than to reading one that already
+    # exists. They stay flat, and the `kubernetes` group comment below says why.
     cli.add_command(kubementat.setup_secrets)
     cli.add_command(kubementat.setup_docker_registry_access)
 
@@ -99,65 +101,37 @@ def main():
     # surface that says one thing and does another, so they moved in and their flat names went.
     cli.add_command(tekton.tekton)
 
-    # helm: `kmt helm apply` is this group's row. `helm-version` is the one command that stays flat
-    # for that reason and no other: no marker measures it, and -- unlike the tekton generators that
-    # moved in -- there is no group beside it whose spelling rule it contradicts. It is flat, and
-    # `kmt --help` says so in one line instead of two.
+    # helm: the whole helm surface is this group. `helm apply` is the write (the verb the lane's own
+    # capability row pins), `helm latest-version` is the read that kept a flat `helm-version` line for
+    # as long as the rest of the surface was flat; once the group was going to take more than its one
+    # verb, leaving a command whose first word is the group's name to answer to a hyphen was the
+    # inconsistency the tekton grouping had already resolved. Both flat names are gone rather than
+    # aliased.
     cli.add_command(helm.helm)
-    # The flat one-component uninstall is not registered here either: that command is now
-    # `kmt component uninstall`, wired in with the install half below. Renamed outright -- no alias,
-    # no second name that answers to the same deletion.
-    # The newest version a chart has, printed. The script it replaces is deleted in the same
-    # commit; it is flat here because no marker measures it.
-    cli.add_command(helm.helm_version)
+    # Nothing here registers the one-component uninstall: that command is `kmt component uninstall`,
+    # wired in with its install half below. Renamed outright -- no alias, no second name that answers
+    # to the same deletion.
 
     # utilities
     cli.add_command(utilities.run_ci_container)
     # There is no command here that takes a script path from the operator and execs it.
-    # Nothing replaces it: the CLI's own work goes through `kubementat.infrastructure.shell`, and what an operator
-    # gets is a command and not a path to run. The guard that keeps it out is
+    # Nothing replaces it: the CLI's own work goes through `kubementat.infrastructure.shell`, and what
+    # an operator gets is a command and not a path to run. The guard that keeps it out is
     # `tests/test_no_cli_command_starts_a_script_by_path.py`.
-    # The Ingress manifest generator that replaces `create_ingress_yml.sh`,
-    # the last script under `scripts/utilities/kubernetes/`, which is deleted in the same
-    # commit.
-    # It is a command and not a path handed to a runner, because the script had no caller
-    # in `src/` or `tekton_ci/` - reaching it meant knowing the filename and standing at the right
-    # depth, because it resolved `../../../platform_config` against itself. No alias: the same
-    # rule the other migrated scripts kept, and the class it writes is now answered through
-    # `Config` (`ingress.py`) rather than `jq`'ing that same file.
-    cli.add_command(utilities.create_ingress)
 
-    # kubernetes reads: the diagnostics that were scripts under
-    # scripts/utilities/kubernetes/, now through the client. No aliases, no shims.
-    cli.add_command(kubernetes.analyze_deployment)
-    cli.add_command(kubernetes.pod_images)
-    cli.add_command(kubernetes.cluster_capacity)
-    # Disk usage of the claims, the fourth of those reads and the last one nobody could
-    # reach without standing in a directory and typing a filename. No alias, for the reason the
-    # others give: `list_pvc_usage.sh` is deleted in this same commit, and it had no caller in
-    # `src/` or `tekton_ci/` either -- `git grep -n list_pvc_usage` says the only things that ever
-    # named it were plan files. It also started a `kubectl proxy`, slept two seconds, curled the
-    # local port, then `pkill -9`ed it, so there is no shell-shaped way to keep it running beside
-    # the client call it duplicates.
-    cli.add_command(kubernetes.pvc_usage)
-
-    # The helm-deployment sessions: the two scripts under scripts/utilities/helm/ that
-    # were a pod lookup plus one kubectl call. Both stream to the terminal and neither captures.
-    cli.add_command(kubernetes.deploy_ssh)
-    cli.add_command(kubernetes.deploy_logs)
-
-    # A token read: the one script under scripts/secret_management/ that an operator
-    # actually needed, now through the client so a typo is a sentence and not an empty `token:`.
-    cli.add_command(kubernetes.service_account_token)
-
-    # The write beside those reads: what `create_secret_from_json.sh` did, now through
-    # the client. That script's only caller was `tekton_ci/tasks/create-secret-from-json.yml`,
-    # so a command is what makes that Task able to stop typing a path into a shell, and the script is
-    # deleted in the same commit. No alias, and no `--team`/`--environment` flag either: the
-    # environment is the first positional the Task passes and a flag for it would be a second
-    # way to say which cluster the Secret lands in, while a flag that resolved the namespace out of
-    # `platform_config` would be a second way to say which namespace to write to.
-    cli.add_command(kubernetes.create_secret_from_json)
+    # The kubernetes group: everything you read or change in a cluster that already exists. The six
+    # reads were scripts under scripts/utilities/kubernetes/, scripts/utilities/helm/ and
+    # scripts/secret_management/; the Ingress manifest generator and the Secret write joined them, so
+    # a reader of `kmt --help` gets one word for "the cluster" instead of nine scattered verbs. The
+    # nine flat names they had are off `--help` and answer to nothing: no alias, no shim, and no
+    # second spelling of one read.
+    #
+    # `setup-secrets` and `setup-docker-registry-access` are the two commands that address a cluster
+    # and did not move. They arrive during the install that creates what this group reads, and sorting
+    # verbs by what they edit rather than by when they run is how a command ends up in a group its own
+    # name does not put it in. The line is stated here so the next reader does not have to rediscover
+    # it from the help text.
+    cli.add_command(kubernetes.kubernetes)
 
     # team accounts (the bash scripts under scripts/user_management/ are gone,
     # so the account is created by a command and not by running a file out of that directory)

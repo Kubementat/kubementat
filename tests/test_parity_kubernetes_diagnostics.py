@@ -107,7 +107,7 @@ def allocatable_node(name, cpu, memory):
 
 
 # ---------------------------------------------------------------------------
-# analyze_deployment.sh -> kmt analyze-deployment
+# analyze_deployment.sh -> kmt kubernetes analyze-deployment
 # ---------------------------------------------------------------------------
 def test_the_deployment_analysis_asks_the_cluster_for_the_pods_and_their_logs(
         tmp_path, fixture_repo, fake_binaries, dry_run_env, recorded_api):
@@ -156,7 +156,7 @@ def test_the_deployment_analysis_asks_the_cluster_for_the_pods_and_their_logs(
 
 
 # ---------------------------------------------------------------------------
-# retrieve_deployment_docker_image_versions.sh -> kmt pod-images
+# retrieve_deployment_docker_image_versions.sh -> kmt kubernetes pod-images
 # ---------------------------------------------------------------------------
 def test_reading_the_used_images_reads_the_pods_of_the_namespace_once(
         tmp_path, fixture_repo, fake_binaries, dry_run_env, recorded_api):
@@ -200,7 +200,7 @@ def test_reading_the_used_images_reads_the_pods_of_the_namespace_once(
 
 
 # ---------------------------------------------------------------------------
-# cluster_capacity.sh -> kmt cluster-capacity
+# cluster_capacity.sh -> kmt kubernetes cluster-capacity
 # ---------------------------------------------------------------------------
 # The half of `kubectl describe node` the script parsed: two whitespace, "Requests", and
 # the two lines below it holding `cpu … (40%) …` and `memory … (10%) …`.

@@ -104,7 +104,7 @@ def pod_lookup_answers(recorded_api, name=POD):
 
 
 # ---------------------------------------------------------------------------
-# ssh_into_helm_deployment.sh -> kmt deploy-ssh
+# ssh_into_helm_deployment.sh -> kmt kubernetes deployment-ssh
 # ---------------------------------------------------------------------------
 def test_opening_a_shell_runs_the_same_exec_and_reads_the_same_pods(
         tmp_path, fixture_repo, fake_binaries, dry_run_env, recorded_api):
@@ -177,7 +177,7 @@ def test_the_shell_the_script_opened_is_the_one_handed_over(tmp_path, fixture_re
 
 
 # ---------------------------------------------------------------------------
-# tail_logs_for_helm_deployment.sh -> kmt deploy-logs
+# tail_logs_for_helm_deployment.sh -> kmt kubernetes deployment-logs
 # ---------------------------------------------------------------------------
 def test_following_the_logs_makes_the_same_read_of_the_same_pods(
         tmp_path, fixture_repo, fake_binaries, dry_run_env, recorded_api):
@@ -211,7 +211,7 @@ def test_following_the_logs_makes_the_same_read_of_the_same_pods(
 
 
 # ---------------------------------------------------------------------------
-# get_latest_version_for_helm_chart.sh -> kmt helm-version
+# get_latest_version_for_helm_chart.sh -> kmt helm latest-version
 # ---------------------------------------------------------------------------
 def test_the_version_of_a_chart_is_the_version_the_script_printed(tmp_path, fixture_repo,
                                                                   fake_binaries, dry_run_env,

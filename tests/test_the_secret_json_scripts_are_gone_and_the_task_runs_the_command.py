@@ -1,6 +1,6 @@
 """The two scripts under `scripts/secret_management/` that a json file needed stay deleted.
 
-`kmt create-secret-from-json` replaced the behaviour of
+`kmt kubernetes create-secret-from-json` replaced the behaviour of
 `create_secret_from_json.sh`, whose only caller in the whole checkout was the Tekton Task
 `tekton_ci/tasks/create-secret-from-json.yml`. That is the reason the pair is deletable now and was
 not before: the script was the only thing the library `base64_library.sh` had left — the other
@@ -81,7 +81,7 @@ def test_neither_script_is_in_the_tree():
     """The deletion itself, asserted where a re-added file would land."""
     for path in (SCRIPT, LIBRARY):
         assert not (REPO_ROOT / path).exists(), \
-            f"{path} is back; kmt create-secret-from-json is the implementation, not a second one"
+            f"{path} is back; kmt kubernetes create-secret-from-json is the implementation, not a second one"
 
 
 def test_the_directory_that_held_them_holds_nothing():
@@ -198,9 +198,9 @@ def test_the_task_runs_the_command_on_four_positionals():
     """
     text = TASK.read_text(encoding="utf-8")
 
-    assert "kmt create-secret-from-json" in text
+    assert "kmt kubernetes create-secret-from-json" in text
     # rsplit, not split: the step's own comment names the command in prose before the step runs it.
-    argv = text.rsplit("kmt create-secret-from-json", 1)[1]
+    argv = text.rsplit("kmt kubernetes create-secret-from-json", 1)[1]
     # The list below is the command's arguments and nothing else, so the flag that follows them is
     # cut before the scan. It is a flag and not a fifth positional: `--config-dir` names the root the
     # command reads, which is a different sentence from "where inside the cluster", and

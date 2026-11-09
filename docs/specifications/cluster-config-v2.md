@@ -1049,7 +1049,7 @@ Deferred by decision 17, and deferred for a reason that is a defect rather than 
 
 **Measured:** `kubernetes.config.load_kube_config()` in the pinned 33.1.0 has **no in-cluster fallback** — the
 symbol does not mention `incluster` and there is no `ConfigException` branch. `tekton_ci/tasks/create-secret-from-json.yml`
-declares no `KUBECONFIG` and no `serviceAccountName`. Therefore `kmt create-secret-from-json` running in that
+declares no `KUBECONFIG` and no `serviceAccountName`. Therefore `kmt kubernetes create-secret-from-json` running in that
 pod calls `load_kube_config()` against a kubeconfig that does not exist and raises before reaching the cluster.
 
 So this path is not "deferred while it still works." It is **already broken and nobody has noticed**, which is

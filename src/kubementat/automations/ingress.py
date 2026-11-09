@@ -1,4 +1,4 @@
-"""`kmt create-ingress`: the Ingress manifest, built as data instead of printed as text.
+"""`kmt kubernetes create-ingress`: the Ingress manifest, built as data instead of printed as text.
 
 `create_ingress_yml.sh` was the last script that answered the
 ingress-class question by `jq`-ing a file out from under the directory it happened to be run from.
@@ -110,7 +110,7 @@ class IngressGenerator:
         # team interpolates `None` into the paths it derives, which stopped being true when
         # `Config._team_scoped_path` moved that refusal to the read. Nothing on this path performs a
         # team-scoped read, so the refusal arrived one step before a failure that could never have
-        # happened, and `kmt create-ingress` refused a team it has no key for. An empty
+        # happened, and `kmt kubernetes create-ingress` refused a team it has no key for. An empty
         # `environment` is not a default that got dropped, it is "no environment was given", and it
         # is answered in `_read_ingress_class`.
         self.environment = ctx.environment
@@ -219,7 +219,7 @@ def _supplied(value: str, name: str) -> str:
     if value is None or not str(value).strip():
         raise errors.IngressArgumentNotSuppliedError(
             f"{name} is empty. The command is "
-            f"kmt create-ingress <ENVIRONMENT> <DOMAIN> <SERVICE_NAME> <SERVICE_PORT>.")
+            f"kmt kubernetes create-ingress <ENVIRONMENT> <DOMAIN> <SERVICE_NAME> <SERVICE_PORT>.")
     return str(value).strip()
 
 
