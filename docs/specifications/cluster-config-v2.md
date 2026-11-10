@@ -5,7 +5,8 @@
 and `TODOs.md` both deferred — *"cluster-context/multi-cluster support … deserves its own plan"* — and it is
 **in scope for v2**, not deferred from it.
 **One command in this file no longer exists, and it is named here so a reader does not go looking for it.**
-`kmt initialize` is deleted: `kmt config init <directory>` prepares a configuration directory in its place and
+`kmt initialize` is deleted: `kmt config init --environment <environment> --config-dir <configuration-root>`
+prepares a configuration directory in its place and
 `kmt install` is what touches a cluster. Everything this spec says that command *writes* is now written by the
 verb that prepares the directory, so §4.4 and owner decision 15 describe retired machinery with the same intent.
 Read those two as `config init`; read nothing else in this file differently, because everything else it settles

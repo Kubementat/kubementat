@@ -116,15 +116,21 @@ def documents(root: Path) -> dict[Path, object]:
             for path in root.rglob("*.json") if path.is_file()}
 
 
-def run_verb(verb, *arguments):
-    """`kmt config <verb> …`, invoked through the group so the verb's own name is exercised.
+def run_verb(verb, root, *arguments):
+    """`kmt config <verb> --config-dir <root> …`, through the group so the verb's name is exercised.
 
     A bug inside the command is re-raised rather than folded into an exit code, and a refusal is not:
     the library raises a `ClickException` to say "I will not write", and standing up as
     `SystemExit` is how that answer reaches a terminal. The distinction is the whole test for the
     refusals, so a raised `ValueError` cannot hide behind `exit_code == 1`.
+
+    The root is the second argument and it travels as `--config-dir`, because that is the only way
+    the surface names a root: a test that handed one over any other way would be asserting about a
+    command nobody can type.
     """
-    result = CliRunner(mix_stderr=False).invoke(config_module.config, [verb, *[str(a) for a in arguments]])
+    result = CliRunner(mix_stderr=False).invoke(
+        config_module.config,
+        [verb, *[str(a) for a in arguments], "--config-dir", str(root)])
     if result.exception is not None and not isinstance(result.exception, SystemExit):
         raise result.exception
     return result
@@ -143,9 +149,9 @@ def step_paths(steps, step_name) -> list[Path]:
     return [step.path for step in steps if step.name == step_name]
 
 
-def refuse(verb, *arguments) -> str:
+def refuse(verb, root, *arguments) -> str:
     """The one refusal sentence, checked to be a refusal and not a crash."""
-    result = run_verb(verb, *arguments)
+    result = run_verb(verb, root, *arguments)
     assert result.exit_code != 0, reported(result)
     assert not printed(result), f"the refusal printed steps on stdout: {reported(result)}"
     return reported(result)

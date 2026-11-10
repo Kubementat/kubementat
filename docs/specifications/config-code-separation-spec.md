@@ -325,19 +325,26 @@ New group, registered like `kmt routing` / `kmt users`:
 
 | command | contract |
 |---|---|
-| `kmt config init <dir> [--environment E --team T] [--set KEY=VALUE …] [--encrypted-set …] [--git-url U] [--gpg-user E] [--no-commit]` | Creates §5's layout, runs git-crypt §11.3, generates keys §11.4, writes `kubementat.yaml`, leaves both `CLUSTER_*` keys `null` (R-6.3). Refuses a non-empty dir without `--force`; never overwrites a file it did not write. **The full contract, including the answers and the ready-to-use checklist, is §15.** |
-| `kmt config add-environment <dir> E` | A new cluster's layer. No product templates. |
-| `kmt config add-team <dir> E TEAM` | Team layer. |
-| `kmt config set <dir> E KEY=VALUE [--team T] [--encrypted] [--from-file PATH]` | Writes one answer to the right layer. Replaces "export eight variables and re-run initialize". Its sibling spelling `config set <dir> E --generate KEY [--team T]` (R-11.8) invents the value when the key answers nothing and refuses when it already answers. `--from-file` answers every key of a JSON object in one run, and it is on this surface for the same reason the verb exists at all: a value that is too long to paste, or a credential the operator does not want in the process table, cannot be a command-line argument. The document chooses no layer and no file — `--team` and `--encrypted` still do — and it is decided whole before the first byte, so a document that answers one key with `null` is refused along with every key in it and the tree is not left in a state nobody wrote. |
-| `kmt config unset <dir> E KEY [--team T]` | Removes one answer from that layer so the next one up answers it (`L2 > L1 > L0`, R-3.1). This is the only way to express "back to kubementat's default", which is otherwise an edit of JSON, and it is what the lane needs when it puts a key back into its not-yet-named state (§16.1). |
-| `kmt config show <dir> E [TEAM]` | Effective config, each key tagged `default`/`environment`/`team`. Read-only. |
-| `kmt config validate <dir> E [TEAM]` | Schema, unresolved `SETME` values, git-crypt unlocked or not, layering cycles, duplicate names across layers, absolute `CLUSTER_KUBECONFIG_PATH` in a shared tree (R-6.1). |
+| `kmt config init [--environment E --team T] [--set KEY=VALUE …] [--encrypted-set …] [--git-url U] [--gpg-key F] [--gpg-email E] [--no-commit] --config-dir D` | Creates §5's layout, runs git-crypt §11.3, generates keys §11.4, writes `kubementat.yaml`, leaves both `CLUSTER_*` keys `null` (R-6.3). Refuses a non-empty dir without `--force`; never overwrites a file it did not write. **The full contract, including the answers and the ready-to-use checklist, is §15.** |
+| `kmt config add-environment E --config-dir D` | A new cluster's layer. No product templates. |
+| `kmt config add-team E TEAM --config-dir D` | Team layer. |
+| `kmt config set E KEY=VALUE [--team T] [--encrypted] [--from-file PATH] [--config-dir D]` | Writes one answer to the right layer. Replaces "export eight variables and re-run initialize". Its sibling spelling `config set E --generate KEY [--team T] [--config-dir D]` (R-11.8) invents the value when the key answers nothing and refuses when it already answers. `--from-file` answers every key of a JSON object in one run, and it is on this surface for the same reason the verb exists at all: a value that is too long to paste, or a credential the operator does not want in the process table, cannot be a command-line argument. The document chooses no layer and no file — `--team` and `--encrypted` still do — and it is decided whole before the first byte, so a document that answers one key with `null` is refused along with every key in it and the tree is not left in a state nobody wrote. |
+| `kmt config unset E KEY [--team T] [--config-dir D]` | Removes one answer from that layer so the next one up answers it (`L2 > L1 > L0`, R-3.1). This is the only way to express "back to kubementat's default", which is otherwise an edit of JSON, and it is what the lane needs when it puts a key back into its not-yet-named state (§16.1). |
+| `kmt config show E [TEAM] --config-dir D` | Effective config, each key tagged `default`/`environment`/`team`. Read-only. |
+| `kmt config validate E [TEAM] --config-dir D` | Schema, unresolved `SETME` values, git-crypt unlocked or not, layering cycles, duplicate names across layers, absolute `CLUSTER_KUBECONFIG_PATH` in a shared tree (R-6.1). |
 
 The group is **seven verbs** and the table above is all of them: `init`, `add-environment`, `add-team`,
 `set`, `unset`, `show`, `validate`. **`config teams` was deleted here on 2026-11-05 by owner decision.** It
 was never implemented and never commissioned; `Config.teams()` stays, because `kmt uninstall` sweeps through
 it, and that is where the answer lives. A team list read off a directory listing is the human's way, and a
 verb for it was judged not worth its surface.
+
+All seven name the root they work on the same way the rest of kmt does: `--config-dir`, or
+`$KUBEMENTAT_PLATFORM_CONFIG_DIR`, with the flag above the variable and a refusal below both. The
+verbs used to take the root as a positional, which meant the machine that had configured its root once
+could install against it and could not configure it, and a root is named rather than located no matter
+which verb is asking. None of the seven takes `--context` or `--kubeconfig`: they address no cluster,
+and a dial that changes nothing is a dial that promises something.
 
 Everything a reader needed from the deleted `explain` is in `show`'s line: `show` already tags every key
 with the layer and names the file that declared it, which is the same two facts, printed for the whole tree
@@ -608,7 +615,7 @@ than the JSON parser.
 answer: every key in every layer is written the same way (`config set`), read the same way (`Config`),
 protected the same way (`--encrypted`, and git-crypt behind it), and refused the same way when it is
 missing. What differs is only *who supplied the value*.
-*Generated when asked:* `kmt config set <dir> E --generate KEY [--team T]` writes a value kubementat
+*Generated when asked:* `kmt config set E --generate KEY [--team T] [--config-dir D]` writes a value kubementat
 produced, and only when that key currently answers nothing. The refusal when it already answers is the
 center of the rule, not a detail: a verb that generated while it wrote would let the act of touching a
 directory be the way a credential is lost, and no layer-creating verb — `config init`,
@@ -745,10 +752,16 @@ under the config root outside `config init` / `config add-environment` / `config
 **R-15.2 (the answers arrive as arguments, not as exported variables).**
 
 ```
-kmt config init <dir> --environment E --team T \
+kmt config init --environment E --team T \
     [--set KEY=VALUE]… [--encrypted-set KEY=VALUE]… \
-    [--git-url U] [--gpg-user E] [--no-commit] [--force]
+    [--git-url U] [--gpg-key F] [--gpg-email E] [--no-commit] [--force] \
+    --config-dir D
 ```
+
+The root is named and not located here too: `--config-dir`, or the `$KUBEMENTAT_PLATFORM_CONFIG_DIR`
+the container already sets, and with neither the verb refuses before `git init` decides anything. The
+root used to be a positional on this verb, which is what made it the only verb in kmt a run that had
+configured its root once could not reach.
 
 Anything R-7.2 requires and `config init` is not told is a refusal that names the key, the file it belongs
 to, and `kmt config set` as the command that writes it. A `--yes` that means "fill in the rest yourself"
@@ -757,7 +770,8 @@ invented by `automation.py:374` is the cautionary example (§11.8). Answers arri
 today the lane exports nine variables to make `initialize` run (`tests/e2e/harness/config.py:221`), which is
 the same interface a human trips over.
 
-**R-15.3 (what "ready to use" means, as a checklist).** After `kmt config init <dir>` finishes, each of
+**R-15.3 (what "ready to use" means, as a checklist).** After `kmt config init --environment E
+--config-dir D` finishes, each of
 these is true and asserted by the same test that names it:
 
 | # | The property | Where it comes from | Asserted by |

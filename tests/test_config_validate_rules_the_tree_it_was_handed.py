@@ -85,7 +85,8 @@ def warnings_by_code(root, team=None) -> dict:
 
 
 def run_validate(root, environment=ENVIRONMENT, team=None) -> "CliRunner().Result":
-    argv = ["validate", str(root), environment] + ([team] if team else [])
+    argv = (["validate", environment] + ([team] if team else [])
+            + ["--config-dir", str(root)])
     return CliRunner(mix_stderr=False).invoke(config_module.config, argv)
 
 

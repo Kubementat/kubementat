@@ -12,7 +12,7 @@
 - **Core libs:** `kubernetes` client, `cryptography`, `python-gnupg`, `pyyaml`
 - **CI/CD:** Tekton (pipelines, tasks, triggers) with a custom CI container
 - **Security:** git-crypt for encrypted platform configs, SSH/GPG keys for deployer auth
-- **Install:** `uv sync` → `uv run kmt config init <dir> --environment dev --team smoke --gpg-email <you>` → `uv run kmt install dev smoke --config-dir <dir>`
+- **Install:** `uv sync` → `uv run kmt config init --environment dev --team smoke --gpg-email <you> --config-dir <configuration-root>` → `uv run kmt install dev smoke --config-dir <dir>`
 
 ---
 
@@ -328,7 +328,8 @@ User → kmt CLI → src/kubementat/ → Kubernetes Cluster
               tekton_ci/pipeline-runs/ → generated runs (output, checkout-relative)
 ```
 
-1. **Initialization:** `kmt config init <dir>` lays a tree down in the directory it is told, generates
+1. **Initialization:** `kmt config init --environment <environment> --config-dir <configuration-root>`
+lays a tree down in the directory it was named, generates
    the deployer's SSH/GPG keypairs there, and configures git-crypt in that directory's own git
    repository. It writes answers and no product shape.
 2. **Installation:** `kmt install <environment> <team>` validates the declared dependencies, prompts or

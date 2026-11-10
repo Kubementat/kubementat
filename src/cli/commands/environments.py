@@ -21,7 +21,7 @@ that was supposed to be safe to run in that state.
 import click
 from pathlib import Path
 
-from cli.context import CONFIG_DIR_OPTION, CONFIG_DIR_PARAMETER
+from cli.context import config_dir_option
 from kubementat.core.constants import STATIC_SOURCE_PREFIX
 from kubementat.core.config.paths import resolve_platform_config_dir
 # Imported by name and not as the module, the way `kubementat/infrastructure/kubernetes/clients.py`
@@ -50,12 +50,9 @@ def environments():
                            'it, the file that declared it, and what was checked against it. Reads '
                            'the configuration only — no cluster is contacted, so it answers on a '
                            'machine that has nothing reachable configured.')
-@click.option(CONFIG_DIR_OPTION, CONFIG_DIR_PARAMETER, default=None, metavar="PATH",
-              type=click.Path(exists=False, file_okay=False),
-              help="The platform_config directory to list. It is the same root the 1:1 check "
-                   "resolves against, so the listing and a command's refusal cannot disagree. "
-                   "With neither this flag nor $KUBEMENTAT_PLATFORM_CONFIG_DIR the run refuses: "
-                   "a configuration root is named, never located.")
+# The one spelling of the flag, so the listing that shares its root with the 1:1 check cannot
+# carry a private description of what that root means.
+@config_dir_option()
 def environments_list(config_dir=None):
     # The flag is threaded to the registry rather than consulted beside it, for the reason the
     # module docstring gives: a listing that resolved its own root while the check read another is
@@ -69,7 +66,7 @@ def environments_list(config_dir=None):
     if not resolutions:
         click.echo(f"no environment in {registry.platform_config_dir} declares a cluster. "
                    f"An environment is a directory that carries a static.json of its own; run "
-                   f"kmt config init <dir> --environment <environment> to write one.")
+                   f"kmt config init --environment <environment> --config-dir <configuration-root> to write one.")
         return
 
     rows = [_row(resolution, registry.platform_config_dir) for resolution in resolutions]

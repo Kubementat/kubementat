@@ -32,9 +32,11 @@ The verbs split by what they create, and the split is the whole surface argument
 manifest, the first environment, and the git half of the tree — the repository, git-crypt live in it,
 and the deployer keypair that goes with both — while `add-environment` owns every environment after
 that one and `add-team` owns a team under exactly one of them. The split is why `init` takes flags and
-the layer verbs do not: preparing a directory asks questions that the layer verbs are never asked,
-whose answers belong to the operator and not to the tree. Neither of the two layer verbs takes a flag
-or writes an answer, because answering a key is a different act from laying down a place for answers:
+the layer verbs hardly do: preparing a directory asks questions that the layer verbs are never asked,
+whose answers belong to the operator and not to the tree. What every verb here does take is the one
+flag that names the root it works on, `--config-dir` or the variable a container already sets, because
+a configuration root is named and not located and no positional carries it. The layer verbs write no
+answer, because answering a key is a different act from laying down a place for answers:
 `set` and `unset` are those two, and they are the first verbs on this surface that read a file before
 they write one. What they must not do is answer a question nobody asked them, which is why neither
 carries a `--yes` or a prompt. `set` carries `--generate`, and that flag is the whole answer on
@@ -42,6 +44,18 @@ generation: it was decided as *an option on one answer* rather than as a verb or
 place a random value may be invented is the verb that already writes one answer to one key, and the
 refusal that comes attached to it is what keeps a layer-creating verb from generating anything at all.
 `unset` takes no `--encrypted`, because clearing one file of a pair is a change the reader never sees.
+
+**The root is spelled one way, here and everywhere else.** All seven verbs name the directory they
+work on with `--config-dir`, or with `KUBEMENTAT_PLATFORM_CONFIG_DIR`, and the flag sits above the
+variable the way `resolve_platform_config_dir` spells it. They used to take it as a positional, which
+made them the only verbs in kubementat that honoured neither spelling: a machine that had written its
+root down once could install against that tree and could not configure it, which is one tree with two
+ways of saying which one and only one route that worked. `config init` had a stated reason for refusing
+the variable -- there is no root to point at, because this is the verb that makes one -- and that
+reason held only while the alternative was locating a root by proximity. Naming a root that does not
+exist yet is the same act as reading one, and the same two spellings name it. What these verbs do not
+carry is `--context` or `--kubeconfig`: they address no cluster, and a dial that changes nothing is a
+dial that promises something.
 """
 
 import json
@@ -49,7 +63,9 @@ from pathlib import Path
 
 import click
 
+from cli.context import config_dir_option
 from kubementat import config_answers, config_bootstrap, config_init, config_keys, config_validate
+from kubementat.core.config.paths import resolve_platform_config_dir
 
 
 @click.group(name='config',
@@ -64,18 +80,23 @@ def config():
 
 
 @config.command(name='init',
-                help='Prepare a configuration directory under <dir>, for one environment: the '
+                help='Prepare a configuration directory, for one environment: the '
                      'manifest and the static layers, the deployer keypair, and git-crypt made live '
                      'in that directory -- .gitattributes declared before the first encrypted file, '
                      'the collaborator registered, the symmetric key exported at 0600, and one '
                      'commit of kubementat\'s own. It writes answers and no product shape, and it is '
                      'idempotent: a second run writes no byte, commits nothing, and says which step '
-                     'it skipped. A fresh tree addresses no cluster until someone names one.')
-# `directory` is a positional and not a flag because it is the thing the verb is *about*: every file
-# written lands under it. No `--config-dir`, and no `KUBEMENTAT_PLATFORM_CONFIG_DIR` behind it --
-# there is no root to point at here, and a verb that fell back to the variable would be a
-# configuration directory located by proximity, wearing a flag.
-@click.argument('directory')
+                     'it skipped. A fresh tree addresses no cluster until someone names one. The '
+                     'directory it prepares is the one --config-dir names, or the one '
+                     '$KUBEMENTAT_PLATFORM_CONFIG_DIR names, and it refuses with neither.')
+# The root is a flag and not a positional here for the same reason it is one everywhere else in
+# kubementat: a configuration root is named and never located, and of the two spellings the second is
+# the one a container or a cron job already has. A positional forced every unattended run to spell a
+# path it had configured once already, which made these seven verbs the only ones in kmt a scheduled
+# run could not address. `--config-dir` is therefore the root this tree is laid down under, resolved
+# by the one function that owns that precedence and not by this file, and it is refused before
+# `git init` decides anything. It is spelled in the last position, the same place it sits on every
+# verb that reaches a cluster, so `--help` reads the same way however far the operator has scrolled.
 @click.option('--environment', default=None,
               help='The environment whose layer is laid down. Required; there is no environment '
                    'that means all of them.')
@@ -120,7 +141,8 @@ def config():
                    'either way. It does not lift the refusal of a .gitattributes or .gitignore '
                    'somebody else configured -- that refusal is about a rule and not about material, '
                    'and force was never its remedy.')
-def init_command(directory, environment, team, set_answers, encrypted_answers, gpg_key, gpg_email,
+@config_dir_option()
+def init_command(config_dir, environment, team, set_answers, encrypted_answers, gpg_key, gpg_email,
                  git_url, no_commit, force):
     """Prepare the directory, print the steps, then say what to do next.
 
@@ -138,11 +160,12 @@ def init_command(directory, environment, team, set_answers, encrypted_answers, g
     material: it names paths and never bytes.
 
     A run that can be refused is refused before it writes. `prepare_configuration_directory` decides
-    the keypair's requirement ahead of `git init`, so a bare `config init <dir> --environment E` that
+    the keypair's requirement ahead of `git init`, so a bare `config init --environment E` that
     has no identity to work from leaves no `.git`, which is the promise `config_keys` already made and
-    the promise `initialize` broke by refusing four steps in.
+    the promise `initialize` broke by refusing four steps in. Naming no root is refused by the same
+    rule every other verb on this group obeys, and it is refused before `git init` decides anything.
     """
-    root = Path(directory)
+    root = resolve_platform_config_dir(config_dir)
 
     # Parsed before the library is called: a malformed `KEY=VALUE` is the operator's typo and is
     # answered before anything is decided about the tree on disk.
@@ -214,8 +237,8 @@ def _summary_lines(root, *, environment, team, git_url, steps) -> list[str]:
                      f"ready to use: nothing else has to write into this tree first.")
     else:
         lines.append(f"then kmt install {environment} <team> --config-dir {root} installs it once a "
-                     f"team exists, and this run created none. kmt config add-team {root} "
-                     f"{environment} <team> is the verb that writes that layer.")
+                     f"team exists, and this run created none. kmt config add-team {environment} "
+                     f"<team> --config-dir {root} is the verb that writes that layer.")
     return lines
 
 
@@ -224,14 +247,16 @@ def _summary_lines(root, *, environment, team, git_url, steps) -> list[str]:
                        'its two static files and its two tekton layer directories, and nothing else. '
                        'It copies no templates and writes no answers, and it will not bootstrap a '
                        'tree -- kubementat.yaml says which product the tree is for and only config '
-                       'init writes it, so run that first.')
-# Two positionals and no flags, and that is the deliverable rather than the minimal shape: the
-# directory is what the verb is about (init spells it the same way) and the environment is the one
-# thing it cannot be told. There is nothing to answer, so there is no `--set` to take, and no
-# resolution flag: this verb creates state and addresses no cluster.
-@click.argument('directory')
+                       'init writes it, so run that first. The directory is named by --config-dir or '
+                       'by $KUBEMENTAT_PLATFORM_CONFIG_DIR.')
+# One positional and the root flag, and that is the deliverable rather than the minimal shape: the
+# environment is the one thing the verb cannot be told, and the root it grows a layer in is what
+# every verb on this group names with the same flag. There is nothing to answer, so there is no
+# `--set` to take, and no cluster-resolution flag: this verb creates state and addresses no cluster,
+# so `--context` and `--kubeconfig` would be dials that change nothing and promise something.
 @click.argument('environment')
-def add_environment_command(directory, environment):
+@config_dir_option()
+def add_environment_command(environment, config_dir):
     """Add an environment to a tree, then print the steps. The same shape as `init`'s.
 
     The library decides everything behind this line, including whether refusing is what happens. The
@@ -240,7 +265,7 @@ def add_environment_command(directory, environment):
     environment addresses nothing and an operator who named a context years ago should not be told
     otherwise by a verb that changed nothing about that.
     """
-    root = Path(directory)
+    root = resolve_platform_config_dir(config_dir)
 
     steps = config_init.add_environment(root=root, environment=environment)
     for step in steps:
@@ -257,14 +282,16 @@ def add_environment_command(directory, environment):
                 help='Add one team layer under one environment of a configuration directory that '
                        'already exists: two empty static files and the team\'s four layer '
                        'directories, and nothing else. It needs kmt config add-environment first: a '
-                       'team is a layer under one environment, and this verb does not make one.')
-# Three positionals, in the order the tree holds them: root, then the environment the team is under,
-# then the team. No `--environment` here because a flag would let `--team` arrive without the layer
-# it sits on, which is the refusal config init already makes.
-@click.argument('directory')
+                       'team is a layer under one environment, and this verb does not make one. The '
+                       'directory is named by --config-dir or by $KUBEMENTAT_PLATFORM_CONFIG_DIR.')
+# Two positionals, in the order the tree holds them below its root: the environment the team sits
+# under, then the team. No `--environment` here because a flag would let `--team` arrive without the
+# layer it sits on, which is the refusal config init already makes. The root is not a third of these:
+# a root is not a layer, and naming one is a different act from naming where a layer sits.
 @click.argument('environment')
 @click.argument('team')
-def add_team_command(directory, environment, team):
+@config_dir_option()
+def add_team_command(environment, team, config_dir):
     """Add a team to one environment, then print the steps, and nothing else.
 
     No cluster sentence here, and its absence is the claim: the sentence belongs to the layer that is
@@ -273,7 +300,8 @@ def add_team_command(directory, environment, team):
     environment's file and no other), so a team cannot address one and saying so would be a second,
     wrong answer about the same null.
     """
-    steps = config_init.add_team(root=Path(directory), environment=environment, team=team)
+    root = resolve_platform_config_dir(config_dir)
+    steps = config_init.add_team(root=root, environment=environment, team=team)
     for step in steps:
         click.echo(_step_line(step))
 
@@ -285,15 +313,15 @@ def add_team_command(directory, environment, team):
                      'way to make a layer: kmt config init / add-environment / add-team make those. '
                      'The answer is either a value you supply or --generate KEY, and the refusal that '
                      'comes with the second is what makes generation a deliberate act instead of a '
-                     'side effect of touching a directory.')
-# The shape is `add-team`'s, because the tree holds the layers in this order: root, then environment,
-# then team. `--team` is a flag and not a positional for exactly the reason `init` spells it as one:
-# a team answer must not be able to arrive without the layer it sits on being spelled. The answer is
-# a positional and not a `--set` flag here, because unlike `init` this verb has exactly one answer and
-# nothing else it is telling you -- and `set_answers` is `init`'s parameter name, so one flag and one
-# positional that take the same `KEY=VALUE` still name the answer the same way to whoever reads the
-# parser.
-@click.argument('directory')
+                     'side effect of touching a directory. The directory is named by --config-dir or '
+                     'by $KUBEMENTAT_PLATFORM_CONFIG_DIR.')
+# The shape is `add-team`'s below the root: environment, then the answer, then `--team` to say which
+# layer the answer lands on. `--team` is a flag and not a positional for exactly the reason `init`
+# spells it as one: a team answer must not be able to arrive without the layer it sits on being
+# spelled. The answer is a positional and not a `--set` flag here, because unlike `init` this verb has
+# exactly one answer and nothing else it is telling you -- and `set_answers` is `init`'s parameter
+# name, so one flag and one positional that take the same `KEY=VALUE` still name the answer the same
+# way to whoever reads the parser.
 @click.argument('environment')
 # Optional, because `--generate` is the other way to answer a key and this verb has exactly one answer
 # either way. Both at once is a command-line question and not a configuration one, so it is refused
@@ -323,7 +351,8 @@ def add_team_command(directory, environment, team):
               help='Answer every key of a JSON object, in the order the document lists them. The file '
                    'is how a value that must not sit in a process table gets answered: only the path '
                    'travels, and the value is read where the operator put it.')
-def set_command(directory, environment, set_answers, team, encrypted, generate, from_file):
+@config_dir_option()
+def set_command(environment, set_answers, team, encrypted, generate, from_file, config_dir):
     """Answer one key, print the step, and say nothing else about the tree than the step does.
 
     `set_answer` (or `generate_answer`, which is its mirror and calls it for the write) decides
@@ -338,7 +367,7 @@ def set_command(directory, environment, set_answers, team, encrypted, generate, 
     is the whole stdout: echoing the value would put an answer into a terminal buffer that outlives
     the file, and `config show` is the verb that prints answers back.
     """
-    root = Path(directory)
+    root = resolve_platform_config_dir(config_dir)
 
     # Both spellings of an answer, and the shape where neither is given, are command-line faults:
     # nothing on disk can fix them, so they answer with `UsageError` and not with `ClickException`
@@ -357,13 +386,14 @@ def set_command(directory, environment, set_answers, team, encrypted, generate, 
     if generate is not None and not generate.strip():
         raise click.UsageError(
             f"--generate was given and no key follows it, so there is no key to invent a value for. "
-            f"kmt config set <dir> <environment> --generate KEY [--team T] [--encrypted]")
+            f"kmt config set {environment} --generate KEY [--team T] [--encrypted] "
+            f"--config-dir {root}")
     if set_answers is None and generate is None and from_file is None:
         raise click.UsageError(
             f"no answer was given, so there is nothing for config set to write. Either answer the key "
-            f"yourself, kmt config set <dir> {environment} KEY=VALUE, answer a whole document with "
-            f"--from-file PATH, or let kubementat invent one for a key that answers nothing, "
-            f"kmt config set <dir> {environment} --generate KEY")
+            f"yourself, kmt config set {environment} KEY=VALUE --config-dir {root}, answer a whole "
+            f"document with --from-file PATH, or let kubementat invent one for a key that answers "
+            f"nothing, kmt config set {environment} --generate KEY --config-dir {root}")
 
     if generate is not None:
         steps = config_init.generate_answer(root=root, environment=environment, key=generate,
@@ -400,17 +430,18 @@ def set_command(directory, environment, set_answers, team, encrypted, generate, 
                 help='Take one answer away from one layer of a configuration directory that already '
                      'exists: both files of that layer, because the pair is one answer and clearing '
                      'only the plain file is a change the reader will not see. The layer above then '
-                     'answers, which is the whole contract of this verb.')
-# Same positional order as every other verb here, and `key` is a bare positional rather than a
-# `KEY=VALUE` because there is no value to type: this verb removes an answer and has no opinion about
-# what the answer was. `--team` means the same thing it means on `set`, so the two verbs cannot drift
-# apart about which layer a flag reaches.
-@click.argument('directory')
+                     'answers, which is the whole contract of this verb. The directory is named by '
+                     '--config-dir or by $KUBEMENTAT_PLATFORM_CONFIG_DIR.')
+# Same positional order as every other verb here below the root, and `key` is a bare positional
+# rather than a `KEY=VALUE` because there is no value to type: this verb removes an answer and has no
+# opinion about what the answer was. `--team` means the same thing it means on `set`, so the two verbs
+# cannot drift apart about which layer a flag reaches.
 @click.argument('environment')
 @click.argument('key')
 @click.option('--team', default=None,
               help='Clear the key from the team layer instead of the environment layer.')
-def unset_command(directory, environment, key, team):
+@config_dir_option()
+def unset_command(environment, key, team, config_dir):
     """Clear one key from both files of one layer, print the two steps, and write nothing else.
 
     No cluster sentence, and that is a claim rather than an oversight: this verb was not asked about
@@ -418,7 +449,8 @@ def unset_command(directory, environment, key, team):
     `CLUSTER_KUBE_CONTEXT` prints a step that says the file changed, which is the honest statement --
     `kmt environments list` is where the consequence belongs.
     """
-    steps = config_init.unset_answer(root=Path(directory), environment=environment, key=key, team=team)
+    root = resolve_platform_config_dir(config_dir)
+    steps = config_init.unset_answer(root=root, environment=environment, key=key, team=team)
     for step in steps:
         click.echo(_step_line(step))
 
@@ -427,16 +459,18 @@ def unset_command(directory, environment, key, team):
                 help='Effective configuration for one environment: every key it answers, each one '
                      'tagged default / environment / team and named by the file that declared it. '
                      'It reads and writes nothing, addresses no cluster, and lists the keys that '
-                     'answer as defaults, not only the ones a file happens to mention.')
-# Root, then environment, then team — the order every verb on this group spells them in. `TEAM` is a
-# positional because that is how `show` spells this row and how `add-team` spells the same thing, and not
-# because the verb is choosing an edit target: this verb changes nothing, so it has none. No
-# --context / --kubeconfig / --config-dir (EXPECTED_CONFIG_COMMAND_PARAMS pins that): the root is
-# named as a positional and nothing here resolves a cluster.
-@click.argument('directory')
+                     'answer as defaults, not only the ones a file happens to mention. The directory '
+                     'is named by --config-dir or by $KUBEMENTAT_PLATFORM_CONFIG_DIR.')
+# Environment, then team — the order the tree holds its layers in below the root, which every verb
+# on this group names with `--config-dir`. `TEAM` is a positional because that is how `show` spells
+# this row and how `add-team` spells the same thing, and not because the verb is choosing an edit
+# target: this verb changes nothing, so it has none. No --context / --kubeconfig
+# (EXPECTED_CONFIG_COMMAND_PARAMS pins that): nothing here resolves a cluster, and a resolution flag
+# on a read would be a dial that changes nothing and promises something.
 @click.argument('environment')
 @click.argument('team', required=False, default=None)
-def show_command(directory, environment, team):
+@config_dir_option()
+def show_command(environment, team, config_dir):
     """Every key the tree answers, one per line, sorted by name.
 
     `config_answers.effective_answers` decides what belongs in the universe and which layer answers
@@ -449,7 +483,8 @@ def show_command(directory, environment, team):
     cluster and has no opinion worth printing about one. A missing layer file is refused by the
     library with the sentence `config set` gives, naming the verb that makes the layer.
     """
-    for answer in config_answers.effective_answers(Path(directory), environment, team):
+    for answer in config_answers.effective_answers(resolve_platform_config_dir(config_dir),
+                                                   environment, team):
         click.echo(_answer_line(answer))
 
 
@@ -457,15 +492,18 @@ def show_command(directory, environment, team):
                 help='Read a configuration tree and say whether it is usable: one verdict, every '
                      'fault named in the same run, warnings printed and not refused. It reads and '
                      'writes nothing, addresses no cluster, and execs nothing — the collision half '
-                     'of the answer comes from the same registry the 1:1 check uses.')
-# The positional order every verb on this group spells: root, then environment, then team. `TEAM` is
-# a positional like `show` spells it (this verb reads, so it has no edit target), and no resolution
-# flag is present — validate resolves nothing and `EXPECTED_CONFIG_COMMAND_PARAMS` pins
-# that absence rather than trusting a comment about it.
-@click.argument('directory')
+                     'of the answer comes from the same registry the 1:1 check uses. The directory it reads is named by '
+                     '--config-dir or by $KUBEMENTAT_PLATFORM_CONFIG_DIR.')
+
+# The positional order every verb on this group spells below the root it names with
+# `--config-dir`: environment, then team. `TEAM` is a positional like `show` spells it (this verb
+# reads, so it has no edit target), and no cluster-resolution flag is present — validate resolves
+# nothing and `EXPECTED_CONFIG_COMMAND_PARAMS` pins that absence rather than trusting a comment about
+# it.
 @click.argument('environment')
 @click.argument('team', required=False, default=None)
-def validate_command(directory, environment, team):
+@config_dir_option()
+def validate_command(environment, team, config_dir):
     """The verdict, in the order it costs the reader something.
 
     The shape is the one the census and this verb agree on, and no CLI command spelled it before this one
@@ -480,7 +518,7 @@ def validate_command(directory, environment, team):
     * with no errors, stdout gets exactly one line. Silence here would read as a command that
       checked nothing, so the line says which environment was checked and how loud the run was.
     """
-    root = Path(directory)
+    root = resolve_platform_config_dir(config_dir)
     report = config_validate.validate_tree(root, environment, team)
 
     for warning in report.warnings:
@@ -488,7 +526,9 @@ def validate_command(directory, environment, team):
 
     if report.errors:
         listed = "\n".join(f"  {f.code}: {f.message}" for f in report.errors)
-        again = f"kmt config validate {root} {environment}" + (f" {team}" if team else "")
+        again = (f"kmt config validate {environment}"
+                 + (f" {team}" if team else "")
+                 + f" --config-dir {root}")
         raise click.ClickException(
             f"{len(report.errors)} fault(s) in the configuration tree at {root} for environment "
             f"{environment!r}, every one of them listed rather than only the first:\n{listed}\n"
@@ -549,7 +589,8 @@ def _answers_from_file(path: Path, root: Path, environment: str) -> tuple[tuple[
             raise click.ClickException(
                 f"{path} answers {str(key)!r} with null, and null is not an answer: it is how a key "
                 f"says it is not answered here. Remove the key from the document, then run "
-                f"kmt config unset {root} {environment} {key} to take it back out of the layer above.")
+                f"kmt config unset {environment} {key} --config-dir {root} to take it back out of the "
+                f"layer above.")
     return tuple((str(key), value) for key, value in document.items())
 
 

@@ -452,6 +452,159 @@ def test_no_capability_argv_carries_an_option_its_command_does_not_define(harnes
                             "resolves but does not run what the row means: %s" % mismatched)
 
 
+def test_every_capability_argv_parses_for_the_command_it_names(harness):
+    """The row's argv has to be the command's argv: right flags, and the right number of arguments.
+
+    The two guards above read command names and option names out of argv, and both of them can say
+    "fine" to an argv Click would refuse. `kmt config set` stopped taking the directory as a
+    positional and started taking it as `--config-dir`; a row that moved the option and left the
+    directory in front of it would resolve, would carry only options it defines, and would exit 2 on
+    the guest, which is a lane failing rather than a lane reporting. So this hands every row's argv
+    to Click's own parser and reports what the parser says.
+
+    Parsing is what runs, never the command body: Click decides arity while it resolves parameters,
+    so an extra positional is caught here and not on the first cluster write.
+    """
+    surface = build_kmt_surface()
+    refused = {}
+    for name, cap in sorted(harness.CAPABILITIES.items()):
+        argv = harness.argv_for(name, **lane_ctx(harness))
+        command, spelled = resolved_command(surface, argv)
+        if command is None:
+            continue  # the guard above already names the row that drives a dead command
+        context = click.Context(command, info_name=spelled)
+        try:
+            command.parse_args(context, argv[len(spelled.split()):])
+        except click.UsageError as error:
+            refused[name] = (spelled, str(error), argv)
+    assert not refused, ("capability rows whose argv the command would refuse -- right command, "
+                         "wrong shape: %s" % refused)
+
+
+def test_the_configuration_rows_hand_the_root_to_the_flag_and_not_to_the_positional(harness):
+    """Every configuration row names the root it writes, because the lane's tree is not the guest's.
+
+    This is the row that keeps the lane honest about which tree its assertions are about. A
+    configuration command that is told no root has two ways to learn one, and the second is
+    `$KUBEMENTAT_PLATFORM_CONFIG_DIR` -- a value the guest could set to something else, which would
+    leave a stage answering from a tree this lane never prepared and still reporting green. So every
+    `kmt config` row spells `--config-dir`, spells it as the lane's own placeholder, and spells it
+    after the arguments rather than before them, the way the rest of the surface spells it.
+    """
+    rows = sorted(name for name, cap in harness.CAPABILITIES.items()
+                  if cap.argv[:2] == ["kmt", "config"])
+    assert rows, "the lane configures through something other than kmt config, so this guard is vacuous"
+
+    for name in rows:
+        argv = harness.argv_for(name, **lane_ctx(harness))
+        assert "--config-dir" in argv, \
+            f"{name}: the row reads a configuration root without naming it, so the guest's own " \
+            "environment decides which tree the stage's assertions are about"
+        assert argv[argv.index("--config-dir") + 1] == harness.LANE_PLACEHOLDERS["config_dir"], \
+            f"{name}: --config-dir is not the lane's root, so the stage is writing somewhere else"
+        first_positional = next((i for i, token in enumerate(argv) if not token.startswith("-")
+                                 and i > 2), None)
+        assert first_positional is not None, f"{name}: the row passes nothing to the verb"
+
+
+# --------------------------------------------------------------------- the configuration rows
+# The lane configures through `kmt config` and never through jq, which makes each of these rows part
+# of the product surface rather than part of the test scaffolding: a row that spells the verb wrong
+# fails a stage, and a row that spells it right but points somewhere else makes a stage green about
+# the wrong tree. Both halves are guarded here -- the parse, and the root.
+
+
+def test_the_lane_configures_only_through_the_verbs_that_write_configuration(harness):
+    """No stage writes configuration by editing a file, so every edit is one of these rows.
+
+    The rule is stated in `docs/plans/config-code-separation-remaining-work.md` and enforced by the
+    shape of this table: `init` lays a tree down, the two layer verbs grow it, `set` and `unset`
+    answer a key and take one away, and `show` and `validate` read the verdict back. A capability
+    that is missing here but is being driven by a stage is a second writer of one tree with no
+    owner, which is the defect the rule exists to prevent.
+    """
+    verbs = sorted(harness.CAPABILITIES[name].argv[2]
+                   for name, cap in sorted(harness.CAPABILITIES.items())
+                   if cap.argv[:2] == ["kmt", "config"])
+
+    assert set(verbs) <= {"init", "add-environment", "add-team", "set", "unset", "show", "validate"}, \
+        f"the lane drives a configuration verb that is not on the surface: {verbs}"
+    assert set(harness.CAPABILITIES[n].argv[2] for n in
+               harness.CAPABILITIES if harness.CAPABILITIES[n].argv[:2] == ["kmt", "config"]) == \
+        {"init", "add-environment", "add-team", "set", "unset", "show", "validate"}, \
+        "the lane no longer exercises every verb that writes configuration, so a regression in the " \
+        "missing verb's argv would reach a release unmeasured"
+
+
+def test_every_capability_argv_parses_for_the_command_it_names(harness):
+    """The row's argv has to be the command's argv: right flags, and the right number of arguments.
+
+    The guards above read command names and option names out of argv, and both can say "fine" to an
+    argv Click would refuse. `kmt config` stopped taking the directory as a positional and started
+    taking it as `--config-dir`; a row that moved the option and left the old directory in front of
+    it would still resolve, and would still carry only options the command defines, but it would
+    exit 2 on the guest. A lane that fails is louder than a lane that reports, so the parse is
+    checked here rather than on the first stage that runs the row.
+
+    What runs is Click's parser and never the command body: arity is decided while parameters are
+    resolved, so an extra positional is caught here and not on a live cluster.
+    """
+    surface = build_kmt_surface()
+    refused = {}
+    for name, cap in sorted(harness.CAPABILITIES.items()):
+        argv = harness.argv_for(name, **lane_ctx(harness))
+        command, spelled = resolved_command(surface, argv)
+        if command is None:
+            continue  # the guard above names the row that drives a dead command
+        context = click.Context(command, info_name=spelled)
+        try:
+            command.parse_args(context, argv[len(spelled.split()):])
+        except click.UsageError as error:
+            refused[name] = (spelled, str(error))
+    assert not refused, ("rows whose argv the command they name would refuse -- right command, wrong "
+                         "shape: %s" % refused)
+
+
+def test_the_configuration_rows_hand_the_root_to_the_flag_and_not_to_a_positional(harness):
+    """Every `kmt config` row names the root, because the lane's tree is not the guest's tree.
+
+    This is the row that keeps the lane honest about which tree its assertions are about. A
+    configuration command given no root has two ways to learn one and the second is
+    `$KUBEMENTAT_PLATFORM_CONFIG_DIR`, a value the guest could set to something else, which would
+    leave a stage answering from a tree this lane never prepared and still reporting green. So every
+    row spells `--config-dir`, spells it with the lane's own placeholder, and spells it after the
+    arguments the way the rest of the surface spells it.
+    """
+    rows = sorted(name for name, cap in sorted(harness.CAPABILITIES.items())
+                  if cap.argv[:2] == ["kmt", "config"])
+    assert rows, "the lane configures through something other than kmt config, so this guard is vacuous"
+
+    for name in rows:
+        argv = harness.argv_for(name, **lane_ctx(harness))
+        assert "--config-dir" in argv, \
+            f"{name}: reads a configuration root without naming it, so the guest's own environment " \
+            "decides which tree this stage's assertions are about"
+        assert argv[argv.index("--config-dir") + 1] == harness.LANE_PLACEHOLDERS["config_dir"], \
+            f"{name}: --config-dir is not the lane's root, so the stage writes somewhere else"
+        assert argv.index("--config-dir") > 2, \
+            f"{name}: the flag precedes the arguments, which is the spelling no other verb uses"
+
+
+def test_the_lane_configures_through_every_verb_that_writes_a_tree_and_no_other(harness):
+    """The lane's coverage of the configuration surface, counted rather than remembered.
+
+    Every stage writes configuration through `kmt config` rather than editing a file, which is what
+    makes the surface observable from a lane. A verb that is on the product and not in this table is
+    a verb whose argv regression reaches a release unmeasured; a verb in this table that is not on
+    the product is a row pointing at something nobody registered.
+    """
+    driven = {cap.argv[2] for cap in harness.CAPABILITIES.values() if cap.argv[:2] == ["kmt", "config"]}
+    writers = {"init", "add-environment", "add-team", "set", "unset", "show", "validate"}
+
+    assert driven == writers, ("the lane drives " + " / ".join(sorted(driven)) +
+                               " and the surface is " + " / ".join(sorted(writers)))
+
+
 def test_the_lane_reports_no_needs_grouped_cli_form(harness):
     """The report the next lane prints for `needs_grouped_cli_form` is empty, and this says why.
 

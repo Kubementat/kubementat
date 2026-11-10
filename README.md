@@ -149,8 +149,10 @@ When resources with the same name occur, they will be overwritten in that order 
     - `AUTOMATION_GIT_SERVER_HOST` - e.g. 'github.com'
     - `AUTOMATION_GIT_SERVER_PORT` - e.g. '22'
     - `AUTOMATION_GIT_SERVER_SSH_USER` - e.g. 'git'
-  Answer them with `kmt config set <dir> <environment> KEY=VALUE`, and check what the tree answers with
-  `kmt config show <dir> <environment>`. Your configuration and script adjustments will then be pulled
+  Answer them with `kmt config set <environment> KEY=VALUE --config-dir <configuration-root>`, and
+  check what the tree answers with
+  `kmt config show <environment> --config-dir <configuration-root>`. Your configuration and script
+  adjustments will then be pulled
   from this location for executing your CI tasks (search for "automation-git-url" within the pipeline
   yaml files to learn more about the specifics)
 
@@ -171,11 +173,12 @@ When resources with the same name occur, they will be overwritten in that order 
 ### Generate initial configuration
 
 `kmt config init` prepares a configuration directory. It is the only verb that lays down an
-environment, and it takes a directory rather than a pair of names, because what it produces is a
-place and not a state:
+environment, and the directory it lays it down in is the one `--config-dir` names — or the one
+`$KUBEMENTAT_PLATFORM_CONFIG_DIR` names, which is the spelling a container or a scheduled run already
+has:
 
 ```
-uv run kmt config init ~/kmt-config --environment dev --team dev1 --gpg-email you@example.com
+uv run kmt config init --environment dev --team dev1 --gpg-email you@example.com --config-dir ~/kmt-config
 ```
 
 That writes `kubementat.yaml`, the environment's two static layers and the team's two, the deployer
@@ -191,10 +194,11 @@ and `ENVIRONMENT`, and each of those points somewhere rather than configuring so
 the keys your setup genuinely needs with the verb that writes them:
 
 ```
-uv run kmt config init ~/kmt-config --environment dev \
+uv run kmt config init --environment dev \
     --set BASE_DOMAIN=example.com \
     --set DOCKER_REGISTRY_BASE_URL=registry.example.com \
-    --encrypted-set CLUSTER_MANAGER_EMAIL=you@example.com
+    --encrypted-set CLUSTER_MANAGER_EMAIL=you@example.com \
+    --config-dir ~/kmt-config
 ```
 
 `--set` writes the plain layer, `--encrypted-set` the git-crypt-protected one; the value is JSON if
@@ -216,16 +220,18 @@ one**. Nothing is resolved from `kubectl`'s current-context.
 kubectl config get-contexts
 
 # Name the one this environment means:
-uv run kmt config set ~/kmt-config dev CLUSTER_KUBE_CONTEXT=dev-cluster
+uv run kmt config set dev CLUSTER_KUBE_CONTEXT=dev-cluster --config-dir ~/kmt-config
 
 # Confirm what kubementat resolves, before installing anything:
 uv run kmt environments list --config-dir ~/kmt-config
 ```
 
-Note the asymmetry, because it will bite once: the `config` verbs take the directory as a positional
-argument, while the commands that act on a cluster name a `--config-dir` instead and refuse to guess
-when neither the flag nor `$KUBEMENTAT_PLATFORM_CONFIG_DIR` gives one. Both are naming the same
-thing; only one of them spells it in front.
+Note the symmetry, because it used to be asymmetrical: every `kmt config` verb takes the directory the
+same way every command that acts on a cluster does, as `--config-dir` or as
+`$KUBEMENTAT_PLATFORM_CONFIG_DIR`, and none of them refuses to say which one it read. The verbs here
+once took the directory as a positional, which meant a machine that had configured its root once could
+install against it and could not configure it. Nothing is located by proximity either: with neither the
+flag nor the variable, a command says so and stops.
 
 You can write that key into `~/kmt-config/dev/static.json` by hand and get the same answer, but the
 verb is the safer half: it keeps every other key in the file where it is, and it refuses rather than
@@ -279,7 +285,7 @@ directory has its own. Nothing is registered by email address any more.
 Per-team keys that pipelines use to clone go in the team's encrypted layer:
 
 ```
-uv run kmt config set ~/kmt-config dev --team dev1 --encrypted --from-file ./ssh-deploy-keys.json
+uv run kmt config set dev --team dev1 --encrypted --from-file ./ssh-deploy-keys.json --config-dir ~/kmt-config
 ```
 
 `--from-file` is how a private key gets answered without ever appearing in a command line.

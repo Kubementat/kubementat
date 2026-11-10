@@ -1,5 +1,79 @@
 # Unreleased
 
+- **The seven `kmt config` verbs take the configuration root the way every other kmt command does:
+  `--config-dir`, or `$KUBEMENTAT_PLATFORM_CONFIG_DIR`. The directory is no longer a positional.**
+  `kmt config init --environment E --team T --config-dir D` prepares the tree `D` names,
+  `kmt config add-environment E --config-dir D` grows one layer, `kmt config add-team E TEAM
+  --config-dir D` grows one layer under one environment, `kmt config set E KEY=VALUE --config-dir D`
+  and `kmt config unset E KEY --config-dir D` answer and remove one key, and `kmt config show E
+  [TEAM] --config-dir D` and `kmt config validate E [TEAM] --config-dir D` read the result back. No
+  alias, no second spelling: the old argv is answered by Click as `Got unexpected extra argument`.
+
+  **Why this is a change and not cosmetics.** A root is named and not located, and kmt says so with
+  two spellings: the flag, and the variable a container or a scheduled run already has. The verbs that
+  reach a cluster honoured both; the seven that configure took a positional and honoured neither. So a
+  machine that had written its root down once could run `kmt install` against that tree and could not
+  run `kmt config set` against it -- one tree, two ways of saying which one, and only one route
+  worked. `kmt config init`'s refusal of the variable had a stated reason (there is no root to point
+  at, because the verb is the one that makes a root), and the reason held only while the alternative
+  was a guess: naming a root that does not exist yet is the same act as reading one, and the same two
+  spellings name it.
+
+  **What an operator notices is the argv and nothing else.** The layer arguments keep their order and
+  their meaning: `environment` stays first, `team` is still a positional on `show` / `validate` /
+  `add-team` and a flag on `set` / `unset`, `--encrypted` still chooses the file and `--generate` still
+  invents the value, and the refusal set of every verb is what it was. What the root flag is not is a
+  resolution flag: `--context` and `--kubeconfig` are still absent from this group, because these
+  verbs address no cluster and a dial that changes nothing is a dial that promises something.
+
+  **One precedence, one owner.** All three branches (`--config-dir`, then the variable, then the
+  refusal) come from `kubementat.core.config.paths.resolve_platform_config_dir`, the function every
+  cluster command already answered with, and the option itself is declared once in
+  `cli.context.config_dir_option` -- which is now what `@kmt_context`, `kmt environments list` and
+  these seven verbs all use instead of each writing its own `click.option` line.
+
+  **Where the lines moved.** `src/cli/commands/config.py`, which is the surface change; `src/cli/
+  context.py`, which gained the shared option; `src/cli/commands/environments.py`, which stopped
+  spelling it a third time; and the printed instructions that told an operator what to run --
+  `config_init.py`, `config_bootstrap.py`, `config_validate.py`, `errors.py`, `core/config/config.py`,
+  `core/identity/context.py`, `core/identity/registry.py`, `automations/routing/routing.py`,
+  `automations/uninstall/kubementat.py` and `cli/commands/environments.py`, all of which now print a
+  command that runs. `README.md`, `docs/README_PLATFORM_CONFIG.md`, `docs/README_TEKTON.md`,
+  `docs/index-overview.md`, `docs/specifications/config-code-separation-spec.md`,
+  `docs/specifications/cluster-config-v2.md` and the two `docs/plans/config-code-separation-*` files
+  follow. `docs/research/` keeps the old argv: those records state what was true on a date, and no
+  change has ever rewritten one of them.
+
+  **Evidence.** `uv run pytest -q` → **1797 passed, 1 skipped**, including the new
+  `test_every_configuration_verb_names_its_root_the_same_way` (the census, the three precedence
+  branches per verb, and the empty-variable case), the rewritten config tables in
+  `test_cli_surface.py`, and `test_the_commands_the_readme_prints_are_commands`, which runs the
+  README's own command lines. `uv run kmt config show --help` → `Usage: kmt config show [OPTIONS]
+  ENVIRONMENT [TEAM]` with `--config-dir PATH` in its options. `uv run kmt config init` with neither
+  spelling present → `no configuration root is named. Give this command --config-dir PATH, or set
+  KUBEMENTAT_PLATFORM_CONFIG_DIR …`, and no tree written anywhere.
+
+  The lane agrees. Four runs on one host, all green: `--lane smoke --scope install` (15 assertions),
+  `--lane smoke --scope full` (82), `--lane full --scope full` (128) and `--lane bootstrap` (44);
+  their `result.json` files name this SHA. The first two only reach `config init`, because the
+  other configuration verbs are driven by features the smoke lane does not run, so the run that
+  proves them is the full lane's: `config add-team` and `config set --team --encrypted --from-file`
+  in `config-scope-ignores-foreign-team`, `config add-environment` in the two-environments-one-cluster
+  refusal, `config unset` and `config set` in `cluster-key-restored-after-the-refusal`, `config show`
+  in the namespace rename, and `config validate` in the bootstrap lane's prepared tree. Nothing in
+  `checkout-untouched` moved, and the `checkout-untouched` assertion itself passed four times.
+
+  One thing the lanes cannot do, and now say so: three configuration rows
+  (`config set --encrypted KEY=VALUE`, `config set --encrypted --team`, `config unset --team`) are
+  driven by no stage. Two of them are refused deliberately rather than missed -- a credential on a
+  command line is visible in `ps`, which is why the lane puts its encrypted answers in a staged file
+  with `--from-file` instead -- and the third is simply a shape no assertion has needed yet. Their
+  argv is checked against the real command by
+  `test_every_capability_argv_parses_for_the_command_it_names`, which is what catches this class of
+  drift when a lane will not run the row. That test is new with this change, and it is the guard
+  that was missing: a capability row could already name a live command and carry only options that
+  command defines, and still be refused on the guest for the wrong number of arguments.
+
 - **Ten cluster verbs move off the flat surface: nine become `kmt kubernetes <verb>`, and
   `helm-version` becomes `kmt helm latest-version`. The flat names are dead.**
   `kmt analyze-deployment` is `kmt kubernetes analyze-deployment`,

@@ -48,7 +48,8 @@ def _init(root: Path, tools, *extra: str) -> None:
     root.mkdir(parents=True, exist_ok=True)
     result = CliRunner().invoke(
         config_command.init_command,
-        [str(root), "--environment", ENVIRONMENT, "--team", TEAM, "--gpg-email", EMAIL, *extra])
+        ["--environment", ENVIRONMENT, "--team", TEAM, "--gpg-email", EMAIL, *extra,
+         "--config-dir", str(root)])
     assert result.exit_code == 0, result.output
 
 

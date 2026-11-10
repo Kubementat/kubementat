@@ -24,21 +24,32 @@ The surface follows the rule. `environment` is the first positional of every com
 cluster, and nothing defaults: no default environment, no `DEFAULT_TEAM`, no ambient kubecontext. A command
 that was not told what it means says so before it touches anything.
 
+The same rule covers the root. Every verb that reads or writes a tree — the seven under `kmt config` and
+every command that reaches a cluster — names it with `--config-dir`, or with
+`$KUBEMENTAT_PLATFORM_CONFIG_DIR`, and the flag sits above the variable. With neither, the command
+says so and stops: kubementat reads no configuration out of the directory it was installed from, and
+it has no default root to fall back to.
+
 ## How a configuration tree is created now
 
-`kmt config init <dir> --environment E` lays one down. It writes `<dir>/kubementat.yaml` and the environment's
-two static files (`<dir>/<environment>/static.json`, `<dir>/<environment>/static.encrypted.json`), plus a
+`kmt config init --environment E --config-dir <configuration-root>` lays one down. It writes the
+root's `kubementat.yaml` and the environment's
+two static files (`<configuration-root>/<environment>/static.json`,
+`<configuration-root>/<environment>/static.encrypted.json`), plus a
 team's two empty files when `--team` says so — and it writes **answers, not product shape**: no namespace, no
 domain, no registry, nothing that a default elsewhere already answers. `--set` / `--encrypted-set` answer a
 key into those two files, with the value taken as JSON when it parses, so `--set GRAFANA_ENABLED=false` stores
 a boolean and `--set BASE_DOMAIN=example.test` stores a string. Running it twice is a no-op: a path that is
 byte-identical prints `skipped`, a path that already differs from what init would write is refused and named,
 and `--force` accepts a tree holding material kubementat did not write while touching none of it. The
-directory is the argument and nothing else — this verb takes no `--config-dir` and does not consult
-`KUBEMENTAT_PLATFORM_CONFIG_DIR`, because a root that is not there cannot be pointed at. What a fresh tree
+root is `--config-dir`, or the `$KUBEMENTAT_PLATFORM_CONFIG_DIR` a container already sets, and with
+neither the verb refuses before `git init` decides anything. It used to be the other way round for
+these seven verbs: the directory was a positional and neither spelling of a root was read, so a machine
+that had configured its root once could install against that tree and could not configure it. What a
+fresh tree
 does not do is address a cluster: `CLUSTER_KUBE_CONTEXT` is written `null` and stays null until someone names
 the context in that file, which is the sentence `kmt environments list` repeats. `kmt config init` is the only
-verb that prepares a directory, and it writes the one named in its argument; `kmt initialize`, which wrote the
+verb that prepares a directory, and it writes only the root it was named; `kmt initialize`, which wrote the
 checkout it was run in, is deleted.
 
 These directories contain another layer of grouping which we call TEAMS for separating team namespaces. Under
@@ -71,7 +82,7 @@ written by `kmt config init` and read by every verb before it touches a cluster.
 Before upgrading, ask whether the tree survives the build you are about to run:
 
 ```
-kmt config validate <dir> <environment>
+kmt config validate <environment> --config-dir <configuration-root>
 ```
 
 That reads and writes nothing and addresses no cluster. It says whether the tree sits inside the version
@@ -86,7 +97,8 @@ you. Where a path moved, the product refuses the old spelling by name at the poi
 what you keep is your own edit. What says the same thing twice is the CHANGELOG and the release note, which
 are now the only channel that says what changed between versions.
 
-So the pre-upgrade ritual is three commands: `kmt config validate <dir> <environment>` against the tree you
+So the pre-upgrade ritual is three commands: `kmt config validate <environment> --config-dir <configuration-root>`
+against the tree you
 have, then the one-line bump in `<dir>/kubementat.yaml` if the verdict asks for one, then validate again. A
 tree that passes and still holds an old directory will be refused by that directory's name, and the refusal
 tells you which two paths it is talking about.
@@ -165,7 +177,8 @@ an operator can lean on.
 | `TRAEFIK_DEPLOYMENT_NAMESPACE` | `traefik` (`constants.DEFAULT_NAMESPACES`, `core/constants.py:58`) | `kubementat/core/assets/values/helmfile.yaml.gotmpl:432` reads it as `env "TRAEFIK_DEPLOYMENT_NAMESPACE" \| default "traefik"`, exported there by `HelmUtils._export_component_namespaces` (`src/kubementat/infrastructure/helm.py:802`); `Config.component_namespace("traefik")` (`core/config/config.py:548`) reads the same key on the Python side, and it is one of the namespaces `kmt uninstall` deletes. | which namespace the controller release lands in — and, because "ours" is decided by reading the cluster, **whether kubementat recognises a Traefik as its own** (`traefik_presence.py`'s classification is a Traefik chart release *in this namespace*, nothing else). Rename it and a release the cluster still carries is reported as `foreign`. |
 | `TRAEFIK_INGRESS_CLASS` | `traefik` (`constants.DEFAULT_STATIC_ANSWERS`, which `routing.py`'s fallback table reads from) | `Config.component_ingress_class` (`core/config/config.py:755`) is the one read path, and the same answer reaches helmfile from `export_ingress_class` (`infrastructure/helm.py:986`) — the traefik release's inline `ingressClass.name` entry (`helmfile.yaml.gotmpl`, the block labelled `component_name: traefik`) reads `env "TRAEFIK_INGRESS_CLASS"` and names no class of its own. Also: the `ClusterIssuer` HTTP-01 solvers (`_apply_cluster_issuers` at `automations/routing/routing.py:491`, which writes the class into the solver at `routing.py:534`), the "nothing serves that class" warning (`_warn_when_nothing_serves_the_class`, `automations/routing/routing.py:568-611`), and `src/kubementat/automations/ingress.py`, which reads it through `Config` when it writes an `Ingress` for `kmt kubernetes create-ingress` — where the script that used to `jq` this file out of a path built from its own location used to answer it | the `IngressClass` the controller creates and the class every solver and every generated `Ingress` names. It is a config key and not a literal because a cluster that already runs a controller has to be able to rename this one without editing a template. Note what it does **not** do: it is not the cluster default. `ingressClass.isDefaultClass: true` is what makes an Ingress that names nothing routable, and that lives in the values file below. |
 | `TRAEFIK_SERVICE_SELECTOR` | `app.kubernetes.io/name=traefik,app.kubernetes.io/instance=traefik` (`constants.DEFAULT_SERVICE_SELECTORS`, `core/constants.py:88`) | `Config.component_service_selector` (`core/config/config.py:746`) — but no `src/` call site names `traefik` today: the selector-based pod lookups resolve `grafana`, `tekton` and `openbao` only, in `automations/tunnels/tunnels.py:39,70,103`. (`polaris` is retired and no tunnel command reads a selector for it.) | which pod a selector-based lookup would find. It is declared so that a rename is answered in `static.json` and not in code, exactly like the other components; **today it has no reader.** The pair only matches while the release is named `traefik`, which is why it is a key and not something built from the component name. |
-| `CLUSTER_MANAGER_EMAIL` | none, and nothing writes one. No shipped default answers it and no verb invents a value for it, so a fresh tree has the key absent | `automations/routing/routing.py:540-558` (`_cluster_manager_email`), called from `_apply_cluster_issuers`, when both `ClusterIssuer`s are applied | the ACME account contact. `kmt routing install` raises with this file's path when the value is missing or still a `REPLACEME_*` placeholder, because cert-manager registers the account with it and Let's Encrypt rejects a malformed contact — an issuance failure that stays invisible until a certificate expires. Set it before the first `routing install` with `kmt config set <dir> <env> CLUSTER_MANAGER_EMAIL=...`. |
+| `CLUSTER_MANAGER_EMAIL` | none, and nothing writes one. No shipped default answers it and no verb invents a value for it, so a fresh tree has the key absent | `automations/routing/routing.py:540-558` (`_cluster_manager_email`), called from `_apply_cluster_issuers`, when both `ClusterIssuer`s are applied | the ACME account contact. `kmt routing install` raises with this file's path when the value is missing or still a `REPLACEME_*` placeholder, because cert-manager registers the account with it and Let's Encrypt rejects a malformed contact — an issuance failure that stays invisible until a certificate expires. Set it before the first `routing install` with
+`kmt config set <env> CLUSTER_MANAGER_EMAIL=... --config-dir <configuration-root>`. |
 
 The nginx-era keys do not come back. `NGINX_INGRESS_DEPLOYMENT_NAMESPACE` is out of this file and out of
 `constants.DEFAULT_NAMESPACES`, there is no `--enable-ingress`, no `--routing`, no alias and no key that

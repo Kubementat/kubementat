@@ -82,6 +82,36 @@ KUBECONFIG_PARAMETER = "kubeconfig"
 CONFIG_DIR_PARAMETER = "config_dir"
 
 
+def config_dir_option(**kwargs):
+    """Add the `--config-dir` option the way every kmt verb that reads a root spells it.
+
+    One spelling and not three. The flag sits on the commands `@kmt_context` decorates, on
+    `kmt environments list`, which contacts no cluster and therefore builds no `Context`, and on
+    the seven `kmt config` verbs, which name a root instead of resolving a cluster. The first two
+    wrote the `click.option` line themselves and the third had none, so the surface held one rule
+    described two ways and missing from a group.
+
+    The help says what the flag *is*, and not what the verb it is bolted onto does, because the
+    sentence has to stay true for a verb that writes a tree and a verb that lists one. The
+    precedence it states is `paths.resolve_platform_config_dir`'s — flag, then variable, then
+    refusal — and nothing here reimplements it: the option lands in a `config_dir` parameter and
+    the caller threads that one value into the function that owns the rule.
+
+    `kwargs` overrides the defaults so a verb can shorten the help; it cannot override the
+    parameter's name, because every caller reads `config_dir`.
+    """
+    option_kwargs = {
+        "default": None,
+        "metavar": "PATH",
+        "type": click.Path(exists=False, file_okay=False),
+        "help": "The platform_config directory this command reads or writes. Layer above "
+                "$KUBEMENTAT_PLATFORM_CONFIG_DIR; with neither, the run refuses, because a "
+                "configuration root is named and not located.",
+    }
+    option_kwargs.update(kwargs)
+    return click.option(CONFIG_DIR_OPTION, CONFIG_DIR_PARAMETER, **option_kwargs)
+
+
 def kmt_context(func):
     """Resolve this command's cluster, print what it found, and hand the command a `Context`.
 
@@ -113,11 +143,7 @@ def kmt_context(func):
                        "stray shell export cannot re-point a command that named an environment. Only "
                        "when no such file is there does Kubernetes' own rule apply: $KUBECONFIG, then "
                        "~/.kube/config.")
-    @click.option(CONFIG_DIR_OPTION, CONFIG_DIR_PARAMETER, default=None, metavar="PATH",
-                  type=click.Path(exists=False, file_okay=False),
-                  help="The platform_config directory to read this command's configuration from. "
-                       "Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with neither, the run refuses, "
-                       "because a configuration root is named and not located.")
+    @config_dir_option()
     @functools.wraps(func)
     def with_context(*args, **params):
         context_arg = params.pop(CONTEXT_PARAMETER, None)

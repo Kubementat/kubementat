@@ -140,13 +140,14 @@ def test_an_install_handed_a_root_that_holds_no_environment_refuses_it_and_not_t
 
 
 def test_config_init_names_no_root_and_scaffolds_nowhere(tmp_path, monkeypatch):
-    """`config init` is the verb that writes a root, and the root is its positional argument.
+    """`config init` writes a root, and a root it was not given is refused before it writes.
 
-    A run that names no directory is refused by the parser before the library is called, so
-    nothing is scaffolded — which is why this test's checkout starts empty rather than seeded. A
-    verb that wrote first and refused later would leave the directory behind, and a verb that
-    fell back to `$KUBEMENTAT_PLATFORM_CONFIG_DIR` would be a located root wearing a flag,
-    which is why the variable is deleted from the environment for this run.
+    A run that names neither `--config-dir` nor `$KUBEMENTAT_PLATFORM_CONFIG_DIR` is refused by the
+    one function that owns that precedence, before the library is called, so nothing is scaffolded —
+    which is why this test's checkout starts empty rather than seeded. A verb that wrote first and
+    refused later would leave the directory behind, and a verb that located a root beside the wheel it
+    was installed from would be the D11 failure under a nicer error message, which is why the variable
+    is deleted from the environment for this run.
     """
     root = tmp_path / "empty-checkout"
     root.mkdir(parents=True, exist_ok=True)
@@ -156,8 +157,11 @@ def test_config_init_names_no_root_and_scaffolds_nowhere(tmp_path, monkeypatch):
     result = CliRunner().invoke(config_command.init_command,
                                 ["--environment", ENVIRONMENT, "--team", TEAM])
 
-    assert result.exit_code == 2, result.output
-    assert "directory" in result.output.lower(), result.output
+    assert result.exit_code != 0, result.output
+    assert "--config-dir" in result.output, \
+        f"the refusal did not name the flag that would have answered it: {result.output}"
+    assert PLATFORM_CONFIG_VARIABLE in result.output, \
+        f"the refusal did not name the variable that would have answered it: {result.output}"
     assert not (root / "platform_config").exists(), \
         "config init scaffolded a tree it had been told nothing about"
 
@@ -166,9 +170,9 @@ def test_config_init_writes_the_root_it_was_given_and_not_the_checkout(tmp_path,
     """The directory the verb was handed is the directory the tree lands in.
 
     `config init` is the one command that writes a configuration root rather than reading one, so a
-    positional that stopped at the argument would leave it writing beside the installed package —
-    which is the same bug with a different verb on it. The library is replaced by a recorder so
-    the claim is about which root the verb hands over, not about the write pass itself.
+    root that stopped being named would leave it writing beside the installed package — which is the
+    same bug with a different verb on it. The library is replaced by a recorder so the claim is about
+    which root the verb hands over, not about the write pass itself.
     """
     root = tmp_path / "checkout"
     root.mkdir(parents=True, exist_ok=True)
@@ -180,7 +184,8 @@ def test_config_init_writes_the_root_it_was_given_and_not_the_checkout(tmp_path,
                         lambda given, *args, **kwargs: handed.append(given) or ())
 
     result = CliRunner().invoke(config_command.init_command,
-                                [str(destination), "--environment", ENVIRONMENT, "--team", TEAM])
+                                ["--environment", ENVIRONMENT, "--team", TEAM,
+                                 "--config-dir", str(destination)])
 
     assert result.exit_code == 0, result.output
     assert handed == [destination], \

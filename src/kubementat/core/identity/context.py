@@ -451,8 +451,9 @@ class Context:
                 declared=f"{declared_context} (declared in {static_path} as {constants.CLUSTER_KUBE_CONTEXT_KEY})",
                 declared_source=declared_source,
                 fix=(f"state {declared_context}, which is what the environment says, or write "
-                     f"{stated['context']} into the environment: kmt config set <configuration-root> "
-                     f"{environment} {constants.CLUSTER_KUBE_CONTEXT_KEY}={stated['context']}"),
+                     f"{stated['context']} into the environment: kmt config set {environment} "
+                     f"{constants.CLUSTER_KUBE_CONTEXT_KEY}={stated['context']} "
+                     f"--config-dir <configuration-root>"),
             )
 
         # Only the file was stated. Its claim about the cluster is the set of contexts it declares,
@@ -471,7 +472,8 @@ class Context:
             declared_source=declared_source,
             fix=(f"state a context this file has, mount the kubeconfig that has {declared_context}, "
                  f"or write the run's context into the environment: kmt config set "
-                 f"<configuration-root> {environment} {constants.CLUSTER_KUBE_CONTEXT_KEY}=<the-context>"),
+                 f"{environment} {constants.CLUSTER_KUBE_CONTEXT_KEY}=<the-context> "
+                 f"--config-dir <configuration-root>"),
         )
 
     @staticmethod

@@ -330,67 +330,68 @@ EXPECTED_HELM_COMMAND_PARAMS = {
 # below is what keeps a well-intentioned fifth verb from arriving without anyone deciding it should.
 # `config diff` and `config migrate` were on the group and are deleted, on owner instruction of
 # 2026-11-05: kubementat rewrites no operator tree, so there is no rename table to apply and nothing
-# that reports what a version bump would cost.
+# that reports what a version bump would cost. Every verb on it also takes the root it works on, which
+# is the one argument the group shares with the rest of kmt and no positional carries.
 EXPECTED_CONFIG_COMMANDS = {"init", "add-environment", "add-team", "set", "unset", "show",
                             "validate"}
 
 # The exact parameter set of each verb on the group, and that is the assertion rather than an opinion
-# about flags. The verbs that exist today address no cluster, so none of the three carries `--context`
-# / `--kubeconfig` / `--config-dir`: `init` is handed its root as a positional and a root discovered
-# by proximity would be a second way to name the directory already named, and
-# `add-environment` / `add-team` write state under a root they were pointed at and resolve nothing.
-# That is a claim about the verbs on this list, not about the group forever: a verb that does address
-# a cluster arrives here with its own exact set, and if it brings a resolution flag with it, that is
-# recorded by this table and not argued about by a sentence that would then be false.
+# about flags. Every verb here carries `config_dir`, because a configuration root is named and not
+# located and this group has no positional left to carry it: the flag and
+# `$KUBEMENTAT_PLATFORM_CONFIG_DIR` are the two spellings, and a verb that took its root as a
+# positional would answer to only one of them while the rest of kmt answered to both. What none of
+# them carries is `--context` or `--kubeconfig`, and that is the claim rather than a style preference:
+# the verbs on this list address no cluster, so a resolution flag on them would be a dial that changes
+# nothing and promises something. A verb that does resolve a cluster belongs on this table with its own
+# exact set when it arrives, and `test_every_configuration_verb_names_its_root_the_same_way.py` is what
+# checks that all seven mean the flag.
 EXPECTED_CONFIG_COMMAND_PARAMS = {
-    # The verb that lays a tree down: the directory, the layer names, the answers, and the five flags the
- # preparation
-    # needs. `--gpg-key` and `--gpg-email` are the two spellings of a deployer identity, and they are
-    # the names `config_keys` refuses with; `--git-url` names a remote without adding one; `--no-commit`
-    # is the operator's half of the first commit. `--force` means material kubementat did not write and
-    # nothing else, which is why it is still here and still one flag.
-    "init": {"directory", "environment", "team", "set_answers", "encrypted_answers", "gpg_key",
-             "gpg_email", "git_url", "no_commit", "force"},
-    # Two positionals, in the order the tree holds them. `init`'s `--environment` is an option because
-    # `--team` can be declined beside it; here the environment is the layer's own name and cannot be.
-    "add-environment": {"directory", "environment"},
-    # Three, same order: root, the environment it sits under, the team. Nothing to answer, so nothing
-    # to answer with.
-    "add-team": {"directory", "environment", "team"},
-    # The same three positionals plus the answer itself, in the order the tree holds them. `--team` is a
-    # flag and not a fourth positional so a team answer cannot arrive without the layer it sits on being
-    # spelled, and `--encrypted` picks which half of the pair takes the answer. `set_answers` is the
-    # parameter name `init` already uses for the same `KEY=VALUE` shape, so one flag and one positional
-    # that accept the same thing do not become two names for one idea. `--generate` is that
-    # second spelling and not a second verb: generation is an option on one answer rather than a class
-    # of key, so the
+    # The verb that lays a tree down: the layer names, the answers, the five flags the preparation
+    # needs, and the root it is laying the tree down under. `--gpg-key` and `--gpg-email` are the two
+    # spellings of a deployer identity, and they are the names `config_keys` refuses with; `--git-url`
+    # names a remote without adding one; `--no-commit` is the operator's half of the first commit.
+    # `--force` means material kubementat did not write and nothing else, which is why it is still here
+    # and still one flag.
+    "init": {"environment", "team", "set_answers", "encrypted_answers", "gpg_key", "gpg_email",
+             "git_url", "no_commit", "force", "config_dir"},
+    # One positional: the layer's own name, the one thing this verb cannot be told. The root it grows
+    # the layer in is named by the flag, the same way every other verb on the group names one.
+    "add-environment": {"environment", "config_dir"},
+    # Two, in the order the tree holds them below its root: the environment the team sits under, then
+    # the team. Nothing to answer, so nothing to answer with.
+    "add-team": {"environment", "team", "config_dir"},
+    # The environment, the answer, and the flags that say where the answer lands. `--team` is a flag
+    # and not a positional so a team answer cannot arrive without the layer it sits on being spelled,
+    # and `--encrypted` picks which half of the pair takes the answer. `set_answers` is the parameter
+    # name `init` already uses for the same `KEY=VALUE` shape, so one flag and one positional that
+    # accept the same thing do not become two names for one idea. `--generate` is that second spelling
+    # and not a second verb: generation is an option on one answer rather than a class of key, so the
     # verb that writes one answer to one key is the only place a value may be invented, and it takes a
-    # key name rather than a value. There is no `--yes`, no prompt, and no key-class flag — nothing that
-    # could send some names to the encrypted file and not others. `--from-file` is the document spelling
-    # of the same answer, which is why it belongs to this verb: it answers every key of a JSON object
-    # in one run, and it is how a value that must not sit in a process table gets answered, because only
-    # the path travels. It is not a second verb either, and it cannot choose a layer: `--team` and
-    # `--encrypted` still decide where the keys land.
-    "set": {"directory", "environment", "set_answers", "team", "encrypted", "generate", "from_file"},
-    # `key` rather than `KEY=VALUE` because this verb removes an answer and has no opinion about what it
-    # was. `--encrypted` is deliberately absent: an unset clears both files of the layer, so a flag that
-    # chose one of them would undo the pair rule.
-    "unset": {"directory", "environment", "key", "team"},
-    # The read-only verbs. Positionals only, and in the order the tree holds its layers: root,
-    # then environment, then team. `team` here is a positional and not a `--team` flag like `set` and
-    # `unset` carry, which is what the surface's own spelling of these rows gives them -- a write verb
-    # needs the flag to say *where* an answer lands, and a read verb only needs to know which layer to
-    # ask. Neither carries `--context` / `--kubeconfig` / `--config-dir`, and that is a claim rather
-    # than a style preference: both verbs resolve no cluster, so a resolution flag on them would be a
-    # dial that changes nothing and promises something. The exact sets below are what keep a later
-    # `--generate`-shaped addition from arriving as a harmless convenience.
-    "show": {"directory", "environment", "team"},
-    # The verdict verb, in the same positional order the tree holds its layers: root, environment,
-    # team. Like `show` it is a read, so the team is a positional and not a flag, and like every verb
-    # here it carries no `--context` / `--kubeconfig` / `--config-dir`: validate resolves no cluster,
-    # reads no kubeconfig, and execs nothing — its collision half comes from the registry's own file
-    # reads, so a resolution flag on it would promise an answer this verb never asks for.
-    "validate": {"directory", "environment", "team"},
+    # key name rather than a value. There is no `--yes`, no prompt, and no key-class flag — nothing
+    # that could send some names to the encrypted file and not others. `--from-file` is the document
+    # spelling of the same answer, which is why it belongs to this verb: it answers every key of a JSON
+    # object in one run, and it is how a value that must not sit in a process table gets answered,
+    # because only the path travels. It is not a second verb either, and it cannot choose a layer:
+    # `--team` and `--encrypted` still decide where the keys land.
+    "set": {"environment", "set_answers", "team", "encrypted", "generate", "from_file", "config_dir"},
+    # `key` rather than `KEY=VALUE` because this verb removes an answer and has no opinion about what
+    # it was. `--encrypted` is deliberately absent: an unset clears both files of the layer, so a flag
+    # that chose one of them would undo the pair rule.
+    "unset": {"environment", "key", "team", "config_dir"},
+    # The read-only verbs. The environment, the layer to ask, and the root. `team` here is a positional
+    # and not a `--team` flag like `set` and `unset` carry, which is what the surface's own spelling of
+    # these rows gives them -- a write verb needs the flag to say *where* an answer lands, and a read
+    # verb only needs to know which layer to ask. Neither carries `--context` or `--kubeconfig`: both
+    # resolve no cluster, so a resolution flag on them would be a dial that changes nothing and promises
+    # something. The exact sets below are what keep a later `--generate`-shaped addition from arriving
+    # as a harmless convenience.
+    "show": {"environment", "team", "config_dir"},
+    # The verdict verb, in the same shape `show` has: environment, team, root. Like `show` it is a
+    # read, so the team is a positional and not a flag, and like every verb here it carries no
+    # `--context` or `--kubeconfig`: validate resolves no cluster, reads no kubeconfig, and execs
+    # nothing — its collision half comes from the registry's own file reads, so a resolution flag on it
+    # would promise an answer this verb never asks for.
+    "validate": {"environment", "team", "config_dir"},
 }
 
 
@@ -775,18 +776,21 @@ def test_the_environments_group_holds_the_listing_and_nothing_else():
 def test_the_config_group_holds_the_init_that_lays_a_tree_down():
     """The ways to change or judge a configuration directory live on one group.
 
-    `kmt config init <dir> --environment E` creates a tree, the two layer verbs grow it by one layer,
-    and `set` / `unset` put one answer on one layer of it. This is the check every other group gets and
-    not a smaller one: what is on the group, what each verb takes, and that no flat `config-init`-shaped
-    name answers beside it. The last of those reads as a formality -- there is no flat name to kill --
-    and it is not: `config-set` or `config-add-environment` appearing later is a second route to the
-    same write that nothing on the group's listing reports.
+    `kmt config init --config-dir D --environment E` creates a tree, the two layer verbs grow it by
+    one layer, and `set` / `unset` put one answer on one layer of it. This is the check every other
+    group gets and not a smaller one: what is on the group, what each verb takes, and that no flat
+    `config-init`-shaped name answers beside it. The last of those reads as a formality -- there is no
+    flat name to kill -- and it is not: `config-set` or `config-add-environment` appearing later is a
+    second route to the same write that nothing on the group's listing reports.
 
-    The flag check asserts an absence about the verbs on this list, and not about the group forever.
-    None of them carries a resolution flag: `init` addresses nothing and is handed its root as a
-    positional, the two layer verbs add state to a directory they were pointed at, and the two
-    answer verbs edit files inside one. A verb that resolves a cluster belongs on this table with its
-    own exact set when it arrives, which is why the table and not this sentence is what would notice.
+    The flag check asserts two things about the verbs on this list, and neither is about the group
+    forever. What they all carry is the root flag, because a root is named and not located and the
+    variable a container sets is the second spelling of it -- a verb that took its root as a positional
+    would be the one verb in kmt that a scheduled run could not address. What none of them carries is a
+    *cluster* resolution flag: `init` addresses nothing, the two layer verbs add state to a directory
+    they were named, and the two answer verbs edit files inside one. A verb that does resolve a cluster
+    belongs on this table with its own exact set when it arrives, which is why the table and not this
+    sentence is what would notice.
 
     The help text says which verbs are deliberately off the group, so the surface states its own
     absences instead of leaving a reader to notice them.

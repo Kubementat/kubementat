@@ -732,7 +732,7 @@ class Config:
         if not environment_directory.is_dir():
             raise click.ClickException(
                 f"No configuration directory for environment '{self.environment}' at"
-                f" {environment_directory}. Run kmt config init <dir> --environment"
+                f" {environment_directory}. Run kmt config init --environment"
                 f" {self.environment}, or pass the environment you actually mean."
             )
         return sorted(

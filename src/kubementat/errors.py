@@ -363,8 +363,9 @@ class CiImageNotConfiguredError(KubementatError):
             f" the tag have kubementat's own default, `ubuntu-ci-minimal:latest`. So either the key"
             f" was declared and says nothing — set it to an image this cluster can pull, or delete the"
             f" entry and let L0 answer — or DOCKER_REGISTRY_BASE_URL is unset, which kubementat does"
-            f" not default at all. Put the registry in that file: kmt config set <dir>"
-            f" <environment> DOCKER_REGISTRY_BASE_URL=<registry-url> is the verb, and nothing"
+            f" not default at all. Put the registry in that file: kmt config set <environment>"
+            f" DOCKER_REGISTRY_BASE_URL=<registry-url> --config-dir <configuration-root> is the verb,"
+            f" and nothing"
             f" rewrites an answer that is there."
         )
 

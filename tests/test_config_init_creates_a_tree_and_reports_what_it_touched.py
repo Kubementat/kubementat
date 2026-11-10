@@ -13,13 +13,16 @@ verb's claims are not the library's:
 * **The print is the plan, in order, and it is the file list.** One line per step, on stdout, nothing
   else on stdout. The closing instruction is guidance about state and so goes to stderr, where the
   cluster sentence already was; a script reading `kmt config init | ...` gets paths and no prose.
-* **A run that can be refused is refused before it writes.** A bare `config init <dir> --environment
-  E` with no `--gpg-key` and no `--gpg-email` has no identity to work from, and `config_keys` says so
+* **A run that can be refused is refused before it writes.** A bare `config init --environment E`
+  with no `--gpg-key` and no `--gpg-email` has no identity to work from, and `config_keys` says so
   ahead of `git init`: no directory, no `.git`, no half-prepared tree for somebody to delete.
-* **The root is the positional and nothing else.** No `--config-dir`, and no
-  `KUBEMENTAT_PLATFORM_CONFIG_DIR` behind the verb. A root that is not there cannot be pointed at,
-  and a verb that fell back to the variable would be a directory located by proximity wearing
-  a flag — so test 8 sets the variable to a decoy and proves nothing is written there.
+* **The root is named and never located.** `--config-dir`, or the
+  `KUBEMENTAT_PLATFORM_CONFIG_DIR` a container already sets, with the flag above the variable and a
+  refusal below both — the same rule every command that reaches a cluster answers with, and this verb
+  is not an exception to it. `git init` happens after that decision, so a run that named no root
+  leaves no tree behind anywhere. Test 8 sets the variable to a decoy beside a named root and proves
+  only the root that was handed over is written to; test 9 leaves the command line empty and proves
+  the variable still names the tree; test 10 deletes both and proves nothing is scaffolded.
 * **The value is typed.** `--set GRAFANA_ENABLED=false` stores a boolean and `--set
   BASE_DOMAIN=example.test` stores a string, which is the claim test 4 asserts in both directions.
   A parser that `str()`-ed everything would keep the tree green and the key dead.
@@ -79,14 +82,30 @@ def no_configuration_root_in_the_environment(monkeypatch):
 
 
 def run_init(root, *arguments):
-    """`kmt config init <root> …`, invoked through the group so the verb's own name is exercised.
+    """`kmt config init --config-dir <root> …`, through the group so the verb's name is exercised.
 
     A bug inside the command is re-raised rather than folded into an exit code: `exit_code == 1`
     with a swallowed traceback reads as "the verb refused", which is exactly the failure this file
     must not mistake for a refusal.
+
+    The root travels as the flag the surface names it with, so every assertion below is evidence
+    about the command a human or a container types and not about a private argv.
     """
     result = CliRunner(mix_stderr=False).invoke(config_module.config,
-                                                ["init", str(root), *arguments])
+                                                ["init", *arguments, "--config-dir", str(root)])
+    if result.exception is not None and not isinstance(result.exception, SystemExit):
+        raise result.exception
+    return result
+
+
+def run_init_without_root(*arguments):
+    """The same verb with no root spelled anywhere, for the two cases that turn on that absence.
+
+    Going through the verb and not the library is the point here too: the question is what the
+    command does when neither of its two spellings of a root is present, and that is the verb's own
+    decision and not the library's.
+    """
+    result = CliRunner(mix_stderr=False).invoke(config_module.config, ["init", *arguments])
     if result.exception is not None and not isinstance(result.exception, SystemExit):
         raise result.exception
     return result
@@ -322,15 +341,17 @@ def test_foreign_material_is_named_and_a_force_leaves_it_alone(root, tools):
     assert (root / ENV_STATIC).is_file()
 
 
-def test_the_platform_config_variable_is_ignored_and_the_decoy_stays_empty(tmp_path,
-                                                                           root,
-                                                                           tools,
-                                                                           monkeypatch):
-    """Test 8: the variable is not a fallback, so a decoy named by it must stay empty.
+def test_the_flag_outranks_the_platform_config_variable_and_the_decoy_stays_empty(tmp_path,
+                                                                                 root,
+                                                                                 tools,
+                                                                                 monkeypatch):
+    """Test 8: the flag is the layer above the variable, so a decoy the variable names stays empty.
 
-    This is the test a verb that "helpfully" honoured `KUBEMENTAT_PLATFORM_CONFIG_DIR` when the
-    argument was missing — or worse, when it disagreed — would fail: the decoy would gain the tree
-    and this root would gain nothing.
+    This is the test a verb that read the variable beside a named root — or worse, that let the
+    variable answer when the flag disagreed with it — would fail: the decoy would gain the tree and
+    the root that was named would gain nothing. The precedence is `paths.resolve_platform_config_dir`
+    and nothing else, so a verb that spelled it a second way here would be a second owner of one rule
+    and the first place it could rot.
     """
     decoy = tmp_path / "decoy"
     decoy.mkdir()
@@ -344,21 +365,43 @@ def test_the_platform_config_variable_is_ignored_and_the_decoy_stays_empty(tmp_p
     assert (root / ENV_STATIC).is_file()
 
 
-def test_the_verb_does_not_take_config_dir(root, tools):
-    """Test 9: there is no root to point at, so there is no flag that points.
+def test_the_variable_names_the_root_when_no_flag_does(tmp_path, root, tools, monkeypatch):
+    """Test 9: a root can be named by the variable a container already sets, with no flag at all.
 
-    The refusal is a usage error and not a message about configuration: Click does not know the
-    option, which is the same answer `kmt environments list --config-dir` would not give.
+    This is what the verb shares with every verb that reaches a cluster, and it is the case a
+    positional root never served: a scheduled job or a CI container that had already configured its
+    root still had to spell the path onto the command line. `--config-dir` still outranks the
+    variable when both are present, so honouring it here is not a second rule, it is the same rule
+    below the flag.
     """
-    result = run_init(root, "--environment", ENVIRONMENT, "--config-dir", str(root))
+    monkeypatch.setenv("KUBEMENTAT_PLATFORM_CONFIG_DIR", str(root))
 
-    assert result.exit_code == 2
-    assert "No such option" in reported(result)
-    assert not root.exists() or tree_bytes(root) == {}
+    result = run_init_without_root("--environment", ENVIRONMENT, *identity_arguments())
+
+    assert result.exit_code == 0, reported(result)
+    assert (root / MANIFEST).is_file()
+    assert (root / ENV_STATIC).is_file()
+
+
+def test_a_run_that_names_no_root_refuses_and_lays_no_tree_down(root, tools, monkeypatch):
+    """Test 10: with neither spelling, the refusal is the sentence and there is no tree.
+
+    A directory-creating verb that picked a location for itself would be the D11 failure wearing a
+    cleaner shape: a tree laid down wherever the wheel happened to be installed, and nothing printed
+    about it. So the root is refused before `git init`, and the check is the absence of a tree rather
+    than the presence of a sentence.
+    """
+    monkeypatch.delenv("KUBEMENTAT_PLATFORM_CONFIG_DIR", raising=False)
+
+    result = run_init_without_root("--environment", ENVIRONMENT, *identity_arguments())
+
+    assert result.exit_code != 0
+    assert "KUBEMENTAT_PLATFORM_CONFIG_DIR" in reported(result)
+    assert tree_bytes(root) == {}
 
 
 def test_the_verb_writes_nothing_under_the_checkout(root, tools):
-    """Test 10: the root is the argument, so the checkout's own `platform_config/` is untouched.
+    """Test 11: the root is named by a flag, so the checkout's own `platform_config/` is untouched.
 
     `kmt initialize` writes there, and it writes the deployer keypair there too, which is how cluster
     credentials ended up beside the product instead of in the tree that configures them. A

@@ -102,8 +102,10 @@ is worth one owner, and a second implementation of it is how `force` ends up mea
 in two files.
 
 **A run that can be refused is refused before the first byte.** `config_keys` promises that every one
-of its refusals is decided before a single file is written, and a bare `config init <dir> --environment
-E` with no `--gpg-key` and no `--gpg-email` used to break that promise from the outside: the check
+of its refusals is decided before a single file is written, and a bare
+`config init --environment E` with no `--gpg-key` and no `--gpg-email` used to break that promise
+from the outside:
+the check
 landed at step 5, four steps after `git init` had made a repository and two more after the two git
 files had been written, so the refusal left a half-prepared tree behind and the next run read that tree
 as one that had already been initialized. So the identity question is decided ahead of step 1: neither

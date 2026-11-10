@@ -214,7 +214,7 @@ def _manifest_findings(root: Path, findings: list[Finding]) -> None:
     if not path.is_file():
         findings.append(Finding(ERROR, "missing-manifest",
                                 f"{path} is absent, so {root} is not a kubementat configuration "
-                                f"tree. Run kmt config init {root} --environment <environment>.",
+                                f"tree. Run kmt config init --environment <environment> --config-dir {root}.",
                                 path))
         return
 

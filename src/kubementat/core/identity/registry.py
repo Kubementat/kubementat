@@ -301,7 +301,9 @@ def environment_file_missing(environment: str, static_path: Path) -> str:
     return (
         f"environment '{environment}' does not address a cluster: {static_path} does not exist, "
         f"so {constants.CLUSTER_KUBE_CONTEXT_KEY} cannot be read from it. There is no current-context "
-        f"fallback — run kmt config init <dir> --environment {environment}, or name the context "
+        f"fallback — run kmt config init --environment {environment} "
+        f"--config-dir <configuration-root>, or name "
+        f"the context "
         f"in that file."
     )
 

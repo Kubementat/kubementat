@@ -645,7 +645,7 @@ def _require_configuration_root(root: Path,
         raise click.ClickException(
             f"{root} is not a configuration directory. {claim}, so a root that is not there is not a "
             f"tree to write into. Pass the directory kmt config init wrote, or make one: kmt config "
-            f"init <dir> --environment <environment>.")
+            f"init --environment <environment> --config-dir <configuration-root>.")
 
 
 def add_environment(root, environment) -> tuple[InitStep, ...]:
@@ -672,7 +672,8 @@ def add_environment(root, environment) -> tuple[InitStep, ...]:
             f"{root / CONFIG_MANIFEST_FILENAME} is absent, so {root} is not a kubementat "
             f"configuration tree yet. kmt config add-environment adds a layer to a tree and lays no "
             f"tree down: kubementat.yaml is what says which product this tree is for, and one verb "
-            f"writes it. Run kmt config init <dir> --environment <environment> first, then come back "
+            f"writes it. Run kmt config init --environment <environment> --config-dir <configuration-root> "
+            f"first, then come back "
             f"with the environments you want beside that one.")
 
     # No `kubementat_main_dir`, for the reason init_configuration gives: `Config` answers that one
@@ -727,7 +728,8 @@ def add_team(root, environment, team) -> tuple[InitStep, ...]:
             f"{config.env_static_config_path} is absent, so environment {environment!r} is not a "
             f"layer of {root} yet. kmt config add-team puts a team under an environment and lays no "
             f"environment down — the same reason config init refuses --team without --environment. "
-            f"Run kmt config add-environment <dir> {environment} first, then add the team.")
+            f"Run kmt config add-environment {environment} --config-dir <configuration-root> first, "
+            f"then add the team.")
     # Same rule as init: the old trigger directory is refused, not scaffolded beside.
     _refuse_obsolete_team_trigger_dir(config)
 
@@ -808,14 +810,15 @@ def _require_answerable_layer(config: Config, root: Path, environment: str, team
             f"config set and config unset put one answer on one layer that already exists and lay no "
             f"layer down, so a file that is not there is refused and not created — the same "
             f"anti-bootstrap claim kmt config add-environment and kmt config add-team make. Run "
-            f"kmt config add-environment {root} {environment} (or kmt config init {root} "
-            f"--environment {environment}, if this tree has no manifest yet) and come back.")
+            f"kmt config add-environment {environment} --config-dir {root} (or kmt config init "
+            f"--environment {environment} --config-dir {root}, if this tree has no manifest yet) "
+            f"and come back.")
     raise click.ClickException(
         f"{missing[0]} is absent, so team {team!r} is not a layer of environment {environment!r} in "
         f"{root}. config set and config unset put one answer on one layer that already exists and lay "
         f"no layer down, and a team layer that is only half there is read through the environment's "
         f"file — so a hand-made directory is an answer that comes back from the layer below. Run "
-        f"kmt config add-team {root} {environment} {team} first, then answer the key.")
+        f"kmt config add-team {environment} {team} --config-dir {root} first, then answer the key.")
 
 
 def _read_document(path: Path) -> dict:
@@ -874,8 +877,8 @@ def _require_keyable_team_layer(key: str, team, root: Path, environment: str) ->
         f"{Config(environment, None, platform_config_dir=root, preload_configs=False).env_static_config_path}, "
         f"and no other path, so a team-layer "
         f"answer here is read by nothing and leaves the tree with two accounts of the same key. "
-        f"Answer it on the environment instead, with no --team: kmt config set {root} {environment} "
-        f"{key}=…")
+        f"Answer it on the environment instead, with no --team: kmt config set {environment} "
+        f"{key}=… --config-dir {root}")
 
 
 def set_answer(root, environment, key, value, team=None, encrypted=False) -> tuple[InitStep, ...]:
@@ -906,8 +909,9 @@ def set_answer(root, environment, key, value, team=None, encrypted=False) -> tup
     if value is None:
         raise click.ClickException(
             f"{key} = null is not an answer, and this verb writes answers. null is the absence of one, "
-            f"and only one verb should be able to create it: kmt config unset {root} {environment} "
-            f"{key}{' --team ' + team if team else ''} takes it away, and a key that answers nothing "
+            f"and only one verb should be able to create it: kmt config unset {environment} "
+            f"{key}{' --team ' + team if team else ''} --config-dir {root} takes it away, and a key "
+            f"that answers nothing "
             f"should not be held open with a placeholder. To store a real answer, pass a value that "
             f"is not null.")
     config = Config(environment, team, platform_config_dir=root, preload_configs=False)
@@ -1103,8 +1107,8 @@ def generate_answer(root, environment, key, team=None, encrypted=False) -> tuple
             f" --team {team}" if name in (TEAM_STATIC_STEP, TEAM_ENCRYPTED_STEP) else ""
             for name, _ in answering))
         rotation = "; ".join(
-            f"kmt config unset {root} {environment} {key}{scope}, then kmt config set {root} "
-            f"{environment} --generate {key}{scope}"
+            f"kmt config unset {environment} {key}{scope}, then kmt config set {environment} "
+            f"--generate {key}{scope} --config-dir {root}"
             for scope in scopes)
         raise click.ClickException(
             f"{key} already answers in {where}, so --generate refuses and writes nothing. kubementat "

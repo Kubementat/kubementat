@@ -219,7 +219,8 @@ not ticket 5's README work deferred — ticket 5 fixes the README's install-and-
 the section in the same commit as the deletion, or the docs will be wrong for four tickets. What replaces
 it: the stamp is read and stated by every verb, `config validate` refuses what is out of the window and
 warns about a version string, and there is no migration to run — so the operator's pre-upgrade ritual is
-`kmt config validate <dir> <environment>`, then the bump, then validate again.
+`kmt config validate <environment> --config-dir <configuration-root>`, then the bump, then validate
+again.
 
 **`docs/plans/config-code-separation-epic.md` — the parent queue, which is the one that can undo this.**
 It still commissions two phase-9 rows (`:52` "Rename table + `config migrate --dry-run`", `:53` "`config
@@ -569,11 +570,11 @@ notes and accepts.
 
 | Read on a freshly prepared tree | Answer |
 |---|---|
-| `config show <dir> dev`, the `CLUSTER_KUBE_CONTEXT` line | `CLUSTER_KUBE_CONTEXT = null   (default from …)` — the value is named and `null`, not absent |
-| `config show <dir> dev`, the `CLUSTER_KUBECONFIG_PATH` line | the same shape |
-| `config show <dir> dev`, the `GRAFANA_ADMIN_USER` line | `grafadmin` (the seeded default) |
-| `config show <dir> dev`, the `GRAFANA_ADMIN_PASSWORD` line | a 43-character generated token, tagged `generated` |
-| `config validate <dir> dev smoke` | exit 0; stdout `no errors for environment dev (1 warnings)`; stderr exactly one `WARNING: … does not address a cluster yet: …` |
+| `config show dev --config-dir <configuration-root>`, the `CLUSTER_KUBE_CONTEXT` line | `CLUSTER_KUBE_CONTEXT = null   (default from …)` — the value is named and `null`, not absent |
+| `config show dev --config-dir <configuration-root>`, the `CLUSTER_KUBECONFIG_PATH` line | the same shape |
+| `config show dev --config-dir <configuration-root>`, the `GRAFANA_ADMIN_USER` line | `grafadmin` (the seeded default) |
+| `config show dev --config-dir <configuration-root>`, the `GRAFANA_ADMIN_PASSWORD` line | a 43-character generated token, tagged `generated` |
+| `config validate dev smoke --config-dir <configuration-root>` | exit 0; stdout `no errors for environment dev (1 warnings)`; stderr exactly one `WARNING: … does not address a cluster yet: …` |
 
 Row 8 is satisfiable as the spec wants it, today, with no code change.
 
@@ -711,7 +712,7 @@ It is cheaper per stage and it touches no cluster until its last assert, but its
 
 | Where | Why it is wrong |
 |---|---|
-| `README.md:168-182` | the eight `export …` lines plus `uv run kmt initialize dev dev1` — a command the CLI no longer has (T-28). Replace with `kmt config init <dir> --environment … --team … --set …`; check the flags against `src/cli/commands/config.py` and not against this table |
+| `README.md:168-182` | the eight `export …` lines plus `uv run kmt initialize dev dev1` — a command the CLI no longer has (T-28). Replace with `kmt config init --environment … --team … --set … --config-dir …`; check the flags against `src/cli/commands/config.py` and not against this table |
 | `README.md:184-201` | *right* about `CLUSTER_KUBE_CONTEXT` being null, but it tells a human to "edit that file" by hand, which the five-verbs-only rule forbids. The section's job is to send the reader to `kmt config set` and then to `kmt environments list` |
 | `README.md:150-166` | the `AUTOMATION_GIT_*` / `KUBERNETES_DEFAULT_STORAGE_CLASS` / `DOCKER_REGISTRY_BASE_URL` environment-variable block. Nothing in `src/` reads `KUBERNETES_DEFAULT_STORAGE_CLASS`; `BASE_DOMAIN` exists as a configuration *key* (`tekton_utils.py:742`), not as a variable. Presenting keys as variables is the same defect R-7.2 closed |
 | `docs/README_PLATFORM_CONFIG.md:41`, `docs/index-overview.md:47,174` | these name `kmt initialize` in past-tense narrative, which may still be true prose. Re-read before deleting anything: the ticket's rule is *no document sends a reader to a deleted command*, not *no document mentions one* |
@@ -841,7 +842,7 @@ Each of the four retires as follows (line numbers at `303c049`, re-locate by fun
 
 | Where | Today | Becomes |
 |---|---|---|
-| `stages.py:1992` `_set_config_field` — a `jq --arg` write, used by `_declare_the_cluster` (`stages.py:528`) for `CLUSTER_KUBE_CONTEXT` | the §4.2-layer-3 assertion is about a file `jq` wrote | `kmt config set <dir> <env> CLUSTER_KUBE_CONTEXT=...` — and the assertion `environment-names-its-cluster-in-static-json` becomes evidence about kubementat |
+| `stages.py:1992` `_set_config_field` — a `jq --arg` write, used by `_declare_the_cluster` (`stages.py:528`) for `CLUSTER_KUBE_CONTEXT` | the §4.2-layer-3 assertion is about a file `jq` wrote | `kmt config set <env> CLUSTER_KUBE_CONTEXT=... --config-dir <configuration-root>` — and the assertion `environment-names-its-cluster-in-static-json` becomes evidence about kubementat |
 | `stages.py:751` `_null_config_field` — `jq` sets a key to `null` for the §4.3 refusal test | `jq` cannot express the not-yet-named state, so the test mutates a shape `jq` made | `kmt config unset` — that is the real state the product leaves behind |
 | `stages.py:491` `_point_pipeline_at_a_resolvable_image` — one `jq` rewriting `DOCKER_REGISTRY_BASE_URL`, `TEKTON_CI_IMAGE_NAME`, `TEKTON_CI_IMAGE_TAG` after init | three edits after init where init could have answered | init-time answers: `--set` on the `config.init` capability, per R-16.4. Rule for which identity keys get a `--set`: only the ones whose value differs from what the layers already answer; identity that needs no answer stays in `config.py` for the lane's own assertions, not in an argument nobody asked for. |
 | `stages.py:2659` `_seed_grafana_account_row` — a `jq --slurpfile` merging `GRAFANA_USERS` + `GRAFANA_SERVICE_ACCOUNT_TOKEN` into the encrypted file | the lane declares a credential through a path no operator has | `kmt config set --encrypted` (per item; the row is one answer per key) |
@@ -957,7 +958,7 @@ predicted; the budgets this lane was given were guesses and came out roughly rig
 `README.md`'s quickstart (`~:165-210`) still tells a reader to export the eight deleted
 `KUBEMENTAT_*` variables and run `uv run kmt initialize dev dev1` — both deleted by this epic, the
 command unknown to the CLI (T-28). `7d5fbdd` fixed other prose and missed the quickstart. Rewrite the
-section as the actual bootstrap: `kmt config init <dir> --environment ... --team ... --set ...` (the
+section as the actual bootstrap: `kmt config init --environment ... --team ... --set ... --config-dir ...` (the
 flags the command actually takes, checked against `src/cli/commands/config.py`), the cluster-naming
 sentence `init` prints (R-6.3), `kmt environments list`, then `kmt install`. Sweep the rest of the docs
 the same way (the epic's docs row named `docs/README_PLATFORM_CONFIG.md:88-123`, `docs/README_TEKTON.md`,

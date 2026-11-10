@@ -554,8 +554,9 @@ def _cluster_manager_email(config: Config) -> str:
         raise click.ClickException(
             f"{CLUSTER_MANAGER_EMAIL_KEY} is not set in {config.env_static_config_path}. Both"
             f" ClusterIssuers register an ACME account with it, so an issuer applied without one"
-            f" cannot issue a certificate. Put the address in that file -- kmt config set <dir>"
-            f" <environment> {CLUSTER_MANAGER_EMAIL_KEY}=<address> is the verb, and nothing rewrites"
+            f" cannot issue a certificate. Put the address in that file -- kmt config set <environment>"
+            f" {CLUSTER_MANAGER_EMAIL_KEY}=<address> --config-dir <configuration-root> is the verb, and"
+            f" nothing rewrites"
             f" an answer that is there -- and run this command again.")
     return value
 

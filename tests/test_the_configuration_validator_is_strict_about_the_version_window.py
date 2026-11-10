@@ -68,7 +68,7 @@ def stamped_tree(tmp_path, *, schema=None, constraint=constants.CONFIG_KUBEMENTA
 def run_validate(root):
     """The verb itself, with both streams kept readable for an assertion about what was *said*."""
     result = CliRunner(mix_stderr=False).invoke(
-        config_command.config, ["validate", str(root), ENVIRONMENT])
+        config_command.config, ["validate", "--config-dir", str(root), ENVIRONMENT])
     assert not isinstance(result.exception, Exception) or result.exit_code != 0, \
         f"validate crashed instead of answering: {result.exception!r}"
     return result

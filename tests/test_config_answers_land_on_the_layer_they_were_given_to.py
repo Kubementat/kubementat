@@ -147,8 +147,13 @@ def run_verb(*arguments):
     how that answer reaches a terminal. The distinction is the whole test for the refusals, so a raised
     `ValueError` cannot hide behind `exit_code == 1`.
     """
+    # The root is the caller's second argument and it travels as `--config-dir`, which is the
+    # only spelling the surface gives a root, so what is checked here is the command somebody can
+    # actually type and not a private argv this file invented.
+    verb, root, *rest = arguments
     result = CliRunner(mix_stderr=False).invoke(
-        config_module.config, [str(argument) for argument in arguments])
+        config_module.config,
+        [verb] + [str(argument) for argument in rest] + ["--config-dir", str(root)])
     if result.exception is not None and not isinstance(result.exception, SystemExit):
         raise result.exception
     return result

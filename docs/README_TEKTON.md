@@ -123,7 +123,8 @@ from when configuration lived inside the product's own tree, and they were also 
 `kmt config init` refuse a checkout it had shipped itself.
 
 So a working tree is a directory you point kubementat at, created by
-`kmt config init <dir> --environment <env> --team <team>`. Everything that used to live under
+`kmt config init --environment <env> --team <team> --config-dir <configuration-root>`. Everything
+that used to live under
 `platform_config/dev/` is written there instead, and an environment that already exists is copied from
 whichever configuration repository owns it — not from this checkout, which has nothing to copy.
 

@@ -211,7 +211,8 @@ def read_uninstall_plan(ctx) -> dict:
         raise click.ClickException(
             f"No environment configuration at {config.env_static_config_path}."
             f" Uninstall reads the namespaces it deletes from that file, so it cannot guess"
-            f" them. Run kmt config init <dir> --environment {environment}, or create"
+            f" them. Run kmt config init --environment {environment} --config-dir <configuration-root>, "
+            f"or create"
             f" the file for the environment."
         )
     present = set(kubernetes_utils.list_namespaces())

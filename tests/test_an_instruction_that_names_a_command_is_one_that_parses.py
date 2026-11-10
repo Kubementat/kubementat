@@ -12,10 +12,17 @@ ACME contact and ends with the verb that fixes it, and it spelled the answer as
 
 which is Click's **two positionals**, and the command declares one. Typing it does not set the key; it
 answers `Error: Got unexpected extra argument`, measured. `kmt config set` takes `KEY=VALUE` as a single
-answer (`cli/commands/config.py:295`, `metavar='[KEY=VALUE]'`), and both
-`docs/README_PLATFORM_CONFIG.md:131` and `kubementat.errors.CiImageNotConfiguredError`, raised from
-`automations/ci.py`, already spell it that way. The guard
-here is that shape, checked by running what the refusal printed rather than by searching for an `=`.
+answer (`metavar='[KEY=VALUE]'`), and both `docs/README_PLATFORM_CONFIG.md` and
+`kubementat.errors.CiImageNotConfiguredError`, raised from `automations/ci.py`, already spell it that
+way. The guard here is that shape, checked by running what the refusal printed rather than by searching
+for an `=`.
+
+The same guard catches the root's spelling now that `--config-dir` is a flag on every verb here: a
+sentence that types the directory as the first positional is a usage error, and a sentence that types
+the flag without a value is answered by the next token and so reads as an option instead of a refusal.
+The placeholder set below is what keeps either spelling from rotting quietly — an unrecognised
+placeholder fails the run, because an instruction that stops at a `<something>` nobody can fill in is
+not an instruction.
 
 A usage error is what fails this file. A refusal that objects to the directory is a pass, because that
 is the command recognising its own arguments and disagreeing about the tree — a different sentence from
@@ -55,6 +62,7 @@ SPLIT_ANSWER = re.compile(
 
 SUBSTITUTIONS = {
     "<dir>": lambda root: str(root),
+    "<configuration-root>": lambda root: str(root),
     "<environment>": lambda root: ENVIRONMENT,
     "<env>": lambda root: ENVIRONMENT,
     "<address>": lambda root: "someone@example.test",

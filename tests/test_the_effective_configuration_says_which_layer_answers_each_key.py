@@ -164,7 +164,8 @@ def answers_by_key(root, team=None) -> dict:
 
 
 def run_show(root, team=None) -> str:
-    argv = ["show", str(root), ENVIRONMENT] + ([team] if team else [])
+    argv = (["show", ENVIRONMENT] + ([team] if team else [])
+            + ["--config-dir", str(root)])
     result = CliRunner(mix_stderr=False).invoke(config_module.config, argv)
     assert result.exit_code == 0, result.output + result.stderr
     return result.stdout
@@ -434,7 +435,8 @@ def test_show_addresses_no_cluster(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", refuse)
 
     runner = CliRunner(mix_stderr=False)
-    shown = runner.invoke(config_module.config, ["show", str(root), ENVIRONMENT])
+    shown = runner.invoke(config_module.config,
+                          ["show", ENVIRONMENT, "--config-dir", str(root)])
     assert shown.exception is None and shown.exit_code == 0, shown.output + shown.stderr
 
 
@@ -449,7 +451,8 @@ def test_a_missing_layer_file_is_refused_the_way_config_set_refuses_it(tmp_path)
     (root / ENVIRONMENT / "static.encrypted.json").unlink()
     before = snapshot(root)
 
-    result = CliRunner(mix_stderr=False).invoke(config_module.config, ["show", str(root), ENVIRONMENT])
+    result = CliRunner(mix_stderr=False).invoke(
+        config_module.config, ["show", ENVIRONMENT, "--config-dir", str(root)])
 
     assert result.exit_code != 0
     assert "static.encrypted.json" in result.stderr
@@ -460,7 +463,7 @@ def test_a_missing_layer_file_is_refused_the_way_config_set_refuses_it(tmp_path)
     # environment's pair underneath the team's, so a tree whose environment layer is incomplete has to
     # be refused for the same reason and not answered from a default under a team's own file.
     team_scoped = CliRunner(mix_stderr=False).invoke(
-        config_module.config, ["show", str(root), ENVIRONMENT, TEAM])
+        config_module.config, ["show", ENVIRONMENT, TEAM, "--config-dir", str(root)])
     assert team_scoped.exit_code != 0
     assert "add-environment" in team_scoped.stderr
     assert snapshot(root) == before

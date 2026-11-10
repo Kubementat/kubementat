@@ -686,7 +686,8 @@ def test_a_locked_layer_file_is_rendered_as_one_error_line_and_never_as_a_traceb
     root_group = KmtGroup(name="kmt")
     root_group.add_command(config_group)
 
-    result = CliRunner(mix_stderr=False).invoke(root_group, ["config", "show", str(root), ENVIRONMENT])
+    result = CliRunner(mix_stderr=False).invoke(
+        root_group, ["config", "show", ENVIRONMENT, "--config-dir", str(root)])
 
     assert result.exit_code == 1, f"{result.exception}; {result.output}"
     refused_by_name(result.stderr, locked)
