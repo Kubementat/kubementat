@@ -9,15 +9,8 @@ deployer_ssh_key.pub
 gpg_private.key
 gpg_public_key.gpg
 cli/commands/__pycache__
-# Generated trigger config is written to and read from
-# `platform_config/{environment}/{team}/triggers/` — see decision 2 of
-# docs/plans/finish-python-migration.md. Under `tekton_ci/triggers/` the only thing that belongs to
-# the product is `templates/`, the generator's input; anything else there is output a previous
-# version of kubementat wrote into the checkout, so it is not for committing.
-tekton_ci/triggers/**
-!tekton_ci/triggers/templates/
-!tekton_ci/triggers/templates/**
-platform_config/dev/smoke/
+# Generated trigger config is written under `<configuration-directory>/<environment>/<team>/tekton/triggers/`,
+# never into this checkout, so nothing under `tekton_ci/triggers/` is a thing git has to be told to skip.
 tekton_ci/pipeline-runs/smoke/
 .aider*
 *.egg-info/

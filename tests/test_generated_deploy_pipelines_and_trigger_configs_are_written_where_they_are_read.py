@@ -605,20 +605,18 @@ def test_a_generated_file_carries_no_comment_from_its_template(checkout):
                    for line in path.read_text().splitlines())
 
 
-def test_generated_configuration_is_not_invisible_to_a_git_status(checkout):
-    """Both halves of one decision, checked with the rule `git status` runs.
+def test_generated_configuration_is_invisible_to_nothing_because_it_is_written_elsewhere():
+    """The output moved out of the checkout, so no ignore rule is what keeps it reviewable.
 
-    `.gitignore` ignores everything under `tekton_ci/triggers/` except `templates/`, precisely
-    because the output moved out of the tree that is ignored and into the tree that is
-    reviewed. `git check-ignore` is that rule rather than an opinion about it, so it is what is
-    asked — and running the generator into this checkout to find out would dirty the tree the test
-    is judging.
+    Generated trigger manifests land under the configuration directory's team layer, and generated deploy
+    pipelines under the environment's `tekton/pipelines`, so neither is a path in this tree that
+    `git status` could be told to skip. The assertion is that this checkout ignores nothing that could
+    hold generated configuration — a rule that hid such a file would be the one thing that could.
     """
-    ignored = subprocess.run(["git", "check-ignore", "-q", "tekton_ci/triggers/fixture/"
-                              "nginx-github-event-listener.yml"], cwd=str(REPO_ROOT))
-    assert ignored.returncode == 0, "the templates directory is the half that stays ignored"
+    for path in ("tekton_ci/triggers", "tekton_ci/triggers/fixture/x.yml",
+                 "tekton_ci/pipeline-runs", "tekton_ci/pipelines"):
+        ignored = subprocess.run(["git", "check-ignore", "-q", path], cwd=str(REPO_ROOT))
+        assert ignored.returncode == 1, f"{path} would be invisible to a git status"
 
-    for generated in (f"{TEAM_TRIGGER_DIR}/{APP}/{APP}-github-event-listener.yml",
-                      f"{TEAM_PIPELINE_DIR}/deploy-pipeline-{APP}.yml"):
-        visible = subprocess.run(["git", "check-ignore", "-q", generated], cwd=str(REPO_ROOT))
-        assert visible.returncode == 1, f"{generated} would be invisible to a git status"
+    assert not (REPO_ROOT / "tekton_ci" / "triggers").exists(), \
+        "the generator writes the team layer of the configuration directory, not this checkout"
