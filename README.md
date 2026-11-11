@@ -1,7 +1,11 @@
 # Kubementat
 
 Kubementat allows developers to quickly get started with their kubernetes environment by providing an opinionated framework for kubernetes automation.It contains code for automating installation and setup of kubernetes environments and running pipelines via `tekton CI`.
-In addition it contains a complete Open Source standard toolset for monitoring (prometheus, grafana), log aggregation & analysis (loki, grafana) and an optional lighweight service mesh (linkerd).
+In addition it installs a complete Open Source standard toolset: monitoring (prometheus, grafana, and the
+blackbox and helm exporters beside them), log aggregation and analysis (loki and alloy), the routing pair
+(traefik with cert-manager in front of it), a secret store (openbao) and a compliance scan (polaris).
+It installs no service mesh. Linkerd is swept from a cluster that really has it and installed by nothing,
+and nginx-ingress left on 2026-10-28.
 It also delivers examples on how to create tasks & pipelines for building and deploying apps on k8s.
 
 __The general goal of this project is to allow developers/operators to get up and running; aka productive; with their kubernetes cluster as easy and comfortable as possible.__
@@ -17,46 +21,77 @@ If you are interested in the naming of this project, you can have a look [here](
 - runs from a local or raspberry pi setup up to a Kubernetes cluster in the Cloud
 
 ## Included platform tools
-- [Tekton + Tekton Triggers + Tekton Dashboard](https://tekton.dev/)
-- [Helm](https://helm.sh/) &amp; [Helmfile](https://github.com/helmfile/helmfile)
-- [Grafana](https://grafana.com/grafana/)
-- [Prometheus](https://prometheus.io/)
-- [Loki](https://grafana.com/oss/loki/)
+
+The releases a run applies are declared in the helmfile that ships inside `kmt`, and their versions come
+from the release index; both are configuration, so both are answered over by the tree.
+
+- [Tekton Pipelines](https://tekton.dev/), with Triggers, the Dashboard and the resolvers
+- Helm and Helmfile, which is how every release arrives
+- [Traefik](https://traefik.io/) and [cert-manager](https://cert-manager.io/), applied by `kmt routing install`
+- [Prometheus](https://prometheus.io/), [Grafana](https://grafana.com/grafana/),
+  [Loki](https://grafana.com/oss/loki/) and [Alloy](https://grafana.com/docs/alloy/)
+- [OpenBao](https://openbao.org/) and [Polaris](https://www.fairwinds.com/polaris)
+
+`cluster-cronjobs`, `goldilocks` and `vpa` are namespaces kubementat creates, not releases it applies, and
+`kmt component install` refuses them for exactly that reason.
 
 ## Sub-directories
 
-Each of the given sub-directories contains additional README*.md files that document the actual component. For further details dive into the sub-directories.
+Where things are. `kmt` reads no path this checkout does not have, so this is not a tour of a file tree;
+it is what the product's own code addresses.
 
-- __docs__: Documentation for kubementat
-- __src/cli__: the `kmt` command-line tool — the entry point every verb in this product is defined in.
-  There is no top-level `cli/`; the package is `src/cli`.
-- __docker_files__: All custom Dockerfiles used for creating docker images and running CI tasks
-- __examples__: Various examples of scripts, helm charts and tekton resources
+- __src/cli__: the `kmt` command-line tool — the entry point every verb in this product is defined in, and
+  the only caller of the library. There is no top-level `cli/`; the package is `src/cli`.
+- __src/kubementat__: the Python library — automation, configuration, cluster resolution, everything the
+  CLI delegates to. It is imported and never exec'd, and it raises its refusals without knowing how they
+  will be printed.
+- __src/kubementat/core/assets__: the **shipped data**: `templates/environment/`, `values/` (the helmfile
+  manifest and the default values files it names) and `tekton_ci/` without `pipeline-runs/`. It is read
+  from inside the package, so an installed `kmt` needs no checkout to find it. Editing one of these files
+  changes what the product does; no command ever writes here.
+- __docs__: the documentation, the specifications under `docs/specifications`, the plans and censuses
+  under `docs/plans`, and the per-component READMEs.
+- __docker_files__: the Dockerfiles the CI images are built from.
+- __examples__: example helm charts, Kubernetes manifests and tekton resources.
   - `examples/helm_charts/nginx-example`: the example chart the nginx-example deployment installs.
     There is no `helm_charts/nginx-example`.
-- __helm_charts__: a directory this checkout keeps empty. Nothing in `src/` installs a chart out of
-  it, and the example charts live under `examples/helm_charts/`.
-- __src/kubementat__: the Python library — automation, configuration, cluster resolution, everything  
-  the CLI delegates to.
-- __src/kubementat/core/assets__: the **shipped data** — `assets/templates/` (7 files), `assets/values/`
-  (11 files: the helmfile manifest and the ten default values files it names) and
-  `assets/tekton_ci/` without `pipeline-runs/` (37 manifests). It is read from inside the package, so an
-  installed `kmt` needs no checkout to find it (R-12.1). Editing one of these files changes what the
-  product does; no command ever writes here.
-- __tekton_ci__: `pipeline-runs/` only — the run manifests this checkout holds as **output**.
-  The Tasks and Pipelines the cluster is given, and the generator templates they are built from, are
-  product data and ship inside the installed `kmt` (R-12.1, `kubementat/core/assets/tekton_ci/`).
-      - tunneling (also implemented into the kmt cli)
-      - kubernetes helpers
-      - helm helpers
-  - __user_management__: Managing users and groups on k8s clusters
-  - __secret_management__: Managing secrets in Kubernetes and Kubementat
+- __helm_charts__: a directory this checkout keeps empty. Nothing in `src/` installs a chart out of it,
+  and the example charts live under `examples/helm_charts/`.
+- __tekton_ci__: `pipeline-runs/` only — the run manifests this checkout holds as **output**. The Tasks
+  and Pipelines the cluster is given, and the generator templates they are built from, are product data
+  and ship inside the installed `kmt` under `src/kubementat/core/assets/tekton_ci/`.
+- __tests__: the unit suite (`test_*.py`, no cluster needed), the shims and fixtures it runs against, and
+  `tests/e2e/` for the VM-based lanes. A test name says what the test proves — `tests/README.md` explains
+  the convention and `tests/test_test_name_conventions.py` holds that line.
+- __tools__: repository scripts. None of them is product code, and no command execs any of them.
+
+**There is no `scripts/` directory.** Every verb that once shelled out to one is Python in
+`src/kubementat/` now: the user management, the secrets, the tunnels, the CI container, the component
+applies. The last shipped script was deleted rather than left standing beside a Python implementation of
+the same work, which is why `kmt install`'s dependency check carries a rule about shipped scripts that
+currently has no referent — and will catch a re-added one.
 
 ## Git-Crypt
-You need to unlock the repository to be able to use \*.encrypted.\* files in the repository (for more details see: docs/README_GIT_CRYPT.md).
-```
-git-crypt unlock
-```
+
+**This repository holds no encrypted files, so there is nothing to unlock here.** The root
+`.gitattributes` is deleted, `platform_config/` is not in the checkout, and what git-crypt protects is the
+**configuration directory** you prepare with `kmt config init` — a tree of your own, not a subdirectory of
+this one. git-crypt is initialised there and only there, by that verb, in an order that declares
+`*.encrypted.*` before the first encrypted file is written, registers the deployer's key as a
+collaborator, and exports the symmetric key at mode 0600.
+
+Two things follow, because the old habit of running `git-crypt unlock` here is now aimed at the wrong
+tree:
+
+- **Reading is not the same act.** kubementat reads the configuration file it is given and never runs
+  `git-crypt unlock`. A file that comes back as ciphertext is refused by name, and unlocking it belongs
+  to whoever owns that directory — an operator at the prompt, or the pipeline's checkout step.
+- **The symmetric key is the environment's whole credential.** `init` writes it beside the other key
+  material, gitignored, and says so when it does: nothing can regenerate it and nothing can rotate it,
+  so losing it loses every credential that environment holds.
+
+The commands `config init` wraps, so a reader can tell which one a failure is actually about, are written
+out in [docs/README_GIT_CRYPT.md](docs/README_GIT_CRYPT.md).
 
 ## Local Environment Prerequisites
 
@@ -78,24 +113,35 @@ kubectl run ubuntu-ci -i --tty --image="docker.io/julianweberdev/ubuntu-ci-minim
 ```
 
 ### Or: The hard manual way
+
+These are what `kmt install` checks before it touches a cluster, so a missing one is a sentence naming the
+binary and not a failure three minutes later:
+
 ```
-# install git-crypt
-# install python & pip
-# install jq          <- still needed: not by the Python code, but by the one shipped script that
-#                        parses with it, scripts/utilities/kubernetes/retrieve_node_addresses.sh
-# install gnugpg
+# install python3 & pip                                  (what the kmt cli runs on)
+# install git
+# install gpg            <- the deployer keypair `config init` writes is made through it
 # install kubectl
 # install helm
 # install helmfile
 # install helm diff plugin -> helm plugin install https://github.com/databus23/helm-diff --verify=false
 #                        helm 4 verifies plugin sources and helm-diff ships no provenance, so the plain command fails
 # install tkn cli
-# install linkerd cli
 ```
+
+`git-crypt` is wanted as well, by one verb only: `kmt config init` initialises it inside the configuration
+directory. Reading that directory afterwards needs no git-crypt, because kubementat reads files and never
+unlocks them.
+
+`jq` and `yq` are not on the list, and they are not missing from it. Both were needed by shipped shell
+scripts, the last of which this repository has deleted, and the same answers come out of the Kubernetes
+class objects and `yaml.safe_load` now. A tool no part of the product runs is not a dependency, and
+asking the check to verify one is asking it to verify something that does not exist.
 
 ## Installation / Getting Started
 For installing kubementat on your kubernetes cluster (either running in the Cloud, a raspberry pi, on-prem...)
 we need to take some initial configuration steps.
+- Prepare the configuration directory that says what the environments are
 - Initialize and configure the git repository you will use for running and developing with kubementat
 - Configure the docker registry you will use
 - Configure kubernetes specific settings
@@ -111,7 +157,17 @@ git config --global user.name "Agent Smith"
 ```
 
 ### Install the python requirements via uv
-The kmt cli serves as a central tool for managing your kubementat processes.
+The kmt cli serves as a central tool for managing your kubementat processes. Two installs, and they differ
+only in what the checkout is for:
+
+- **from a checkout**, which is what you want if you are changing kubementat: `uv sync --all-extras`, then
+  everything runs as `uv run kmt …`.
+- **as a tool**, which is what you want if you are only operating a cluster: `uv tool install kubementat`
+  or `pipx install kubementat`, then the command is just `kmt …`.
+
+A checkout is not needed for the second one, and that is not a convenience — since v2 the configuration
+directory is a tree of its own, so nothing about your environments depends on where kubementat happens to be
+installed from. The rest of this document writes `uv run kmt`; drop the prefix if you installed the tool.
 
 ```
 uv sync --all-extras
@@ -120,25 +176,69 @@ uv sync --all-extras
 uv run kmt --help
 ```
 
-## Platform Configuration
-The whole kubementat stack is configured via the platform_config directory.
-The directories structure is as follows:
-- ENVIRONMENT - The kubernetes cluster level (e.g. dev, prod)
-  - __static.json__ - contains static configuration for the environment/cluster
-  - __static.encrypted.json__ - contains credentials for the environment/cluster
-  - 'tekton' directory - contains team specific pipelines and tasks in the according directories (optional)
-  
-  - TEAM - Per team configurations (e.g. dev1, smoke)
-    - __static.json__ - contains static configuration for the team
-    - __static.encrypted.json__ - contains credentials for the team
-    - 'tekton' directory - contains team specific pipelines and tasks in the according directories (optional)
-    - contains helm deployment configurations for the according team namespace
+The verbs are grouped, not flat: `kmt config …`, `kmt environments …`, `kmt kubernetes …`, `kmt helm …`,
+`kmt tekton …`, `kmt component …`, `kmt routing …`, `kmt tunnel …` and `kmt users …`, beside the commands that
+act on a whole cluster (`install`, `uninstall`, `setup-secrets`, `setup-docker-registry-access`,
+`run-ci-container`). `uv run kmt --help` prints the surface, and every verb answers `--help` with the
+refusals it makes.
 
-For tekton pipelines and tasks the load order when executing `kmt tekton setup-pipelines` is as follows:
-- Kubementat default resources
-- Environment resources (in platform_config/{ENVIRONMENT_NAME}/tekton)
-- Team resources (in platform_config/{ENVIRONMENT_NAME}/{TEAM_NAME}/tekton)
-When resources with the same name occur, they will be overwritten in that order also. So the team resource overrides the environment resources overwrites the default resource.
+## The configuration directory
+
+The stack is configured by an **external configuration directory**: a directory of your choosing that is a
+git repository in its own right, prepared by `kmt config init`. It is not a subdirectory of this checkout,
+nothing is copied into it, and no command reads its configuration out of the tree kubementat was installed
+from.
+
+It is **named, never located**, by two spellings and no third: `--config-dir PATH`, which outranks
+`$KUBEMENTAT_PLATFORM_CONFIG_DIR`, the spelling a container or a scheduled run already carries. With
+neither, the command says so and stops. That is not pedantry — a root found by proximity is a wheel
+installing into whichever tree it happened to land in.
+
+```
+uv run kmt config init --environment dev --team dev1 --gpg-email you@example.com --config-dir ~/kmt-config
+```
+
+leaves a tree like this:
+
+```
+~/kmt-config/
+├── kubementat.yaml                       the stamp: which product this tree was prepared for, and which
+│                                         schema its answers mean. kubementat reads this before it
+│                                         trusts anything else in the tree.
+├── .gitattributes                        *.encrypted.* filter=git-crypt diff=git-crypt
+├── .gitignore                            the key files below, so none of it reaches git
+├── deployer_ssh_key{,.pub}               the deploy keypair; the public half goes to the git host
+├── gpg_private.key / gpg_public_key.gpg  the git-crypt collaborator's pair
+├── git_crypt_symmetric.key               mode 0600, cannot be regenerated, cannot be rotated
+├── dev/
+│   ├── static.json                       the environment layer: what this cluster is
+│   ├── static.encrypted.json             its credentials, encrypted by the filter above
+│   ├── kubeconfig.encrypted.yaml         optional, and it outranks $KUBECONFIG. See below.
+│   ├── tekton/{tasks,pipelines}          resources this environment owns
+│   └── dev1/
+│       ├── static.json                   the team layer, which answers over the environment layer
+│       ├── static.encrypted.json
+│       └── tekton/{tasks,pipelines,pipeline-runs,triggers}
+└── prod/…                                another environment, one cluster each
+```
+
+Every key is answered by exactly one of three things — the team's file, the environment's, or kubementat's
+shipped default, in that order — and `kmt config show <environment>` is the only command that prints the
+result: each key, which of the three answered it, and whether a default did. A key you never answered is
+not missing. `kmt config validate` reads the whole tree and returns one verdict instead of failing on the
+first fault, and that is the verb to run before anything else touches a cluster.
+
+Resources load in this order when `kmt tekton setup-pipelines` runs:
+
+1. kubementat's own defaults, which ship inside the installed `kmt`
+2. `<config-dir>/<environment>/tekton/`
+3. `<config-dir>/<environment>/<team>/tekton/`
+
+A resource of the same name in a later line wins over an earlier one, so the team's Task replaces the
+environment's, which replaces the shipped one.
+
+Everything else about a tree is below: which cluster an environment is, where its kubeconfig lives, which
+git remote the pipelines pull from. The specification of all of it is `docs/README_PLATFORM_CONFIG.md`.
 
 ### Git Repository
 - This project is intended as a template to build your own customizations on top.
@@ -172,10 +272,9 @@ When resources with the same name occur, they will be overwritten in that order 
 
 ### Generate initial configuration
 
-`kmt config init` prepares a configuration directory. It is the only verb that lays down an
-environment, and the directory it lays it down in is the one `--config-dir` names — or the one
-`$KUBEMENTAT_PLATFORM_CONFIG_DIR` names, which is the spelling a container or a scheduled run already
-has:
+`kmt config init` is the only verb that lays down an environment. The spelling that names the root is the
+one above; this is what it writes, and it is idempotent — a second run writes no byte, commits nothing, and
+names the step it skipped:
 
 ```
 uv run kmt config init --environment dev --team dev1 --gpg-email you@example.com --config-dir ~/kmt-config
@@ -188,10 +287,12 @@ It commits its own work once. It copies nothing out of the checkout, so the dire
 on this repository staying where it is.
 
 What the tree answers comes from that directory and from kubementat's own shipped defaults. It does
-**not** come from your shell environment, and an `export` of a key name will not answer it; the
-variables kubementat reads are only `KUBEMENTAT_HOME`, `KUBEMENTAT_PLATFORM_CONFIG_DIR`, `KUBECONFIG`
-and `ENVIRONMENT`, and each of those points somewhere rather than configuring something. So answer
-the keys your setup genuinely needs with the verb that writes them:
+**not** come from your shell environment: exporting a key's name does not answer that key. Every variable
+kubementat reads *points* and none of them configures — `KUBEMENTAT_HOME` and
+`KUBEMENTAT_PLATFORM_CONFIG_DIR` for the two roots, `KUBECONFIG` and `ENVIRONMENT` for the machine and the
+environment, and `CLUSTER_KUBE_CONTEXT` / `CLUSTER_KUBECONFIG_PATH`, which are the layer above what the
+environment declares and exist so a CI task can state a cluster from outside. So answer the keys your setup
+genuinely needs with the verb that writes them:
 
 ```
 uv run kmt config init --environment dev \
@@ -268,8 +369,8 @@ uv run kmt environments list --config-dir ~/kmt-config
 
 The name is not a style choice. A prepared tree declares `*.encrypted.*` for git-crypt, so a kubeconfig
 called anything else lands in that directory as plaintext, and nothing will complain about it — git-crypt
-simply stops touching the file. If you are working in a locked checkout, run `git-crypt unlock` there
-before reading it; kubementat reads configuration and never unlocks anything.
+simply stops touching the file. If that directory is locked in a checkout, run `git-crypt unlock` in that
+directory before reading it; kubementat reads configuration and never unlocks anything.
 
 That file is *yours*: kubementat reads it and never writes it, and `config init` knows to expect one
 there. Deleting it puts you back at step 4, which is why removing it is a safe way to test that the
