@@ -59,8 +59,8 @@ def tekton():
                 help='Run a tekton pipeline. PIPELINE_RUN_IDENTIFIER is either a PATH or an '
                    'IDENTIFIER: an absolute path, or any argument that contains a path separator and '
                    'exists there, is used as it was given; a bare name resolves under the team\'s '
-                   'platform_config/<environment>/<team>/tekton/pipeline-runs, and global/<name>.yml '
-                   'resolves under tekton_ci/pipeline-runs. Without PIPELINE_RUN_IDENTIFIER, the runs '
+                   'tekton/pipeline-runs inside the configuration directory, and global/<name>.yml '
+                   'resolves under tekton_ci/pipeline-runs at the output root. Without PIPELINE_RUN_IDENTIFIER, the runs '
                    'this team can start are listed and nothing is applied.')
 @click.argument('environment',envvar='ENVIRONMENT')
 @click.argument('team',envvar='TEAM')

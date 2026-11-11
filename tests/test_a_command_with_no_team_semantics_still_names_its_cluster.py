@@ -99,7 +99,7 @@ def test_a_team_scoped_read_through_the_same_context_names_the_team_it_was_given
         context.config.get("team_static")
 
     message = str(refused.value)
-    assert f"platform_config/{ENVIRONMENT}/<team>" in message, message
+    assert f"`{ENVIRONMENT}/<team>` layer of the configuration directory" in message, message
     assert "team_static" in message, "the refusal has to say which read it stopped"
     assert "/None/" not in message, message
 
@@ -124,7 +124,7 @@ def test_a_service_that_needs_a_teams_configuration_refuses_the_context_it_was_g
         context.require_team("creating a team account")
 
     message = str(refused.value)
-    assert f"platform_config/{ENVIRONMENT}/<team>" in message, message
+    assert f"`{ENVIRONMENT}/<team>` layer of the configuration directory" in message, message
     assert "--team" in message, message
     assert "creating a team account" in message, "the refusal has to say what it stopped"
 

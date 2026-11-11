@@ -1,4 +1,4 @@
-"""`kmt environments list` — what environments this `platform_config` has, and which cluster each addresses.
+"""`kmt environments list` — what environments the configuration directory has, and which cluster each addresses.
 
 One command, and no cluster contacted. The name follows what
 exists: kubementat owns no object called a cluster, so the inventory *is*
@@ -40,7 +40,7 @@ CONTEXT_NOT_DECLARED = "(not declared)"
 
 
 @click.group(name='environments',
-             help='List the environments this platform_config has, and the cluster each addresses.')
+             help='List the environments this configuration directory has, and the cluster each addresses.')
 def environments():
     pass
 

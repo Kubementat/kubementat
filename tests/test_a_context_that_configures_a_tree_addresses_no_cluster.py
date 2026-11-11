@@ -94,4 +94,4 @@ def test_the_configuration_context_still_refuses_a_team_as_usually(tmp_path, mon
     assert Context.for_configuration(ENVIRONMENT, None).config.team is None
     with pytest.raises(TeamNotSuppliedError) as refused:
         Context.for_configuration(ENVIRONMENT, None).require_team("a namespace")
-    assert "platform_config" in str(refused.value)
+    assert f"`{ENVIRONMENT}/<team>` layer of the configuration directory" in str(refused.value)

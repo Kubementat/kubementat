@@ -103,7 +103,7 @@ def preflight_tekton_api_version(kubernetes_utils, config) -> None:
         f"The cluster serves no resources under {config.TEKTON_API_GROUP}/{config.TEKTON_API_VERSION}, "
         "and kubementat speaks only that API version. Nothing was applied. Install or upgrade "
         f"Tekton Pipelines with `kmt install <environment> <team>`, or set "
-        f"TEKTON_VERSION_PIPELINE in platform_config/<environment>/static.json to a version that "
+        f"TEKTON_VERSION_PIPELINE in `<environment>/static.json` of the configuration directory to a version that "
         f"serves {config.TEKTON_API_GROUP}/{config.TEKTON_API_VERSION} (Pipelines 1.0 and newer). "
         f"The manifests kubementat ships, and the ones under examples/tekton_ci/, are written for "
         f"it, and so is this code."
@@ -198,6 +198,6 @@ def preflight_installed_tekton_api_versions(kubernetes_utils, config,
             f"Either the install did not land its manifests for {entry['component']}, or that "
             f"release does not serve {group_version} ({entry['supported']}). Install or upgrade "
             f"with `kmt install <environment> <team>`, or set {entry['pin_key']} in "
-            f"platform_config/<environment>/static.json to a version that serves {group_version}, "
+            f"`<environment>/static.json` of the configuration directory to a version that serves {group_version}, "
             f"then run the install again. There is no fallback API version and no override."
         )

@@ -220,8 +220,8 @@ def test_a_command_that_reads_team_config_refuses_a_run_that_named_none(command,
         "crash and not a refusal"
     refused = result.output
     assert "--team" in refused, refused
-    assert "platform_config/dev/<team>" in refused, \
-        f"the refusal did not name the directory it wanted: {refused}"
+    assert "`dev/<team>` layer of the configuration directory" in refused, \
+        f"the refusal did not name the layer it wanted: {refused}"
     assert "Traceback" not in refused, \
         f"the refusal reached the operator as a stack trace: {refused}"
 

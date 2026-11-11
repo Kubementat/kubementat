@@ -40,7 +40,8 @@ def uninstall(ctx, environment, yes):
         raise click.UsageError(
             "uninstall requires confirmation, but stdin is not a terminal. "
             "Re-run with --yes (-y) to uninstall kubementat without prompting.")
-    # Environment-scoped: the sweep covers every team `platform_config/{environment}` configures,
+    # Environment-scoped: the sweep covers every team the environment's layer of the configuration
+    # directory configures,
     # so passing one team along would be a claim about the install that is not true. The `Context`
     # the decorator resolved is all this command hands the uninstall slice: a cluster to sweep, and
     # no team, whose shape is decided by the command and not defaulted from the caller's context.
@@ -49,7 +50,9 @@ def uninstall(ctx, environment, yes):
 
 # --------------------------------------------
 # SETUP SECRETS
-@click.command(name='setup-secrets', help='Setup secrets for the given team in the k8s cluster. See platform_config/ENV/TEAM/static.encrypted.json -> SSH_DEPLOY_KEYS')
+@click.command(name='setup-secrets', help='Setup secrets for the given team in the k8s cluster. '
+                                          'See the team layer of the configuration directory '
+                                          '-> static.encrypted.json -> SSH_DEPLOY_KEYS')
 @click.argument('environment',envvar='ENVIRONMENT')
 @click.argument('team',envvar='TEAM')
 @kmt_context

@@ -24,12 +24,12 @@ from kubementat.errors import GrafanaError
 
 
 def _environment_option():
-    # No default, and that is the whole point: `--environment` says which
-    # platform_config/{environment} this command edits, so a run that names none is refused by
+    # No default, and that is the whole point: `--environment` says which environment of the
+    # configuration directory this command edits, so a run that names none is refused by
     # `cli.context._environment_of` rather than pointed at whichever directory the checkout
     # happens to have. The envvar stays, because that is how a lane names it.
     return click.option('--environment', envvar='ENVIRONMENT',
-                        help="Environment whose platform_config this command edits. Required, "
+                        help="Environment this command edits. Required, "
                              "like every command that reaches a cluster; also reads ENVIRONMENT.")
 
 

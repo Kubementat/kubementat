@@ -153,7 +153,7 @@ def main():
     # command with two names is a command with two answers.
     cli.add_command(component.component)
 
-    # Which environments this `platform_config` has, and which cluster each one addresses.
+    # Which environments the configuration directory has, and which cluster each one addresses.
     # It sits directly on the `EnvironmentRegistry` primitive the 1:1 check resolves against, for
     # the reason: a listing that worked out its own answers would be a second opinion
     # about what is configured, and the two would drift. No cluster is contacted to answer it.

@@ -205,7 +205,7 @@ def _print_pvc_table(rows, human):
 def pvc_usage(ctx, environment, human):
     # The environment is the first positional here and it is used, not echoed. What "used" means at
     # this line is the honest half: `@kmt_context` resolved the cluster the operator's environment
-    # names — `CLUSTER_KUBE_CONTEXT` in `platform_config/<environment>/static.json`, layer 3 of the
+    # names — `CLUSTER_KUBE_CONTEXT` in the environment's own `static.json`, layer 3 of the
     # precedence and the key that exists so a command can say which cluster it reads — and the line
     # naming that cluster is printed on stderr
     # before this body runs, which is the answer every command owes. The old paragraph
@@ -396,7 +396,7 @@ def create_secret_from_json(ctx, environment, namespace, secret_name, json_file_
     # first is the environment every cluster-touching command has to name. The bash script had
     # neither a team nor an environment, and that is precisely the gap v2 closes — a Secret written
     # by this Task went to whatever `kubectl` was last pointed at. A flag that resolved a namespace
-    # out of `platform_config` would still be a second way to say which namespace to write to, so
+    # out of the configuration directory would still be a second way to say which namespace to write to, so
     # there is none: the namespace is a positional, and the cluster is the one this environment's
     # `static.json` names.
     #

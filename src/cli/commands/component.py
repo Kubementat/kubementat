@@ -190,8 +190,8 @@ def install(ctx, environment, component):
         raise click.ClickException(
             f"kubementat could not read the helmfile it ships, so it cannot say what is installable"
             f" for environment '{environment}' ({error}). Nothing was installed. That manifest is"
-            f" product data -- `release_index.helmfile_paths_for` is what names it -- and the installation,"
-            f" not `platform_config`, is where it is missing.") from error
+            f" product data -- `release_index.helmfile_paths_for` is what names it -- and the installed"
+            f" package, not the configuration directory, is where it is missing.") from error
 
     if not releases:
         raise click.ClickException(_no_release_message(utils, environment, name))

@@ -38,7 +38,7 @@ in Click's sense — `err=True`, always there on a terminal, never inside a pipe
   nothing the message did not. The same rendering covers the commands that build no `Context` at
   all, through the group class in `cli.kmt`.
 * **Nothing here asks `kubectl`.** The answer comes from `Context.build`, which reads
-  `platform_config` and a kubeconfig file and opens no socket. Both
+  the configuration directory and a kubeconfig file and opens no socket. Both
   `kubectl config current-context` call sites are deleted for the same reason: a command whose cluster came
   from whatever `kubectl` was pointed at is the defect this change closes.
 """
@@ -104,7 +104,7 @@ def config_dir_option(**kwargs):
         "default": None,
         "metavar": "PATH",
         "type": click.Path(exists=False, file_okay=False),
-        "help": "The platform_config directory this command reads or writes. Layer above "
+        "help": "The configuration directory this command reads or writes. Layer above "
                 "$KUBEMENTAT_PLATFORM_CONFIG_DIR; with neither, the run refuses, because a "
                 "configuration root is named and not located.",
     }
@@ -137,12 +137,12 @@ def kmt_context(func):
                   type=click.Path(exists=False, dir_okay=False),
                   help="Kubeconfig file to read the context from. With none of --kubeconfig, the "
                        "CLUSTER_KUBECONFIG_PATH variable or the environment's own key, kubementat "
-                       "reads platform_config/<environment>/kubeconfig.encrypted.yaml when that file "
-                       "exists -- it is the environment's own kubeconfig, encrypted by the git-crypt "
-                       "filter the tree already installs, and it answers ahead of $KUBECONFIG so a "
-                       "stray shell export cannot re-point a command that named an environment. Only "
-                       "when no such file is there does Kubernetes' own rule apply: $KUBECONFIG, then "
-                       "~/.kube/config.")
+                       "reads <environment>/kubeconfig.encrypted.yaml inside the configuration "
+                       "directory when that file exists -- it is the environment's own kubeconfig, "
+                       "encrypted by the git-crypt filter the tree already installs, and it answers "
+                       "ahead of $KUBECONFIG so a stray shell export cannot re-point a command that "
+                       "named an environment. Only when no such file is there does Kubernetes' own "
+                       "rule apply: $KUBECONFIG, then ~/.kube/config.")
     @config_dir_option()
     @functools.wraps(func)
     def with_context(*args, **params):
@@ -181,7 +181,7 @@ def _environment_of(parameters, params):
     is still the variable and not a guess.
 
     The rest is an error rather than a default: `UsageError` because what is missing is on the
-    command line, and no edit to `platform_config` would have fixed it. It answers the blank case —
+    command line, and no edit to the configuration directory would have fixed it. It answers the blank case —
     `ENVIRONMENT=` on the way in, or a declared argument the operator left empty — because a missing
     *positional* is refused by Click itself, `Error: Missing argument 'ENVIRONMENT'.`, before this
     function is reached. Either way the run stops on the sentence and not on a default.

@@ -139,7 +139,7 @@ class Context:
         if self.team is None:
             raise TeamNotSuppliedError(
                 f"{what_is_missing} belongs to a team, and this command was not given one. A team "
-                f"is what platform_config/{self.environment}/<team> is keyed by, and what the "
+                f"is what the `{self.environment}/<team>` layer of the configuration directory is keyed by, and what the "
                 f"namespaces and account names it governs are built from; kubementat will not name "
                 f"one for a command that did not name one. Pass --team (or set TEAM)."
             )
@@ -165,7 +165,7 @@ class Context:
                 f"{what_is_missing} needs the cluster environment '{self.environment}' addresses, "
                 f"and this Context was built to write configuration without ever addressing one. "
                 f"{constants.CLUSTER_KUBE_CONTEXT_KEY} is what names it: set it in "
-                f"platform_config/{self.environment}/static.json, or run the command that resolves "
+                f"`{self.environment}/static.json` of the configuration directory, or run the command that resolves "
                 f"one instead of the one that configures.",
                 reason=f"no ClusterTarget was resolved for environment '{self.environment}'",
             )

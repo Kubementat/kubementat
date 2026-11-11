@@ -45,7 +45,7 @@ def status(ctx, environment):
     #
     # No `--team`, because the rule says so and not for symmetry with `install`: discovery is three
     # reads of the cluster plus one namespace read out of the environment's `static.json` - it never
-    # resolves anything under `platform_config/{environment}/<team>/`. A flag here would be a
+    # resolves anything in the team layer. A flag here would be a
     # question the command cannot answer and the operator cannot decline.
     presence = traefik_presence.discover(ctx)
     click.echo(presence.report())

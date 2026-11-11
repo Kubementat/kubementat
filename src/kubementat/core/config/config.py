@@ -239,9 +239,9 @@ class Config:
         if self.team is None:
             raise TeamNotSuppliedError(
                 f"{what} lives in the team directory of environment '{self.environment}', and this "
-                f"configuration was built for no team, so no path under "
-                f"platform_config/{self.environment}/<team>/ can be named. A command that reads it "
-                f"was not given a team; kubementat will not name one for it. Pass --team (or set "
+                f"configuration was built for no team, so no "
+                f"`{self.environment}/<team>` layer of the configuration directory can be named. A command that reads "
+                f"it was not given a team; kubementat will not name one for it. Pass --team (or set "
                 f"TEAM) to name it."
             )
         return Path(f"{self.platform_config_dir}/{self.environment}/{self.team}").joinpath(
@@ -453,7 +453,7 @@ class Config:
             raise TeamNotSuppliedError(
                 f"{category} is the team's own configuration, and this command was given no team "
                 f"for environment '{self.environment}'. It is not missing a file: a team-level read "
-                f"needs platform_config/{self.environment}/<team>/, which is where namespaces, "
+                f"needs the `{self.environment}/<team>` layer of the configuration directory, which is where namespaces, "
                 f"service accounts and deploy keys are named. kubementat will not name a team a "
                 f"command did not name. Pass --team (or set TEAM) to name it."
             )

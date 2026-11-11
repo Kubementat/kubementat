@@ -67,7 +67,7 @@ def open_tunnel(function, *args):
 
 # These three reach a component by namespace and label, and every key that decides which namespace
 # that is (`*_DEPLOYMENT_NAMESPACE`, `*_SERVICE_SELECTOR`) is read from the *environment's* own
-# `static.json`. None of them reads one thing under `platform_config/{environment}/<team>/`, which is
+# `static.json`. None of them reads one thing from the team layer, which is
 # why they used to carry a `--team` they never used and echo `TEAM: None` at an operator who had
 # named one. A command which cannot act on a team does not accept one, so the
 # option is deleted rather than silenced: a flag that resolves to nothing is how the tunnels came to
@@ -86,7 +86,8 @@ def open_tunnel(function, *args):
 def tunnel_grafana(ctx, environment, local_port, remote_port, host):
     click.echo(f"ENVIRONMENT: {environment}")
     click.echo("########################")
-    click.echo(f"See GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD environment variables within platform_config/{environment}/static.encrypted.json")
+    click.echo(f"See GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD in "
+               f"{environment}/static.encrypted.json of the configuration directory this command read")
     click.echo("########################")
     return open_tunnel(partial(open_tunnel_grafana, ctx), local_port, remote_port, host)
 
@@ -138,7 +139,7 @@ def tunnel_pod(ctx, environment, namespace, pod_name, local_port, remote_port, h
     click.echo(f"NAMESPACE: {namespace}")
     click.echo(f"POD_NAME: {pod_name}")
     # No team is read here: a port-forward is decided by the namespace and the pod name, not by
-    # anything under platform_config/<environment>/<team>/. The Context is built anyway, because it
+    # anything in the team layer. The Context is built anyway, because it
     # says which cluster the forward is opened against — and because the uniformity of one
     # `Context` type is what keeps the tunnel from resolving a cluster of its own. Nothing on this
     # path calls `require_team`, so a team-less run is not refused, it is simply not asked.

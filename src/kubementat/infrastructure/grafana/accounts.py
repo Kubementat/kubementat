@@ -109,7 +109,7 @@ def grafana_users_rows(config: Config, environment: str) -> list:
     nothing was asked for is the vacuity this ticket exists to remove.
     """
     encrypted = config.get("env_static_encrypted") or {}
-    location = f"platform_config/{environment}/static.encrypted.json"
+    location = f"`{environment}/static.encrypted.json` of the configuration directory"
     rows = encrypted.get(GRAFANA_USERS_KEY)
     if rows is None:
         logging.info("%s is not set in %s, so this environment declares no grafana accounts.",
@@ -164,7 +164,7 @@ def resolve_grafana_base_url(ctx, grafana_url: Optional[str] = None) -> str:
         f"{ctx.environment}: no --grafana-url was given, and asking the "
         f"cluster for a service matching '{selector}' in namespace '{namespace}' found nothing "
         f"with a ClusterIP this process can open. The selector is GRAFANA_SERVICE_SELECTOR in "
-        f"platform_config/{ctx.environment}/static.json, read through "
+        f"`{ctx.environment}/static.json` of the configuration directory, read through "
         f"Config.component_service_selector. Either that "
         f"component is not installed, it was installed headless, or its labels are not what "
         f"config says -- and a cluster that could not be reached at all looks identical here. "

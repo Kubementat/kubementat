@@ -186,7 +186,7 @@ def cleanup_job_image(env_static) -> str:
         raise errors.CleanupJobImageNotConfiguredError(
             f"{' and '.join(missing)} {'are' if len(missing) > 1 else 'is'} not answered in the "
             f"environment's static.json, so kubementat cannot name the image the cleanup job runs "
-            f"in. Add them to platform_config/<environment>/static.json. What is refused here is a "
+            f"in. Add them to `<environment>/static.json` of the configuration directory. What is refused here is a "
             f"key that answers nothing, and kubementat will not point a job at an image it made up: "
             f"that is created successfully and then fails in silence on the schedule. The name and "
             f"the tag do have kubementat's own default (`ubuntu-ci-minimal:latest`, the template's "

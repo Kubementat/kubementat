@@ -18,5 +18,5 @@ def run_ci_container(ctx, environment, team):
     # one: `cli.kmt.Config` carried a single `kubementat_main_dir` and 32 commands accepted it and
     # none read it. What reads the root now is `kubementat.core.config.paths.default_kubementat_main_dir`,
     # called at the one place a path is derived, and this command does not derive one — the image
-    # comes from platform_config and the pod is started by argv.
+    # comes from the configuration directory and the pod is started by argv.
     CiUtils(ctx).run_ci_container()

@@ -1,7 +1,7 @@
 """CLI-wide helpers shared by the command modules.
 
 `helmfile-apply` and the four `tunnel-*` commands used to pass the literal `'dev1'` as the
-team, so they silently read another team's `platform_config/{environment}/<team>/...` and
+team, so they silently read another team's layer of the configuration directory and
 every path derived from it. The fix was one option with one default, and the default
 was the same guess wearing a different name: every invocation that did not type `--team` kept
 reading `dev1`, which is what a default team means by *guessing*. It is deleted here, and so
@@ -33,7 +33,7 @@ def team_option(**kwargs):
     There is no default and there was never a reason there should have been one. The
     operator names the team, or the `TEAM` variable names it, or the command says what it was
     missing: `Context.require_team` is the sentence, and it is printed by whatever needed the team --
-    a service about to read `platform_config/{environment}/<team>/`, or one that puts the team in an
+    a service about to read the team layer of the configuration directory, or one that puts the team in an
     argv namespace (`kubectl run -n`) or into a name (`<environment>-cluster-<team>-<account>`).
     A `Config` built without a team no longer interpolates `None` into the paths it derives; it
     refuses at the read (`_team_scoped_path`). So the guard belongs in front of the two uses above,
@@ -47,8 +47,8 @@ def team_option(**kwargs):
     """
     option_kwargs = {
         "envvar": "TEAM",
-        "help": "Team whose platform_config/{environment}/<team> config this command uses. "
-                "Also reads the TEAM environment variable. kubementat does not name a team "
+        "help": "Team whose `environment/team` layer of the configuration directory this command "
+                "uses. Also reads the TEAM environment variable. kubementat does not name a team "
                 "for a command that did not name one.",
     }
     option_kwargs.update(kwargs)

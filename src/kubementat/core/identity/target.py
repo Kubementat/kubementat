@@ -89,7 +89,7 @@ class ClusterTarget:
             raise ClusterNotConfiguredError(
                 f"no context was declared for environment '{environment}'. "
                 f"There is no current-context fallback: name the context in "
-                f"platform_config/{environment}/static.json, pass --context, or set "
+                f"`{environment}/static.json` of the configuration directory, pass --context, or set "
                 f"{constants.CLUSTER_KUBE_CONTEXT_KEY}.",
                 reason=f"{constants.CLUSTER_KUBE_CONTEXT_KEY} is not set for '{environment}'",
             )

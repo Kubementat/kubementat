@@ -104,7 +104,7 @@ def release_manifests_to_apply(env_static) -> list:
             raise errors.TektonReleaseVersionNotConfiguredError(
                 f"{version_key} is not set in the environment's static.json, so kubementat cannot "
                 f"build the URL for the {component} release. Add \"{version_key}\": "
-                f"\"<version>\" to platform_config/<environment>/static.json. What is refused here is "
+                f"\"<version>\" to `<environment>/static.json` of the configuration directory. What is refused here is "
                 f"a key that was declared and answered nothing, and it is refused rather than "
                 f"defaulted: kubementat's own default for this key is the template's value in "
                 f"`constants.DEFAULT_STATIC_ANSWERS`, and a version the tool picked instead of the "
