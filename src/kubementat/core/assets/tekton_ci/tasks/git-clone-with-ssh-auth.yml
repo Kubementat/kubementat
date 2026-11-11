@@ -2,7 +2,7 @@
 # example execution parameters:
 # git-url: ssh://git@github.com:Kubementat/kubementat.git
 # git-project-name: kubementat
-# git-revision: master
+# git-revision: main
 # git-server-host: github.com
 # git-server-ssh-user: git
 
@@ -33,7 +33,7 @@ spec:
   - name: git-revision
     description: git revision to checkout (branch, tag, sha, ref)
     type: string
-    default: "master"
+    default: "main"
   - name: git-server-host
     description: the git server host to create an entry in the ssh config file
     type: string

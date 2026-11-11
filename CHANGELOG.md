@@ -1,5 +1,27 @@
 # Unreleased
 
+- **The branch the automation clones is `main`, and that includes the shipped default.**
+  `AUTOMATION_GIT_REVISION` answers `main` where it answered `master`, in `constants.py`, in the
+  `static.json` template, in the `git-revision` default of the two Tasks that clone, in the
+  `git-revision` param of the Pipelines that pass it along, and in the example pipeline runs. The
+  description those Pipelines carry says so too, and so does the one URL that named this repository's
+  own `blob/master` path.
+
+  **Why this is one change and not a sed over eight files.** `AUTOMATION_GIT_REVISION` is the half of the
+  git coordinate that moves without anyone editing a file, which is why it is a default and not a constant,
+  and a default that names a branch the repository no longer has sends every generated Pipeline to clone a
+  revision that does not exist. The shipped manifests had the same `master` written independently in
+  fourteen places — Tasks, Pipelines, templates and examples — and that is the actual finding: the
+  coordinate had a value in the code and a value in the YAML, and they agreed only because nobody had
+  renamed the branch. Both halves moved together for that reason, and `constants.py` is now the only place
+  the answer is written down as a default; the manifests carry the param they receive.
+
+  **What an operator has to do about it.** Nothing, if the automation repository's trunk is `main` —
+  which is what this repository's rename makes it. A tree that had answered this key itself is unaffected,
+  because a declared answer has always outranked the default, and the branch a tree declares is a decision
+  about that tree's repository and not about kubementat's. `kmt config show` tags the row so it is obvious
+  which case a given environment is in.
+
 - **The seven `kmt config` verbs take the configuration root the way every other kmt command does:
   `--config-dir`, or `$KUBEMENTAT_PLATFORM_CONFIG_DIR`. The directory is no longer a positional.**
   `kmt config init --environment E --team T --config-dir D` prepares the tree `D` names,

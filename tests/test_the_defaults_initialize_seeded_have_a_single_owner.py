@@ -217,10 +217,10 @@ def test_a_tree_that_declared_nothing_still_answers_the_git_project_name_and_l0_
 
 
 def test_a_tree_that_declared_nothing_still_answers_the_git_revision_and_l0_said_so(tmp_path):
-    """`AUTOMATION_GIT_REVISION` is `master`, the half of the coordinate that changes without an edit."""
+    """`AUTOMATION_GIT_REVISION` is `main`, the half of the coordinate that changes without an edit."""
     config = seed(tmp_path)
 
-    assert config.get("env_static")["AUTOMATION_GIT_REVISION"] == "master"
+    assert config.get("env_static")["AUTOMATION_GIT_REVISION"] == "main"
     assert answered_by(config, "AUTOMATION_GIT_REVISION") == "default"
 
 

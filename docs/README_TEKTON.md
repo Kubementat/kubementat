@@ -313,7 +313,10 @@ environment layer has no `triggers/` directory because nothing reads one.
 ## Making code changes
 This section describes the general processes for extending the existing automations:
 
-- In case you are changing configuration in platform_config you also need to  commit the changes to the master branch of the kubementat automation repository. Like this the pipeline runs can read the up-to-date configuration and use it accordingly
+- The configuration directory is a git repository of its own, so a configuration change only reaches a
+  pipeline run once it is committed there and pushed to the branch that run clones. `AUTOMATION_GIT_REVISION`
+  names that branch — `main` by default, answered over by the environment or team layer like any other key —
+  and a run that clones a branch you never pushed to reads the configuration as it was, and reports success.
 - In case you are adding or changing tasks or pipelines in the "tasks" or "pipelines" sub-directories you need to re-run the "uv run kmt tekton setup-pipelines <ENVIRONMENT> <TEAM>" script for your environments and teams as described in the section "Automated Tekton pipeline and task setup". This ensures that the task and pipeline definitions are updated on the k8s cluster and are running the latest versions of task definitions and your pipelines.
 
 ## Where a pipeline gets its configuration (§10's source B)

@@ -42,8 +42,8 @@ spec:
     - name: automation-git-revision
       description: |
         the git revision to checkout
-        for the automation repository we are using master most of the time
-      default: "master"
+        for the automation repository we are using main most of the time
+      default: "main"
     - name: automation-git-server-host
       description: |
         this should match the hostname provided in automation-git-url

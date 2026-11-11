@@ -251,7 +251,7 @@ DEFAULT_STATIC_ANSWERS = {
     "AUTOMATION_GIT_PROJECT_NAME": "kubementat",
     # The branch the automation reads and writes. It is the half of the coordinate that changes
     # without any file being edited, which is the reason it is a default and not a constant.
-    "AUTOMATION_GIT_REVISION": "master",
+    "AUTOMATION_GIT_REVISION": "main",
     # The `ingressClassName` the generated Ingress, the cert-manager solver and the EventListener
     # ingresses all name. It is Traefik's class because Traefik is the controller this product
     # installs (see `TRAEFIK_CHART` above), and a class nothing installs is a silent failure.

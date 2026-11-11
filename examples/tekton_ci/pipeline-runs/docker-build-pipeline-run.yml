@@ -50,6 +50,6 @@ spec:
     - name: app-git-project-name
       value: "docker-alpine"
     - name: app-git-revision
-      value: "master"
+      value: "main"
     - name: app-git-ssh-key-secret-name
       value: "git-deployer-ssh-key"

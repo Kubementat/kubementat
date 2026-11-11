@@ -30,8 +30,8 @@ spec:
     - name: app-git-revision
       description: |
         the git revision to checkout
-        for the app repository we are using master most of the time
-      default: "master"
+        for the app repository we are using main most of the time
+      default: "main"
     - name: app-git-server-host
       description: |
         this should match the hostname provided in app-git-url

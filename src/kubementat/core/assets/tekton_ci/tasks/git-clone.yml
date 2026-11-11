@@ -3,7 +3,7 @@
 # example execution parameters:
 # git-url: https://github.com/julweber/circle_ci_kubectl_helm_docker_image.git
 # git-project-name: circle_ci_kubectl_helm_docker_image
-# git-revision: master
+# git-revision: main
 
 apiVersion: tekton.dev/v1
 kind: Task
