@@ -238,12 +238,17 @@ def test_the_readme_directory_list_names_directories_that_exist():
     are `src/cli` and `src/kubementat`. A reader who `cd`s into a directory the list promises gets a
     shell error and no hint, which is the defect this file keeps calling a direction.
 
-    Only the top-level `__name__` entries and the one sub-bullet that gives a path are checked. The
-    prose under each is prose.
+    Names containing an underscore count too, and did not used to. The pattern read a name as a run
+    of characters that stopped at the first one, so `__docker_files__`, `__tekton_ci__` and
+    `__helm_charts__` were never extracted and never checked: a directory of that shape could be
+    deleted out from under the list and the guard stayed green. The underscore is part of a
+    directory's name and the pattern now reads to the closing mark instead of to the first
+    separator. Only the top-level `__name__` entries and the one sub-bullet that gives a path are
+    checked. The prose under each is prose.
     """
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
 
-    listed = re.findall(r"^- __([^_]+)__(?::|$)", readme, flags=re.MULTILINE)
+    listed = re.findall(r"^- __(.+)__(?::|$)", readme, flags=re.MULTILINE)
     assert listed, "README no longer has a `__directory__` list for this guard to read"
 
     missing = [name for name in listed if not (REPO_ROOT / name).exists()]

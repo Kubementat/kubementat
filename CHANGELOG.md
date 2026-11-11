@@ -1,5 +1,24 @@
 # Unreleased
 
+- **The checkout no longer has a `helm_charts/` directory, and the version window moved to the 2.x
+  line.**
+
+  The root `helm_charts/` held a `.gitkeep` and collected nothing: nothing under `src/` installed a
+  chart out of it, the example charts were already under `examples/helm_charts/`, and everything
+  applied comes out of the configuration directory or out of the installed package. It is deleted, not
+  emptied. The shipped generator template's `helm-path-to-chart` default is unchanged by this, because
+  that path is resolved against the clone of *your* automation repository and never against this
+  checkout.
+
+  `CONFIG_KUBEMENTAT_CONSTRAINT` — the `kubementat:` constraint `kmt config init` stamps into a new
+  tree's `kubementat.yaml` — is now `>=2,<3`. The floor moved with the major version rather than the
+  ceiling being lifted, so that a tree stamped against 0.x is still read as out of date and not quietly
+  accepted. What closes the `version-outside-window` finding is one line in that tree's own
+  `kubementat.yaml`, and that is what a release's bump PR is for. `config validate` refuses it and a
+  cluster verb warns and walks past, which is the split that already held. **What an operator has to do
+  about it:** upgrade without touching the tree and the strict verb names it; the fix is to raise the
+  stamp's constraint once the tree has been read against the new release.
+
 - **The branch the automation clones is `main`, and that includes the shipped default.**
   `AUTOMATION_GIT_REVISION` answers `main` where it answered `master`, in `constants.py`, in the
   `static.json` template, in the `git-revision` default of the two Tasks that clone, in the

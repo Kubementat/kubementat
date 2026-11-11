@@ -54,9 +54,6 @@ it is what the product's own code addresses.
 - __docker_files__: the Dockerfiles the CI images are built from.
 - __examples__: example helm charts, Kubernetes manifests and tekton resources.
   - `examples/helm_charts/nginx-example`: the example chart the nginx-example deployment installs.
-    There is no `helm_charts/nginx-example`.
-- __helm_charts__: a directory this checkout keeps empty. Nothing in `src/` installs a chart out of it,
-  and the example charts live under `examples/helm_charts/`.
 - __tekton_ci__: `pipeline-runs/` only — the run manifests this checkout holds as **output**. The Tasks
   and Pipelines the cluster is given, and the generator templates they are built from, are product data
   and ship inside the installed `kmt` under `src/kubementat/core/assets/tekton_ci/`.
@@ -70,6 +67,11 @@ it is what the product's own code addresses.
 applies. The last shipped script was deleted rather than left standing beside a Python implementation of
 the same work, which is why `kmt install`'s dependency check carries a rule about shipped scripts that
 currently has no referent — and will catch a re-added one.
+
+**There is no `helm_charts/` directory.** The root directory of that name held a `.gitkeep` and nothing
+else; it is deleted, not emptied. Every chart that installs anything lives under `examples/helm_charts/`
+(a worked example of how to ship your own) or inside the configuration directory you prepared, and no code
+path under `src/` resolves a chart path against this checkout.
 
 ## Git-Crypt
 

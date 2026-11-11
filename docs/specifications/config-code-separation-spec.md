@@ -102,7 +102,7 @@ end-to-end suite as its first machine consumer (§15, §16)**.
 
 ```
 L0  product layer        installed kubementat (wheel + CI image)
-                         defaults in constants.py, packaged templates/, tekton_ci/, helm_charts/
+                         defaults in constants.py, packaged templates/, tekton_ci/
         ↓ overridden by
 L1  environment layer    <config>/<environment>/…
         ↓ overridden by

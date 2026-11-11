@@ -76,7 +76,7 @@ repository itself ships nothing encrypted.
 ## How a tree stays current
 
 `<dir>/kubementat.yaml` is the tree's own statement of what it was prepared for: `schema_version` for what
-the keys *mean*, and `kubementat: ">=0.4,<2"` for the release line it was last validated against. Both are
+the keys *mean*, and `kubementat: ">=2,<3"` for the release line it was last validated against. Both are
 written by `kmt config init` and read by every verb before it touches a cluster.
 
 Before upgrading, ask whether the tree survives the build you are about to run:

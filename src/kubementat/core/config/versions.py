@@ -7,7 +7,7 @@ tree ends up with a verdict that depends on which verb asked.
 `product_version` asks the packaging metadata and never a literal, because `pyproject.toml` already has
 the first owner of the version and a second owner is how a release drifts. Missing metadata answers
 `None` rather than inventing a string, and an unknown version is exactly the case a warn-and-continue
-rule must not read as "fine". `satisfies_version_constraint` answers `>=0.4,<2`-shaped clauses from the
+rule must not read as "fine". `satisfies_version_constraint` answers `>=2,<3`-shaped clauses from the
 operator table below, in about 30 lines, so `packaging` stays undeclared.
 
 The two privates are that parser's arithmetic and nothing more: `_version_parts` truncates a component
@@ -70,8 +70,8 @@ def _compare_versions(one: tuple, two: tuple) -> int:
 def satisfies_version_constraint(constraint: str, version: str) -> bool:
     '''Does `version` fall inside `constraint`, which is a comma-separated list of clauses?
 
-    `>=0.4,<2` is the shape this answers, because it is the shape `constants` stamps and the shape
-    `pyproject.toml` uses. It is about 30 lines, which is the honest cost of not adding
+    `>=2,<3` is the shape this answers, because it is the shape `constants` stamps and the shape a
+    `pyproject.toml` version is read against. It is about 30 lines, which is the honest cost of not adding
     `packaging` to the dependencies for two operators — `packaging` is importable here only as a
     transitive neighbour, and `test_the_declared_dependencies_are_what_the_tree_needs.py` refuses a
     dependency the manifest does not name. If this ever needs `!=`, a wildcard, or a prerelease

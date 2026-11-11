@@ -269,7 +269,7 @@ def _manifest_findings(root: Path, findings: list[Finding]) -> None:
             ERROR, "manifest-key-type",
             f"{_MANIFEST_KEYS[1]} in {path} is a "
             f"{type(document['kubementat']).__name__} and not a version-constraint string like "
-            f"'>=0.4,<2', so there is nothing here to compare a release against.", path))
+            f"'>=2,<3', so there is nothing here to compare a release against.", path))
 
 
 def _stamp_findings(root: Path, findings: list[Finding]) -> None:

@@ -349,7 +349,14 @@ def static_answer(key: str):
 #
 # `CONFIG_SCHEMA_VERSION` is stamped and never bumped by a library function — reading a tree from an
 # older schema is a migration decision, not a side effect of writing one file.
-CONFIG_KUBEMENTAT_CONSTRAINT = ">=0.4,<2"
+#
+# The constraint states which release line this build belongs to, and a major release narrows it to
+# that line rather than widening the ceiling to keep older trees quiet. The gap is the point: a tree
+# stamped against a line this build is not in is read as out of date, and the line that closes it is
+# one edit in that tree's `kubementat.yaml`, which is what a release's bump PR is for. Moving the
+# floor is how a stale stamp ends up being read as current, which is the mistake the check exists to
+# catch.
+CONFIG_KUBEMENTAT_CONSTRAINT = ">=2,<3"
 CONFIG_SCHEMA_VERSION = 1
 
 # The name of the file that carries those two values. It lives here and not beside either writer

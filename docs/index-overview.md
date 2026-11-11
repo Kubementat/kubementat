@@ -4,7 +4,7 @@
 
 **Kubementat** is an all-in-one open-source platform for enabling dev teams to configure, maintain, build, and deploy on Kubernetes. It combines CLI automation, Tekton CI/CD pipelines, Helm-based platform components, and encrypted platform configuration. (No service mesh: kubementat dropped Linkerd on 2026-10-28, and `kmt uninstall` sweeps a mesh a cluster may still be carrying.)
 
-- **Version:** 0.4.0 | **Python:** ≥3.9 | **Package manager:** uv
+- **Version:** 2.0.0 | **Python:** ≥3.9 | **Package manager:** uv
 - **CLI:** Click-based (`kmt`), 27 entries — 20 flat and 7 groups (`component`, `environments`, `helm`,
   `routing`, `tekton`, `tunnel`, `users`); measured with `uv run kmt --help | grep -oE '^  [a-z][a-z0-9-]*' | sort -u | wc -l`.
   `environments` is the newest of them (`kmt environments list`), and every command takes `environment`
@@ -217,10 +217,13 @@ The product's helmfile entry point plus the ten `*.encrypted.yaml` defaults its 
 Manual smoke tests plus the unit/lane suite that the migration built. `find tests -name 'test_*.py' | wc -l` → **81** files, all run by `uv run pytest -q`; the two `.sh` files are `tests/e2e/stages/01-provision.sh` (the lane's VM provision stage) and `tests/shims/_recorder.sh` (the parity shims' command recorder). `test_installation.sh` is gone, and what it asserted moved into the lane harness. The sentence below is kept as the 2026-06 state: manual smoke tests only, no unit tests, no pytest, no mocks — the last three words are now the opposite of the truth.
 
 ### examples/ (24 files across 3 categories — `find examples -type f | wc -l`)
-Reference implementations: `helm_charts/nginx-example/` (complete Helm chart with deployment, service, ingress, HPA), `kubernetes/` (shell examples for pod exec and node scheduling), `tekton_ci/` (pipeline examples including the full deployment orchestrator). Good reference for extending the platform. (The MySQL setup and nginx-reverse-proxy example pipelines were removed 2026-10-27 with the backing-service automation, and the Flutter build example went with the image build that replaced kaniko.)
+Reference implementations: `examples/helm_charts/nginx-example/` (complete Helm chart with deployment, service, ingress, HPA), `kubernetes/` (shell examples for pod exec and node scheduling), `tekton_ci/` (pipeline examples including the full deployment orchestrator). Good reference for extending the platform. (The MySQL setup and nginx-reverse-proxy example pipelines were removed 2026-10-27 with the backing-service automation, and the Flutter build example went with the image build that replaced kaniko.)
 
-### helm_charts/ (placeholder only)
-Contains only `.gitkeep`. All actual Helm chart content lives in `examples/helm_charts/nginx-example/`. The root directory is a placeholder with no charts.
+The checkout used to carry a root `helm_charts/` that held one `.gitkeep` and collected nothing. It is
+**deleted, not emptied**: nothing under `src/` installed a chart out of it, and a directory that a
+sentence in the docs had to apologise for is not a place holder. The example chart above is now the only
+Helm content this tree ships as an example, and everything applied comes out of the configuration
+directory or out of the installed package.
 
 ---
 
@@ -263,7 +266,12 @@ Contains only `.gitkeep`. All actual Helm chart content lives in `examples/helm_
    `kubernetes` group reads. `uv run kmt --help` now lists 14 entries.
 8. **Hardcoded config paths** — many paths are relative strings (`scripts/utilities`, `scripts/automation/tekton`) that could break with reorganization.
 9. **`utils.py` is empty** — lib has an empty `utils.py` module suggesting planned refactoring that was never completed.
-10. **`helm_charts/` is a placeholder** — confusing directory that collects nothing; all Helm content is in `examples/` and `platform_config/`.
+10. ~~**`helm_charts/` is a placeholder**~~ — **closed 2026-11-11, by deletion and not by filling it.**
+The directory held a `.gitkeep`, nothing under `src/` installed a chart out of it, and all Helm content
+was already in `examples/` and in the configuration directory. The research that proposed this gave two
+options — make it the home of kubementat's own charts, or delete it — and the first was refused on the
+same ground `assets/` refuses a checkout copy: shipped charts belong inside the package, not beside the
+tree that generates them.
 
 ---
 

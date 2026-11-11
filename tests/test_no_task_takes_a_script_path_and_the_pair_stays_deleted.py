@@ -65,7 +65,7 @@ def _text_files(root):
 
 
 def _manifest_files():
-    """Every `.yml`/`.yaml` in the checkout, from `examples/` to `helm_charts/`."""
+    """Every `.yml`/`.yaml` in the checkout, whichever of its trees they sit in."""
     return sorted(path for path in REPO_ROOT.rglob("*")
                   if path.suffix in MANIFEST_SUFFIXES
                   and ".git" not in path.parts and ".venv" not in path.parts)
