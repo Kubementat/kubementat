@@ -1,0 +1,125 @@
+# For reference:
+# - Loki (the chart this file configures):
+#   https://github.com/grafana-community/helm-charts/blob/main/charts/loki/values.yaml
+# The chart is `grafana-community/loki` 20.2.0, which is Loki 3.7.9 -- see the release block in
+# `helmfile.yaml.gotmpl` for why that repository and not the vendor one.
+#
+# This file used to be the loki-stack one, and it is not a newer copy of it. The old keys are not
+# merely unnecessary here, they are rejected or ignored: chart 20 ships a `values.schema.json` whose
+# root sets `additionalProperties: false`, so the old file's `promtail:` block fails `helm template`
+# outright, and the two keys that used to mean retention on Loki 2.x (`table_manager`,
+# `chunk_store_config`) are emitted by this chart only from places this install does not use. So the
+# whole file is written against 20.2.0 and every key below was checked by rendering:
+# `helm template loki ... -f <this file>` answers 336h for `limits_config.retention_period` and
+# `retention_enabled: true` for `compactor`, in that order, and answers nothing at all for
+# `table_manager`. That is the point of the migration and the reason the 14-day window is real.
+
+# One binary, `-target=all`, no separate read/write/backend targets. This is what the platform ran
+# before (one replica, one PVC) and the mode the storage layout below assumes.
+deploymentMode: Monolithic
+
+loki:
+  # Single tenant. There is no auth here and no `X-Scope-OrgID`, which is what the Grafana datasource
+  # provisioning in `monitoring/grafana_values.encrypted.yaml.template` assumes it is talking to.
+  auth_enabled: false
+
+  commonConfig:
+    # One replica, so one copy of every stream.
+    replication_factor: 1
+
+  storage:
+    # Filesystem, on the PVC below. No MinIO, no S3, no bucket names: the platform has always been
+    # filesystem-backed here and adding object storage is not this change's business.
+    type: filesystem
+
+  # TSDB. This is what the old data is not: loki-stack 2.10.3 wrote boltdb-shipper v11 chunks, and
+  # Loki 3.x reads v13, which is why a big-bang cutover was chosen over a dual-run -- the bytes on
+  # the old PVC are unreadable by this binary whatever the retention settings say.
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          # 24h is what retention needs; a shorter or longer period changes what the compactor can
+          # delete and for how long a delete request is honoured.
+          period: 24h
+
+  limits_config:
+    # 14 days. Same number the loki-stack file carried, but written where Loki 3 enforces it.
+    retention_period: 336h
+    # Query-time metadata, and the fields Logs Drilldown reads.
+    allow_structured_metadata: true
+    volume_enabled: true
+    # Anything older than a week that arrives late is refused rather than ingested and deleted.
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h
+
+  compactor:
+    # The half that actually deletes. Without this the retention_period above is a ceiling the
+    # querier respects and nothing else, and it will be trusted anyway.
+    retention_enabled: true
+    delete_request_store: filesystem
+    working_directory: /var/loki/compactor
+
+  # Log-line patterns, for Grafana Logs Drilldown. The only key here that is a cost rather than a
+  # capability: it is ingester RAM, and `false` is a legitimate answer for a small cluster.
+  pattern_ingester:
+    enabled: true
+
+singleBinary:
+  # The chart default is 0 replicas, so without this line Monolithic mode renders a Loki that is
+  # not running.
+  replicas: 1
+  # No rules sidecar. kubementat ships no Loki alert rules, and a sidecar watching a directory that
+  # nothing writes to is a mounted volume for a file that never appears.
+  sidecar: false
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+# Everything below here is a default that would cost something. Each is disabled for a reason, and
+# the first is the one the Grafana datasource depends on.
+gateway:
+  # Enabled, the chart puts `loki-gateway` on port 80 and the datasource's
+  # `http://loki.loki.svc.cluster.local:3100` still resolves -- the `loki` Service is rendered either
+  # way -- but it also puts a proxy in front of a single client on a cluster this small. Off is both
+  # the cheaper answer and the one with fewer moving parts between Explore and the store.
+  enabled: false
+
+# Memcached, in two sizes, neither of which a single-replica filesystem Loki is worth. Left enabled
+# this install asks for a cache deployment and roughly 10Gi of memory to answer the same question
+# twice.
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+# The chart keeps a `memcached` section of its own beside the two cache sections, and its default is
+# `enabled: true` -- which, with both caches off, renders a ServiceAccount and nothing else. Off, so
+# no object survives in the namespace for a component this install does not run.
+memcached:
+  enabled: false
+
+lokiCanary:
+  # The canary is the thing `test:` runs, so they go together.
+  enabled: false
+test:
+  enabled: false
+
+# Inert under Monolithic -- the chart renders no workloads for them -- but the chart's own validation
+# fails the render when they are left at their default 3 replicas while Monolithic is also running,
+# so zeroing them is what makes the mode explicit rather than hopeful.
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0

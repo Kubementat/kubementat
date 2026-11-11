@@ -1,0 +1,161 @@
+# kubectl apply -n $namespace -f git-crypt-unlock.yml
+#
+# Unlocks a configuration repository that arrived from `git-clone-configuration` still in ciphertext,
+# using the symmetric key kubementat put in a Secret during `kmt install` (§10 R-10.3).
+#
+# WHY THIS EXISTS AS A STEP AND NOT AS CODE: §11.7 is "kubementat reads, it never unlocks", and census K
+# measured that nothing under `src/` runs `git-crypt unlock`. That rule is about the product, and this file
+# is not the product: it is a Tekton Task, run by a pod, in a pipeline that has to be able to open a
+# repository the product deliberately stopped holding the key for. §10 chose this shape -- a step after the
+# clone -- because an unlock inside `kmt` would put the thing R-11.7 forbids back into the read path, and
+# an unlock inside the clone step would make "did we clone it" and "can we read it" one answer again.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: git-crypt-unlock
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace holding the clone this step unlocks. Same workspace the clone step wrote to, so the
+      same path the reader two steps later will use.
+    mountPath: /workspace
+
+  params:
+  - name: image
+    description: The docker image used for executing the script (the ci base image, which ships git-crypt)
+    default: "julianweberdev/ubuntu-ci-minimal:latest"
+
+  - name: configuration-root
+    description: |
+      The directory that carries the environment directories -- what `--config-dir` is handed everywhere
+      else in this product, spelled here as a path under the workspace. §5 puts `<environment>/` one level
+      below it, and this step runs `git-crypt unlock` inside it, which is where a git repository's own
+      `.git` lives.
+
+      It is the same value every other step in this pipeline reads, and option (b) makes that agreement
+      this file's problem rather than Tekton's: the clone step and this step name the same directory by
+      different means, so a change to one had better reach the other. The guard over shipped YAML checks
+      that, not a comment.
+    type: string
+    default: "$(workspaces.workspace.path)/configuration"
+
+  - name: git-crypt-key-secret-name
+    description: |
+      The Secret holding the symmetric key that opens this configuration repository. The default is the
+      Secret `kmt install` creates out of `<configuration root>/git_crypt_symmetric.key` -- the file
+      `config init` exports and gitignores, which is why no clone carries one.
+
+      A rename on one side of this pair is a step that unlocks nothing, and the guard named in the docstring
+      above is what notices.
+    type: string
+    default: "git-crypt-configuration-key"
+
+  - name: git-crypt-key-secret-key-name
+    description: The key within that Secret. The Secret is `Opaque` with the file's bytes base64-encoded once, so this step decodes exactly once.
+    type: string
+    default: "git-crypt-key"
+
+  stepTemplate:
+    env:
+      # The key arrives through the pod's own credentials, the same way the deployer's SSH key reaches the
+      # clone step. Nothing in this Task's params is a path to a key on a host: a pod has no hosts.
+      #
+      # `optional: true` because `kmt install` creates this Secret only for a directory that declares
+      # git-crypt (its `.gitattributes` names the filter, which is the marker that survives a clone). On a
+      # configuration that never used git-crypt there is no Secret to reference, and a non-optional
+      # reference makes the *pod* fail to start: the failure would land as a Tekton pod error several
+      # layers away from the sentence anyone can act on. Optional keeps the failure in this script, where
+      # the script can tell the two cases apart and say which one this is.
+      - name: GIT_CRYPT_KEY_BASE64
+        valueFrom:
+          secretKeyRef:
+            name: "$(params.git-crypt-key-secret-name)"
+            key: "$(params.git-crypt-key-secret-key-name)"
+            optional: true
+
+  steps:
+    - name: git-crypt-unlock
+      computeResources:
+        requests:
+          memory: 64Mi
+          cpu: 50m
+        limits:
+          memory: 256Mi
+          cpu: 200m
+      image: "$(params.image)"
+      env:
+        - name: CONFIGURATION_ROOT
+          value: "$(params.configuration-root)"
+      script: |
+        #!/usr/bin/env bash
+        # `set -e` is what makes a failure here be a failure of the step. `pipefail` is not load-bearing
+        # today and this comment says so rather than pretending otherwise: git-crypt is the last command in
+        # the pipeline below, so its status is what the shell reports with or without it. Measured against
+        # 0.7.0, both an empty key and a key from another repository exit 1 either way, and so does a value
+        # that is not base64 at all. It is kept because a pipeline that grew a step after `git-crypt unlock`
+        # would stop reporting the unlock's status the day it grew, and that is the kind of quiet change a
+        # comment is for.
+        set -ueo pipefail
+
+        echo "#################################"
+        echo "Unlocking the configuration clone"
+        echo "configuration-root: $CONFIGURATION_ROOT"
+        echo "#################################"
+
+        if [ ! -d "$CONFIGURATION_ROOT/.git" ]; then
+          echo "ERROR: $CONFIGURATION_ROOT/.git is not a directory, so there is no git repository here to unlock."
+          echo "       The clone step that is supposed to precede this one wrote somewhere else, or not at all."
+          exit 1
+        fi
+
+        cd "$CONFIGURATION_ROOT"
+        echo "CURRENT PATH: $(pwd)"
+
+        # Checked before anything touches git-crypt, because git-crypt's own answer to no input is
+        # `Error: -: not a valid git-crypt key file` -- which reads like a wrong key and is really a Secret
+        # that exists with nothing in it. Those are different things to go fix, so say which one this is.
+        #
+        # An absent key is a third case, and the marker for it is the same one `kmt install` reads: a
+        # directory whose `.gitattributes` declares the filter is encrypted, and one that does not is not.
+        # Measured against git-crypt 0.7.0, a valid key handed to a repository that never used git-crypt
+        # unlocks it with exit 0 and no output, so the step would be green either way and could not tell an
+        # operator anything. Refusing when the filter *is* declared and moving on when it is not is the only
+        # shape that says something true in both directions.
+        if [ -z "${GIT_CRYPT_KEY_BASE64:-}" ]; then
+          if grep -qs 'filter=git-crypt' "$CONFIGURATION_ROOT/.gitattributes" 2>/dev/null; then
+            echo "ERROR: this configuration declares git-crypt in its .gitattributes, but no key arrived."
+            echo "       Either the Secret $(params.git-crypt-key-secret-name) does not exist, or it exists"
+            echo "       with an empty $(params.git-crypt-key-secret-key-name)."
+            echo "       It is built from <configuration root>/git_crypt_symmetric.key, which is gitignored"
+            echo "       and cannot travel inside the repository, so the answer is to run kmt install against"
+            echo "       the configuration directory that owns this clone -- not to copy a key into the tree."
+            exit 1
+          fi
+          echo "No key arrived and this clone declares no git-crypt filter, so there is nothing to unlock."
+          echo "The configuration is plaintext end to end and every later step reads it directly."
+          exit 0
+        fi
+
+        # Unlocking an already-open repository is silent and exits 0, so a green step here is evidence that
+        # the tree is readable from this point onward and nothing more -- this file cannot tell "was locked,
+        # opened it" from "was already open". What it can do is explain a failure, because git-crypt's first
+        # line for a key from a different repository is about *tampering*, and an operator who reads that
+        # will go check the clone before they check the Secret. Measured: it then fails the smudge filter,
+        # leaves the repository configured but undecrypted, and a retry with the same key hits the same wall.
+        #
+        # `|| UNLOCK_STATUS=$?` rather than the call on its own line: `set -e` would end the script the
+        # moment git-crypt failed, and nothing below it would ever run.
+        UNLOCK_STATUS=0
+        printf '%s' "$GIT_CRYPT_KEY_BASE64" | base64 -d | git-crypt unlock - || UNLOCK_STATUS=$?
+
+        if [ "$UNLOCK_STATUS" -ne 0 ]; then
+          echo "ERROR: git-crypt could not open this configuration clone (exit $UNLOCK_STATUS)."
+          echo "       If this configuration was ever opened with a different key, git-crypt says 'encrypted"
+          echo "       file has been tampered with!' and leaves the repository configured but not decrypted,"
+          echo "       so retrying without changing the key reproduces the same failure. Check the"
+          echo "       configuration directory kmt install was given before suspecting this clone."
+          exit "$UNLOCK_STATUS"
+        fi
+
+        echo "Configuration clone is unlocked. Every step after this one reads a directory, not a Secret."

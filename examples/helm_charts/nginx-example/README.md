@@ -1,6 +1,9 @@
 # Smart Telematics Web UI Helm Chart
 
-This chart is used for deploying nginx as an example for implementing custom helm charts into kubementat automation.
+This chart is used for deploying a demo web service as an example for implementing custom helm charts into
+kubementat automation. Routing belongs to the platform, not to the chart: kubementat installs Traefik as the
+cluster's default IngressClass, so this example installs no controller of its own and states which class
+answers for its Ingress.
 
 ## Prerequisites
 
@@ -33,6 +36,18 @@ When you want to use yml syntax highlighting on the console install yq and pipe 
 ```
 helm template testdeploymentname . | yq eval
 ```
+
+## Ingress
+
+Enable it with `ingress.enabled: true`. Two things the example exists to teach:
+
+- The route is answered by an IngressClass, and on a kubementat cluster that class is Traefik. The platform
+  installs it with `ingressClass.isDefaultClass: true`, so it is also the class that answers for an Ingress
+  that names none. `ingress.className` is written anyway, because the example has to stay honest on a
+  cluster that serves someone else's default too.
+- Nothing asks for an HTTPS redirect. kubementat's Traefik redirects the `web` entrypoint to `websecure`
+  cluster-wide (see `src/kubementat/assets/values/traefik/values.encrypted.yaml`),
+  which is one setting owned by the platform instead of one annotation per Ingress.
 
 ## Deletion
 ```

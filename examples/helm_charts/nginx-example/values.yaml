@@ -48,9 +48,7 @@ configuration:
 
 hostAliases: {}
 
-podAnnotations:
-  # enable linkerd proxy injection if linkerd is configured
-  linkerd.io/inject: enabled
+podAnnotations: {}
 
 podSecurityContext: {}
   # fsGroup: 2000
@@ -62,19 +60,34 @@ service:
 
 ingress:
   enabled: false
+  # The IngressClass that serves this Ingress. Leave it at `traefik` and nothing else is needed:
+  # kubementat installs Traefik with `ingressClass.isDefaultClass: true`, so this class is also what
+  # answers for an Ingress that names none. Set it to "" only when you want the cluster's own default
+  # to decide, and set it to another name only when that cluster serves a controller kubementat does not own.
+  className: traefik
   annotations:
-    ingress.kubernetes.io/rewrite-target: /
+    # What the certificate is asked for by. This pair is class-independent: it is cert-manager's
+    # contract, and it is what makes the `tls:` block below real rather than decorative.
+    cert-manager.io/cluster-issuer: letsencrypt
     kubernetes.io/tls-acme: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    # The nginx annotations that used to sit here are gone, and they are gone for two different reasons:
+    #   force-ssl-redirect  -> Traefik's `web` entrypoint redirects to `websecure` cluster-wide, which is
+    #                          the platform's answer (see
+    #                          templates/environment/kubementat_components/traefik/values.encrypted.yaml.template)
+    #                          and is one setting instead of one annotation per Ingress.
+    #   proxy-body-size     -> Traefik expresses this as a Buffering Middleware, and kubementat ships no
+    #                          default middleware for it. Pointing this file at a middleware nobody creates
+    #                          is a router that fails to build, not a limit that is relaxed.
+    # `rewrite-target` is gone too, for the same reason as proxy-body-size: it is a Middleware
+    # (StripPrefix) here, and the value it carried was `/`, which is the path already asked for.
   hosts:
-    - host: nginx.yourdomain.com
+    - host: nginx-example.yourdomain.com
       paths:
         - path: /
   tls:
    - secretName: nginx-example-tls-secret
      hosts:
-       - nginx.yourdomain.com
+       - nginx-example.yourdomain.com
 
 autoscaling:
   enabled: false

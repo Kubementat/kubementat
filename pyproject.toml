@@ -1,0 +1,57 @@
+[project]
+name = "kubementat"
+version = "0.4.0"
+description = "Kubementat is a all in one Open Source solution for enabling your dev teams to configure, maintain, build and deploy on a Kubernetes cluster"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "click>=8.1.8",
+    "cryptography>=45.0.7",
+    "kubernetes>=33.1.0",
+    "python-gnupg>=0.5.5",
+    "pyyaml>=6.0.2",
+    "requests>=2.32.5",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==8.1.1",
+    "pytest-timeout==2.3.1",
+]
+
+[project.scripts]
+kmt = "cli.kmt:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+# `include-package-data` is what makes the templates travel: `kubementat.assets.templates` holds
+# no Python, so `packages.find` alone would ship the code and leave the asset directory behind.
+# Declaring the glob rather than a `MANIFEST.in` keeps the rule next to the package it describes.
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["kubementat*","cli*"]
+
+[tool.setuptools.package-data]
+# Everything the product ships and opens: the templates, and the Tekton Tasks/Pipelines plus the
+# generator templates they read (`tekton_ci/pipeline-runs` is output and is deliberately not here —
+# a half-written manifest inside site-packages is the bug R-12.1 names).
+"kubementat.assets" = ["templates/**/*", "values/**/*", "tekton_ci/**/*"]
+
+# `integration` marks the tests that need something this suite is not allowed to need: a
+# running cluster, a real helmfile, a machine with the tools installed. They are skipped by
+# default so `uv run pytest -q` stays runnable anywhere, which is the promise the README
+# makes. A parity test is only marked this way when its *bash* half genuinely talks to a
+# cluster; the whole point of FIN-03 is that most of them do not.
+[tool.pytest.ini_options]
+markers = [
+    "integration: needs a Kubernetes cluster or a real cluster tool, skipped unless -m integration is asked for",
+]
+
+[project.urls]
+Homepage = "https://github.com/Kubementat/kubementat"
+Repository = "https://github.com/Kubementat/kubementat"

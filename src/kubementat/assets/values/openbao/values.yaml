@@ -1,0 +1,38 @@
+# OpenBao. The value shape is the Vault chart's, because the OpenBao chart is a fork of it: every
+# key this file writes is spelled the same in `openbao-0.30.6` as it was in `hashicorp/vault`, so
+# nothing here is renamed. What the fork renamed inside the chart (`ui.activeVaultPodOnly` ->
+# `ui.activeOpenbaoPodOnly`, `global.externalVaultAddr` -> `global.externalBaoAddr`) are keys this
+# file does not write, so they are not this file's to keep or correct.
+#
+# Images are not pinned here. The chart's own `appVersion` decides the server tag -- 0.30.6 carries
+# OpenBao v2.7.2 from `quay.io/openbao/openbao` -- and the injector's sidecar is `openbao/openbao`
+# while its own binary is still `hashicorp/vault-k8s`, which is the chart's decision and not a
+# kubementat one.
+injector:
+  # True if you want to enable openbao agent injection.
+  enabled: true
+
+  # The injector's Prometheus endpoint. The old file's comment called it "a node exporter metrics
+  # endpoint"; the chart writes it as a `METRICS_PATH=/metrics` environment variable on the
+  # injector container, and nothing here scrapes it. It is kept at `true` because changing a value
+  # is not this rename's business.
+  metrics:
+    enabled: true
+
+server:
+  # If not set to true, the OpenBao server will not be installed. See `server.standalone` /
+  # `server.ha` in `_helpers.tpl` for how the mode is picked once this is on.
+  enabled: true
+
+# OpenBao UI
+ui:
+  # True if you want to create a Service entry for the OpenBao UI.
+  #
+  # serviceType can be used to control the type of service created. For
+  # example, setting this to "LoadBalancer" will create an external load
+  # balancer (for supported K8S installations) to access the UI.
+  enabled: true
+  serviceType: "ClusterIP"
+  serviceNodePort: null
+  externalPort: 8200
+  targetPort: 8200

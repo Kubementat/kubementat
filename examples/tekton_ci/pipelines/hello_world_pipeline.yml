@@ -1,7 +1,7 @@
 # kubectl apply -f hello_world_pipeline.yml
 
 ## TASKS
-apiVersion: tekton.dev/v1beta1
+apiVersion: tekton.dev/v1
 kind: Task
 metadata:
   name: greet-task
@@ -16,7 +16,7 @@ spec:
 
 ---
 
-apiVersion: tekton.dev/v1beta1
+apiVersion: tekton.dev/v1
 kind: Task
 metadata:
   name: show-env-task
@@ -36,7 +36,7 @@ spec:
 ---
 
 ## PIPELINE
-apiVersion: tekton.dev/v1beta1
+apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
   name: hello-world-pipeline

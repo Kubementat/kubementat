@@ -9,8 +9,44 @@ deployer_ssh_key.pub
 gpg_private.key
 gpg_public_key.gpg
 cli/commands/__pycache__
-tekton_ci/triggers/smoke/
+# Generated trigger config is written to and read from
+# `platform_config/{environment}/{team}/triggers/` — see decision 2 of
+# docs/plans/finish-python-migration.md. Under `tekton_ci/triggers/` the only thing that belongs to
+# the product is `templates/`, the generator's input; anything else there is output a previous
+# version of kubementat wrote into the checkout, so it is not for committing.
+tekton_ci/triggers/**
+!tekton_ci/triggers/templates/
+!tekton_ci/triggers/templates/**
 platform_config/dev/smoke/
-lib/kubementat/__pycache__/
 tekton_ci/pipeline-runs/smoke/
 .aider*
+*.egg-info/
+# `.python-version` is deliberately NOT ignored: it is the checkout's interpreter pin, and a clone
+# that does not get it resolves whatever python the machine has (`requires-python` only says `>=3.9`),
+# which changes the resolved click version and makes the suite report differently per machine —
+# plan last-lap row 15. Removing this line is that fix; the file is tracked.
+
+# Python artifacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.pytest_cache/
+.mypy_cache/
+__pycache__/
+# `build/` is setuptools' own output directory, and it appears in the checkout because the E2E
+# guest installs the local package through the read-write virtiofs share (`tests/e2e/harness/config.py`
+# `GUEST_MOUNT`): the build runs in the guest and writes into the tree on the host. It is a build
+# artifact and not a source change — `checkout-untouched` proves the tree is otherwise byte-identical,
+# which is why this line is the fix rather than the assert being loosened.
+build/
+.pi/
+
+# Local tooling state, never for committing
+.codegraph/
+.agent-work/
+.claude/
+
+.ruff_cache/
+dist/
+# Agent orchestration state (briefs, state files, reports). Tooling state, not product history.
+.agent-work/

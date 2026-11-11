@@ -1,0 +1,52 @@
+# INGRESS RESOURCE FOR GITHUB TRIGGER
+#
+# kubementat ships no nginx compatibility, so the nginx annotations this document used to carry are
+# deleted rather than translated onto Traefik middlewares:
+#  - `nginx.ingress.kubernetes.io/force-ssl-redirect` is answered cluster-wide by the entrypoint
+#    redirect in the Traefik values (ports.web.http.redirections), so a per-Ingress copy of it is a
+#    second opinion nobody would ever find.
+#  - `nginx.ingress.kubernetes.io/proxy-body-size: "0"` meant unlimited to nginx and means nothing
+#    to Traefik's standard provider, which has no body-size knob at all. Where a limit is wanted the
+#    answer is a `buffering` Middleware, and this file creates no Middleware.
+# See docs/research/traefik-installation-k9s-research.md 5 and 7.5.
+#
+# `ingress.kubernetes.io/rewrite-target: /` is deliberately still here. It is not nginx-namespaced
+# so no annotation sweep of the nginx keys touches it, Traefik's standard provider ignores it, and
+# the rule rewrites `/` to `/` - which is to say it is inert exactly as it was. Removing it belongs
+# with whatever decides what rewrites mean on Traefik (stripPrefix/replacePath middlewares), not here.
+#
+# The class name is spelled rather than substituted, on purpose: kubementat's only substitution
+# mechanism (the placeholder table in src/kubementat/tekton_utils.py, the one that fills the
+# BASE_DOMAIN placeholder) refuses a template whose key no static.json answers for, which is how an
+# unset BASE_DOMAIN never becomes a host ending in `.null`. Wiring TRAEFIK_INGRESS_CLASS through it
+# would make trigger generation fail for every environment initialized before that key existed, and
+# docs/plans/traefik-integration.md 6.4 lists this generator among nothing that reads the key. If
+# the class ever needs to be configurable here, that is a change to the generator's table and its
+# fallback rule, not to this file alone.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-event-listener-ingress
+  labels:
+    managed-by: kubementat
+  annotations:
+    kubernetes.io/tls-acme: 'true'
+    cert-manager.io/cluster-issuer: letsencrypt
+    ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: APP_NAME_PLACEHOLDER.trigger-hooks.TEAM_PLACEHOLDER.BASE_DOMAIN_PLACEHOLDER
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: el-APP_NAME_PLACEHOLDER-TEAM_PLACEHOLDER-event-listener
+                port:
+                  number: 8080
+  tls:
+    - hosts:
+        - APP_NAME_PLACEHOLDER.trigger-hooks.TEAM_PLACEHOLDER.BASE_DOMAIN_PLACEHOLDER
+      secretName: APP_NAME_PLACEHOLDER-trigger-hooks-TEAM_PLACEHOLDER-tls-secret

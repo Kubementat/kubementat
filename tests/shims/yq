@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""A stand-in for `yq`, for the two conversions the scripts actually use.
+
+`run_pipeline.sh` uses exactly two of yq's moves:
+
+    cat "$file" | yq e -j      # YAML  -> JSON, so jq can edit it
+    echo "$json" | yq e        # JSON  -> YAML, so kubectl can read it
+
+and nothing else. Those are pure conversions with no cluster in them, so that is all this does.
+It is deliberately *not* recorded in `$SHIM_LOG`: it is not a cluster tool, and counting it would
+compare a formatting step as though it were an operation.
+
+The tool this stands in for is mikefarah's yq v4 (`yq e -j` is that tool's syntax, and a host with
+python-yq instead fails these scripts on their first line). Standing in for it is what makes the
+bash half deterministic; see `tests/test_parity_tekton_runs.py`, where that dependency is written
+down rather than assumed.
+"""
+
+import json
+import sys
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover - the venv has pyyaml, a bare interpreter does not
+    sys.exit("tests/shims/yq: pyyaml is needed to stand in for yq")
+
+
+def _load(text):
+    """Autodetect the way yq v4 autodetects: the input is JSON or YAML, nothing else."""
+    try:
+        return json.loads(text)
+    except ValueError:
+        return yaml.safe_load(text)
+
+
+def main(argv):
+    to_json = any(argument in ("-j", "--output-format=json", "-o=json", "--print=json")
+                  or argument.startswith("--output-format=json")
+                  for argument in argv)
+    files = [argument for argument in argv if not argument.startswith("-") and argument != "e"]
+    text = open(files[0]).read() if files else sys.stdin.read()
+    if not text.strip():
+        return 0
+
+    document = _load(text)
+    if to_json:
+        json.dump(document, sys.stdout)
+        sys.stdout.write("\n")
+    else:
+        sys.stdout.write(yaml.dump(document, default_flow_style=False, sort_keys=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

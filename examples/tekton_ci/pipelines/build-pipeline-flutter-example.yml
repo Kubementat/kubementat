@@ -3,7 +3,7 @@
 # See push-image-tag for target registry tag
 ################################
 
-apiVersion: tekton.dev/v1beta1
+apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
   name: build-pipeline-flutter-example

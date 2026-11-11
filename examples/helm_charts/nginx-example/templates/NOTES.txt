@@ -5,6 +5,13 @@
   http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
   {{- end }}
 {{- end }}
+{{- if .Values.ingress.className }}
+  Routed by IngressClass "{{ .Values.ingress.className }}". On a kubementat cluster that class is also the
+  cluster default, so this route exists whether or not an Ingress bothers to name a class.
+{{- else }}
+  No class is written on this Ingress, so the cluster's default answers for it. On a kubementat cluster that
+  default is Traefik, installed with `ingressClass.isDefaultClass: true`.
+{{- end }}
 {{- else if contains "NodePort" .Values.service.type }}
   export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "nginx-example.fullname" . }})
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")

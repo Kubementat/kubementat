@@ -1,0 +1,25 @@
+# see: https://github.com/jetstack/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml
+
+# Install the chart's six CustomResourceDefinitions as part of the release, and keep them when the
+# release goes away.
+#
+# This replaced `installCRDs: true`, which the v1.21.3 chart still honours but calls deprecated:
+# its own `values.yaml:102-104` says the option "is equivalent to setting crds.enabled=true and
+# crds.keep=true" and tells you to use those two instead, and its `templates/NOTES.txt:2` prints a
+# deprecation warning at install time for anyone who keeps writing the old key. The two keys below
+# are the same decision written the way the chart asks for it, and `helm template` against v1.21.3
+# renders all six definitions with `helm.sh/resource-policy: keep` on each.
+#
+# `crds.keep: true` is the chart's own default, so writing it changes nothing today. It is written
+# because it is the key that decides whether kubementat's uninstall sweep is deleting CRDs that are
+# already gone or CRDs that helm refused to take back -- with `keep`, helm leaves them for kubementat
+# to delete, which is what `CERT_MANAGER_CRD_GROUPS` in `src/kubementat/automation.py` assumes. A
+# cluster that changed this value to `false` silently moves ownership of those six definitions to
+# helm and takes the sweep's premise with it, so it is stated rather than defaulted.
+#
+# Nothing else is set here. This tree installs Traefik through Ingress, not Gateway API, so
+# `config.gatewayAPI.enabled` is deliberately absent: an ACME solver for a resource kind no part of
+# kubementat creates is configuration that outlives the reason it was added.
+crds:
+  enabled: true
+  keep: true

@@ -1,0 +1,37 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: echo
+spec:
+  params:
+    - name: image
+      description: The docker image used for executing the script (the ci base image)
+      default: "julianweberdev/ubuntu-ci-minimal:latest"
+
+    - name: echo-message
+      description: the message to put out on the console
+      type: string
+      default: "ECHO"
+  steps:
+    - name: echo
+      image: "$(params.image)"
+      computeResources:
+        requests:
+          memory: 50Mi
+          cpu: 100m
+        limits:
+          memory: 100Mi
+          cpu: 200m
+      env:
+        - name: WORKSPACE_PATH
+          value: "$(workspaces.workspace.path)"
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        echo "###########################"
+        echo "ENV:"
+        env
+        echo "###########################"
+
+        echo "$(params.echo-message)"

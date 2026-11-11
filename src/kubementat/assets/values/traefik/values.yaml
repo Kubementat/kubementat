@@ -1,0 +1,98 @@
+# see: https://github.com/traefik/traefik-helm-chart/blob/master/traefik/values.yaml
+# This file is validated against the chart's own `values.schema.json` (traefik/traefik 42.1.3, which
+# sets `additionalProperties: false` at the root) by
+# tests/test_the_routing_values_file_never_writes_a_service_type_or_a_storage_class.py. That check is
+# not ceremony: nothing rewrites this template, so a key the chart does not know is not a key that is
+# ignored -- it is `helmfile apply -l group=routing` failing with `additional properties ... not
+# allowed` and installing nothing at all.
+#
+# What is *not* here is decided elsewhere, and that is deliberate: the namespace is helmfile's
+# `env "TRAEFIK_DEPLOYMENT_NAMESPACE" | default`, the class name is helmfile's inline entry, and
+# duplicating either here would give one question two answers that can disagree. This file holds
+# only what no config key exists for.
+
+deployment:
+  kind: Deployment            # upstream default; equivalent to DaemonSet on one node
+  replicas: 1
+
+resources:                    # the chart ships none, and a component that fronts everything
+  requests:                   # should not be OOM-killable at the default 0/100Mi
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+ports:
+  traefik:                    # the API/dashboard entrypoint: never exposed. The chart's own
+    expose:                   # comment says to reach it with `kubectl port-forward`, and
+      default: false          # exposing it also costs a node port svclb is already holding.
+  metrics:
+    expose:
+      default: false          # scraped in-cluster; there is no route to this port by design
+  web:
+    port: 8000
+    exposedPort: 80
+    http:
+      redirections:
+        entryPoint:           # the cluster-wide answer to nginx's ssl-redirect /
+          to: websecure       # force-ssl-redirect: one redirect, not an annotation per Ingress
+          scheme: https
+          permanent: true
+  websecure:
+    port: 8443
+    exposedPort: 443
+
+service:
+  enabled: true
+  spec:
+    # `spec.type`, never `service.type`: chart v40 moved the key and the old spelling is silently
+    # ignored, which produces a LoadBalancer Service that never schedules and no error anywhere.
+    # The other reason is upstream's own: a second LoadBalancer Service on a k3s node whose ports
+    # 80/443 are held by another controller's svclb pods is a Service that stays Pending.
+    type: LoadBalancer
+
+ingressClass:
+  enabled: true
+  # DECIDED 2026-10-29 (`docs/plans/finish-python-migration-last-lap.md` §3.3, answering
+  # `docs/plans/traefik-integration.md` §9.1): when kubementat installs the controller, that controller is
+  # the cluster's default class. This is an opinionated framework choice, said out loud rather than copied
+  # from upstream -- though upstream does ship `true`, so the `false` that stood here until that date was
+  # kubementat declining a default, not a default kubementat had refused. The IngressClass is the
+  # cluster-scoped answer for every Ingress that names none, which is what `kmt routing install` promises
+  # and what it had left unfinished: a cluster that ran it had a controller and no routing claim, so every
+  # generated manifest had to spell `ingressClassName` out or be silently unrouted. Consequences this is
+  # honest about: a cluster with an existing default class gains a second claimant, which is why the lane
+  # disables k3s's bundled controller first (§5.2) and why `kmt install` installs no controller at all --
+  # the claim is made only where kubementat's routing group is deliberately applied.
+  isDefaultClass: true
+
+providers:
+  kubernetesIngress:
+    enabled: true
+    publishedService:
+      enabled: true           # status written from kubementat's own Service, not from a guess
+  kubernetesCRD:
+    enabled: true             # IngressRoute, so the CRD path stays available without extra work
+  kubernetesIngressNGINX:
+    enabled: false            # no nginx annotations survive here; a second provider discovering
+                              # the same Ingresses would create duplicate routers
+log:                          # Chart 42's key is `log`, singular, and its shape is `log.level` /
+  level: INFO                 # `log.format` / `log.filePath`. `logs.general.level` was the research
+                              # draft's spelling, and it is worse than merely unused: the root object
+                              # forbids extra keys, so it fails the apply instead of being ignored.
+
+accessLog:
+  enabled: false              # kubementat ships no log sink for it
+
+persistence:
+  enabled: false              # no ACME inside Traefik while cert-manager holds the issuers, so
+                              # there is no acme.json and nothing to put a volume under
+
+hub:
+  enabled: false              # a licence token is not kubementat's to ship
+  namespaces: []              # Not a preference: the schema marks `namespaces` as required inside
+                              # `hub` (values.schema.json `hub.required: ["namespaces"]`; the same
+                              # `required: true` is printed by `helm show values traefik/traefik
+                              # --version 42.1.3`), so `hub` written with only `enabled` is invalid
+                              # even when the hub is disabled. `[]` is the chart's own default and
+                              # says nothing about what a hub would watch, because nothing watches.

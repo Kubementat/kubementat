@@ -1,12 +1,13 @@
-apiVersion: tekton.dev/v1beta1
+apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   name: docker-build-pipeline-run
 spec:
-  # here we need to use our previously created service account (see setup_pipelines.sh)
+  # here we need to use our previously created service account 
   # as we are deploying to another namespace than the tekton pipeline
   # and want to grant according permissions for the helm deploy task
-  serviceAccountName: "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME_PLACEHOLDER"
+  taskRunTemplate:
+    serviceAccountName: "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME_PLACEHOLDER"
   workspaces:
     - name: pipeline-workspace
       volumeClaimTemplate:
@@ -19,7 +20,8 @@ spec:
               storage: 200Mi
   pipelineRef:
     name: docker-build-pipeline
-  timeout: 30m
+  timeouts:
+    pipeline: 30m
   params:
     - name: environment
       value: dev

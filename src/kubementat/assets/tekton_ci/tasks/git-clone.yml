@@ -1,0 +1,89 @@
+
+# kubectl apply -n $namespace -f git-clone.yml
+# example execution parameters:
+# git-url: https://github.com/julweber/circle_ci_kubectl_helm_docker_image.git
+# git-project-name: circle_ci_kubectl_helm_docker_image
+# git-revision: master
+
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: git-clone
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The target folder for checking out git repositories.
+    mountPath: /workspace
+  params:
+  - name: image
+    description: The docker image used for executing the script (the ci base image)
+    default: "julianweberdev/ubuntu-ci-minimal:latest"
+
+  - name: git-url
+    description: git url to clone
+    type: string
+  - name: git-project-name
+    description: project directory name that will be used locally for the git clone call
+    type: string
+  - name: git-revision
+    description: git revision to checkout (branch, tag, sha, ref)
+    type: string
+
+  steps:
+    - name: git-clone
+      computeResources:
+        requests:
+          memory: 256Mi
+          cpu: 200m
+        limits:
+          memory: 768Mi
+          cpu: 800m
+      image: "$(params.image)"
+      env:
+        - name: GIT_URL
+          value: "$(params.git-url)"
+        - name: GIT_PROJECT_NAME
+          value: "$(params.git-project-name)"
+        - name: GIT_REVISION
+          value: "$(params.git-revision)"
+        - name: HOME
+          value: /root
+        - name: WORKSPACE_PATH
+          value: "$(workspaces.workspace.path)"
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        echo "#################################"
+        echo "USER: $(whoami)"
+        echo "HOME: $HOME"
+        echo "WORKSPACE_PATH: $WORKSPACE_PATH"
+        cd $WORKSPACE_PATH
+        echo "CURRENT PATH: $(pwd)"
+
+        # config
+        echo "GIT_URL: $GIT_URL"
+        echo "GIT_PROJECT_NAME: $GIT_PROJECT_NAME"
+        echo "GIT_REVISION: $GIT_REVISION"
+        echo "#################################"
+
+        # clone repo
+        echo "Cloning: $GIT_URL"
+        git clone $GIT_URL "$GIT_PROJECT_NAME"
+
+        cd $GIT_PROJECT_NAME
+        echo "CURRENT PATH: $(pwd)"
+
+        echo "####################"
+        echo "Checking out: $GIT_REVISION"
+        git checkout "$GIT_REVISION"
+        echo "####################"
+        commit_sha="$(git rev-parse HEAD)"
+        echo "Current commit SHA: $commit_sha"
+        echo "####################"
+        # writing commit SHA to file in workspace
+        echo "$commit_sha" > COMMIT_SHA
+
+        # check contents
+        ls -lacht

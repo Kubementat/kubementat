@@ -1,0 +1,27 @@
+# This serves as an example on how to delete any helm deployment via an according pipeline run
+
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: delete-pipeline-mysql-run
+spec:
+  # here we need to use our previously created service account 
+  # as we are deploying to another namespace than the tekton pipeline
+  # and want to grant according permissions for the helm deploy task
+  taskRunTemplate:
+    serviceAccountName: "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME_PLACEHOLDER"
+  pipelineRef:
+    name: delete-pipeline-helm-deployment
+  timeouts:
+    pipeline: 10m
+  params:
+    - name: k8s-namespace
+      value: "dev1"
+    - name: helm-deployment-name
+      value: "mysql"
+    - name: docker-registry-base-url
+      value: DOCKER_REGISTRY_BASE_URL_PLACEHOLDER
+    - name: tekton-ci-image-name
+      value: "TEKTON_CI_IMAGE_NAME_PLACEHOLDER"
+    - name: tekton-ci-image-tag
+      value: "TEKTON_CI_IMAGE_TAG_PLACEHOLDER"

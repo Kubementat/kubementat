@@ -1,0 +1,318 @@
+################################
+# This pipeline template serves as a starting point for deploying helm chart based apps
+# See team and environment for details of the deployment
+################################
+
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: deploy-pipeline-APP_NAME_PLACEHOLDER
+spec:
+  workspaces:
+    - name: pipeline-workspace
+  params:
+    # ENVIRONMENT AND TEAM SPECIFIC SECTION
+    - name: environment
+      type: string
+      description: The name of the environment to run the pipeline for. (e.g. dev, prod)
+      # default: dev
+    - name: team
+      type: string
+      description: The name of the team to run the pipeline for. Results in app deployment namespace (e.g. dev1, dev2, prod1, ...)
+      # default: "k8s/dev1"
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+    - name: tekton-ci-image-name
+      description: The image name to use for the automation run
+      default: "ubuntu-ci-minimal"
+    - name: tekton-ci-image-tag
+      description: The image tag to use for the automation run
+      default: "latest"
+
+    # AUTOMATION REPOSITORY SECTION
+    - name: automation-git-url
+      description: |
+        The git url of the automation repository to use (your fork of the kubementat repos address)
+        e.g.: if you would use the kubementat default location: ssh://git@github.com:Kubementat/kubementat.git
+    - name: automation-git-project-name
+      description: |
+        your local directory name for the repository
+        In general this can be set to the default: "kubementat"
+      default: "kubementat"
+    - name: automation-git-revision
+      description: |
+        the git revision to checkout
+        for the automation repository we are using master most of the time
+      default: "master"
+    - name: automation-git-server-host
+      description: |
+        this should match the hostname provided in automation-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+        e.g.: github.com
+    - name: automation-git-server-port
+      description: |
+        the git server ssh port
+        this should match the port provided (or 22 if no port is provided) in automation-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+      default: "22"
+    - name: automation-git-server-ssh-user
+      description: |
+        the git server ssh user
+        this should match the username provided in automation-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+      default: "git"
+
+    # CONFIGURATION REPOSITORY SECTION
+    # §10's source B: configuration arrives in its own clone, not as a by-product of wherever the code
+    # landed. There is no second key here on purpose -- R-10.2 is the sentence that says `AUTOMATION_GIT_*`
+    # *stop describing where the product lives* and start describing the configuration repository, and a
+    # `CONFIG_GIT_URL` would be the new key R-10.2 refuses. What is added is the one param that says
+    # *which directory of the same workspace that clone occupies*, because a Task cannot be told which
+    # repository it was cloned from but it can be told which directory to read.
+    - name: configuration-git-project-name
+      description: |
+        your local directory name for the configuration repository clone, inside the pipeline workspace.
+        Keep this distinct from `automation-git-project-name`: the code checkout and the configuration
+        clone mount into the *same* workspace, and if both land under the same name the second clone
+        either fails on a non-empty directory or reads whichever one it got first, which is the accident
+        this param exists to prevent.
+      default: "configuration"
+    # APP SPECIFIC SECTION
+    - name: app-name
+      default: "APP_NAME_PLACEHOLDER"
+
+    ## DOCKER IMAGE
+    - name: docker-image-url
+      type: string
+      description: The docker image url to use for the db setup and helm deployment
+    - name: docker-image-tag
+      type: string
+      description: The docker image tag to use for the db setup and helm deployment
+
+    ## APP GIT LOCATION
+    - name: app-git-url
+      description: The app git url of the app repo to execute the deploly for
+      default: "APP_GIT_URL_PLACEHOLDER"
+    - name: app-git-project-name
+      description: The git project name of the app repo to execute the deploly for
+      default: "APP_GIT_PROJECT_NAME_PLACEHOLDER"
+    - name: app-git-revision
+      description: The git branch/tag of the app repo to execute the deploy for
+      default: "k8s/$(params.team)"
+    - name: app-git-server-host
+      description: The git server host of the app repo to execute the deploy for
+      default: "APP_GIT_SERVER_HOST_PLACEHOLDER"
+    - name: app-git-server-port
+      description: The git server port of the app repo to execute the build for
+      default: "APP_GIT_SERVER_PORT_PLACEHOLDER"
+    - name: app-git-server-ssh-user
+      description: The git ssh user for the app repo to execute the build for
+      default: "APP_GIT_SERVER_SSH_USER_PLACEHOLDER"
+
+    # HELM CHART CONFIGURATION
+    - name: helm-path-to-chart
+      default: "/workspace/$(params.automation-git-project-name)/helm_charts/APP_NAME_PLACEHOLDER"
+    - name: helm-deployment-name
+      default: APP_NAME_PLACEHOLDER
+
+  tasks:
+
+    # clone automation source repo for deploy steps
+    - name: git-clone-automation
+      taskRef:
+        name: git-clone-with-ssh-auth
+      params:
+        - name: git-url
+          value: "$(params.automation-git-url)"
+        - name: git-project-name
+          value: "$(params.automation-git-project-name)"
+        - name: git-revision
+          value: "$(params.automation-git-revision)"
+        - name: git-server-host
+          value: "$(params.automation-git-server-host)"
+        - name: git-server-port
+          value: "$(params.automation-git-server-port)"
+        - name: git-server-ssh-user
+          value: "$(params.automation-git-server-ssh-user)"
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
+
+    # clone the configuration repository
+    # §10's source B, option (b): the configuration gets its own clone, in the *same* workspace, at a
+    # path of its own. The URL it clones is `automation-git-url`, because R-10.2 is the sentence that
+    # decides what that key means: it no longer names where the product lives, it names the configuration
+    # repository. For an operator whose configuration still lives in their fork this clone and the one
+    # below are the same repository fetched twice, and that is not a mistake to fix later -- it is what
+    # makes "the root is a clone" true by construction rather than true today by luck. When the
+    # configuration genuinely moves out of the fork, no step here changes: only the URL does.
+    - name: git-clone-configuration
+      taskRef:
+        name: git-clone-with-ssh-auth
+      params:
+        - name: git-url
+          value: "$(params.automation-git-url)"
+        - name: git-project-name
+          value: "$(params.configuration-git-project-name)"
+        - name: git-revision
+          value: "$(params.automation-git-revision)"
+        - name: git-server-host
+          value: "$(params.automation-git-server-host)"
+        - name: git-server-port
+          value: "$(params.automation-git-server-port)"
+        - name: git-server-ssh-user
+          value: "$(params.automation-git-server-ssh-user)"
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
+
+    # §10 R-10.3: the configuration clone arrives locked. `git_crypt_symmetric.key` is gitignored, so it
+    # is not inside the repository `git-clone-configuration` just fetched, and every step that reads
+    # configuration after this one sees a directory only if this step opened it. The key comes from the
+    # Secret `kmt install` creates, read by `secretKeyRef` -- a pod has no filesystem to find a key on.
+    #
+    # A step of its own and not part of the clone, because §10 rules it that way and because it keeps "did
+    # we fetch it" and "can we read it" two separate answers. Not part of `kmt`, because §11.7 says
+    # kubementat reads and never unlocks, and census K found no `git-crypt unlock` anywhere under `src/`.
+    - name: git-crypt-unlock-configuration
+      runAfter:
+        - git-clone-configuration
+      taskRef:
+        name: git-crypt-unlock
+      params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+        - name: configuration-root
+          value: "$(workspaces.workspace.path)/$(params.configuration-git-project-name)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
+
+    # clone app source repo for build
+    - name: git-clone-app
+      taskRef:
+        name: git-clone-with-ssh-auth
+      params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+        - name: git-url
+          value: "$(params.app-git-url)"
+        - name: git-project-name
+          value: "$(params.app-git-project-name)"
+        - name: git-revision
+          value: "$(params.app-git-revision)"
+        - name: git-server-host
+          value: "$(params.app-git-server-host)"
+        - name: git-server-port
+          value: "$(params.app-git-server-port)"
+        - name: git-server-ssh-user
+          value: "$(params.app-git-server-ssh-user)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
+
+    # list workspace contents
+    - name: list-workspace-contents
+      params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+      runAfter:
+        - git-clone-automation
+        # The configuration has to be *open*, not merely fetched: a step that starts after the clone and
+        # before the unlock reads ciphertext and calls it configuration. Waiting on the unlock step is
+        # the difference between "we have the bytes" and "we can read them".
+        - git-crypt-unlock-configuration
+        - git-clone-app
+      taskRef:
+        name: list-workspace
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
+
+    # TODO: generate the database schema
+    - name: generate-database-schema
+      runAfter:
+        - git-clone-automation
+        # The configuration has to be *open*, not merely fetched: a step that starts after the clone and
+        # before the unlock reads ciphertext and calls it configuration. Waiting on the unlock step is
+        # the difference between "we have the bytes" and "we can read them".
+        - git-crypt-unlock-configuration
+        - git-clone-app
+      taskRef:
+        name: echo
+      params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+        - name: echo-message
+          value: "PLEASE IMPLEMENT DATABASE SCHEMA GENERATION HERE"
+      # workspaces:
+      #   - name: workspace
+      #     workspace: pipeline-workspace
+
+    # TODO: implement according task and add config for it here
+    - name: app-database-setup
+      runAfter:
+        - generate-database-schema
+      taskRef:
+        name: echo
+      params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+        - name: echo-message
+          value: "PLEASE IMPLEMENT DATABASE SETUP HERE"
+      # workspaces:
+      #   - name: workspace
+      #     workspace: pipeline-workspace
+
+    # TODO: implement according task and add config for it here
+    - name: app-database-seeds
+      runAfter:
+        - app-database-setup
+      taskRef:
+        name: echo
+      params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+        - name: echo-message
+          value: "PLEASE IMPLEMENT DATABASE SEEDING HERE"
+      # workspaces:
+      #   - name: workspace
+      #     workspace: pipeline-workspace
+
+    # deploy app via helm chart and config in platform_config/ENVIRONMENT/TEAM/APP_NAME
+    - name: deploy-app-helm-chart
+      runAfter:
+        - app-database-seeds
+      taskRef:
+        name: deploy-local-helm-chart
+      params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+        # The root this step reads is named here rather than left to the Task default. Both spell the
+        # same thing by default (the clone param defaults to "configuration", and the default is
+        # /workspace/configuration), which is exactly the agreement that would go wrong quietly the day
+        # someone changes one of them -- so the pipeline states it, and the Task default is only the
+        # fallback for a bare TaskRun.
+        - name: path-to-configuration
+          value: "$(workspaces.workspace.path)/$(params.configuration-git-project-name)"
+        - name: docker-image-url
+          value: "$(params.docker-image-url)"
+        - name: docker-image-tag
+          value: "$(params.docker-image-tag)"
+        - name: path-to-chart
+          value: "$(params.helm-path-to-chart)"
+        - name: team
+          value: "$(params.team)"
+        - name: helm-deployment-name
+          value: "$(params.helm-deployment-name)"
+        - name: environment
+          value: "$(params.environment)"
+        - name: app-name
+          value: "$(params.app-name)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace

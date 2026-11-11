@@ -1,8 +1,19 @@
-# This file serves as an example for configuring ingresses using the nginx ingress controller and
+# This file serves as an example for configuring an ingress that is routed by kubementat's Traefik and
 # tls certificates issued by letsencrypt and managed via cert manager
 #
 # adjust domain settings and apply via:
 # kubectl -n dev1 apply -f tls_ingress_example.yml
+#
+# The class is written in `spec.ingressClassName` and not in the retired
+# `kubernetes.io/ingress.class` annotation: Traefik's default Ingress provider reads the field and not the
+# annotation, which is the difference between a challenge that gets routed and one that exists forever
+# without being answered. Naming it here is also optional on a kubementat cluster -- kubementat installs
+# Traefik with `ingressClass.isDefaultClass: true`, so this is what an Ingress that names nothing resolves
+# to. Write it when the cluster you apply this to serves a class of someone else's.
+#
+# There is no ssl-redirect annotation, because there is no per-Ingress redirect to configure: kubementat's
+# Traefik redirects its `web` entrypoint to `websecure` for the whole cluster, in
+# src/kubementat/assets/values/traefik/values.encrypted.yaml.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -10,10 +21,9 @@ metadata:
     # add an annotation indicating the issuer to use.
     cert-manager.io/cluster-issuer: letsencrypt
     kubernetes.io/tls-acme: "true"
-    kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
   name: nginx-example-ingress
 spec:
+  ingressClassName: traefik
   rules:
   - host: nginx-example.dev1.example.com
     http:

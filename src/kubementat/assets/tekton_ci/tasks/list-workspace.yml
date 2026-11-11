@@ -1,0 +1,38 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: list-workspace
+spec:
+  params:
+    - name: image
+      description: The docker image used for executing the script (the ci base image)
+      default: "julianweberdev/ubuntu-ci-minimal:latest"
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder to list files.
+    mountPath: /workspace
+  steps:
+    - name: list
+      computeResources:
+        requests:
+          memory: 50Mi
+          cpu: 100m
+        limits:
+          memory: 100Mi
+          cpu: 200m
+      image: "$(params.image)"
+      env:
+        - name: WORKSPACE_PATH
+          value: "$(workspaces.workspace.path)"
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        echo "Disk usage:"
+        df -h
+
+        echo "WORKSPACE_PATH: $WORKSPACE_PATH"
+
+        cd $WORKSPACE_PATH
+        ls -lacht

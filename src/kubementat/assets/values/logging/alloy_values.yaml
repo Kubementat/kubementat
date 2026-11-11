@@ -1,0 +1,158 @@
+# For reference:
+# - Alloy (the chart this file configures): https://github.com/grafana/alloy/blob/main/chart/values.yaml
+# The chart is `grafana/alloy` 1.15.0, which is Alloy v1.21.3. The collector is a release of its own
+# rather than a Loki subchart because the community Loki chart has no subchart to be, and the release
+# block in `helmfile.yaml.gotmpl` says why it shares the loki namespace.
+#
+# This replaces what Promtail did inside loki-stack. The label set below is deliberately the same one
+# a Promtail install produced -- `namespace`, `pod`, `container`, `app`, `job`, `instance`,
+# `component`, `node_name`, `stream` -- because that is what existing Grafana queries and Explore
+# links read, and a collector that renames labels is a collector that breaks them silently.
+# Kubernetes events come along too, which Promtail could not do.
+
+controller:
+  # One agent per node. This is what reads the log files, so the alternative -- one Deployment
+  # reading every file through one hostPath -- is not a thing this cluster can do.
+  type: daemonset
+
+alloy:
+  clustering:
+    # Lets exactly one of these DaemonSet pods collect the cluster's events, so `events` do not
+    # arrive once per node. Pod logs are node-local by construction and are unaffected.
+    enabled: true
+
+  mounts:
+    # hostPath /var/log. This is how container logs are read on a cluster with no log API, and it is
+    # the same mount Promtail's chart set.
+    varlog: true
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+  configMap:
+    content: |
+      // One DaemonSet pod per node, and it only watches the pods that live on that node. Without
+      // the node selector every pod in the cluster is discovered N times and the log file simply
+      // is not there, which is a failure that reports as a quiet gap rather than an error.
+      discovery.kubernetes "pods" {
+        role = "pod"
+
+        selectors {
+          role  = "pod"
+          field = "spec.nodeName=" + coalesce(sys.env("HOSTNAME"), constants.hostname)
+        }
+      }
+
+      // The label set loki-stack's Promtail shipped, rebuilt here.
+      discovery.relabel "pod_logs" {
+        targets = discovery.kubernetes.pods.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_controller_name"]
+          regex         = "([0-9a-z-.]+?)(-[0-9a-f]{8,10})?"
+          target_label  = "__tmp_controller_name"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_label_app", "__tmp_controller_name", "__meta_kubernetes_pod_name"]
+          regex         = "^;*([^;]+)(;.*)?$"
+          target_label  = "app"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_instance", "__meta_kubernetes_pod_label_instance"]
+          regex         = "^;*([^;]+)(;.*)?$"
+          target_label  = "instance"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_component", "__meta_kubernetes_pod_label_component"]
+          regex         = "^;*([^;]+)(;.*)?$"
+          target_label  = "component"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_node_name"]
+          target_label  = "node_name"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["namespace", "app"]
+          separator     = "/"
+          target_label  = "job"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          replacement   = "/var/log/pods/*$1/*.log"
+          target_label  = "__path__"
+        }
+        // Static pods -- the k3s control plane -- log under their config hash rather than their
+        // uid, and without this rule they are the only logs that never arrive.
+        rule {
+          source_labels = ["__meta_kubernetes_pod_annotationpresent_kubernetes_io_config_hash", "__meta_kubernetes_pod_annotation_kubernetes_io_config_hash", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          regex         = "true/(.*)"
+          replacement   = "/var/log/pods/*$1/*.log"
+          target_label  = "__path__"
+        }
+      }
+
+      local.file_match "pod_logs" {
+        path_targets = discovery.relabel.pod_logs.output
+      }
+
+      loki.source.file "pod_logs" {
+        targets    = local.file_match.pod_logs.targets
+        forward_to = [loki.process.pod_logs.receiver]
+      }
+
+      loki.process "pod_logs" {
+        stage.cri {}
+
+        // stdout or stderr as a label, so a query can separate the two.
+        stage.labels {
+          values = {
+            stream = "",
+          }
+        }
+
+        // The file path is a target of this pipeline, not a fact about the log line.
+        stage.label_drop {
+          values = ["filename"]
+        }
+
+        forward_to = [loki.write.default.receiver]
+      }
+
+      // Kubernetes events. With clustering on, one agent writes them instead of one per node.
+      loki.source.kubernetes_events "cluster_events" {
+        job_name   = "integrations/kubernetes/eventhandler"
+        log_format = "logfmt"
+
+        clustering {
+          enabled = true
+        }
+
+        forward_to = [loki.write.default.receiver]
+      }
+
+      // The address Grafana's datasource points at, on the push port. Release `loki`, namespace
+      // `loki`, port 3100: the same Service the two components agree on, which is why the collector
+      // that finds it lives beside the store and not in a namespace of its own.
+      loki.write "default" {
+        endpoint {
+          url = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }

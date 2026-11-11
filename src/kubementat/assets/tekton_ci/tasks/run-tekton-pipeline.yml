@@ -1,0 +1,190 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: run-tekton-pipeline
+spec:
+  workspaces:
+    - name: workspace
+      description: |
+        The workspace folder with the automation repository including helm charts and platform_config.
+      mountPath: /workspace
+
+  params:
+    - name: image
+      description: The image url including tag used for running the task
+      default: "julianweberdev/ubuntu-ci-minimal:latest"
+
+    - name: environment
+      description: the target environment for the installation
+      type: string
+      # default: "dev"
+    - name: team
+      description: the target team name for the installation
+      type: string
+    - name: path-to-configuration
+      description: |
+        Where the step starts, and it is stated once for both of the things that read it.
+        `workingDir` and `KUBEMENTAT_HOME` are this directory, and the reason they have to be declared
+        is not decoration: `uv run kmt` resolves the entry point from the project, and it walks *up*
+        from the directory it is invoked in to find pyproject.toml/uv.lock and never down. The CI
+        image ships `uv` alone and does not pip-install kubementat, so a `kmt` command started outside
+        the checkout dies with "Failed to spawn: kmt / No such file or directory" rather than saying
+        the project was not found. Declaring the directory is what puts the command inside it.
+        How it is declared follows helmfile-cli and terraform-cli, which take a directory param and
+        name it on their steps, rather than create-secret-from-json, which rebuilds the same path from
+        $(params.automation-git-project-name) and enters it with a `cd`. No pipeline in the tree
+        overrides this param.
+        The sharp edge that comes with that: the default names the checkout only for as long as the
+        clone lands under "kubementat", i.e. only for as long as the calling pipeline keeps
+        automation-git-project-name on the default it has (examples/tekton_ci/pipelines/
+        01-full-deployment-pipeline.yml). An operator who renames the clone directory and does not set
+        path-to-configuration gets a step that runs in a directory that is not the project, and the
+        failure is the uv one above and not a misconfiguration message.
+        e.g. as a default: "$(workspaces.workspace.path)/kubementat"
+
+        What this is *not*: the configuration root the `kmt` below reads. Since §8 a root is named and
+        never located, so the command names it explicitly with --config-dir (§10 R-10.1), and since §10's
+        source B that root is a clone of its own, named by `configuration-root` below. This param is the
+        **code** checkout, and the two params are kept apart because they answer two questions: `uv` walks
+        up from this directory to find the project, and `kmt` reads configuration out of the other one.
+      default: "$(workspaces.workspace.path)/kubementat"
+    - name: configuration-root
+      description: |
+        Where the configuration lives, as opposed to where the step starts. §10 R-10.1's second clause is
+        this line: every `kmt` invocation names its root, and under source B that root is no longer
+        `$(params.path-to-configuration)/platform_config` -- it is the cloned configuration workspace.
+        The two params exist because they answer two different questions: `path-to-configuration` is the
+        **code** checkout that `uv` walks *up* from to find `pyproject.toml`, and `configuration-root` is
+        what the command **reads**. Under source A they were one directory; under source B they are two
+        clones of two repositories, mounted into the same workspace at two paths, and nothing may let the
+        step infer one from the other.
+
+        What this param names is **the directory that carries the environment directories** -- the same
+        thing `Config`'s `platform_config_dir` names, and for the same reason (§8: a root is named and
+        never located). It is not a directory that *holds* a directory called `platform_config`. On a §5
+        configuration repository, cloned whole, that root is this clone's own top level, because §5 puts
+        `<environment>/` one directory below the root and there is no `platform_config` level anywhere in
+        the tree. A combined tree that still keeps `platform_config/` inside a code checkout (§14.2) is
+        not broken by this: the operator points this param *at* `<checkout>/platform_config`, which is
+        what §14.2 tells them to do. Either way the param is the root, and no step appends anything to it.
+
+        That last sentence is the part that was wrong once. A `--config-dir` of
+        `<clone>/platform_config` against a §5 tree is one directory too deep, and it fails with
+        `no environment in ... declares a cluster` -- a refusal that reads as though the clone were empty
+        and is in fact this file's bug, not the operator's. §14.2's `platform_config` is a value someone
+        passes, never a segment a Task adds.
+        e.g. as a default: "$(workspaces.workspace.path)/configuration"
+        A pipeline that clones the configuration somewhere else passes this param. It cannot be found out:
+        §8 deleted the lookup, and a `kmt` that names no root refuses before it reaches a cluster.
+      default: "$(workspaces.workspace.path)/configuration"
+    - name: cluster-kubeconfig
+      description: |
+        **The kubeconfig this step's `kmt` reads the cluster from, and the TaskRun has to name it.**
+        §10 R-10.4's stated cluster, passed on the command line in v2's own layer-1 shape so the
+        resolution report can say where the answer came from.
+
+        Why a step that already lives inside the cluster has to name a file: v2's resolution order
+        puts the cloned configuration's `static.json` (layer 3) **ahead of** the mounted service
+        account (layer 4), and it does not fall through when the file that file points at is missing.
+        A pod that states nothing therefore does not resolve to the cluster it is running on — it
+        refuses on `CLUSTER_KUBECONFIG_PATH`, a path the clone carries and the pod has never seen.
+        The alternative, teaching layer 3 to fall through, is refused by §10.4 on the grounds that a
+        configuration which cannot find the cluster it declares does not get to discover a different
+        one.
+
+        So the statement is what makes the difference between those two failures: the file named here
+        is the file that gets opened, while the context asked of it stays the environment's own
+        `CLUSTER_KUBE_CONTEXT`. If the stated file does not declare that context, `kmt` refuses and names both
+        claims — the TaskRun's and the clone's — because which environment a run is for is not
+        something a pod gets to decide by being scheduled somewhere.
+
+        An empty value says "the environment's own declaration answers, and this run states nothing".
+        A pod should not leave it empty, because it will die on the clone's dead path; a step that
+        runs against a machine's own `~/.kube/config` may. It is never derived: §8 deleted the
+        lookup that used to answer "which cluster" for a command that had said nothing.
+      type: string
+    - name: polling-sleep-time
+      description: "How many seconds the step should wait between reads of the inner pipeline-run status. Passed to kmt as --poll-interval."
+      default: "3"
+    - name: allow-parallel-run
+      description: "Should the pipeline run be allowed to run in parallel to other runs"
+      default: "false"
+    - name: path-to-pipeline-run-file
+      description: |
+        The path to the pipeline run file within the config repo
+        e.g. for env=dev and team=dev1: "$(workspaces.workspace.path)/kubementat/platform_config/dev/dev1/tekton/pipeline-runs/deploy-pipeline-nginx-example-run.yml"
+  steps:
+    - name: run-tekton-pipeline
+      computeResources:
+        requests:
+          memory: 100Mi
+          cpu: 100m
+        limits:
+          memory: 512Mi
+          cpu: 300m
+      image: "$(params.image)"
+      # The directory is declared rather than entered, which is what makes the `uv run` below able to
+      # find the project: the checkout is a child of the mount, so a step started from the mount is
+      # outside it and gets uv's "No such file or directory" for a kmt that the image does not ship.
+      # It is the same value the step exports as KUBEMENTAT_HOME, so the command and the step cannot
+      # drift apart. See the path-to-configuration param for what this cannot be left to.
+      workingDir: $(params.path-to-configuration)
+      env:
+        - name: KUBEMENTAT_HOME
+          value: "$(params.path-to-configuration)"
+        - name: ENVIRONMENT
+          value: "$(params.environment)"
+        - name: TEAM
+          value: "$(params.team)"
+        - name: PATH_TO_PIPELINE_RUN_FILE
+          value: "$(params.path-to-pipeline-run-file)"
+        - name: ALLOW_PARALLEL_RUN
+          value: "$(params.allow-parallel-run)"
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        echo "###########################"
+        echo "ENV:"
+        env
+        echo "CURRENT_PATH: $(pwd)"
+        echo "###########################"
+
+        echo ""
+        echo "Running pipeline run file: $PATH_TO_PIPELINE_RUN_FILE"
+        echo "for ENV: $ENVIRONMENT and team: $TEAM"
+        echo ""
+
+        # One step, one command: `kmt tekton run-pipeline --wait` starts the run and reads its own
+        # status until it finishes. There is no second command and no polling loop here, and the step
+        # exits non-zero on a failed run or on a run that was refused, so the outer pipeline's
+        # verdict is the inner run's verdict.
+        #
+        # The bound is kmt's own `--timeout`, thirty minutes by default; this step does not override
+        # it. bash had no bound, which is how a wedged run held this pod forever.
+        # Built as a list of arguments rather than assembled into a string, so the optional flag
+        # cannot change how the rest of the line is word-split.
+        #
+        # --config-dir is what the command reads, and since §10's source B it is a different clone from
+        # the one this step starts in: $(params.configuration-root) is the configuration repository, and
+        # workingDir/KUBEMENTAT_HOME above stay on the code checkout so `uv` can resolve the entry point.
+        # Nothing is appended to the root: it is the directory that carries `<environment>/`, which on a
+        # §5 clone is the clone itself and on a combined tree is `.../platform_config`, and the difference
+        # is the operator's to state, not this step's to guess. §8 deleted everything that used to answer
+        # the root for a command that said nothing, so a kmt that names none refuses before a cluster.
+        #
+        # --kubeconfig is the other half of the same discipline, and §10.4 is the reason it is stated
+        # and not read out of the configuration: inside a pod the clone's own CLUSTER_KUBECONFIG_PATH
+        # is a reference to a file nobody here has, and the answer that wins has to be the one the
+        # pipeline declared. See this Task's `cluster-kubeconfig` param for what the statement does
+        # and does not decide.
+        COMMAND=(uv run --locked --no-dev kmt tekton run-pipeline
+                 "$ENVIRONMENT" "$TEAM" "$PATH_TO_PIPELINE_RUN_FILE"
+                 --config-dir "$(params.configuration-root)"
+                 --kubeconfig "$(params.cluster-kubeconfig)")
+        if [[ "$ALLOW_PARALLEL_RUN" == "true" ]]; then
+          COMMAND+=(--parallel)
+        fi
+        COMMAND+=(--wait --poll-interval "$(params.polling-sleep-time)")
+
+        "${COMMAND[@]}"

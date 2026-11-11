@@ -1,0 +1,8 @@
+{
+  "APP_DEPLOYMENT_NAMESPACE": "dev1",
+  "ENVIRONMENT": "dev",
+  "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME": "helm-deployer-sa",
+  "MYSQL_VOLUME_STORAGE_CLASS": "local-path",
+  "PIPELINE_NAMESPACE": "dev1-pipelines",
+  "REDIS_VOLUME_STORAGE_CLASS": "local-path"
+}

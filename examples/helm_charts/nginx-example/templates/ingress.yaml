@@ -12,6 +12,12 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
+  {{- /* The class is written and not assumed. On a kubementat cluster it is redundant -- Traefik is
+  installed as the default class, so an Ingress that names nothing is routed anyway -- and writing it is
+  what makes this example true on a cluster where someone else's class answers that question. */}}
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
   {{- if .Values.ingress.tls }}
   tls:
     {{- range .Values.ingress.tls }}

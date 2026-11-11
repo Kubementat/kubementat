@@ -1,0 +1,192 @@
+################################
+# This pipeline deploys all configured apps for an environment and team
+# See team and environment for details of the deployment
+################################
+
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: 01-full-deployment-pipeline
+spec:
+  workspaces:
+    - name: pipeline-workspace
+  params:
+    - name: environment
+      type: string
+      description: The name of the environment to run the pipeline for. (e.g. dev, prod)
+      # default: dev
+    - name: team
+      type: string
+      description: The name of the team to run the pipeline for. Results in app deployment namespace (e.g. dev1, dev2)
+
+    # Platform configuration
+    - name: docker-registry-base-url
+      description: The docker registry base url with path to load the CI image for tekton task execution from
+    - name: tekton-ci-image-name
+      description: The image name to use for the automation run
+      default: "ubuntu-ci-minimal"
+    - name: tekton-ci-image-tag
+      description: The image tag to use for the automation run
+      default: "latest"
+
+    # AUTOMATION REPOSITORY SECTION
+    - name: automation-git-url
+      description: |
+        The git url of the automation repository to use (your fork of the kubementat repos address)
+        e.g.: if you would use the kubementat default location: ssh://git@github.com:Kubementat/kubementat.git
+    - name: automation-git-project-name
+      description: |
+        your local directory name for the repository
+        In general this can be set to the default: "kubementat"
+      default: "kubementat"
+    - name: automation-git-revision
+      description: |
+        the git revision to checkout
+        for the automation repository we are using master most of the time
+      default: "master"
+    - name: automation-git-server-host
+      description: |
+        this should match the hostname provided in automation-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+        e.g.: github.com
+    - name: automation-git-server-port
+      description: |
+        the git server ssh port
+        this should match the port provided (or 22 if no port is provided) in automation-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+      default: "22"
+    - name: automation-git-server-ssh-user
+      description: |
+        the git server ssh user
+        this should match the username provided in automation-git-url
+        this setting is used for configuring the ssh auth mechanism correctly
+      default: "git"
+
+    # CONFIGURATION REPOSITORY
+    # §10's source B, option (b): the configuration arrives in its own clone, in the *same* workspace and
+    # at a path of its own. No second key is introduced, because R-10.2 is the sentence that decides what
+    # `automation-git-url` means, and it now means the configuration repository. This param says only
+    # which directory of the workspace that clone occupies.
+    - name: configuration-git-project-name
+      description: |
+        your local directory name for the configuration repository clone, inside the pipeline workspace.
+        Keep it distinct from automation-git-project-name: both clones mount into the same workspace, and
+        if they land under the same name one of them unpacks into the other.
+      default: "configuration"
+
+    # §10 R-10.4: the cluster a pod runs its `kmt` steps against is not something the clone can tell
+    # it. This is the statement, and every `kmt` step in the tasks below carries it as
+    # `--kubeconfig`.
+    - name: cluster-kubeconfig
+      description: |
+        The kubeconfig this pipeline's `kmt` steps read the cluster from. A pipeline cannot name it
+        for you: an example ships no mount that holds one, and inventing a path nothing creates is
+        how a task comes to point at somebody's laptop. So the default is the empty string, which
+        states nothing and leaves the answer to each environment's own `CLUSTER_KUBE_CONTEXT`.
+
+        For a pod, empty is the wrong answer. The cloned configuration declares a context whose
+        `CLUSTER_KUBECONFIG_PATH` is machine-local, v2's ordering puts that declaration ahead of the
+        pod's mounted service account, and the declaration does not fall through when the file is
+        missing — the step refuses on a path nobody in this workspace has. A pipeline that runs in a
+        cluster mounts its kubeconfig and puts that path here; a pipeline that runs on a machine
+        with a working `~/.kube/config` can leave it empty and say so.
+      default: ""
+  tasks:
+
+    # clone the configuration repository (§10's source B, option (b)): the same workspace the code clone
+    # lands in, at a path of its own. The URL is automation-git-url, because R-10.2 says that key names
+    # the configuration repository and no second key fills the gap.
+    - name: git-clone-configuration
+      taskRef:
+        name: git-clone-with-ssh-auth
+      params:
+        - name: git-url
+          value: "$(params.automation-git-url)"
+        - name: git-project-name
+          value: "$(params.configuration-git-project-name)"
+        - name: git-revision
+          value: "$(params.automation-git-revision)"
+        - name: git-server-host
+          value: "$(params.automation-git-server-host)"
+        - name: git-server-port
+          value: "$(params.automation-git-server-port)"
+        - name: git-server-ssh-user
+          value: "$(params.automation-git-server-ssh-user)"
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
+
+    # §10 R-10.3: the configuration clone arrives locked, because `git_crypt_symmetric.key` is gitignored
+    # and so never travels inside the repository. The key comes from the Secret `kmt install` creates.
+    # Without this step the next one reads ciphertext, gets YAML-shaped noise, and calls it configured.
+    - name: git-crypt-unlock-configuration
+      runAfter:
+        - git-clone-configuration
+      taskRef:
+        name: git-crypt-unlock
+      params:
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+        - name: configuration-root
+          value: "$(workspaces.workspace.path)/$(params.configuration-git-project-name)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
+
+    # clone automation source repo for deploy steps
+    - name: git-clone-automation
+      taskRef:
+        name: git-clone-with-ssh-auth
+      params:
+        - name: git-url
+          value: "$(params.automation-git-url)"
+        - name: git-project-name
+          value: "$(params.automation-git-project-name)"
+        - name: git-revision
+          value: "$(params.automation-git-revision)"
+        - name: git-server-host
+          value: "$(params.automation-git-server-host)"
+        - name: git-server-port
+          value: "$(params.automation-git-server-port)"
+        - name: git-server-ssh-user
+          value: "$(params.automation-git-server-ssh-user)"
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace
+
+    # The name of this task is the demo app's name, not a controller's. The app is reached through
+    # kubementat's Traefik class like everything else the platform installs, and nothing here brings an
+    # ingress controller along with it - that is `kmt routing install`'s job, not an example chart's.
+    - name: nginx-example
+      taskRef:
+        name: run-tekton-pipeline
+      runAfter:
+        - git-clone-automation
+        # Wait for the configuration to be *open*, not merely cloned -- the run file below is read out of it.
+        - git-crypt-unlock-configuration
+      params:
+        # The run file this step starts is configuration and not code, so since §10's source B it hangs
+        # off the configuration clone -- the same tree `--config-dir` names inside the Task. No
+        # `platform_config` segment: §5 puts `<environment>/` directly under the clone's own top level,
+        # and `70745fa` retired the level everywhere else it had been spelled.
+        - name: path-to-pipeline-run-file
+          value: "$(workspaces.workspace.path)/$(params.configuration-git-project-name)/$(params.environment)/$(params.team)/tekton/pipeline-runs/deploy-pipeline-nginx-example-run.yml"
+        - name: environment
+          value: "$(params.environment)"
+        - name: team
+          value: "$(params.team)"
+        - name: image
+          value: "$(params.docker-registry-base-url)/$(params.tekton-ci-image-name):$(params.tekton-ci-image-tag)"
+        # §10.4's stated cluster. This step reaches a cluster — it starts the inner PipelineRun and
+        # watches it — so it states which one it means instead of letting a cloned `static.json`
+        # answer with a path the pod does not have. See this pipeline's `cluster-kubeconfig` param
+        # for what that statement does and does not decide.
+        - name: cluster-kubeconfig
+          value: "$(params.cluster-kubeconfig)"
+      workspaces:
+        - name: workspace
+          workspace: pipeline-workspace

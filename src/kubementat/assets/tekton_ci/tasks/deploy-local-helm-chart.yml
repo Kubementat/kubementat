@@ -1,0 +1,172 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: deploy-local-helm-chart
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder with the automation repository including helm charts and platform_config.
+    mountPath: /workspace
+  params:
+    - name: image
+      description: The docker image used for executing the script (the ci base image)
+      default: "julianweberdev/ubuntu-ci-minimal:latest"
+
+    - name: environment
+      description: The application environment to use for loading configuration. E.g. dev, prod
+      # default: dev
+    - name: team
+      description: The k8s namespace to use for the deployment
+    - name: app-name
+      description: The name of the application (this is used for platform_config/ENV/TEAM/APP_NAME/values.encrypted.yaml)
+    - name: path-to-configuration
+      description: |
+        The root the step reads configuration from: the directory that carries the environment
+        directories, and nothing else. §10 R-10.1's first clause is about this value, and the sentence is
+        about the *default*, not the param: the default was `$(workspaces.workspace.path)/kubementat`,
+        which named the **code** checkout -- the directory the clone step created out of
+        `automation-git-project-name` -- so the step read configuration from wherever the code happened to
+        be rather than from the repository that owns it. It is now
+        `$(workspaces.workspace.path)/configuration`: §10's source B, option (b), which puts the
+        configuration clone in the *same* workspace the code clone does, at a path of its own.
+        `/workspace/kubementat` is code, `/workspace/configuration` is configuration, and nothing has to
+        be the same repo for the two to be true.
+        e.g. as a default: "$(workspaces.workspace.path)/configuration"
+
+        What this is not: something the Task can find out. A direct TaskRun that passes no value gets this
+        default, and if the pipeline did not clone there the failure is a missing file named in full -- not
+        an invented root, because §8 deleted the lookup that used to answer this question. That is the
+        whole reason the default is stated as a path and not derived: a Task cannot see its pipeline's clone
+        steps, and an inference it makes about the checkout directory is a guess that outlives the day the
+        layout changes.
+
+        Nor is it a root with something appended to it. §5 puts `<environment>/` one directory below the
+        root of a configuration repository, so the values file for `dev`/`dev1`/`my-app` is
+        `<this param>/dev/dev1/my-app/values.encrypted.yaml`, and there is no `platform_config` level to
+        add: it is not a directory in v2's tree, and the two places this Task once built that segment were
+        both bugs -- the first because the code checkout did carry a `platform_config/`, so appending it
+        worked while the fork was also the configuration repository (§10's whole reason for existing), and
+        the second when the default moved to the configuration clone and the append stayed, which read one
+        directory too deep and reported a missing file rather than the wrong tree. A combined tree that
+        keeps `platform_config/` inside a checkout (§14.2) still works: the operator names that directory
+        *as* this param, and §14.2 is about naming a root rather than adding a segment to one.
+      default: "$(workspaces.workspace.path)/configuration"
+    - name: docker-image-url
+      description: Url of the image repository for the deployment
+    - name: docker-image-tag
+      description: Tag to use for the deployment
+      default: "latest"
+    - name: set-tag-from-version-file
+      description: Should the docker image tag be set from a version file (see path-to-version-file variable)
+      default: "false"
+    - name: path-to-version-file
+      description: A path to the file containing the app version number (used with set-tag-from-version-file)
+      default: ""
+    - name: path-to-chart
+      description: The path to the helm chart that should be deployed
+    - name: helm-deployment-name
+      description: The name to use for the helm deployment
+    - name: helm-timeout
+      description: "How long should helm wait for the deployment to finish? - e.g. 5m0s"
+      default: "5m0s"
+
+  steps:
+    - name: deploy-via-helm
+      image: "$(params.image)"
+      computeResources:
+        requests:
+          memory: 100Mi
+          cpu: 100m
+        limits:
+          memory: 256Mi
+          cpu: 300m
+      script: |
+        #!/usr/bin/env bash
+        set -ue
+
+        # configure env:
+        ENVIRONMENT="$(params.environment)"
+        TEAM="$(params.team)"
+        APP_NAME="$(params.app-name)"
+        PATH_TO_CONFIGURATION="$(params.path-to-configuration)"
+        PATH_TO_CHART="$(params.path-to-chart)"
+        HELM_DEPLOYMENT_NAME="$(params.helm-deployment-name)"
+        DOCKER_IMAGE_URL="$(params.docker-image-url)"
+        DOCKER_IMAGE_TAG="$(params.docker-image-tag)"
+        SET_TAG_FROM_VERSION_FILE="$(params.set-tag-from-version-file)"
+        PATH_TO_VERSION_FILE="$(params.path-to-version-file)"
+        HELM_TIMEOUT="$(params.helm-timeout)"
+
+
+        echo "########################"
+        echo "Parameters:"
+        echo "environment: $ENVIRONMENT"
+        echo "team: $TEAM"
+        echo "app-name: $APP_NAME"
+        echo "docker-image-url: $DOCKER_IMAGE_URL"
+        echo "docker-image-tag: $DOCKER_IMAGE_TAG"
+        echo "set-tag-from-version-file: $SET_TAG_FROM_VERSION_FILE"
+        echo "path-to-version-file: $PATH_TO_VERSION_FILE"
+        echo "path-to-configuration: $PATH_TO_CONFIGURATION"
+        echo "path-to-chart: $PATH_TO_CHART"
+        echo "helm-deployment-name: $HELM_DEPLOYMENT_NAME"
+        echo "helm-timeout: $HELM_TIMEOUT"
+        echo "########################"
+        echo "kubectl version:"
+        kubectl version
+        echo "helm version:"
+        helm version
+        echo "########################"
+
+
+        if [[ "$SET_TAG_FROM_VERSION_FILE" == "true" ]]; then
+          echo "Setting tag from version file ..."
+          if [[ "$PATH_TO_VERSION_FILE" == "" ]]; then
+            echo "Configuration ERROR: No path-to-version-file parameter is defined - Aborting build"
+            exit 1
+          fi
+          DOCKER_IMAGE_TAG="$(cat $PATH_TO_VERSION_FILE)"
+          if [[ "$DOCKER_IMAGE_TAG" == "" ]]; then
+            echo "ERROR: Version file at $PATH_TO_VERSION_FILE did not contain data - Aborting build"
+            exit 1
+          fi
+        fi
+        echo "Using Docker image tag: $DOCKER_IMAGE_TAG"
+
+        echo "########################"
+        echo ""
+        cd "$PATH_TO_CHART"
+        echo "CURRENT PATH: $(pwd)"
+
+        echo "########################"
+        echo "HELM CHART INFORMATION:"
+        helm show chart .
+        echo "########################"
+
+        echo "Listing existing helm deployments in namespace $TEAM :"
+        helm -n "$TEAM" ls --all
+        echo "########################"
+
+        echo "Deploying helm chart as deployment $HELM_DEPLOYMENT_NAME to namespace $TEAM ..."
+
+        # The values file sits where §5 puts the team's own encrypted answers: inside the environment
+        # directory, inside the team directory, inside the app directory, all of it one level below the
+        # root this param names. No `platform_config` segment -- see the param's description for why the
+        # two spellings that had it were both wrong.
+        HELM_VALUES_FILE="${PATH_TO_CONFIGURATION}/${ENVIRONMENT}/${TEAM}/${APP_NAME}/values.encrypted.yaml"
+
+        helm upgrade -n "$TEAM" -i --wait --timeout "${HELM_TIMEOUT}" \
+        -f "$HELM_VALUES_FILE" \
+        --set image.tag="$DOCKER_IMAGE_TAG" \
+        --set image.repository="$DOCKER_IMAGE_URL" \
+        "$HELM_DEPLOYMENT_NAME" \
+        .
+
+        echo "########################"
+        echo "Listing existing helm deployments in namespace $TEAM after deployment:"
+        helm -n "$TEAM" ls --all
+
+        echo "########################"
+        echo "Showing status for deployment:"
+        helm -n "$TEAM" status "$HELM_DEPLOYMENT_NAME"

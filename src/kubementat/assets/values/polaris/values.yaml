@@ -1,0 +1,17 @@
+# No image override, and no commented one either. The block that was here pointed at
+# `warpigg/polaris-arm:1.0`, an image in a personal namespace from roughly 2021: it was ARM-only, it
+# was not published by the chart's maintainers, and it is not needed -- the official
+# `us-docker.pkg.dev/fairwinds-ops/oss/polaris` image (v10.2.4 for this chart) has carried
+# linux/amd64, linux/arm64 and linux/arm since well before 6.0.1. A personal-namespace tag in a
+# template is a supply chain with no owner, and a commented one is a suggestion someone will follow.
+
+dashboard:
+  enable: true
+
+webhook:
+  # webhook.enable -- Whether to run the Validating Webhook
+  enable: false
+
+audit:
+  # audit.enable -- Runs a one-time audit. This is used internally at Fairwinds, and may not be useful for others.
+  enable: false

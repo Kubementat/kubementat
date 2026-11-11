@@ -1,28 +1,18 @@
 #
 # resource definitions
 #
-
-# git resource example
-apiVersion: tekton.dev/v1beta1
-kind: PipelineResource
-metadata:
-  name: git-concourse-kubernetes-poc
-spec:
-  type: git
-  params:
-    - name: revision
-      value: master
-    - name: url
-      value: https://github.com/julweber/concourse_kubernetes_poc
-
----
+# `PipelineResource` is gone: Pipelines v1 serves no such kind, so a git repository is no
+# longer declared as a manifest of its own. A workspace carries the clone instead, and
+# `tekton_ci/tasks/git-clone.yml` is the task that fills it — a task that used to declare a
+# git input resource declares a workspace and reads `$(workspaces.<name>.path)` now. The
+# `input-example-task` further down is that migration, done in place.
 
 #
 # tasks
 #
 
 # hello-world task
-apiVersion: tekton.dev/v1beta1
+apiVersion: tekton.dev/v1
 kind: Task
 metadata:
   name: echo-hello-world
@@ -47,8 +37,8 @@ spec:
 
 ---
 
-# task example for using inputs and parameters
-apiVersion: tekton.dev/v1beta1
+# task example for using workspaces and parameters
+apiVersion: tekton.dev/v1
 kind: Task
 metadata:
   name: input-example-task
@@ -58,17 +48,18 @@ spec:
       type: string
       description: The filename of the file to cat
       default: README.md
-  resources:
-    inputs:
-      - name: git-source
-        type: git
+  # v1beta1 declared this as `resources: inputs: - name: git-source, type: git`. v1 removed
+  # both PipelineResource and Task input resources, so the repository arrives on a workspace.
+  workspaces:
+    - name: git-source
+      description: The git repository the files are read from
   steps:
     - name: cat-file
       image: ubuntu
       command:
         - cat
       args:
-        - $(resources.inputs.git-source.path)/$(params.filename)
+        - $(workspaces.git-source.path)/$(params.filename)
     - name: echo-hello
       image: ubuntu
       command:

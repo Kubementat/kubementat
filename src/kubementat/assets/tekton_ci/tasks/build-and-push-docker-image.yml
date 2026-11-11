@@ -1,0 +1,133 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: build-and-push-docker-image
+spec:
+  workspaces:
+  - name: workspace
+    description: |
+      The workspace folder with the dockerfile and context.
+    mountPath: /workspace
+  params:
+    # automation image configuration
+    - name: builder-image
+      description: The image that should be used for the docker build command
+      default: "gcr.io/kaniko-project/executor:debug"
+    - name: ci-image
+      description: The docker image used for executing the script preparation parts (the ci base image)
+      default: "julianweberdev/ubuntu-ci-minimal:latest"
+
+    - name: path-to-context
+      description: The path to the build context, used by Kaniko
+    - name: path-to-dockerfile-within-context
+      description: The path to the Dockerfile within the given context, used by Kaniko
+      default: Dockerfile
+    - name: push-image-url
+      description: Url of image repository for the push
+    - name: push-image-tag
+      description: Tag to apply to the built image
+      default: "latest"
+    - name: set-tag-from-version-file
+      description: Should the docker image tag be set from a version file (see path-to-version-file variable)
+      default: "false"
+    - name: path-to-version-file
+      description: A path to the file containing the app version number (used with set-tag-from-version-file)
+      default: ""
+    - name: extra-build-args
+      description: You can provide a list of additional build args here
+      default: ""
+    - name: push-retries
+      description: The number of retries when pushes fail
+      default: "0"
+
+    - name: docker-registry-secret-name
+      description: The docker registry secret name for logging into the docker registry
+      default: "docker-registry-secret"
+
+  steps:
+    - name: configure-docker-registry-access
+      computeResources:
+        requests:
+          memory: 100Mi
+          cpu: 50m
+        limits:
+          memory: 256Mi
+          cpu: 300m
+      image: "$(params.ci-image)"
+      script: |
+        #!/usr/bin/env bash
+        set -u
+
+        docker_config_contents="$(kubectl get secret "$(params.docker-registry-secret-name)" --output="jsonpath={.data.\.dockerconfigjson}" | base64 --decode)"
+
+        set -e
+        docker_config_path="$(workspaces.workspace.path)/.docker"
+        mkdir -p "$docker_config_path"
+
+        if [[ "$docker_config_contents" == "" ]]; then
+          echo "No docker config was loaded. Generating empty config file at: ${docker_config_path}/config.json"
+          echo '{}' > "${docker_config_path}/config.json"
+        else
+          echo "Found docker config. Writing config file to: ${docker_config_path}/config.json"
+          echo "$docker_config_contents" > "${docker_config_path}/config.json"
+        fi
+
+    - name: build-and-push
+      image: "$(params.builder-image)"
+      computeResources:
+        requests:
+          memory: 500Mi
+          cpu: 300m
+        limits:
+          memory: 8Gi
+          cpu: 2000m
+      script: |
+        #!/busybox/sh
+        set -eu
+
+        echo "###############"
+        echo "Build settings:"
+        docker_config_path="$(workspaces.workspace.path)/.docker"
+        DOCKER_CONFIG_FILE="${docker_config_path}/config.json"
+        CONTEXT="$(params.path-to-context)"
+        DOCKERFILE="$(params.path-to-dockerfile-within-context)"
+        EXTRA_BUILD_ARGS="$(params.extra-build-args)"
+        SET_TAG_FROM_VERSION_FILE="$(params.set-tag-from-version-file)"
+        PATH_TO_VERSION_FILE="$(params.path-to-version-file)"
+        PUSH_RETRIES="$(params.push-retries)"
+
+        echo "DOCKER_CONFIG_FILE: $DOCKER_CONFIG_FILE"
+        echo "CONTEXT: $CONTEXT"
+        echo "DOCKERFILE: $DOCKERFILE"
+        echo "SET_TAG_FROM_VERSION_FILE: $SET_TAG_FROM_VERSION_FILE"
+        echo "PATH_TO_VERSION_FILE: $PATH_TO_VERSION_FILE"
+        echo "PUSH_RETRIES: $PUSH_RETRIES"
+        echo "###############"
+
+        TAG="$(params.push-image-tag)"
+
+        if [[ "$SET_TAG_FROM_VERSION_FILE" == "true" ]]; then
+          echo "Setting tag from version file ..."
+          if [[ "$PATH_TO_VERSION_FILE" == "" ]]; then
+            echo "Configuration ERROR: No path-to-version-file parameter is configured - Aborting build"
+            exit 1
+          fi
+          TAG="$(cat $PATH_TO_VERSION_FILE)"
+          if [[ "$TAG" == "" ]]; then
+            echo "ERROR: Version file at $PATH_TO_VERSION_FILE did not contain data - Aborting build"
+            exit 1
+          fi
+        fi
+
+        echo "Pushing tag: $TAG"
+        DESTINATION="$(params.push-image-url):$TAG"
+        echo "DESTINATION: $DESTINATION"
+        echo "###############"
+
+        echo "Building docker image ..."
+
+        mkdir -p /kaniko/.docker
+        cp "$DOCKER_CONFIG_FILE" /kaniko/.docker/config.json
+        /kaniko/executor $EXTRA_BUILD_ARGS --dockerfile="$DOCKERFILE" --context="$CONTEXT" --destination="$DESTINATION" --push-retry="$PUSH_RETRIES"
+      securityContext:
+        runAsUser: 0
