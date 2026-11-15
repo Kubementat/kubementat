@@ -218,7 +218,11 @@ fi
 mkdir_p "$WORKDIR" "$STATE"
 sudo chown "$(id -u):$(id -g)" "$WORKDIR" "$STATE"
 log "copying $MOUNT -> $WORKDIR"
-if [ -d "$MOUNT/.git" ]; then
+# The checkout may be a linked git worktree, where `.git` is a `gitdir:` pointer
+# file rather than a directory. The guard asks only whether the mounted checkout is
+# there, so it tests existence: a pointer file is a supported checkout layout, not a
+# missing tree. (The `tar` below copies the whole tree, `.git` pointer included.)
+if [ -e "$MOUNT/.git" ]; then
   # INV-1: the tree, dirty state included, copied before anything initializes in
   # it. Built artifacts are not the tree: the guest's own virtualenv is created by
   # `uv sync` below, so .venv/.pytest_cache are excluded.
