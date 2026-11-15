@@ -43,3 +43,4 @@ build/
 dist/
 # Agent orchestration state (briefs, state files, reports). Tooling state, not product history.
 .agent-work/
+.playwright-mcp/
