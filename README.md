@@ -458,11 +458,14 @@ Neither takes a `--team`: what the command applies is the environment's own helm
 it lands in is `static.json`'s `*_DEPLOYMENT_NAMESPACE` for that component. A team on these commands is a
 `--team` the command could not act on, and v2 deleted the flag rather than ignore it.
 
-Both go through helmfile with the environment's own label selector
+Both go through helmfile with the label selector of the manifest kubementat ships
 (`helmfile apply -l component_name=<component>`) — the same mechanism `kmt install` uses for a group
 (`group=standard`) and `kmt routing install` uses for routing (`group=routing`). There is no
-per-component `helm upgrade`, and no table of components in the code: what the command accepts is
-`constants.DEFAULT_NAMESPACES`, and what it can apply is read out of the environment's helmfile.
+per-component `helm upgrade`, and no table of components in the code: what the command accepts is the
+set of names kubementat addresses with a namespace, and what it can apply is read out of the
+shipped helmfile. Both answers come from one module, `src/kubementat/core/components.py`, which
+reads the manifest once per command and composes them — so the two cannot disagree, and a name cannot
+be accepted by one verb and refused by another.
 
 **What it installs.** `cert-manager`, `grafana`, `loki`, `openbao`, `polaris`, `prometheus`,
 `traefik` — the seven components that have a release labelled after them. A group apply can be wider
@@ -473,7 +476,9 @@ that belong to no component, so
 standard` applies all seven of that group's. `alloy` is one of those three deliberately: it is the log
 collector and it shares `loki`'s namespace, so it is installed by the group and swept by the namespace,
 and an `alloy` entry in `constants` would have bought a key helmfile never reads and a namespace to
-delete twice.
+delete twice. The refusal says exactly that, names `kmt install <environment>
+--helmfile-installation-group standard` as the verb that reaches them, and prints which labels are in
+that position right now — read from the manifest, not counted from this paragraph.
 
 **What it will not install, and what to run instead.** `tekton`, `tekton-dashboard`,
 `tekton-pipelines-resolvers`, `cluster-cronjobs`, `goldilocks`, `vpa` are namespaces kubementat

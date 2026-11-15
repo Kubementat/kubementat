@@ -18,6 +18,7 @@ import logging
 
 from kubernetes import client
 
+from kubementat.core import components
 from kubementat.core.identity.target import helm_target_args
 from kubementat.infrastructure import shell
 from kubementat.infrastructure.helm import helm_list_releases_argv
@@ -51,12 +52,76 @@ from kubementat.infrastructure.kubernetes.constants import (
 # argument `TRAEFIK_CRD_GROUPS` makes about its fifteen.
 CERT_MANAGER_CRD_GROUPS = ("cert-manager.io", "acme.cert-manager.io")
 
-# API groups kubementat installs CRDs into, and whose CRDs it therefore has to take away
-# again. `tekton.dev` covers the subdomains the CRD names carry: `triggers.tekton.dev` and
-# `resolution.tekton.dev` both end with their parent, which is the same set the lane's
-# residue assert measures. cert-manager joins it from the component side, for the reason its
-# own block gives.
-CRD_GROUPS_KUBEMENTAT_OWNS = ("tekton.dev",) + CERT_MANAGER_CRD_GROUPS
+# API groups kubementat installs CRDs into by applying release manifests with kubectl, and whose
+# CRDs it therefore has to take away again. `tekton.dev` covers the subdomains the CRD names carry:
+# `triggers.tekton.dev` and `resolution.tekton.dev` both end with their parent, which is the same set
+# the lane's residue assert measures. This half is not keyed to a component, because Tekton arrives
+# with `kmt install`'s kubectl manifests and no helmfile label: the release index cannot say whether
+# Tekton is installed, so it is asked of the cluster by `delete_crds_in_groups` and listed here.
+CRD_GROUPS_APPLIED_WITH_KUBECTL = ("tekton.dev",)
+
+
+def crd_groups_kubementat_owns(config=None, helmfile_path=None) -> tuple:
+    r'''
+    The API groups the unconditional CRD sweep deletes, derived from the shipped release index.
+
+    The set used to be spelled out: `("tekton.dev",) + CERT_MANAGER_CRD_GROUPS`, a concatenation of
+    two module literals that said nothing about whether either of them still ships anything. Now each
+    row is taken when the manifest kubementat applies labels a release after that component, which is
+    the same answer `kmt component install` gives (`core.components`) and the same answer
+    `export_component_release_knobs` exports knobs for -- so a component added to the manifest is
+    installed, addressable, knob-exported and swept from one set of edits, and a release commented out
+    of it stops being anything's residue rather than staying on the list out of habit.
+
+    Two properties this keeps on purpose, both stated because they are the difference between a
+    derived sweep and a lucky one:
+
+    * **the Tekton half is unconditional**, for the reason its own constant gives: kubectl-applied
+      release manifests are not in the index, so the index is silent about them and silence is not an
+      answer. Asking the cluster is what that sweep does, and deleting a group nothing serves costs
+      nothing.
+    * **a manifest that cannot be read deletes *more*, not less.** `FileNotFoundError` here would
+      mean "the product is missing its own data", not "nothing is kubementat's", and a sweep that
+      took the second reading would leave cert-manager's definitions on the cluster while reporting a
+      clean teardown. So the undecided answer is every row of the subset this sweep owns, said out
+      loud -- and it deliberately does not reach Traefik's or Alloy's rows, which belong to sweeps
+      that ask the cluster first and answer a cluster that will not answer by deleting nothing.
+
+    Args:
+        config: The `Config` this run reads -- supplies the packaged manifest. `None` (a caller with
+            no configuration, which the uninstall path does not have) is treated as the unreadable
+            case, for the same reason.
+        helmfile_path: The manifest to read; passing it is how a test asks about a tree that is not
+            the shipped one.
+
+    Returns:
+        tuple[str, ...]: The groups, in a stable order, deduplicated.
+    '''
+    groups = list(CRD_GROUPS_APPLIED_WITH_KUBECTL)
+    decided = True
+    if config is None:
+        logging.warning("The CRD sweep has no configuration to read the shipped manifest from, so"
+                        " every group this sweep owns is deleted rather than the derived subset.")
+        decided = False
+    else:
+        try:
+            released = set(components.components_the_manifest_releases(config, helmfile_path))
+        except OSError as error:
+            # Not "nothing is kubementat's", for the reason the docstring gives: delete more and say
+            # so, rather than report a clean teardown over somebody's definitions.
+            logging.warning(f"The CRD sweep could not read the manifest kubementat applies"
+                            f" ({error}), so every group this sweep owns is deleted rather than the"
+                            f" derived subset.")
+            decided = False
+    for component in CRD_GROUPS_SWEEPED_WITHOUT_A_CLUSTER_READ:
+        # Undecided means "delete every row of the subset this sweep owns", which is the safe
+        # direction. It does not mean "delete every row of the table": Traefik's and Alloy's groups
+        # are not this sweep's to take, and they have their own cluster read to decide with -- a
+        # fallback that reached them would delete definitions a foreign proxy or collector is still
+        # serving, which is the harm the gating on those two sweeps exists to prevent.
+        if not decided or component in released:
+            groups.extend(CRD_GROUPS_BY_COMPONENT[component])
+    return tuple(dict.fromkeys(groups))
 
 # The API groups the `traefik/traefik` chart's `crds/` directory lands in, and the residue a
 # `helm uninstall` never takes back: `helm install` applies that directory before the release
@@ -120,6 +185,39 @@ TRAEFIK_PROXY_CHART_NAME = "traefik"
 # One group and one definition, and both are written here rather than counted, because the count is
 # what changes the day a second Alloy chart adds one.
 ALLOY_CRD_GROUPS = ("monitoring.grafana.com",)
+
+
+# Which API groups each component's chart defines, keyed by the component the manifest labels. This
+# is the whole of CRD ownership in one table, and the entry that is missing is the bug: an Alloy
+# chart that adds a second group needs one row here, not a fourth name and a fifth comment.
+#
+# Each entry is justified above, where its chart's evidence was read from, and the three rows repeat
+# that evidence rather than restate it. What is *not* derived here is which sweep reads each row:
+# cert-manager goes into the unconditional sweep below, Traefik and Alloy into their own
+# cluster-gated sweeps, because a chart that ships `crds/` leaves definitions behind that may still
+# be serving somebody else's proxy or collector. Say it as a rule and not as a flag, because a flag
+# is a second table that can disagree with the first:
+#
+#   * `delete_crds_kubementat_owns` sweeps the rows of components whose definitions `helm
+#     uninstall` does reach -- charts that render from `templates/`, which is cert-manager's case.
+#   * `delete_crds_traefik_helm_leaves_behind` and `delete_crds_alloy_helm_leaves_behind` sweep the
+#     rows of components whose charts ship a `crds/` directory, gated on the release read that says
+#     whether anything is still served by them.
+#
+# So the set this table answers for every shipped component is the union of what those three
+# functions delete, and a component that is not in it is a component nobody has checked for CRDs.
+CRD_GROUPS_BY_COMPONENT = {
+    "cert-manager": CERT_MANAGER_CRD_GROUPS,
+    "traefik": TRAEFIK_CRD_GROUPS,
+    "alloy": ALLOY_CRD_GROUPS,
+}
+
+# The subset of that table deleted by the unconditional sweep -- i.e. the components whose charts
+# render their definitions from `templates/` rather than shipping a `crds/` directory. Named here and
+# nowhere else: the sentence a reader needs is "why isn't Traefik in `delete_crds_kubementat_owns`",
+# and the answer is this line plus the rule above.
+CRD_GROUPS_SWEEPED_WITHOUT_A_CLUSTER_READ = ("cert-manager",)
+
 
 # The chart field that says an Alloy is running, read the same way Traefik's is: helm prints
 # `<name>-<version>`, so this matches `alloy-1.15.0` whatever the release is called and whatever
@@ -436,11 +534,15 @@ def delete_crds_kubementat_owns(ctx) -> list:
     deleted, and the residue assert passes over a cluster that still serves
     `runs.tekton.dev`. Listing them by group means a CRD nobody remembered still goes.
 
+    Which groups this sweeps is derived and not concatenated -- see
+    `crd_groups_kubementat_owns`. What the cluster is asked is a separate question and stays the
+    cluster's: a group is a rule, and the names under it belong to the cluster.
+
     Returns:
         list[str]: What survived, empty when everything went.
     '''
-    return delete_crds_in_groups(ctx, CRD_GROUPS_KUBEMENTAT_OWNS,
-                                       absent="No kubementat CRDs on the cluster.")
+    return delete_crds_in_groups(ctx, crd_groups_kubementat_owns(getattr(ctx, "config", None)),
+                                 absent="No kubementat CRDs on the cluster.")
 
 
 def delete_crds_traefik_helm_leaves_behind(ctx) -> list:
@@ -502,8 +604,8 @@ def delete_crds_traefik_helm_leaves_behind(ctx) -> list:
                                f" chart '{chart}'," for namespace, name, chart in still_running)
                      + " and its controller is served by them.")
         return []
-    return delete_crds_in_groups(ctx, TRAEFIK_CRD_GROUPS,
-                                       absent="No Traefik CRDs on the cluster.")
+    return delete_crds_in_groups(ctx, CRD_GROUPS_BY_COMPONENT["traefik"],
+                                 absent="No Traefik CRDs on the cluster.")
 
 
 def delete_crds_alloy_helm_leaves_behind(ctx) -> list:
@@ -544,8 +646,8 @@ def delete_crds_alloy_helm_leaves_behind(ctx) -> list:
                      + "".join(f" release {row} still collects logs through them,"
                                for row in still_running))
         return []
-    return delete_crds_in_groups(ctx, ALLOY_CRD_GROUPS,
-                                       absent="No Alloy CRDs on the cluster.")
+    return delete_crds_in_groups(ctx, CRD_GROUPS_BY_COMPONENT["alloy"],
+                                 absent="No Alloy CRDs on the cluster.")
 
 
 def _release_runs_traefik_proxy(row) -> bool:

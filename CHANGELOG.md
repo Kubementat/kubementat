@@ -1,4 +1,45 @@
 # Unreleased
+- **"What exists" is answered once, from the release index. The refusal a shipped release used to
+  get was the sentence for a typo, and it is now the sentence for what it actually is.**
+
+  `kmt component install dev alloy` told an operator that `alloy` is "not a kubementat component"
+  while the manifest kubementat was about to apply named a release labelled `component_name=alloy`.
+  Two places answered "does this component exist": `constants.DEFAULT_NAMESPACES`, which decided
+  what the component verbs accept, and `core/config/release_index.py`, which decides what
+  `helmfile apply -l` reaches and which release knobs get exported. Each was correct about its own
+  question; the CLI used one answer to describe the other, which is why the *sentence* was wrong
+  rather than the behaviour.
+
+  * **One module answers, and every caller reads it.** `core/components.py` composes the two reads
+    once per command into a *kind*: a component with a release, a namespace kubementat creates and
+    no release, a release that belongs to no component, or not a kubementat name. The component
+    verbs, the namespace-rename guard's skip rule and the uninstall CRD sweep all consult it.
+  * **No command gained or lost a name it accepts.** What the verbs take is still exactly what the
+    namespace table keys, so `alloy` and the two prometheus exporters are still refused — and still
+    refused because they belong to no namespace of their own. What changed is that the refusal says
+    that, names `kmt install <environment> --helmfile-installation-group standard` as the verb that
+    reaches them, and lists the labels in that position today instead of asserting a number.
+  * **The uninstall sweep's set did not move.** `automations/uninstall/residue.py` now keeps one
+    table of which API groups each component's chart defines and selects its rows from the release
+    index, instead of concatenating four module literals. A manifest that cannot be read still
+    deletes every group the unconditional sweep owns and says so — the safe direction, because the
+    failure this guards is a `DONE` reported over cluster-scoped definitions. Traefik's and Alloy's
+    rows are still swept only by their own cluster-gated sweeps.
+  * **The counts in the old comment are gone.** `helm.py` defended the export set with "ten labels,
+    thirteen namespace keys", a sentence that had to be re-measured to stay true. Both directions of
+    the difference are now named by derived answers and the numbers are not written down.
+  * **Proven by capture and not by prose.** A driver answered the same questions on a detached
+    worktree of the parent commit and on this one: the namespaces `kmt uninstall` deletes, what each
+    of the three CRD sweeps hands the cluster, both export sets, the rename guard's answer, and the
+    whole effective-configuration universe of a 2.x-shaped tree — all byte-identical. The only lines
+    that moved are the six refusal verdicts for those three names
+    (`not-a-kubementat-component` → `release-without-a-component`), counted inside the capture to
+    prove which tree each half ran.
+  * Tests: `tests/test_what_exists_is_answered_once_by_the_release_index.py`, thirteen cases — the
+    derived release universe against an independent parse of the shipped manifest, set equations in
+    both directions of the mismatch, the refusal sentence for every shipped release, and the CRD set
+    equality with a release commented out to prove the sweep is a derivation and not a copy.
+
 - **`helmfile_apply` hands its child one environment instead of editing the process sixty times. Nothing
   an operator reads moved; two applies in one process no longer overwrite each other's answers.**
 

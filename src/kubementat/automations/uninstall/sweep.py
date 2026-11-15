@@ -9,7 +9,7 @@ same file lives in `core.config.teams`, so the two commands cannot disagree abou
 
 import logging
 
-from kubementat.core import constants
+from kubementat.core import components
 from kubementat.core.config.teams import (
     declared_team_namespaces,
     unreadable_team_configuration,
@@ -46,11 +46,13 @@ def namespace_sweep(ctx) -> dict:
       `dev1` and `smoke` were two names somebody wrote down, not the set of teams, and a
       third team's namespaces were left on the cluster by a script that carried its own
       TODO about exactly that.
-    * one namespace per component `kubementat.core.constants` declares, each read through
-      `Config.component_namespace` so a renamed namespace is honoured. `uninstall_kubementat.sh`
-      read fourteen of them and missed `cert-manager`, whose release then outlived it, and
-      `nginx-ingress`, which is not a component at all any more and is therefore swept by
-      `uninstall_nginx_ingress` rather than by anything reading this set.
+    * one namespace per component kubementat addresses, each read through
+      `Config.component_namespace` so a renamed namespace is honoured. The set is not spelled here --
+      `core.components.components_kubementat_addresses` is the same answer `kmt component install`
+      gives, which is what keeps "the sweep deletes what we install" from being a coincidence.
+      `uninstall_kubementat.sh` read fourteen of them and missed `cert-manager`, whose release then
+      outlived it, and `nginx-ingress`, which is not a component at all any more and is therefore
+      swept by `uninstall_nginx_ingress` rather than by anything reading this set.
 
     The team half is where the failure policy lives, and it is deliberately not the strict
     one. Discovery is a directory listing and a directory listing is allowed to contain
@@ -106,7 +108,7 @@ def namespace_sweep(ctx) -> dict:
         teams[team] = entry
         namespaces += entry["deletable"]
         warn_about_team_directory(entry)
-    for component in sorted(constants.DEFAULT_NAMESPACES):
+    for component in components.components_kubementat_addresses():
         namespaces.append(config.component_namespace(component))
     # `dict.fromkeys` rather than a set: two teams that share a namespace still have to be
     # swept once, and the order is what the log has to be able to show.

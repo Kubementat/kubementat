@@ -7,7 +7,7 @@ from kubernetes import client
 
 from kubementat.infrastructure import shell
 from kubementat.core.config import release_index as config_reads_index
-from kubementat.core import constants
+from kubementat.core import components, constants
 from kubementat.core.identity.target import ClusterTarget, helm_target_args
 from kubementat.core.config.keys import component_config_key
 from kubementat.infrastructure.kubernetes import KubernetesUtils
@@ -516,7 +516,9 @@ class HelmUtils:
         namespace the configuration names for that label from `Config.component_namespace` -- three
         reads, none of them guessed, intersected here. A label the manifest carries that is not a
         kubementat component (`constants.DEFAULT_NAMESPACES` is the answer to that question, and it
-        is the same answer `kmt component install` gives) has no configuration to disagree with, so
+        is the same answer `kmt component install` gives -- both now call
+        `components.components_kubementat_addresses`, so "the same answer" is a call graph fact and not
+        a promise that two files were edited the same way) has no configuration to disagree with, so
         it is not asked about; the two prometheus exporters are that case, and what they are
         deployed beside is the reason their namespace is not read from a component key.
 
@@ -552,7 +554,7 @@ class HelmUtils:
         claimed = self._kubementat_namespaces()
         conflicts = []
         for component in sorted(index):
-            if component not in constants.DEFAULT_NAMESPACES:
+            if component not in components.components_kubementat_addresses():
                 continue
             if named is not None and component not in named:
                 continue
@@ -865,9 +867,11 @@ class HelmUtils:
         not fail the install. No release in `helmfile.yaml.gotmpl` keeps a literal namespace, so
         every release kubementat installs gets a variable of its own; the three git-provider
         releases that used to sit outside this rule were retired on 2026-10-29 and took their
-        repositories with them. A component that is not in `DEFAULT_NAMESPACES` gets no key and no
-        release, which is a stated gap rather than a silently dead key in
-        `static.json.template`.
+        repositories with them. A name that is not in the namespace table gets no key, which is a
+        stated gap rather than a silently dead key in `static.json.template`: the releases in that
+        position are named by `components.releases_belonging_to_no_component`, and every one of them
+        lands in a namespace another component owns -- so a key of their own would be a key helmfile
+        never asks for and a namespace `kmt uninstall` would delete twice.
 
         Returns
         -------
@@ -966,18 +970,25 @@ def export_component_release_knobs(config, index) -> dict:
     `L2 > L1` walk a namespace gets is what answers — a team that declares
     `ALLOY_ENABLED: false` is not overridden by the environment that declares nothing.
 
-    **The set is the manifest's `component_name` labels, i.e. *index*, and not
-    `constants.DEFAULT_NAMESPACES`.** Those two sets do not line up, and both directions of the
-    mismatch are wrong. Measured at this HEAD: ten labels, thirteen namespace keys. `alloy`,
-    `prometheus-blackbox-exporter` and `prometheus-helm-exporter` have a label and no namespace key
-    of their own (all three land in a namespace that belongs to another component), so exporting off
-    the namespace set leaves three releases with no knob at all. The other side of it is what
+    **The set is the manifest's `component_name` labels, i.e. *index*, and not the namespace
+    table.** Those two sets do not line up, and both directions of the mismatch are correct rather
+    than a drift to be fixed. What changed is where the two answers live: one module composes them
+    (`core.components.ComponentUniverse`), `releases_without_a_component` names the
+    label-without-a-namespace side and `namespace_only` the namespace-without-a-release side, and a
+    reader that wants either one asks the same object that decides what `kmt component install`
+    accepts. So this function exports off the index and cannot be caught agreeing with the wrong half
+    -- there is no longer a second list in this file for it to disagree with.
+
+    The shape of the two sides, so the argument stays legible when the numbers move:
+    `alloy`, `prometheus-blackbox-exporter` and `prometheus-helm-exporter` carry a label and no
+    namespace key of their own (all three land in a namespace that belongs to another component), so
+    exporting off the namespace set leaves those releases with no knob at all. The other side is what
     `_export_component_namespaces` calls the silently dead key: `vpa`, `goldilocks`,
-    `cluster-cronjobs` and the three Tekton keys create namespaces and apply no release, so exporting
-    off them writes six variables that no template line will ever read. Reading the index instead
-    costs nothing, exactly the way `component_release_index` costs nothing: a release added to the
-    manifest gets its knobs the way it gets installability, for free and with no second list to
-    agree with.
+    `cluster-cronjobs` and the Tekton keys create namespaces and apply no release, so exporting off
+    them writes variables no template line will ever read. What is deliberately not written here is
+    the two counts -- they belong to the manifest and to `constants`, they move the day a release
+    block is commented in or out, and a sentence that names a number has to be re-measured to stay
+    true. The rule above says the same thing without an expiry date.
 
     Only what was declared is handed over. A key that answers `None` is not exported,
     because helmfile's own `default` in the manifest is what a tree that declares nothing should

@@ -21,8 +21,10 @@ group (`automations/install/kubementat.py:114` builds `group=<name>` and passes 
 `kmt routing install` passes `group=routing`).
 There is no per-component install path, no `helm upgrade` written here, and no component table: what
 this command can apply is read out of the manifest kubementat ships and applies
-(the manifest is named by `release_index.helmfile_paths_for`, which is what names that file) and what it is *allowed to be told about* is read out of
-`constants.DEFAULT_NAMESPACES`. Both change without an edit here.
+(the manifest is named by `release_index.helmfile_paths_for`, which is what names that file), and what
+it is *allowed to be told about* is the set of names kubementat addresses with a namespace. Both come
+from one place -- `core.components.ComponentUniverse`, which reads the manifest once and composes the
+answer -- so both change without an edit here, and neither changes in one verb and not the other.
 
 Three answers a reader should not have to discover by hitting them:
 
@@ -40,27 +42,40 @@ Three answers a reader should not have to discover by hitting them:
 * **The git providers are not components.** gitea, gitbucket and gitlab were retired as kubementat
   components in `8678526`; they have no release, no namespace key and nothing to install.
 
-Two releases are reachable only through a group: `prometheus-blackbox-exporter` and
-`prometheus-helm-exporter` carry `component_name:` labels no `DEFAULT_NAMESPACES` key names, so
-`kmt install --helmfile-installation-group standard` applies five releases and `kmt component
-install <environment> prometheus` applies one. Say so here rather than in a bug report.
+Some releases are reachable only through a group: a `component_name:` label that no
+`DEFAULT_NAMESPACES` key names belongs to no component kubementat addresses, so a group apply brings
+it and a component apply does not. Which ones that is now is read and not counted --
+`ComponentUniverse.releases_without_a_component` -- because the sentence "the group is wider" is the
+kind of fact that goes stale the day a block is commented in, and a stale sentence here is an
+operator being told a release does not exist while the manifest names it. Say so here rather than in a bug report.
 """
 
 import click
 
 from cli.context import kmt_context
-from kubementat.core import constants
+from kubementat.core import components
 from kubementat.automations.routing import traefik_presence
 from kubementat.infrastructure.helm import HelmUtils
 
 # Traefik is a component like any other *and* a controller like no other one, so it gets the one
 # branch this command has. The name is a constant rather than a literal because
-# `traefik_presence.COMPONENT` and `constants.DEFAULT_NAMESPACES` both carry it already and a fourth
-# spelling is a fourth place to be wrong.
+# `traefik_presence.COMPONENT` and the namespace table `core.components` reads both carry it already
+# and a fourth spelling is a fourth place to be wrong.
 ROUTER_COMPONENT = "traefik"
 
 
-def _known_component_or_raise(component: str, action: str) -> str:
+def _universe(utils: HelmUtils) -> components.ComponentUniverse:
+    """The one read every question about "what exists" is answered from.
+
+    Read once per command and not once per question: this verb asks up to four things of the manifest
+    (is this name known, does it have a release, what else is installable, what arrives with a group),
+    and a command that asks it four times is a command that can give itself four answers.
+    """
+    return components.ComponentUniverse.read(utils.config)
+
+
+def _known_component_or_raise(component: str, action: str,
+                              universe: components.ComponentUniverse) -> str:
     """The component name, normalised, or one readable line that stops here.
 
     Lower-cased because that is how `Config.component_namespace` and the `component_name:` labels
@@ -72,27 +87,46 @@ def _known_component_or_raise(component: str, action: str) -> str:
     nothing and exits 0. The readable line is therefore not cosmetics, it is the difference between
     "nothing happened, and here is what to name" and a green command that applied nothing.
 
-    The valid names are `constants.DEFAULT_NAMESPACES`, read rather than typed: this is the second
-    place a component name is spelled on this surface, and a list here is a list that goes stale the
-    day a component is renamed.
+    The accepted names are what kubementat *addresses* -- `constants.DEFAULT_NAMESPACES`, read rather
+    than typed -- and the reason a name is refused now comes off the same read that decides what
+    `helmfile apply` can reach. Until this line moved, the refusal had one answer available
+    (`not a kubementat component`) and used it for both shapes of refusal: a typo, and a release the
+    manifest itself labels with a name no component owns. The second one is not a typo, and telling an
+    operator it is makes the manifest and the CLI look like they disagree about what is installed.
+    Nothing about which names are accepted changes -- what changes is that the sentence says which of
+    the two it is, and names the verb that does reach that release.
     """
     name = component.lower()
-    if name not in constants.DEFAULT_NAMESPACES:
+    kind = universe.kind(name)
+    if kind in (components.WITH_RELEASE, components.NAMESPACE_ONLY):
+        return name
+    if kind == components.RELEASE_WITHOUT_COMPONENT:
         raise click.ClickException(
-            f"'{component}' is not a kubementat component, so nothing was {action}.\n"
-            f"Components kubementat knows: "
-            f"{', '.join(sorted(constants.DEFAULT_NAMESPACES))}.")
-    return name
+            f"'{component}' is a release the manifest kubementat applies labels"
+            f" component_name={name}, but no component kubementat addresses owns that label, so"
+            f" nothing was {action}. It is applied by a group -- `kmt install <environment>"
+            f" --helmfile-installation-group standard` is the verb that reaches it, and"
+            f" `kmt uninstall <environment>` sweeps it out of the namespace it shares -- and the"
+            f" labels in that position right now are:"
+            f" {', '.join(universe.releases_without_a_component())}.")
+    raise click.ClickException(
+        f"'{component}' is not a kubementat component, so nothing was {action}.\n"
+        f"Components kubementat knows: "
+        f"{', '.join(universe.accepted_names())}.")
 
 
-def _releases_for_component(utils: HelmUtils, name: str) -> list:
+def _releases_for_component(universe: components.ComponentUniverse, name: str) -> tuple:
     """The releases labelled `component_name=<name>`, checked for the one thing that stops us.
 
     Exactly one release is what "install this component" can mean. Zero is the namespace-only case
     and is refused with what to run instead; more than one is a finding about the manifest -- the
     same label on two releases -- and the answer is to say so and apply nothing, not to pick one.
+
+    The releases come off the caller's single read and not from a second `component_release_index`
+    call: a command that asks the manifest for the accepted names and then asks it again for the
+    releases has bought itself the one thing this file used to be written to refuse.
     """
-    releases = utils.component_release_index().get(name, [])
+    releases = universe.releases_for(name)
     if len(releases) > 1:
         raise click.ClickException(
             f"the manifest kubementat applies gives {len(releases)} releases the label"
@@ -102,19 +136,19 @@ def _releases_for_component(utils: HelmUtils, name: str) -> list:
     return releases
 
 
-def _installable_names(utils: HelmUtils) -> list:
+def _installable_names(universe: components.ComponentUniverse) -> list:
     """The components this command can apply: named by `constants`, and labelled in the manifest.
 
-    The intersection is the whole answer, and both halves of it are read rather than written here.
-    A name in `DEFAULT_NAMESPACES` with no release is a namespace; a release with no
-    `DEFAULT_NAMESPACES` key is somebody else's component. Neither is installable, and deriving the
-    set this way is what keeps it from going stale in two places at once.
+    The intersection is the whole answer, and both halves of it come off one read of one file. A name
+    in the namespace table with no release is a namespace; a release with no namespace key is somebody
+    else's component. Neither is installable, and deriving the set this way is what keeps it from going
+    stale in two places at once.
     """
-    declared = utils.component_release_index()
-    return sorted(name for name in constants.DEFAULT_NAMESPACES if declared.get(name))
+    return sorted(name for name in universe.accepted_names() if universe.releases_for(name))
 
 
-def _no_release_message(utils: HelmUtils, environment: str, name: str) -> str:
+def _no_release_message(utils: HelmUtils, universe: components.ComponentUniverse,
+                        environment: str, name: str) -> str:
     r'''
     Why nothing can be installed for `name`, in the sentence the evidence supports.
 
@@ -140,7 +174,7 @@ def _no_release_message(utils: HelmUtils, environment: str, name: str) -> str:
         f"'{name}' is a component whose namespace kubementat creates, not a helm release it"
         f" applies: the manifest kubementat applies ({utils.helmfile_state_path()}) declares no"
         f" release labelled component_name={name}, so there is nothing for this command to install."
-        f" Components it can install: {', '.join(_installable_names(utils))}."
+        f" Components it can install: {', '.join(_installable_names(universe))}."
         f" Tekton arrives with `kmt install {environment}`, which applies its release manifests"
         f" with kubectl rather than helm; anywhere else, kubementat installs nothing into that"
         f" namespace and a team's own helm deploy is what belongs there.")
@@ -177,24 +211,29 @@ def component():
 def install(ctx, environment, component):
     # Deliberately not `--helmfile-installation-group standard` with the wrong end cut off: the
     # group filter is a *group*, and the only thing that addresses one release is the label.
-    name = _known_component_or_raise(component, "installed")
     utils = HelmUtils(ctx)
-    click.echo(f"environment: {environment}")
     try:
-        releases = _releases_for_component(utils, name)
+        universe = _universe(utils)
     except FileNotFoundError as error:
         # The manifest ships inside the package, so a run that cannot read it is not a tree that
         # needs preparing -- `kmt config init` writes no helmfile and would fix nothing here. What
         # is missing is the installed product's own data, and the message says so rather than
-        # sending the operator to a command that no longer touches this file.
+        # sending the operator to a command that no longer touches this file. It is the same
+        # sentence the release read below gives, because it is the same failure arriving one step
+        # earlier now that the accepted-name answer reads the manifest too -- and it lands before
+        # the `environment:` line on purpose, so a command that never learned what the manifest
+        # contains says nothing else first.
         raise click.ClickException(
             f"kubementat could not read the helmfile it ships, so it cannot say what is installable"
             f" for environment '{environment}' ({error}). Nothing was installed. That manifest is"
             f" product data -- `release_index.helmfile_paths_for` is what names it -- and the installed"
             f" package, not the configuration directory, is where it is missing.") from error
+    name = _known_component_or_raise(component, "installed", universe)
+    click.echo(f"environment: {environment}")
+    releases = _releases_for_component(universe, name)
 
     if not releases:
-        raise click.ClickException(_no_release_message(utils, environment, name))
+        raise click.ClickException(_no_release_message(utils, universe, environment, name))
 
     if name == ROUTER_COMPONENT:
         # The same question `kmt routing install` asks, through the same module, because a second
@@ -237,7 +276,19 @@ def uninstall(ctx, environment, component):
     utils = HelmUtils(ctx)
     click.echo(f"environment: {environment}")
     try:
-        outcome = utils.uninstall_release(_known_component_or_raise(component, "uninstalled"))
+        universe = _universe(utils)
+    except FileNotFoundError as error:
+        # The same product-data sentence `install` gives, because the same read is what tells this
+        # command which names are kubementat's. Nothing has been deleted at this point -- the read
+        # comes before any write -- so the refusal is the whole of what this run does.
+        raise click.ClickException(
+            f"kubementat could not read the helmfile it ships, so it cannot say what is uninstallable"
+            f" for environment '{environment}' ({error}). Nothing was uninstalled. That manifest is"
+            f" product data -- `release_index.helmfile_paths_for` is what names it -- and the installed"
+            f" package, not the configuration directory, is where it is missing.") from error
+    name = _known_component_or_raise(component, "uninstalled", universe)
+    try:
+        outcome = utils.uninstall_release(name)
     except KeyError as error:
         # A namespace is what the deletion is addressed at, so the CLI has to say the name is
         # unknown rather than let a traceback stand where one line would do -- the same shape
@@ -245,7 +296,7 @@ def uninstall(ctx, environment, component):
         raise click.ClickException(
             f"'{component}' is not a kubementat component, so nothing was uninstalled.\n"
             f"{error}\nComponents kubementat knows: "
-            f"{', '.join(sorted(constants.DEFAULT_NAMESPACES))}.") from error
+            f"{', '.join(components.components_kubementat_addresses())}.") from error
     click.echo(f"namespace: {outcome['namespace']}")
     if not outcome["releases"]:
         click.echo(f"component '{component}' has no helm release in namespace"

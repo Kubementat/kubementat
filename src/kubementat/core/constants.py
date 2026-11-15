@@ -50,6 +50,17 @@ the table: `namespaces_kubementat_owns` in `automations/uninstall/sweep.py` iter
 `DEFAULT_NAMESPACES` to decide what `kmt uninstall` deletes, so a component nobody tunnels to is
 still swept. (The bash that used to read all thirteen of them from the config file by hand is
 deleted; the Python reads them through `Config` and falls back to this table the same way.)
+
+**This table answers "in which namespace", not "does it exist."** The existence question is answered
+once, in `core/components.py`, which pairs these keys with the releases the shipped manifest labels
+and gives each name a kind. A key here with no release is a namespace kubementat creates (`tekton`,
+`tekton-dashboard`, `tekton-pipelines-resolvers`, `cluster-cronjobs`, `goldilocks`, `vpa`); a label the
+manifest carries that is not a key here is a release that belongs to no component (`alloy`, the two
+prometheus exporters). Both halves of that sentence are derived rather than counted, and that is the
+point: the same function decides what `kmt component install` accepts, what the namespace export
+writes, which releases the rename guard may ask about, and which CRD groups the uninstall sweep
+deletes, so a name cannot be accepted by one verb and refused by another while the manifest disagrees
+with both.
 """
 
 # Namespace each component is deployed into. Equal to what `static.json.template` ships and
