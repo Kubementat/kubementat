@@ -1,5 +1,24 @@
 # Unreleased
 
+- **The unit suite now has CI: every push and every pull request runs `uv run pytest -q`.**
+
+  The file is `.github/workflows/unit.yml`, and it does four things and four things only — check out,
+  install `uv`, run `uv run pytest -q`, publish the report. The interpreter is not declared there;
+  it comes from `.python-version` (`3.9`), so the same file that pins a local checkout pins the job.
+  There is deliberately no lint, typecheck, coverage, formatter or E2E-lane step: the first four do
+  not exist in this checkout, so each is its own change with its own baseline, and a lane wants a VM
+  plus a host-wide lock, so it cannot be a per-push gate. `docs/README_DEVELOPMENT_FLOW.md` carries
+  the developer-facing version of this.
+
+  **Why this is a change and not plumbing.** Twenty-two test files assert on `src/kubementat/**`
+  paths. Until today every one of those assertions was a guard a human had to remember to run, which
+  is exactly the guard that fails to fire on a move nobody thought about. The signal was proved
+  before landing — the command exits 1 with one failing assertion in a clean checkout and returns to
+  green when it is removed — so the job fails on a real failure and not only on its own setup.
+  **What is not yet proved:** no push has happened with this file in it, so the runner's own
+  behaviour is unverified until the first run of a real workflow. One push of `refactoring-and-cleanup`
+  discharges it; read the run id, not the local log.
+
 - **The checkout no longer has a `helm_charts/` directory, and the version window moved to the 2.x
   line.**
 

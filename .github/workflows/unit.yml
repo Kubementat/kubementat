@@ -1,0 +1,67 @@
+# The unit suite, on every push and every pull request. Nothing else runs here.
+#
+# Four steps, each one justified rather than inherited:
+#
+#   checkout          — nothing can be asserted about code that was never fetched.
+#   install uv        — `uv` is how the README tells a developer to run this suite, so the job runs
+#                       it exactly that way instead of maintaining a second dependency story. The
+#                       interpreter is not chosen here: `.python-version` answers 3.9, and that file
+#                       is the only source of the pin (setup-uv reads it; so does `uv run`).
+#   uv run pytest -q  — byte-for-byte the command a developer types at the repo root. Never written
+#                       as `-m integration`: that marker selects zero tests unless it is asked for,
+#                       and the things it marks need a cluster, which this job must not need.
+#   publish the report — `if: always()`, so that a red run still leaves behind the log to read.
+#
+# What is deliberately absent. No lint, no typecheck, no coverage, no formatter: none of them exist
+# in this checkout today, and each would be its own change with its own baseline rather than a step
+# in this job. No E2E lane either — not because a lane run is optional (the plan's F6 makes one
+# mandatory per item), but because `tests/e2e/suite.py` wants a VM and takes a host-wide lock, so it
+# cannot be a per-push gate. It is run by whoever touched the tree, and its `result.json` names the
+# SHA it tested.
+#
+# Why this file exists at all: 22 test files assert on `src/kubementat/**` paths, so before it every
+# move of a module was guarded by hand. This is the guard.
+
+name: Unit suite
+
+on:
+  push:
+  pull_request:
+
+# `actions: write` is not a fifth thing the job does; it is what step 4 needs to exist at all.
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    # The suite itself takes ~55 s. Fifteen minutes is the sync plus the suite with generous room
+    # for a runner that is cold, and it is here so a hang fails instead of running forever.
+    timeout-minutes: 15
+
+    steps:
+      # Current majors, checked against the tags on the day this landed rather than inherited from
+      # another repository's file. An action pinned below what the runner can still resolve does not
+      # fail the suite, it fails the job before the suite exists.
+      - name: Check out the code
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
+
+      - name: Run the unit suite
+        # `shell: bash` matters more than it looks: GitHub's default shell is `bash -e`, which does
+        # not fail a pipeline when the *first* command in it fails, and this step would then never
+        # go red. `-o pipefail` is the whole reason `tee` here is safe.
+        shell: bash
+        run: uv run pytest -q 2>&1 | tee pytest-output.txt
+
+      - name: Publish the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pytest-output
+          path: pytest-output.txt
+          if-no-files-found: warn
+          retention-days: 14
