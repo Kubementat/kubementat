@@ -58,6 +58,27 @@ def help_of(kmt: list[str], path: list[str]) -> tuple[str, bool]:
     return proc.stdout.strip(), True
 
 
+def source_sha() -> str | None:
+    """The short SHA of the checkout the reference is being read from, if there is one.
+
+    A dated line says when this was generated but not what it was generated against, and
+    those two things are not the same: a stale reference reads exactly like a current one.
+    The SHA is what makes the gap measurable.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
 def subcommands(help_text: str) -> list[str]:
     """The names listed under `Commands:` in a help block (groups only)."""
     match = COMMANDS_BLOCK.search(help_text)
@@ -86,8 +107,10 @@ def main() -> int:
 
     print("# kmt command reference\n")
     print("Snapshot of `kmt --help` and every `kmt <command> --help`, regenerated from the live CLI.\n")
-    print(f"Generated {date.today().isoformat()} by `scripts/kmt_reference.py`. "
-          "The CLI is the source of truth: `uv run kmt <command> --help` outranks this file.\n")
+    print(f"Generated {date.today().isoformat()} by `scripts/kmt_reference.py`"
+          + (f" from kubementat {source_sha()}" if source_sha() else "")
+          + ". The CLI is the source of truth: `uv run kmt <command> --help` outranks this "
+          "file.\n")
 
     failures = 0
     for name in subcommands(help_of(kmt, [])[0]):

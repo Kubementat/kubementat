@@ -37,8 +37,8 @@ Open a new session and type:
 
 ## Keeping the reference honest
 
-The reference file is a snapshot. After the command surface moves, regenerate it from a
-kubementat checkout:
+The reference file is a snapshot, stamped with the kubementat commit it was read from. After the
+command surface moves, regenerate it from a kubementat checkout:
 
 ```bash
 cd /path/to/kubementat   # the checkout whose `kmt` you want captured
