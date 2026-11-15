@@ -12,10 +12,10 @@ Two shapes are asserted and not one, because either alone would let the wrong th
 * **The lines exist, one per release, and use the key the component's own name produces.** Read off
   `component_release_index()` and not off a list here, so a release added to the manifest is checked
   the way it becomes installable -- for free, by the file that decides both.
-* **The `default` is still the pin kubementat ships.** The templated line is where the literal lives
-  now, so a rewrite that "just" reflows a block or bumps a chart without saying so lands here. The
-  table below is the re-derivation the pin has to come with; the fix when it moves is to re-read the
-  chart index the block names, not to update the row.
+* **The `default` is still a version, and is the only one the release block offers.** The templated
+  line is where the literal lives, so it is read back off the block rather than quoted from a table
+  here: a rewrite that "just" reflows a block, or a pin that lands as a boolean or a number,
+  fails on the shape rather than on a row that was written down and left to rot.
 
 The shapes are not incidental: `installed:` is unquoted because helmfile 1.7.0 puts an unquoted
 `true`/`false` into its boolean field and a quoted `"false"` into nothing, and `version:` is quoted
@@ -39,22 +39,13 @@ from kubementat.infrastructure.helm import HelmUtils
 MANIFEST = values_path("helmfile.yaml.gotmpl")
 SUFFIXES = ("ENABLED", "VERSION")
 
-# The chart version kubementat ships, one row per release the manifest names. Each row is the pin the
-# release block carried before it was templated, which is the number the block's own comment dates to
-# the index re-read of 2026-10-31 -- which is why the rows and the blocks agree and what to do when
-# they do not: re-read the chart index named in that block, then change both.
-SHIPPED_CHART_VERSIONS = {
-    "prometheus": "29.40.1",
-    "prometheus-blackbox-exporter": "11.20.2",
-    "prometheus-helm-exporter": "1.4.0+e2eee28",
-    "grafana": "14.2.0",
-    "loki": "20.2.0",
-    "alloy": "1.15.0",
-    "polaris": "6.0.1",
-    "cert-manager": "v1.21.3",
-    "traefik": "42.1.3",
-    "openbao": "0.30.6",
-}
+# The version kubementat resolves for a release when configuration says nothing, read off the
+# manifest's own templated `default` for that component rather than written down here. A table in this
+# file would be a second owner of the pin, and the only failure worth catching -- a block reflowed or
+# bumped without the check moving with it -- is a failure a copied table cannot see, because the copy
+# stays green while the file it claims to quote moves. So the set of components this guard can check,
+# and the version each one resolves to, come from the same read of the shipped artefact that
+# `helmfile_apply` makes.
 
 # `installed:` unquoted, so helmfile's boolean field gets a boolean; `version:` quoted, so a version
 # that reads like `1.0` survives as the string helm resolves.
@@ -119,30 +110,62 @@ def label_of(lines):
 
 def blocks_by_label():
     """`{label: [(release, lines), ...]}` for the manifest, which is what the assertions iterate."""
-    indexed = {}
-    for release, lines in release_blocks().items():
-        indexed.setdefault(label_of(lines), []).append((release, lines))
+    indexed = _blocks_by_label()
     assert None not in indexed, \
         f"these releases declare no component_name label, so no knob can be addressed to them: " \
         f"{indexed[None]}"
     return indexed
 
 
+def _blocks_by_label():
+    """The same mapping, without the assertion, so it can be read while the suite is collecting."""
+    indexed = {}
+    for release, lines in release_blocks().items():
+        indexed.setdefault(label_of(lines), []).append((release, lines))
+    return indexed
+
+
+def shipped_chart_versions() -> dict:
+    """`{component: the version its own release block resolves}` -- the pins, read off the artefact.
+
+    The `default` inside the templated `version:` line is the only place a shipped chart version is
+    written, so it is read there and nowhere else: a bumped or reflowed block moves this answer with
+    it, which is the whole point of not writing the table out a second time.
+    """
+    pins = {}
+    for label, entries in _blocks_by_label().items():
+        for _release, lines in entries:
+            templated = [VERSION_KNOB.match(line) for line in lines if VERSION_KNOB.match(line)]
+            if len(templated) == 1:
+                pins[label] = templated[0].group("version")
+    return pins
+
+
+# Read once, for the parametrised rows below. A component that reaches the manifest arrives here and
+# in the index, and the first test says the two answers have to be the same set.
+CHART_VERSIONS_FROM_MANIFEST = shipped_chart_versions()
+
+
 # --- every release carries both lines ------------------------------------------------------
 
 
 def test_the_releases_the_manifest_names_are_the_rows_this_guard_knows():
-    """The labels and the version table are the same set, so a release cannot arrive without a check.
+    """The labels the manifest declares and the index the apply reads are the same set, once each.
 
     Add one to the manifest and this fails with the release's name in it, which is the only shape of
-    failure that sends whoever added it to the right place: the two lines, and the pin to re-derive.
+    failure that sends whoever added it to the right place: the two lines. Nothing is quoted from a
+    table here, so nothing can be green while the row it claimed to check has moved.
     """
-    assert sorted(live_index()) == sorted(SHIPPED_CHART_VERSIONS)
+    labels = {label for label in _blocks_by_label() if label is not None}
+    assert sorted(labels) == sorted(live_index()), \
+        (f"the release blocks and the index the apply reads disagree: "
+         f"only in the blocks {sorted(labels - set(live_index()))}, "
+         f"only in the index {sorted(set(live_index()) - labels)}")
     assert not [label for label, releases in live_index().items() if len(releases) > 1], \
         "a label on more than one release makes a component's own knob decide twice"
 
 
-@pytest.mark.parametrize("component", sorted(SHIPPED_CHART_VERSIONS))
+@pytest.mark.parametrize("component", sorted(CHART_VERSIONS_FROM_MANIFEST))
 def test_every_release_the_manifest_names_carries_both_knobs(component):
     """Both templated lines, exactly one of each, addressed by the key this component's name produces."""
     labelled = [entry for entry in blocks_by_label().get(component, [])]
@@ -155,12 +178,17 @@ def test_every_release_the_manifest_names_carries_both_knobs(component):
         assert len(version) == 1, f"{release} has {len(version)} templated version: lines"
         assert installed[0].group("key") == component_config_key(component, "ENABLED")
         assert version[0].group("key") == component_config_key(component, "VERSION")
-        assert version[0].group("version") == SHIPPED_CHART_VERSIONS[component], \
-            f"{release} resolves {version[0].group('version')!r} as its default and not " \
-            f"{SHIPPED_CHART_VERSIONS[component]!r}: the pin moved, and the row here moves with it"
+        # The pin itself is read off this same line, so what is asserted is that the line answers:
+        # a version, quoted, and not the empty string a block loses when its default is dropped.
+        default = version[0].group("version")
+        assert default.strip() == default and default, \
+            f"{release} resolves {default!r} as its version default, which is not a version"
+        assert "{{" not in default, f"{release} nests a second substitution inside its version default"
+        assert default not in ("true", "false"), \
+            f"{release} resolves {default!r}, which helmfile reads as a boolean and not as a chart"
 
 
-@pytest.mark.parametrize("component", sorted(SHIPPED_CHART_VERSIONS))
+@pytest.mark.parametrize("component", sorted(CHART_VERSIONS_FROM_MANIFEST))
 def test_no_release_carries_a_second_knob_line(component):
     """One `installed:` and one `version:` per release, and nothing else that answers either.
 

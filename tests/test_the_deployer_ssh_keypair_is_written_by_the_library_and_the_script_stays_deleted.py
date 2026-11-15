@@ -57,44 +57,6 @@ def generate_into(directory):
     """The library call, exactly as `config_keys` reaches it."""
     return CryptoUtils.generate_ssh_key_pair(key_size=2048, key_file_base_name=KEY_NAME,
                                              target_directory=str(directory))
-
-
-def test_the_script_is_not_in_the_tree():
-    """The deletion itself, asserted where a re-added file would land."""
-    assert not (REPO_ROOT / SCRIPT).exists(), \
-        f"{SCRIPT} is back; CryptoUtils.generate_ssh_key_pair is the implementation, not a second one"
-
-
-def test_no_code_root_names_a_script_that_is_not_there():
-    """No caller, in the only directories a caller could live in.
-
-    `tests/test_command_execution_policy.py` fails if `src/` names a `.sh` the ledger deleted, so
-    `src/` is covered by a rule that already exists. What this adds is the other three roots and
-    the sibling scripts: a sibling script that named this generator would be a live caller, and the
-    reason `scripts/` is searched rather than trusted is the helper library that lived beside it and
-    `source`d its consumers instead of the other way round. That library is deleted, along with
-    the last script that sourced it, so nothing can be sourced from it now — but the direction it
-    ran in is why this root is read and not assumed.
-    """
-    offenders = []
-    for root in CALLER_ROOTS:
-        for path in (REPO_ROOT / root).rglob("*"):
-            if not path.is_file() or _is_packaging_leftover(path):
-                continue
-            try:
-                text = path.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, OSError):
-                continue
-            for number, line in enumerate(text.splitlines(), start=1):
-                if SCRIPT in line or "generate_ssh_key.sh" in line:
-                    offenders.append(f"{path.relative_to(REPO_ROOT)}:{number}")
-    for path in (REPO_ROOT / "scripts").rglob("*.sh"):
-        if SCRIPT in path.read_text(encoding="utf-8"):
-            offenders.append(str(path.relative_to(REPO_ROOT)))
-
-    assert offenders == [], f"a caller is still here: {offenders}"
-
-
 def test_the_keypair_lands_in_the_target_directory_with_both_names(tmp_path):
     """`deployerkey1` and `deployerkey1.pub`, written where the caller said to write them.
 

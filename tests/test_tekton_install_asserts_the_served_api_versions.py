@@ -194,8 +194,6 @@ def test_there_is_no_second_api_version_for_the_triggers_group():
     assert config_module.TEKTON_API_VERSION == "v1"
 
 
-
-
 def test_the_installer_builds_every_url_from_one_base_and_never_from_the_old_bucket():
     """The base URL and the pins move together, so one place must own the address.
 
@@ -303,14 +301,3 @@ def test_the_install_applies_the_urls_the_pinned_versions_actually_point_at(fixt
         f"{RELEASE_BASE_URL}/triggers/previous/v{TRIGGERS}/release.yaml",
         f"{RELEASE_BASE_URL}/triggers/previous/v{TRIGGERS}/interceptors.yaml",
     ], "the URLs the install builds are not what the pins mean"
-
-
-def test_the_pinned_versions_and_the_documented_version_table_agree():
-    """The table is where a reader looks up what is supported, so drift there is a wrong instruction."""
-    documented = TEKTON_DOC.read_text()
-
-    for version in (PIPELINES, TRIGGERS, DASHBOARD):
-        assert version in documented, f"{version} is pinned but the documentation does not list it"
-
-    for retired in ("1.4.0", "0.33.0", "0.61.0"):
-        assert retired not in json.dumps(PINNED), f"{retired} is a stale pin still shipping in the template"

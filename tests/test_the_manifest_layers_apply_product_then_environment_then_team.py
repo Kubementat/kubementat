@@ -31,7 +31,6 @@ import tempfile
 from pathlib import Path
 
 import gnupg
-import pytest
 
 from kubementat.automations.install import pipelines as pipelines_slice
 from kubementat.automations.install.pipelines import setup_pipelines
@@ -451,28 +450,6 @@ def test_the_environments_directories_are_spelled_from_the_configuration_root(tm
     assert config.tekton_env_task_dir == tmp_path / "dev" / "tekton" / "tasks"
     assert config.tekton_env_pipeline_dir == tmp_path / "dev" / "tekton" / "pipelines"
     assert config.tekton_env_task_dir != config.kubementat_main_dir / "tekton" / "tasks"
-
-
-def test_no_environment_triggers_directory_ships_with_this_layer(tmp_path):
-    """An earlier design put one there; nothing reads one, so shipping one would be a dead directory.
-
-    The read path that applies a trigger directory is team-only
-    (`infrastructure/tekton/triggers.py`'s `_apply_team_trigger_resources`), so an environment
-    `triggers/` directory
-    is a directory that exists and is read by nothing — the shape of the `kubementat_components/`
-    tree that was deleted for that exact reason. The *team* trigger directory later moved under
-    `tekton/`; the environment half still has no reader, so it still ships nothing, and it lands
-    only with the reader that opens it. This guard says the line twice, once as a comment on
-    `Config` and once as a fact a test can fail on.
-    """
-    config = Config(environment="dev", team="dev1", platform_config_dir=tmp_path,
-                    preload_configs=False)
-
-    assert not hasattr(config, "tekton_env_trigger_dir")
-    assert "triggers" not in {Path(config.tekton_env_task_dir).name,
-                              Path(config.tekton_env_pipeline_dir).name}
-
-
 # ---------------------------------------------------------------------------
 # nothing prunes
 # ---------------------------------------------------------------------------

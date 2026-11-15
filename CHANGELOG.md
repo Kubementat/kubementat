@@ -1,5 +1,59 @@
 # Unreleased
 
+- **The suite no longer polices this repository's own source. Nine bash-parity files and the static
+  repository sweeps are retired, and the agreement literals they wrote down are derived instead.**
+
+  This changes what a developer reads and runs, not what `kmt` does: no refusal text, no flag, no
+  generated manifest and no command moved, and `uv run pytest -q` still reports a green suite. What
+  moved is 118 `def test_` cases out of `tests/`.
+
+  * **The nine `tests/test_parity_*.py` files are gone (51 defs).** They compared the Python flow
+    against a bash script that no longer exists, so from the migration onward the other half of every
+    comparison was a written-down transcript in the test file. The Python side — the real half — is
+    still asserted, by the command's own tests: `kubernetes pvc-usage` under
+    `tests/test_pvc_usage_reads_the_kubelets_and_names_the_nodes_that_stay_silent.py`, the
+    diagnostics trio under `tests/test_diagnostics_read_the_cluster_and_name_what_is_absent.py`,
+    `create-ingress` under
+    `tests/test_generated_ingress_manifests_name_the_service_the_class_and_the_issuer.py`, the tunnels
+    across the 26 tunnel test files, `setup-secrets` and `setup-docker-registry-access` under
+    `tests/test_a_team_that_declares_no_deploy_key_says_so_instead_of_failing.py` and
+    `tests/test_a_team_that_names_no_registry_neither_crashes_nor_lies.py`, and the Tekton install
+    under `tests/test_tekton_install_asserts_the_served_api_versions.py`.
+  * **The static sweeps are deleted or narrowed to the behaviour they were standing in for (67 defs).**
+    Files retired: `test_no_client_is_built_without_a_target.py`, the
+    `test_the_cluster_read_scripts_are_deleted_and_the_primitives_answer_for_them.py` pair, and
+    `test_a_step_only_passes_params_the_task_it_calls_declares.py` (whose rule the full lane enforces,
+    because Tekton rejects a param the Task never declared). `test_no_dead_code_ships_in_the_tree.py`
+    is now one import of the package index rather than an AST walk of `src/`; the docs-path guard is
+    now a guard on the asset roots the product resolves; the helm and kubectl addressing rules are now
+    the runtime refusals, not a scan of every call site; `test_no_cli_command_starts_a_script_by_path.py`
+    keeps the two assertions it makes about the registered CLI and drops eight about the shapes its own
+    parser accepted.
+  * **What stays watched.** Three guards the plan named as drift risks survived, in derived form. A
+    dead module: every module the installed `kubementat` package ships is imported and asserted to
+    define something. `jq` and `yq`: asserted absent from `KUBEMENTAT_DEPENDENCIES` directly, beside a
+    test that asks the dependency gate about every name the list declares. Moved assets: the packaged
+    roots resolve, and the checkout ships no shadow copy of them. An assertion that reads an index or
+    an artefact stayed; one that grepped the tree went.
+  * **The agreement literals are derived.** `SHIPPED_CHART_VERSIONS` became
+    `shipped_chart_versions()`, read back off each release block's own templated `default`; the
+    component count (`== 13`) became the invariants it was standing in for — non-empty, no two
+    components sharing a namespace, a release-carrying label refused by the same accessor everything
+    else asks; the two key counts (`== 52`) became the universe's own sources, each asserted
+    non-empty; and the two written-down component lists are read out of `constants.DEFAULT_NAMESPACES`,
+    `constants.DEFAULT_SERVICE_SELECTORS` and `read_release_index`.
+
+  **Why.** A change of one component used to cost 21 files / 31 edits, and 12 of those edits were in
+  `tests/` — most of them agreement machinery rather than behaviour. The rule this enforces was
+  already in `AGENTS.md`: *a test may assert what a stage proved about the product, and may read the
+  argv a capability row resolves to; it may not police this repository's own source.*
+  **The honest limit:** 67 of the sweep defs retired here were narrowed rather than fully removed, and
+  eight files still read a path under the checkout for what they assert (`test_tekton_manifest_api_versions.py`
+  and the CI-template guards among them). Those read shipped artefacts — a manifest, a Task, a
+  template — not source, which is the line the rule draws, and they stayed because nothing else
+  currently asserts what they assert. Retiring them is a later change with a replacement, not this one.
+
+
 - **The unit suite now has CI: every push and every pull request runs `uv run pytest -q`.**
 
   The file is `.github/workflows/unit.yml`, and it does four things and four things only — check out,

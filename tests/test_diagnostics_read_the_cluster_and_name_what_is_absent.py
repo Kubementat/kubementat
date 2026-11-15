@@ -1,8 +1,10 @@
 """The cluster diagnostics: pods, images, and capacity, read the way the scripts read them.
 
 `kmt kubernetes analyze-deployment`, `kmt kubernetes pod-images` and `kmt kubernetes cluster-capacity` replace three bash
-scripts (see `test_parity_kubernetes_diagnostics.py` for the comparison against the recorded
-blobs). What the scripts did with `kubectl` piped through `jq` these do through the client,
+scripts. Those scripts are deleted, and the parity file that compared them is gone with the rest of
+that family, so every claim below is made by running the command against the recorded API and
+asserting what it asked the cluster. What the scripts did with `kubectl` piped through `jq` these do
+through the client,
 and the part that makes the swap safe lives here:
 
 * a namespace that was never created gets its name in a message, not an `ApiException`;

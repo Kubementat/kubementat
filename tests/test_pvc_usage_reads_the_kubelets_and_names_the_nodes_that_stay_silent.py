@@ -3,9 +3,10 @@
 The `kmt kubernetes pvc-usage` command replaces `scripts/utilities/kubernetes/list_pvc_usage.sh`, which
 reached a node's
 `/stats/summary` by starting `kubectl proxy`, `sleep 2`, curling `127.0.0.1:8001` and then
-`pkill -9`ing the proxy. The comparison against that script is
-`tests/test_parity_pvc_usage_reads_the_nodes_and_their_stats.py`; what lives here is the shape the
-replacement has to keep:
+`pkill -9`ing the proxy. The comparison against that script lived in a parity file and is gone with
+the rest of that family -- the script left the tree, so the only side of the comparison still
+runnable was a record of a bash script nobody runs. What lives here is the shape the replacement has
+to keep, and it is asserted by running the command:
 
 * the node list is read once and each node's summary is asked for by name — the same two questions,
   with no local server and no program started at all;

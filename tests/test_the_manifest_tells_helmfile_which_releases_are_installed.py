@@ -109,7 +109,7 @@ def test_the_version_helmfile_builds_is_the_quoted_default_and_not_a_number():
 
     helmfile resolves a release's version against what the chart index serves, so this is the string
     the manifest carried as its literal before the knob landed -- the same value
-    `SHIPPED_CHART_VERSIONS` in the manifest guard states.
+    `shipped_chart_versions()` in the manifest guard reads back off the release block.
     """
     releases = built_releases()
 

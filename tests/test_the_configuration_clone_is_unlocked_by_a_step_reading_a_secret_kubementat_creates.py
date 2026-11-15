@@ -332,8 +332,10 @@ def test_the_unlock_task_needs_no_key_on_a_host():
 def test_the_task_passes_only_params_it_declares():
     """A pipeline may not hand a Task a param the Task does not declare.
 
-    Same rule `test_a_step_only_passes_params_the_task_it_calls_declares.py` established for the older
-    tasks; the new step is new surface for the same mistake.
+    The same rule the older tasks measured once; the new step is new surface for the same mistake.
+    Where that measurement went, and why the failure is still caught, is written in
+    `tests/test_every_ci_kmt_invocation_states_its_cluster.py`, where every shipped step's params are
+    read against the Task they call.
     """
     declared = {p["name"] for p in _load(TASKS / f"{UNLOCK_TASK}.yml")["spec"].get("params") or []}
     for path in CLONING_PIPELINES:

@@ -25,12 +25,15 @@ Each file covers one contract of the code it is named after — running scripts 
 checkout, the `--team` option, loading a config that is missing, the command-execution
 primitive and the rule that only that primitive starts programs.
 
-**Parity.** `test_parity_*.py` compares a Python path against the bash script that did the same
-job. When the script is still in the tree both halves run, through the same fake binaries, and
-`cluster_parity.py` reduces what each of them asked the cluster to do. When the deletion ledger
-has taken the script, the comparison does not go away with it: what the script sent is recorded
-in the test file instead, and the Python side still runs for real. A record without a name — "what
-it did" — is not evidence, so every recorded row says which script it came from.
+**What is not asserted.** No case here greps this repository's own source for its own sake — not
+"the lane must not write configuration with jq", not "this module must not declare that constant",
+not "the docs agree with the code". A test may assert what a stage proved about the product, and it
+may read the argv a capability row resolves to; if what it reads is an artefact the product resolves
+(a release index, a packaged template, a Task's declared params) that is a fact about the product, and
+if what it reads is a sentence in a file it is a self-audit. The parity family, the bash-deletion
+guards and the AST sweeps over `src/` were removed on that rule, on
+2026-11-15; the behaviour they were standing in for is asserted by running the command, and the
+agreement literals they carried are derived from `constants.py` and the release index.
 
 **Naming.** Say what the test proves, not which ticket asked for it. A file and a case
 name must be readable by someone who has never seen the plan that motivated the change:

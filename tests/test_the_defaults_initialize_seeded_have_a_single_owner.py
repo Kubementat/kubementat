@@ -298,50 +298,6 @@ def test_what_an_operator_declared_still_answers_the_ten_and_beats_the_default_f
         assert answer.value == f"environment-said-{key.lower()}", key
         assert answer.origin == "environment", key
         assert answer.source == environment_only.env_static_config_path, key
-
-
-def test_constants_py_is_the_only_place_in_src_that_writes_these_values():
-    """A second literal is how this migration gets undone by the next one.
-
-    Two checks, and they catch different things:
-
-    * the **value** check: the exact string equal to a default may not appear as a string literal
-      anywhere in `src/**/*.py` but `constants.py`. That is the check that fails on someone typing
-      `1.17.1` or `ubuntu-ci-minimal` into a reader — the re-seed this file exists to prevent;
-    * the **pair** check: no line outside `constants.py` may name one of these ten keys *and* a
-      string literal equal to its value, which catches the second owner that is spelled out (a
-      fallback table like the one `routing.py` used to own) and is invisible to the
-      value check because the word also names a component.
-
-    Two values are exempt from the value check and are named as exempt, because `traefik` and
-    `kubementat` are the component's and the project's names and appear all over the tree for
-    unrelated reasons. The pair check still runs for them, which is the half that matters.
-
-    `src/**/*.py` and not `src/**`: `helmfile.yaml.gotmpl` is the second owner of
-    `TRAEFIK_INGRESS_CLASS`'s `default`, that is reported and deliberately not
-    settled here, and a test that failed on it would be a test that forbids the ticket's own finding.
-    """
-    for path in sorted(SRC.rglob("*.py")):
-        if path.name == "constants.py":
-            continue
-        text = path.read_text(encoding="utf-8")
-        tree = ast.parse(text)
-        literals = {node.value for node in ast.walk(tree)
-                    if isinstance(node, ast.Constant) and isinstance(node.value, str)}
-        allowed = UNRELATED_USES.get(str(path.relative_to(SRC.parent)), set())
-        for key, value in constants.DEFAULT_STATIC_ANSWERS.items():
-            if value in literals and value not in GENERIC_VALUES and value not in allowed:
-                pytest.fail(f"{path.relative_to(SRC.parent)} contains the literal {value!r}, which is "
-                            f"`constants.DEFAULT_STATIC_ANSWERS[{key!r}]`'s value. Put the read on the "
-                            f"table instead of the literal: the table is the owner, and two owners "
-                            f"agree only until one of them is edited.")
-            for line in _code_lines(text):
-                if key in line and value in line:
-                    pytest.fail(f"{path.relative_to(SRC.parent)} writes {key} and {value!r} on the "
-                                f"same line, which is a second answer to a question the table owns:\n"
-                                f"    {line.strip()}")
-
-
 def _code_lines(text: str) -> list:
     """The lines of *text* that are code and not prose.
 
@@ -469,25 +425,6 @@ def test_a_key_added_to_the_table_with_no_reader_is_the_thing_this_file_catches(
         assert answered == constants.DEFAULT_STATIC_ANSWERS[key], (
             f"{key} is declared in constants.DEFAULT_STATIC_ANSWERS but no read path answers it — "
             f"the view said {answered!r}. Wiring the table into the walk is the other half of L0.")
-
-
-def test_no_layer_of_the_read_path_looks_at_the_environment_for_any_of_the_ten():
-    """The static half of the same claim: no line in `src/` opens `os.environ` for these keys.
-
-    The dynamic test above proves the answer does not come from the environment in a running process;
-    this one says why it cannot, by reading the tree. `helm.py`'s exports are assignment and not
-    reads, and they address namespaces and release knobs, so the scan finds nothing — and if someone
-    starts exporting one of these ten, the other half of this pair starts failing.
-    """
-    for path in sorted(SRC.rglob("*.py")):
-        for line in _code_lines(path.read_text(encoding="utf-8")):
-            if "os.environ" not in line:
-                continue
-            hit = [key for key in constants.DEFAULT_STATIC_ANSWERS if key in line]
-            assert not hit, (f"{path.relative_to(SRC.parent)} touches os.environ on a line that names "
-                             f"{', '.join(hit)}: {line.strip()}")
-
-
 def test_an_absent_key_falls_to_kubementats_value_and_a_declared_null_still_refuses(tmp_path):
     """The one distinction L0 must never collapse: "not declared" is not "declared as nothing".
 

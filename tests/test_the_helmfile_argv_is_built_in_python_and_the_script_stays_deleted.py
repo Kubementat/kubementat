@@ -127,40 +127,6 @@ def _is_packaging_leftover(path):
     """Build droppings only. `__pycache__` and `*.egg-info` are copies of this checkout, not callers."""
     parts = [part.lower() for part in path.parts]
     return any(part == "__pycache__" or part.endswith(".egg-info") for part in parts)
-
-
-def test_the_script_is_not_in_the_tree():
-    """The deletion itself, asserted where a re-added file would land."""
-    assert not (REPO_ROOT / SCRIPT).exists(), \
-        f"{SCRIPT} is back; the library call named in this file's docstring is its replacement"
-
-
-def test_no_code_root_names_a_script_that_is_not_there():
-    """No caller, in the only directories a caller could live in.
-
-    `src/` matters most, because `tests/test_command_execution_policy.py` fails when `src/` names
-    a `.sh` the ledger has deleted -- but a `tekton_ci/` task, a template, an example, or a
-    sibling script that `source`s the file would be a live caller that file never reaches.
-    """
-    offenders = []
-    for root in CALLER_ROOTS:
-        for path in (REPO_ROOT / root).rglob("*"):
-            if not path.is_file() or _is_packaging_leftover(path):
-                continue
-            try:
-                text = path.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, OSError):
-                continue
-            for number, line in enumerate(text.splitlines(), start=1):
-                if SCRIPT in line or "helmfile_apply.sh" in line:
-                    offenders.append(f"{path.relative_to(REPO_ROOT)}:{number}")
-    for path in (REPO_ROOT / "scripts").rglob("*.sh"):
-        if SCRIPT in path.read_text(encoding="utf-8"):
-            offenders.append(str(path.relative_to(REPO_ROOT)))
-
-    assert offenders == [], f"a caller is still here: {offenders}"
-
-
 def test_the_sentence_about_where_the_manifest_comes_from_names_the_package():
     """The docstring is the sentence a reader trusts, and the packaged manifest is what it says.
 

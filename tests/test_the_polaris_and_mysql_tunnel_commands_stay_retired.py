@@ -15,8 +15,8 @@ row 25 took away:
   is the part that makes the retirement real.
 
 What is *not* asserted here is the surface of the four surviving tunnels. `kmt tunnel`'s own verbs
-and their ports belong to `test_parity_tunnels.py` and `test_cli_surface.py`, which keep running
-them unchanged.
+and their ports belong to `test_cli_surface.py`, which keeps running them unchanged, and to the
+tunnel tests that run the commands and read the argv the cluster call is made with.
 """
 
 import contextlib

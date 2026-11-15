@@ -156,9 +156,12 @@ def test_the_scripts_left_in_the_tree_are_the_ones_this_ticket_is_not():
 
     This ticket deleted one file, so the set is asserted rather than the count. The set this file
     used to pin is empty: the two one-liners that were its survivors were deleted by a later sweep,
-    which guards its own deletion in `test_the_cluster_read_scripts_are_deleted_and_the_primitives_answer_for_them.py`,
     so what is measured here is that the tree holds nothing else. A guard that pinned a moving total
-    would be an argument waiting to happen; this pins the set instead, and the set is empty.
+    would be an argument waiting to happen; this pins the set instead, and the set is empty. The
+    sweep's own guard was retired with it -- what the deleted reads left behind is asserted by the
+    commands that answer for them, in
+    `tests/test_diagnostics_read_the_cluster_and_name_what_is_absent.py` and
+    `tests/test_pvc_usage_reads_the_kubelets_and_names_the_nodes_that_stay_silent.py`.
     """
     # Absence is a reading, not an error: git cannot represent an empty directory, so a clean
     # checkout has no `scripts/` where a developer's tree still has the husk left by the migration.

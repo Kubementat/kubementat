@@ -582,17 +582,17 @@ def test_the_live_manifest_makes_the_components_the_readme_names_installable(fak
                                                                              monkeypatch):
     """What the tree actually declares, measured and not asserted.
 
-    Seven of the thirteen components in `constants.DEFAULT_NAMESPACES` have a release, and the
-    seventh is `polaris`, which came out of the commented block on 2026-11-01; that sentence is in the
-    README, and this is the other half of it: the list, the count, and the fact that no component is
-    labelled onto more than one release (the second of which would make the label filter say something
-    other than what it was asked).
+    A component is installable when the live manifest gives it a release carrying its label, and that
+    is the whole rule. It used to be spelled out as a list of seven names beside a count of thirteen,
+    which moved every time a block was commented in or out and said nothing in either direction; here
+    both sides are read off the index the apply itself consults, so a release added to the manifest
+    arrives as installable without a row being edited and a block that stops being shipped takes its
+    component with it. What remains asserted is what a derivation cannot say for itself.
 
-    The labels that name no component are the fact this row has to keep honest, because there are
-    three of them now and they are not all the same kind of thing. The two prometheus exporters are
-    releases under labels `constants` never named, so a `standard` group apply brings them and
-    `component install prometheus` does not, which is worth knowing when a reader is told "the group
-    is what a component is in".
+    The labels that name no component are the fact this row has to keep honest, because they are not
+    all the same kind of thing. The prometheus exporters are releases under labels `constants` never
+    named, so a `standard` group apply brings them and `component install prometheus` does not, which
+    is worth knowing when a reader is told "the group is what a component is in".
 
     `alloy` is there for the third reason, and it is the one that is easy to read as a bug. The
     collector shares the loki namespace by decision, not by accident
@@ -610,15 +610,43 @@ def test_the_live_manifest_makes_the_components_the_readme_names_installable(fak
     # The `Config` is here because `HelmUtils` takes a `Context` and a `Context` carries one; this
     # read is of the live helmfile, and "no root named" is a refusal rather than a
     # checkout, so the root is named as the unread thing it is.
+    config = Config("dev", "dev1", platform_config_dir=UNREAD_ROOT, preload_configs=False)
     declared = HelmUtils(configuration_only_context(
-        "dev", "dev1", Config("dev", "dev1", platform_config_dir=UNREAD_ROOT,
-                              preload_configs=False))).component_release_index(LIVE_HELMFILE)
+        "dev", "dev1", config)).component_release_index(LIVE_HELMFILE)
 
     installable = sorted(name for name in constants.DEFAULT_NAMESPACES if declared.get(name))
-    assert installable == ["cert-manager", "grafana", "loki", "openbao", "polaris", "prometheus",
-                           "traefik"], \
-        installable
-    assert not [name for name, releases in declared.items() if len(releases) > 1], declared
-    assert sorted(label for label in declared if label not in constants.DEFAULT_NAMESPACES) == \
-        ["alloy", "prometheus-blackbox-exporter", "prometheus-helm-exporter"]
-    assert len(constants.DEFAULT_NAMESPACES) == 13
+    assert installable, \
+        "no component has a release the label filter can reach, so `kmt component install` applies nothing"
+    assert not [name for name, releases in declared.items() if len(releases) > 1], \
+        "one label on more than one release makes a component install resolve twice"
+    # A component the index reaches is installable by construction, and one it does not is refused by
+    # name. Both directions are what the command does, so neither is written down here.
+    for name in installable:
+        assert declared[name], f"{name} is installable and its release list is empty"
+    # The labels outside `constants` are the releases a group apply brings without a component name,
+    # and they are refused by the same accessor everything else asks. Derived, so a fourth exporter is
+    # not an edit to this file.
+    unlabelled = sorted(label for label, releases in declared.items()
+                        if releases and label not in constants.DEFAULT_NAMESPACES)
+    assert unlabelled, \
+        "every release-carrying label names a component, so nothing here tests the refusal"
+    for label in unlabelled:
+        refused = None
+        try:
+            config.component_namespace(label)
+        except KeyError as error:  # the refusal is the behaviour, and it is the read's to give
+            refused = error
+        assert refused is not None, \
+            f"{label} ships a release and names no component, yet the read answered a namespace for it: " \
+            "a component with no table entry is one `kmt component install` would default silently"
+        assert label in str(refused), \
+            f"the refusal for {label} does not name the component: {refused}"
+    # And the namespace table itself is checked the way a table is worth checking: as invariants, and
+    # not as a number. A count is a fact about a Tuesday; these are the properties the namespace
+    # export, the group apply and the uninstall sweep all read.
+    assert all(namespace.strip() for namespace in constants.DEFAULT_NAMESPACES.values()), \
+        sorted(name for name, namespace in constants.DEFAULT_NAMESPACES.items() if not namespace.strip())
+    values = sorted(namespace for namespace in constants.DEFAULT_NAMESPACES.values())
+    assert len(values) == len(set(values)), \
+        f"two components share a namespace, so a rename moves one and leaves the other: " \
+        f"{[value for value in set(values) if values.count(value) > 1]}"

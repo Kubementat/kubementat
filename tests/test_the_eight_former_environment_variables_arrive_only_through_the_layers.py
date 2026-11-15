@@ -34,7 +34,6 @@ from pathlib import Path
 import pytest
 
 from kubementat import config_answers
-from kubementat.infrastructure.tekton import generation
 import kubementat.automations.ci as ci_utils
 from kubementat.core import constants
 from kubementat.automations.ci import CiUtils
@@ -141,32 +140,6 @@ def test_a_key_the_row_leaves_to_l0_never_arrives_from_the_process_environment(t
         assert answer.default == expected
     else:
         assert expected is None
-
-
-def test_the_substitution_tables_and_the_read_path_agree_on_the_category(tmp_path):
-    """Every (category, key) pair in `src/` that names one of these keys says `env_static`.
-
-    `generation.CONFIG_PLACEHOLDER_SOURCES` is what fills a generated manifest's placeholders, and
-    it is a second statement of "where this value comes from". If one of its rows said `team_static`
-    while every read said `env_static`, the generator and the command would answer two different
-    questions from one key — which is the drift class this row is supposed to close. Keys no table
-    mentions (`CLUSTER_MANAGER_EMAIL` is read directly by `routing._cluster_manager_email`) are
-    reported as absent from the tables rather than treated as a failure.
-    """
-    triples = _category_tables(generation)
-    seen = {}
-    for key in FORMER_ENVIRONMENT_VARIABLES:
-        entries = [(table, source, category)
-                   for table, source, category, target in triples if target == key]
-        categories = {category for _, _, category in entries}
-        assert categories <= {"env_static"}, (key, sorted(categories))
-        seen[key] = sorted((table, source) for table, source, _ in entries)
-
-    assert seen[CI_REGISTRY_KEY] == [("CONFIG_PLACEHOLDER_SOURCES", "DOCKER_REGISTRY_BASE_URL")]
-    assert seen["CLUSTER_MANAGER_EMAIL"] == [], \
-        "the manager address is read by a command, not by a substitution table"
-
-
 # --------------------------------------------------------------------- 2. no key arrives from the shell
 
 
@@ -423,93 +396,6 @@ def _names_of(node, constants_by_name) -> tuple:
     if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant):
         return (node.slice.value,)
     return ("?" + ast.unparse(node),)
-
-
-def test_no_former_environment_variable_arrives_from_the_process_environment():
-    """Every `os.environ` access in `src/` is one this file can explain, and none answers the row.
-
-    Three assertions, and each one catches a different way of going wrong:
-
-    * **the set of accesses matches the table.** A new access that is not listed fails the test, so an
-      exemption cannot be added by omissions and the table cannot be kept for an access that has left.
-    * **no name any access carries is one of the eight** — checked against the names the AST folded,
-      so a table that claims a harmless name for a site that reads something else fails too.
-    * **the reads are reads.** The exports are writes, and classifying them is what stops a grep for
-      `os.environ` from being either a false green or a false alarm about helmfile.
-    """
-    sites = []
-    for path in sorted(SRC.rglob("*.py")):
-        sites.extend(_env_access_sites(path))
-
-    listed = set(PROCESS_ENVIRONMENT_USES)
-    found = {site.identity for site in sites}
-    assert found == listed, (
-        "the process-environment accesses in `src/` no longer match the table that explains them. "
-        f"Unlisted: {sorted(found - listed)}; gone: {sorted(listed - found)}. List a new access with "
-        "what it reads and why it is not one of the eight, or delete the row that no longer answers.")
-
-    eight = set(FORMER_ENVIRONMENT_VARIABLES)
-    for site in sites:
-        entry = PROCESS_ENVIRONMENT_USES[site.identity]
-        carried = {name for name in site.names if not name.startswith("?")}
-        if not carried:
-            # The name is built at runtime, so the AST cannot fold it. Two honest answers: the table
-            # names the module constants the loop is handed, and the test folds them itself; or the
-            # table describes what the name is built out of. A blank here would be "I could not see
-            # it" read as "it cannot be one of the eight".
-            if entry.get("constants"):
-                # A constant the loop is handed can live in a module the reader imports, so the table
-                # says whose constant it is and the fold happens there. Absent that key the constants
-                # are the reader's own, which is what every row but the two cluster ones needs.
-                home = entry.get("constants_home", site.path)
-                module_constants = _module_string_constants(Path(REPO / home))
-                declared = list(entry["constants"])
-                assert all(name in module_constants for name in declared), \
-                    f"{site.label()}: {declared} are not all module constants of {home} any more"
-                derived = {module_constants[name] for name in declared}
-                assert derived == set(entry["names"]), (
-                    f"{site.label()} can carry {sorted(derived)} and the table says "
-                    f"{sorted(entry['names'])}")
-                assert not (derived & eight), \
-                    f"{site.label()} reads {sorted(derived & eight)} from the process environment"
-            elif entry.get("derived") == "literal-keys":
-                derived = _literal_key_names(Path(REPO / site.path), site.symbol)
-                assert derived == set(entry["names"]), (
-                    f"{site.label()} spells {sorted(derived)} in its own dict and the table says "
-                    f"{sorted(entry['names'])}")
-                assert not (derived & eight), \
-                    f"{site.label()} exports {sorted(derived & eight)} into the process environment"
-            elif entry.get("derived") == "component-config-key":
-                folded, unfoldable = _component_key_names(Path(REPO / site.path), site.symbol)
-                assert not (folded & eight), \
-                    f"{site.label()} exports {sorted(folded & eight)} into the process environment"
-                if not unfoldable:
-                    assert folded == set(entry["names"]), (
-                        f"{site.label()} builds {sorted(folded)} from component_config_key and the "
-                        f"table says {sorted(entry['names'])}")
-                else:
-                    assert any(name.startswith("<") for name in entry["names"]), (
-                        f"{site.label()} builds some keys from a component the file does not name; "
-                        "say what the set of components is.")
-            else:
-                assert any(name.startswith("<") for name in entry["names"]), (
-                    f"{site.label()} builds its name at runtime and the table says nothing about how; "
-                    "say what the name is built out of.")
-        else:
-            assert not (carried & eight), \
-                f"{site.label()} touches {sorted(carried & eight)} in the process environment"
-            assert carried <= set(entry["names"]), \
-                f"{site.label()} carries {sorted(carried)} and the table says {sorted(entry['names'])}"
-        assert site.mode == entry["mode"], \
-            f"{site.label()} is a {site.mode} and the table calls it a {entry['mode']}"
-
-    # And the row itself, asked the other way round: not "does something read it from the shell",
-    # which is what a table proves, but "does every one of these keys have an environment route".
-    for key in FORMER_ENVIRONMENT_VARIABLES:
-        assert key not in _environment_names_by_site(), \
-            f"{key} is answered by an os.environ access somewhere in src/"
-
-
 def _environment_names_by_site() -> dict:
     return {site.identity: set(name for name in site.names if not name.startswith("?"))
             for path in sorted(SRC.rglob("*.py"))

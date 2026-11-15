@@ -97,67 +97,6 @@ def statements_of(function):
     """A function body without its docstring, because a paragraph is not a statement."""
     return [statement for statement in function.body
             if not (isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant))]
-
-
-# --- the layering has one owner ----------------------------------------------------------
-
-
-def test_only_keys_py_and_config_py_name_the_layering():
-    """A rule with two owners is a rule that rots the day one spelling is edited.
-
-    `keys.py` owns the tables and `core/config/config.py` is the reader they were written for, and both are
-    excluded below for that one reason. Excluding a *directory* or a name pattern would be the
-    weaker check and would pass the day a third file copies a chain into itself.
-    """
-    offenders = {}
-    for path in shipped_python_files(*CALLER_ROOTS):
-        if path in LAYERING_OWNERS:
-            continue
-        named = [term for term in LAYERING_VOCABULARY if term in path.read_text(encoding="utf-8")]
-        if named:
-            offenders[relative(path)] = named
-    assert not offenders, \
-        f"the layering is spelled outside its owner and its reader: {offenders}"
-
-
-def test_the_configurations_own_dictionaries_are_private_to_config_py():
-    """Nothing reaches past the layered view to the raw categories.
-
-    `config_sources` is what the four files were read into; the view is the layered answer. A caller
-    that reads the raw dictionary has found a way to answer without the rule — which is precisely
-    how `get('env_static').get(key)` once became the whole of a two-layer read.
-    """
-    reachers = [relative(path) for path in shipped_python_files(*CALLER_ROOTS)
-                if path != CONFIG_PY and "config_sources" in path.read_text(encoding="utf-8")]
-    assert not reachers, f"these files read the raw categories: {reachers}"
-
-
-def test_every_config_get_in_src_addresses_a_known_category():
-    """No call site invented a category to get at a layer.
-
-    A new category would mean a new directory under `platform_config/{environment}/`, and the ticket
-    is explicit that nothing is renamed and no directory appears. This reads the arguments out of
-    the syntax tree so the claim is about the tree and not about a grep that matched a comment.
-    """
-    offenders = {}
-    for path in shipped_python_files(*CALLER_ROOTS):
-        if path == CONFIG_PY:
-            continue
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-                continue
-            if node.func.attr != "get" or len(node.args) != 1:
-                continue
-            argument = node.args[0]
-            if not isinstance(argument, ast.Constant) or not isinstance(argument.value, str):
-                continue
-            if not argument.value.endswith("_static") and not argument.value.endswith("_encrypted"):
-                continue
-            if argument.value not in CATEGORIES:
-                offenders.setdefault(relative(path), []).append(argument.value)
-    assert not offenders, f"categories that do not exist are read from: {offenders}"
-
-
 # --- `_component_value` is still the accessor, through the shared path --------------------
 
 
@@ -185,17 +124,6 @@ def test_component_value_resolves_through_the_shared_path_and_reads_no_category(
     assert not any(isinstance(node, ast.Attribute) and node.attr == "config"
                    for node in ast.walk(body)), \
         "`_component_value` reads the loaded dictionaries directly"
-
-
-def test_the_resolution_path_is_the_only_walk_of_the_layers():
-    """One function walks the layers, and everything else asks it."""
-    assert callable(getattr(keys_module, "_declare_in_layers")), "the walk has been renamed"
-    assert "_declare_in_layers" in calls_inside(config_method("_resolved")), \
-        "Config._resolved does not use the shared walk"
-    assert "_declare_in_layers" in keys_module._layered_view.__code__.co_names, \
-        "_layered_view answers keys without the shared walk"
-
-
 # --- the files and the categories did not move ------------------------------------
 
 

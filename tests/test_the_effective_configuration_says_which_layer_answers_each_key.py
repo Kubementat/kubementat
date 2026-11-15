@@ -41,7 +41,6 @@ import json
 import subprocess
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from cli.commands import config as config_module
@@ -50,7 +49,6 @@ from kubementat.infrastructure import shell
 from kubementat.core.config import release_index as config_reads_index
 from kubementat.core import constants
 from kubementat.core.config.config import Config
-from kubementat.core.config.keys import component_config_key
 from kubementat.config_init import add_team, init_configuration
 
 ENVIRONMENT = "prod"
@@ -81,22 +79,41 @@ INITIALIZED_TREE = {
 # ---------------------------------------------------------------------------------------------
 # The universe, spelled as the five sources the module's docstring gives and not as a size.
 #
-# The component names below are hard-coded on purpose: a universe that grows because `constants.py`
-# grew has to be noticed by a test and not by a comment. `test_the_hard-coded_families_match_the_sources`
-# is the drift check that says these lists still describe what `constants.py` and the manifest say,
-# and the assertion they feed says `show` prints exactly that set and nothing else.
+# The component families are read out of `constants.py` and out of the shipped manifest rather than
+# typed here, so a component that arrives in a source arrives in the report with no edit to this
+# file. The check that they are still populated is
+# `test_the_hardcoded_component_lists_match_their_sources`, and the assertion they feed says `show`
+# prints exactly that set and nothing else.
 # ---------------------------------------------------------------------------------------------
 
 CLUSTER_KEYS = ("CLUSTER_KUBECONFIG_PATH", "CLUSTER_KUBE_CONTEXT")
 
-NAMESPACE_COMPONENTS = ("cert-manager", "cluster-cronjobs", "goldilocks", "grafana", "loki", "openbao",
-                        "polaris", "prometheus", "tekton", "tekton-dashboard",
-                        "tekton-pipelines-resolvers", "traefik", "vpa")
+CLUSTER_KEYS = ("CLUSTER_KUBECONFIG_PATH", "CLUSTER_KUBE_CONTEXT")
 
-SELECTOR_COMPONENTS = ("grafana", "openbao", "polaris", "tekton", "traefik")
+# The component families are read out of the two tables and the manifest that own them, because a
+# list written here is a second owner of a set that already has one. The plan's exit criterion for
+# this file is that the universe be derived rather than pinned, and the drift check that used to
+# police three typed lists is now an assertion that the derivation still answers.
+NAMESPACE_COMPONENTS = tuple(sorted(constants.DEFAULT_NAMESPACES))
 
-RELEASE_COMPONENTS = ("alloy", "cert-manager", "grafana", "loki", "openbao", "polaris", "prometheus",
-                      "prometheus-blackbox-exporter", "prometheus-helm-exporter", "traefik")
+SELECTOR_COMPONENTS = tuple(sorted(constants.DEFAULT_SERVICE_SELECTORS))
+
+
+def release_components() -> tuple:
+    """The components the shipped manifest labels, read the way the report reads it.
+
+    `config_reads_index.read_release_index` is the same parser `kmt component install` addresses,
+    so a release commented out of the template leaves this universe without a row being edited, and
+    a release added to it arrives without one either. No `HelmUtils` here: the index is a filesystem
+    answer, and this read never addresses a cluster.
+    """
+    unread = Config(ENVIRONMENT, None,
+                    platform_config_dir=Path("/a-root-this-suite-reads-no-configuration") / "platform_config",
+                    preload_configs=False)
+    return tuple(sorted(config_reads_index.read_release_index(unread)))
+
+
+RELEASE_COMPONENTS = release_components()
 
 # The accessor each family is derived from, as `Config` spells it. Held here so the guard test can
 # ask the same question twice — once of the report, once of the read path.
@@ -220,8 +237,17 @@ def test_show_on_a_fresh_tree_tags_every_key_and_prints_no_other_keys(tmp_path):
     assert set(answers) == expected_universe(), (
         "config show's universe drifted from the five sources it is defined by: "
         f"missing {sorted(expected_universe() - set(answers))}, extra {sorted(set(answers) - expected_universe())}")
-    assert len(answers) == 52, \
-        "the universe moved; 52 since config init also generated grafana's admin password"
+    # The size of that universe is what the five sources add up to, so it is not written here. What is
+    # written is the non-vacuity of each source, because a universe that shrank to nothing would pass a
+    # set comparison against itself and a hard-coded count would have caught it for the wrong reason.
+    for family, keys_in_family in (("cluster", CLUSTER_KEYS),
+                                   ("derived", derived_keys()),
+                                   ("static", constants.DEFAULT_STATIC_ANSWERS),
+                                   ("encrypted", constants.DEFAULT_ENCRYPTED_ANSWERS),
+                                   ("generated", constants.GENERATED_ENCRYPTED_ANSWERS)):
+        assert keys_in_family, f"the {family} source of the universe is empty, so it answers nothing"
+    assert len(answers) == len(expected_universe()), \
+        "the answered universe and the declared one are the same keys, so their sizes cannot differ"
 
     # A key `config init` wrote as `null` is declared, answers `null`, and is tagged `environment`.
     for key in CLUSTER_KEYS:
@@ -248,8 +274,9 @@ def test_show_on_a_fresh_tree_tags_every_key_and_prints_no_other_keys(tmp_path):
 
     # ...and the line itself is the shape a `diff` reads, including the `null` that reads as JSON.
     lines = run_show(root).splitlines()
-    assert len(lines) == 52, \
-        "the printed universe moved with the answered one; 52 since config init generates grafana's password"
+    assert len(lines) == len(answers), \
+        f"the report printed {len(lines)} lines for the {len(answers)} keys this tree answers, so a key " \
+        "is either counted twice or dropped on the way to the terminal"
     assert lines == sorted(lines), "a diff of two runs is why a human pipes this, and order is that claim"
     assert "GRAFANA_DEPLOYMENT_NAMESPACE = grafana   (default from constants.py)" in lines
     assert "TEKTON_VERSION_PIPELINE = 1.17.1   (default from constants.py)" in lines
@@ -279,16 +306,24 @@ def test_show_on_a_fresh_tree_tags_every_key_and_prints_no_other_keys(tmp_path):
 
 
 def test_the_hardcoded_component_lists_match_their_sources(tmp_path):
-    """The drift check behind the assertion above: the lists in this file still describe the sources.
+    """The derivation is not vacuous: every family it reads still has members, and the sources agree.
 
-    Without it, `test_show_on_a_fresh_tree...` would agree with itself forever: a universe that grows
-    silently because `constants.py` gained a component is a universe the report does not grow with.
+    The lists used to be typed, so this test was the drift check that kept them true. They are read
+    out of `constants` and the manifest now, which means growth in a source moves the universe by
+    itself -- and what is left to assert is the opposite failure: a derivation that quietly returns
+    nothing because the table it reads moved, or a manifest that answers no labels at all, would
+    shrink the report's universe to a handful of keys and every other test in this file would agree
+    with itself about a universe that no longer exists.
     """
+    assert NAMESPACE_COMPONENTS, "the namespace family is empty, so `constants.DEFAULT_NAMESPACES` moved"
+    assert SELECTOR_COMPONENTS, "the selector family is empty, so `constants.DEFAULT_SERVICE_SELECTORS` moved"
+    labelled = set(release_components())
+    assert labelled, "the shipped manifest labels no release, so this universe lost twenty keys"
     assert set(NAMESPACE_COMPONENTS) == set(constants.DEFAULT_NAMESPACES)
     assert set(SELECTOR_COMPONENTS) == set(constants.DEFAULT_SERVICE_SELECTORS)
     # Read the way the report reads it: the index is a filesystem answer, so no `HelmUtils` and no
     # `__new__` bypass of a constructor that addresses a cluster this check never addresses.
-    assert set(RELEASE_COMPONENTS) == set(config_reads_index.read_release_index(
+    assert labelled == set(config_reads_index.read_release_index(
         Config(ENVIRONMENT, None, platform_config_dir=a_tree(tmp_path), preload_configs=False)))
 
 
