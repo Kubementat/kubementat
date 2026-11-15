@@ -31,8 +31,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from kubementat.errors import (ConfigurationRootNotNamedError,
-                           RootDirectoryVariableIsEmptyError)
+from kubementat.errors import ConfigurationRootNotNamedError, RootDirectoryVariableIsEmptyError
 
 from kubementat.core.config.config import Config
 from kubementat.core.config.paths import default_kubementat_main_dir

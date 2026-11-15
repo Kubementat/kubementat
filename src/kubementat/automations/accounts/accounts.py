@@ -62,8 +62,11 @@ def _ensure_team_account(ctx, service_account_name, role_name, rules, assume_yes
     token, create the Roles, bind them, show what is now there, hand over the kubeconfig.
 
     Raises:
-    - click.ClickException: Refused at the confirmation, or a verb the cluster will not
-      grant, or a namespace the team's configuration did not name.
+    - kubementat.errors.ConfirmationUnavailableError:
+      kubementat.errors.ConfirmationDeclinedError:
+      kubementat.errors.ClusterAccessDeniedError:
+      Refused at the confirmation, or a verb the cluster will not grant, or a namespace the
+      team's configuration did not name.
     """
 
     environment = ctx.environment
@@ -144,7 +147,9 @@ def delete_team_account(ctx, service_account_name: str, assume_yes: bool = False
     - assume_yes: bool = False - Skip the confirmation (`kmt users delete-team-account --yes`).
 
     Raises:
-    - click.ClickException: Refused at the confirmation, or a verb the cluster will not grant.
+    - kubementat.errors.ConfirmationUnavailableError: No terminal to answer in.
+    - kubementat.errors.ConfirmationDeclinedError: The operator answered no.
+    - kubementat.errors.ClusterAccessDeniedError: A verb the cluster will not grant.
     """
 
     team = ctx.team

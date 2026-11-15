@@ -129,11 +129,18 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import click
 import gnupg
 
 from kubementat import config_init, config_keys
 from kubementat.infrastructure import shell
+
+from kubementat.errors import (
+    DeployerIdentityNotNamedError,
+    DeployerPublicKeyMissingError,
+    GitCryptSymmetricKeyMissingError,
+    GpgCollaboratorNotRegistrableError,
+    GpgKeyNotImportableError,
+)
 # The same keyring `config_keys` asks its own two gpg questions against: created for the call,
 # thrown away in the same `finally`. Rule 1 adds a third question of exactly that shape -- what
 # fingerprint is in this file? -- and a second implementation of the ring would be a second owner
@@ -196,7 +203,6 @@ CONFIG_COMMITTER_EMAIL = "kubementat@localhost"
 GIT_BINARY = "git"
 GIT_CRYPT_BINARY = "git-crypt"
 
-
 def prepare_configuration_directory(root, environment, team=None, *, answers=(),
                                     encrypted_answers=(), gpg_key=None, gpg_email=None,
                                     commit=True, force=False) -> tuple[InitStep, ...]:
@@ -236,7 +242,14 @@ def prepare_configuration_directory(root, environment, team=None, *, answers=(),
 
     Raises
     ------
-    click.ClickException
+    kubementat.errors.EnvironmentNotSuppliedError
+    kubementat.errors.ForeignConfigurationMaterialError
+    kubementat.errors.ConfigurationFileDiffersError
+    kubementat.errors.ObsoleteTriggerDirectoryError
+    kubementat.errors.DeployerIdentityNotNamedError
+    kubementat.errors.GpgKeyNotImportableError
+    kubementat.errors.GpgCollaboratorNotRegistrableError
+    kubementat.errors.GitCryptSymmetricKeyMissingError
         Everything `init_configuration` and `config_keys` refuse for, plus this module's own three: a
         keypair that would have to be generated and no identity to generate it under, refused before
         `git init` so nothing is left behind; a `.gitattributes` or `.gitignore` that is present and
@@ -279,7 +292,6 @@ def prepare_configuration_directory(root, environment, team=None, *, answers=(),
     steps.extend(_commit(root, commit=commit))
     return tuple(steps)
 
-
 # ---------------------------------------------------------------------------------------------
 # The decision made ahead of every write, and the refusal that comes out of it.
 # ---------------------------------------------------------------------------------------------
@@ -302,7 +314,7 @@ def _refuse_without_an_identity(root: Path, *, gpg_key, gpg_email) -> None:
     private, public = (root / config_keys.GPG_PRIVATE_NAME, root / config_keys.GPG_PUBLIC_NAME)
     if private.is_file() or public.is_file():
         return
-    raise click.ClickException(
+    raise DeployerIdentityNotNamedError(
         f"{root} holds no deployer gpg key — neither {config_keys.GPG_PRIVATE_NAME} nor"
         f" {config_keys.GPG_PUBLIC_NAME} is here — and no identity was given, so there is no key to"
         f" generate and none to import. {config_keys.CREATE_COMMAND}'s {config_keys.GPG_EMAIL_FLAG}"
@@ -310,7 +322,6 @@ def _refuse_without_an_identity(root: Path, *, gpg_key, gpg_email) -> None:
         f" this module cannot give for itself: deriving it from an environment variable is what"
         f" initialize did, and the caller owns that answer. Nothing was written and no"
         f" `git init` ran — a refusal leaves the directory exactly as it was found.")
-
 
 # ---------------------------------------------------------------------------------------------
 # Steps 1, 8, 9: the three git calls.
@@ -332,7 +343,6 @@ def _git_repository(root: Path) -> tuple[InitStep, ...]:
         return (InitStep(GIT_REPOSITORY_STEP, git_dir, SKIPPED),)
     shell.run([GIT_BINARY, "init"], cwd=root)
     return (InitStep(GIT_REPOSITORY_STEP, git_dir, CREATED),)
-
 
 def _commit(root: Path, *, commit: bool) -> tuple[InitStep, ...]:
     """Stage, then commit exactly when there is something this run added to the history.
@@ -380,7 +390,6 @@ def _commit(root: Path, *, commit: bool) -> tuple[InitStep, ...]:
     shell.run([GIT_BINARY, "commit", "-m", CONFIGURATION_COMMIT_MESSAGE], cwd=root)
     return (InitStep(GIT_ADD_STEP, root, CREATED), InitStep(GIT_COMMIT_STEP, root, CREATED))
 
-
 # ---------------------------------------------------------------------------------------------
 # Steps 2 and 3: the two files that must exist before anything can be encrypted.
 # ---------------------------------------------------------------------------------------------
@@ -398,7 +407,6 @@ def _git_attributes(root: Path) -> tuple[InitStep, ...]:
     return tuple(_apply_layer_plan(
         [(GITATTRIBUTES_STEP, root / ".gitattributes", GITATTRIBUTES_BODY)]))
 
-
 def _git_ignore(root: Path) -> tuple[InitStep, ...]:
     """The five key-material names, and nothing else.
 
@@ -407,7 +415,6 @@ def _git_ignore(root: Path) -> tuple[InitStep, ...]:
     lands in a configuration tree, and the keystore is tracked on purpose.
     """
     return tuple(_apply_layer_plan([(GITIGNORE_STEP, root / ".gitignore", GITIGNORE_BODY)]))
-
 
 # ---------------------------------------------------------------------------------------------
 # Steps 6, 7 and 8: git-crypt's half, and what each one checks before it execs.
@@ -427,7 +434,6 @@ def _keystore(root: Path) -> tuple[InitStep, ...]:
         return (InitStep(GIT_CRYPT_KEYSTORE_STEP, keystore, SKIPPED),)
     shell.run([GIT_CRYPT_BINARY, "init"], cwd=root)
     return (InitStep(GIT_CRYPT_KEYSTORE_STEP, keystore, CREATED),)
-
 
 def _collaborator(root: Path) -> tuple[InitStep, ...]:
     """Register the deployer once, by the fingerprint this directory's own key file answers.
@@ -461,7 +467,6 @@ def _collaborator(root: Path) -> tuple[InitStep, ...]:
     shell.run([GIT_CRYPT_BINARY, "add-gpg-user", "--no-commit", "--trusted", fingerprint], cwd=root)
     return (InitStep(GIT_CRYPT_COLLABORATOR_STEP, key_directory, CREATED),)
 
-
 def uses_git_crypt(config_dir) -> bool:
     """Whether this directory declares that git-crypt owns some of its files.
 
@@ -487,7 +492,6 @@ def uses_git_crypt(config_dir) -> bool:
         return False
     return "filter=git-crypt" in body
 
-
 def require_symmetric_key(config_dir) -> Path:
     """The exported key that unlocks this configuration directory, or a refusal naming where it comes from.
 
@@ -511,7 +515,7 @@ def require_symmetric_key(config_dir) -> Path:
 
     Raises
     ------
-    click.ClickException
+    kubementat.errors.GitCryptSymmetricKeyMissingError
         The file is absent. A tree prepared before step 8 existed, or a directory someone copied without
         its gitignored material, both present as this one missing file.
     """
@@ -521,7 +525,7 @@ def require_symmetric_key(config_dir) -> Path:
         environment = config_keys._environment_words(directory)
         which = (f"--environment {environment}" if environment != "<environment>"
                  else "--environment <environment>, which this directory does not declare for itself")
-        raise click.ClickException(
+        raise GitCryptSymmetricKeyMissingError(
             f"{path} is not there, so kubementat cannot give a pipeline the ability to open the "
             f"configuration in {directory}. This is the file `git-crypt unlock` reads, and `kmt config "
             f"init {directory} {which}` exports it as its eighth step and then gitignores it. That is why "
@@ -529,7 +533,6 @@ def require_symmetric_key(config_dir) -> Path:
             f"makes arrives locked, and which is why the answer is to run init here rather than to copy a "
             f"key in from somewhere else.")
     return path
-
 
 def _symmetric_key(root: Path) -> tuple[InitStep, ...]:
     """Export the key that unlocks the directory, readable by its owner alone.
@@ -545,7 +548,6 @@ def _symmetric_key(root: Path) -> tuple[InitStep, ...]:
     shell.run([GIT_CRYPT_BINARY, "export-key", str(path)], cwd=root)
     os.chmod(path, 0o600)
     return (InitStep(GIT_CRYPT_SYMMETRIC_KEY_STEP, path, CREATED),)
-
 
 # ---------------------------------------------------------------------------------------------
 # The keyring, which is where git-crypt looks and where `config_keys` deliberately does not.
@@ -566,7 +568,7 @@ def _directory_fingerprint(root: Path) -> str:
     """
     public_path = root / config_keys.GPG_PUBLIC_NAME
     if not public_path.is_file():
-        raise click.ClickException(
+        raise DeployerPublicKeyMissingError(
             f"{public_path} is not there, so step 7 has no fingerprint to register."
             f" {config_keys.CREATE_COMMAND}'s {config_keys.GPG_KEY_FLAG} <file> puts both halves of a"
             f" keypair in the directory, which is what this step reads its collaborator's name from.")
@@ -584,13 +586,12 @@ def _directory_fingerprint(root: Path) -> str:
 
     fingerprint = _in_disposable_keyring(read)
     if not fingerprint:
-        raise click.ClickException(
+        raise GpgCollaboratorNotRegistrableError(
             f"{public_path} is not a gpg key this run can read a fingerprint from, so git-crypt has"
             f" no collaborator to register. Nothing was registered and nothing else was touched;"
             f" kmt config init --gpg-key <file> is the verb that puts a key which can answer for"
             f" itself into the directory.")
     return fingerprint
-
 
 def _import_the_public_half(root: Path, fingerprint: str) -> None:
     """Put the directory's own public key into the running keyring, and nothing else.
@@ -615,12 +616,12 @@ def _import_the_public_half(root: Path, fingerprint: str) -> None:
     try:
         result = gnupg.GPG(verbose=False).import_keys(public_path.read_bytes())
     except (OSError, ValueError) as error:
-        raise click.ClickException(
+        raise GpgKeyNotImportableError(
             f"{public_path} cannot be imported into the keyring this run is using ({error})."
             f" git-crypt resolves the deployer's key there, so step 7 cannot be completed from the"
             f" file that is present. Nothing was registered, and nothing else was touched.") from error
     if not result:
-        raise click.ClickException(
+        raise GpgCollaboratorNotRegistrableError(
             f"{public_path} is not a gpg key the keyring can hold, so {fingerprint!r} cannot be"
             f" registered as a git-crypt collaborator. kmt config init --gpg-key <file> puts a key"
             f" that does import into the directory in the first place.")

@@ -20,6 +20,7 @@ The failure mode worth locking down is the quiet one: a document that is valid Y
 without complaint, and is wired to the wrong user or the wrong cluster.
 """
 
+from kubementat.errors import ResolvedKubeconfigUnusableError
 import base64
 import json
 import os
@@ -28,7 +29,6 @@ import sys
 import pytest
 import yaml
 
-from click.exceptions import ClickException
 
 import kubementat.infrastructure.user_management as user_management
 from kubementat.infrastructure.kubernetes import KubernetesUtils
@@ -396,7 +396,7 @@ def test_an_authority_that_never_got_flattened_in_is_refused_and_not_printed(fak
         "server": SERVER, "certificate-authority": "/home/operator/clusters/dev-ca.crt"}}]}),
         subcommand="config.view")
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(ResolvedKubeconfigUnusableError) as raised:
         user_management.local_cluster_settings(utils())
 
     assert "certificate-authority-data" in str(raised.value)
@@ -412,7 +412,7 @@ def test_a_kubeconfig_that_names_no_cluster_to_copy_says_so(fake_binaries):
     """
     fake_binaries.respond("kubectl", json.dumps({"clusters": []}), subcommand="config.view")
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(ResolvedKubeconfigUnusableError) as raised:
         user_management.local_cluster_settings(utils())
 
     assert "kubectl config view" in str(raised.value)
@@ -426,7 +426,7 @@ def test_a_config_view_that_answers_nothing_is_not_read_as_a_cluster_with_no_add
     """
     fake_binaries.respond("kubectl", "", subcommand="config.view")
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(ResolvedKubeconfigUnusableError) as raised:
         user_management.local_cluster_settings(utils())
 
     assert "kubeconfig this command resolved" in str(raised.value)

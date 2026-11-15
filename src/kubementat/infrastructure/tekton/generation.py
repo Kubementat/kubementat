@@ -344,7 +344,7 @@ def generate_deploy_pipeline(config, app_name: str, git_url: str = None,
         kubementat.errors.GenerationTemplateNotFoundError: If the template is not in the installed package.
         kubementat.errors.GenerationPlaceholderNotConfiguredError: If the template holds a placeholder with no
             configured value, naming the key and the file it would have been read from.
-        click.ClickException: From an unreadable `static.json`.
+        kubementat.errors.LockedConfigFileError: From a `static.json` the keyring cannot open.
 
     Returns:
         Path: the file that was written.
@@ -431,7 +431,7 @@ def generate_trigger_configs(config, app_name: str, pipeline_name: str,
             listed.
         kubementat.errors.GenerationPlaceholderNotConfiguredError: If a template holds a placeholder with no
             configured value, naming the key and the file it would have been read from.
-        click.ClickException: From an unreadable `static.json`.
+        kubementat.errors.LockedConfigFileError: From a `static.json` the keyring cannot open.
         kubementat.errors.ObsoleteTriggerDirectoryError: If the tree still has the old
       `<team>/triggers/`
             directory — generating into the new path beside it would strand what the old one
@@ -563,7 +563,7 @@ def generate_pipeline_run(config, pipeline_file: str) -> Path:
         kubementat.errors.GenerationInputNotUsableError: If it is not a single Pipeline document, declares no
             `metadata.name`, or declares a parameter with no name.
         kubementat.errors.GenerationTargetExistsError: If the file this would write already exists.
-        click.ClickException: From an unreadable `static.json`.
+        kubementat.errors.LockedConfigFileError: From a `static.json` the keyring cannot open.
 
     Returns:
         Path: the run file that was written.

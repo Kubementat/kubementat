@@ -60,10 +60,9 @@ from kubementat import config_init, config_validate
 from kubementat.core.identity.registry import _static_declaration
 from kubementat.core.identity.kubeconfig import _read_kubeconfig
 from kubementat.core.identity.target import ClusterTarget
-from kubementat.errors import ClusterFileUnreadableError
+from kubementat.errors import ClusterFileUnreadableError, LockedConfigFileError
 from kubementat.core.config.config import Config
 from kubementat.core.config.reads import read_decrypted
-from kubementat.errors import LockedConfigFileError
 from kubementat.config_validate import validate_tree
 
 ENVIRONMENT = "dev"

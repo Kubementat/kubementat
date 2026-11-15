@@ -768,3 +768,411 @@ class UninstallIncompleteError(KubementatError):
     in the tooling could be believed. Named in the message is what is still there, so the
     operator has something to act on instead of a claim that the exit code was 0.
     """
+
+
+# ---------------------------------------------------------------------------
+# What the configuration verbs refuse — the `config_init` / `config_validate` half.
+#
+# These forty-odd refusals used to be `click.ClickException`s, raised from inside the modules that
+# read or lay down a configuration tree. That shape said "a command printed this" and not
+# "kubementat refused", and it put a CLI type on every library consumer of those modules. They
+# descend from `KubementatError` now and the CLI renders them: the same one `Error:` line and exit
+# 1 they got for free before, produced by `cli/context.py`'s allowlist and `cli/kmt.py`'s group
+# class rather than by Click's own handler.
+#
+# As in the `core/config/` group above, the grouping is by the question the operator has to answer
+# and not by the module that was asked. `set_answer` and `unset_answer` ask the same question about
+# a layer that is not there and raise one class; `config init` and `config validate` ask the same
+# question about a tree that is not there and raise one class. Where two sites raise the same
+# sentence they raise one class, and where a refusal has a sibling that reads differently they stay
+# one class when the operator cannot tell them apart from the terminal.
+# ---------------------------------------------------------------------------
+
+
+class AnswerArgumentNotKeyValueError(KubementatError):
+    """A `KEY=VALUE` the operator handed a verb was not a key, an equals sign, and a value.
+
+    What the tree on disk has to do with this is nothing, which is why it is refused where the
+    argument is parsed rather than where the file is written: the typo is in the command line, and
+    no edit to a configuration directory would have answered it. `--set` and `--encrypted-set` take
+    it, and the message names the flag that was given the malformed item.
+    """
+
+
+class DuplicateAnswerKeyError(KubementatError):
+    """One answer was given twice in a single run.
+
+    A JSON object cannot hold a key twice, so the two answers would have to be reconciled
+    somewhere, and the reconciliation is whichever flag happened to be parsed last. Refusing is the
+    only answer that does not make the order of the operator's flags decide a configuration.
+    """
+
+
+class LayerNameUnusableError(KubementatError):
+    """An environment or team name that could not be one directory's name.
+
+    A layer is exactly one directory under the root (or one under an environment), so a name that is
+    empty, a path, two directories, padded with whitespace, or carrying a NUL is not a shortened
+    name but a name no reader finds again. Refused before any write, so the tree is left exactly as
+    it was found.
+    """
+
+
+class LayerNameAlreadyTakenError(KubementatError):
+    """The name an environment or team was to take is already one of kubementat's own.
+
+    An environment named `secrets` is read as the root's `secrets` directory and not as a layer, and
+    a team named `values` is a directory two rules both claim. The listing already filters
+    `kubementat_components` out for the same reason; this says it to whoever picked the name.
+    """
+
+
+class EnvironmentNotSuppliedError(KubementatError):
+    """The verb needs to know which environment it is about, and none was given.
+
+    `config init` writes every file but the manifest under `<root>/<environment>/`, so naming none
+    is not "all of them" — it is a tree with no place to put an answer. `config validate` asks the
+    same question because it answers the files of one environment and the root that holds them.
+    """
+
+
+class TeamWithoutEnvironmentError(KubementatError):
+    """A team was named and the environment it sits under was not.
+
+    A team is a layer under one environment, so the request has no answer in the tree: the directory
+    would have no parent to be under. Both `kmt config init` and the legacy `initialize` reach this
+    one sentence.
+    """
+
+
+class ForeignConfigurationMaterialError(KubementatError):
+    """The directory already holds files kubementat did not write.
+
+    `init` lays its own files beside them only when the operator passes `force`, because a tree that
+    is half somebody else's is not a tree this verb can describe: it cannot tell an edited answer
+    from a half-written one, so it lists what it found and says which of the two flags answers this.
+    """
+
+
+class ConfigurationFileDiffersError(KubementatError):
+    """A file kubementat was about to write is already there and says something else.
+
+    This is not a conflict to overwrite. Someone wrote that file, and the difference between an
+    edited answer and a half-written one is not something a flag can tell apart, so no flag lifts
+    the refusal — `force` is about foreign material, never about an answer that is already there.
+    """
+
+
+class ConfigurationRootNotUsableError(KubementatError):
+    """The directory that was named is not a configuration directory.
+
+    The layer verbs and the keypair verb are additive: they put one layer, or one keypair, on a tree
+    that already exists. The tree is therefore a precondition and not something either would create,
+    which makes this a refusal and not a bootstrap. The same sentence is shared with
+    `config_keys.ensure_deployer_keypair`, which cannot write a keypair into a directory that is not
+    there either, and the claim about the verb is spelled into the message so a wrong directory is
+    told which verb to come back with.
+    """
+
+
+class ConfigurationTreeNotLaidDownError(KubementatError):
+    """A directory that exists is not a kubementat tree, because `kubementat.yaml` is not in it.
+
+    One verb writes the manifest, and it is what says which product the tree is for. Everything else
+    adds a layer to what that verb laid down, so a tree with no manifest is refused rather than
+    completed: guessing the manifest's answer would be a second product definition in a
+    subdirectory.
+    """
+
+
+class StaticLayerFileUnreadableError(KubementatError):
+    """A static layer file is present and cannot be read.
+
+    `config set` and `config unset` edit the file that is there and write nothing else, so they
+    cannot go on without it. It is refused as a `KubementatError` and not an `OSError` for that
+    reason: the reason may be git-crypt, a permission, or a file that is a symlink to nothing, and
+    all three are the operator's to fix rather than a stack to trace.
+    """
+
+
+class StaticLayerFileInvalidError(KubementatError):
+    """A static layer file is there, readable, and not the document a layer is.
+
+    Either it is not JSON at all, or it parses into something other than the object keyed by answer
+    name that every reader of a layer expects. kubementat will not rewrite a file it cannot read and
+    call the result a configuration, and it will not put a key into a JSON list.
+    """
+
+
+class TeamLayerCarriesClusterKeyError(KubementatError):
+    """A cluster key was answered on the team layer, where nothing reads it.
+
+    One directory is exactly one cluster: what resolves a cluster reads the environment's own static
+    file and no other path, so a team-layer answer is read by nothing and leaves the tree with two
+    accounts of the same key. The message names the file that does answer and the verb that writes
+    it there.
+    """
+
+
+class NullAnswerNotAcceptedError(KubementatError):
+    """`config set` was told to answer a key with `null`.
+
+    null is the absence of an answer, and one verb should be able to create it. Held open with a
+    placeholder, a key answers nothing while looking answered, which is the state every later
+    "is this configured" question gets wrong.
+    """
+
+
+class KeyDeclaredByNoLayerError(KubementatError):
+    """`config unset` was asked to take away an answer no layer of this tree declares.
+
+    That is a different fact from "the answer is null", and the message says so: the file that
+    declares a key is the file that answers it, so nothing is written for a key that was never there.
+    The searched paths are named, because the honest next question is which file to look in.
+    """
+
+
+class AnswerAlreadyPresentError(KubementatError):
+    """`--generate` was asked for a key that already answers.
+
+    kubementat keeps a value that is there rather than rewriting it in place: a verb that generated
+    while it wrote would make the act of touching a directory the way a credential is lost. The
+    message gives the rotation, because that is the act the operator actually meant.
+    """
+
+
+# ---------------------------------------------------------------------------
+# What the deployer keypair and git-crypt refuse.
+#
+# `config_keys` and `config_bootstrap` lay down the four keypair files and make git-crypt live in
+# the directory, and every one of these is decided before a byte is written — the promise the module
+# makes and the one `initialize` broke by refusing four steps in. They are one group because they
+# answer one question: is there a deployer identity, and is it in the directory in the shape the
+# next step reads it in.
+# ---------------------------------------------------------------------------
+
+
+class DeployerIdentityNotNamedError(KubementatError):
+    """A gpg keypair had to be made and no identity was given to make one under.
+
+    `config init` derives nothing from the environment for this: deriving the deployer's email from
+    a variable is what `initialize` did, and the caller owns that answer. So the refusal says which
+    flag carries it, and that the directory can be left exactly as it is until it does.
+    """
+
+
+class GpgKeyNotImportableError(KubementatError):
+    """A file that was handed over as a gpg key is not one this run's keyring can import.
+
+    The point of naming it is what did *not* happen: nothing was generated in its place, so the
+    directory does not end up with a key nobody asked for wearing the name of the one that was
+    missing.
+    """
+
+
+class GpgKeyWithoutPublicKeyError(KubementatError):
+    """A key imported cleanly and then exported no public half.
+
+    `gpg_public_key.gpg` is the file whose whole job is to be handed to git, so an imported key that
+    cannot answer for itself in public is not a deployer key. Nothing was generated to paper over
+    it.
+    """
+
+
+class GpgKeyFileMissingError(KubementatError):
+    """The `--gpg-key` flag named a file that is not there.
+
+    A flag that points at a missing file is a typo, and the version of this bug that reports itself
+    as success is the one where a generated key answers in its place.
+    """
+
+
+class DeployerKeyPairIncompleteError(KubementatError):
+    """One half of a keypair is in the directory and the other is not.
+
+    Two halves are one unit: a pair that is half there is a key that cannot be used and cannot be
+    completed without saying which half the operator meant. This is the same claim `DeployerKeyMissingError`
+    makes about a directory with neither half, told from the side where one file was found.
+    """
+
+
+class GpgBinaryNotRunnableError(KubementatError):
+    """The deployer keypair needs the `gpg` binary and it is not runnable here.
+
+    This is not a new dependency — `CryptoUtils` needs the same binary — it is the first place that
+    says so out loud when the binary is not on the machine instead of letting the next step die on
+    an `OSError` three layers down.
+    """
+
+
+class GitCryptSymmetricKeyMissingError(KubementatError):
+    """The pipeline that has to open the configuration was handed a directory with no key to open it.
+
+    `git_crypt_symmetric.key` is what `git-crypt unlock` reads, exported by `config init` as its
+    eighth step and then gitignored. A clone therefore carries none, which is the reason a clone
+    `git-clone-configuration` makes arrives locked: the answer is to run init here and not to copy a
+    key in from somewhere else.
+    """
+
+
+class DeployerPublicKeyMissingError(KubementatError):
+    """The step that registers a collaborator has no public half to read a name from.
+
+    Refused rather than skipped, because a directory that is ready except for its collaborators still
+    looks ready, and the next operator to read that tree in a second checkout is the one who finds
+    out.
+    """
+
+
+class GpgCollaboratorNotRegistrableError(KubementatError):
+    """git-crypt has no collaborator to register, from the key that is in the directory.
+
+    Either the file yields no fingerprint, or the running keyring will not hold it. Both are refused
+    and not reported, because step 7 skipping quietly is the failure this function exists to remove.
+    """
+
+
+# ---------------------------------------------------------------------------
+# What helm refuses.
+#
+# The four `latest-version` refusals are one group because the operator's question is "what is the
+# newest version of this chart" and the four answers are told apart by what to do next: name the
+# chart, add the repository, fix the name, or accept that `helm` could not be asked. The rest are
+# the writes: a release that is already running somewhere else, a cluster that cannot say where its
+# releases are, a component that would not come off, and grafana, which is not installable from an
+# incomplete admin pair.
+# ---------------------------------------------------------------------------
+
+
+class DeployedReleaseNamespaceConflictError(KubementatError):
+    """A release this apply reaches is already deployed in a namespace other than the one now named.
+
+    A deployed release's namespace is convention and not configuration: helm stamps the
+    cluster-scoped objects a release creates with `meta.helm.sh/release-namespace`, so applying the
+    same objects under the new name belongs to no release and helm refuses them while the release
+    that is serving keeps serving where it is. kubementat does not move a deployed release between
+    namespaces, and it will not take one off to make the new name fit — which is why the message
+    says so before the traceback helm would have produced.
+    """
+
+
+class HelmReleaseListingFailedError(KubementatError):
+    """The cluster could not say which namespace each of its releases is in.
+
+    The check that refuses a namespace rename is a read and not a guess, so when it cannot be
+    answered nothing is applied. The alternative is to guess, and a guessed namespace is applied to
+    a running release.
+    """
+
+
+class HelmChartNotSuppliedError(KubementatError):
+    """No chart was named, so there is no version to look up.
+
+    The form the flag takes is spelled in the message because the answer the operator wants is a
+    command line and not a description.
+    """
+
+
+class HelmSearchFailedError(KubementatError):
+    """`helm search` could not be run, or refused the target.
+
+    What helm said is passed through verbatim, because the usual reasons — no index, no network, a
+    repository that moved — are in helm's own sentence and kubementat cannot improve on it.
+    """
+
+
+class HelmRepositoryNotConfiguredError(KubementatError):
+    """The chart's repository is not added to this machine.
+
+    This is a different refusal from `HelmChartNotFoundError` and it is deliberately named apart,
+    because the fix is `helm repo add` and not "check the chart name". An unadded repository answers
+    a search with an empty list rather than an error, so the empty list alone could not tell the two
+    apart; the repository list is what makes the question answerable.
+    """
+
+
+class HelmChartNotFoundError(KubementatError):
+    """The repository answers, and not with this chart.
+
+    The advice is the one that applies once the repository is known to be added: the name, or an
+    index that is stale because a chart that exists upstream is not visible here until
+    `helm repo update`.
+    """
+
+
+class GrafanaAdminCredentialsNotConfiguredError(KubementatError):
+    """grafana's admin pair is not answered in the environment's encrypted file.
+
+    Its admin account is built from both halves, and helmfile aborts the whole file without the
+    password, so nothing would be applied. The message names the file and the verb that answers it,
+    and says not to answer it in the shell, where kubementat cannot see it. It does not descend from
+    `GrafanaError`, which is the family `kmt users` catches to report account work over HTTP; this
+    is a configuration key and is answered where configuration keys are answered.
+    """
+
+
+class CommandAnswerNotParseableError(KubementatError):
+    """A command answered something whose shape cannot be read.
+
+    Either its output is not JSON, or it parsed into a document of the wrong shape. Either way the
+    answer it carries is not one anything downstream can trust, and finding out inside a `for` loop
+    is how the same failure arrives five times with no name on it.
+    """
+
+
+# ---------------------------------------------------------------------------
+# Confirmations, cluster permission, and the kubeconfig a credential is copied from.
+#
+# Three of these are the same question asked by three commands: is anyone standing here to answer,
+# and what did they answer. `kmt users create-team-account`, `kmt routing install --update` and
+# `kmt uninstall` all fail closed when there is no terminal, and all three cancel on "no" in the
+# same words, so they raise the same two classes.
+# ---------------------------------------------------------------------------
+
+
+class ConfirmationUnavailableError(KubementatError):
+    """The run needed confirmation, and stdin is not a terminal.
+
+    A prompt that reads end-of-file is answered by the empty string, and the bash that this replaced
+    then died on `set -e` with no message at all. So the answer is a refusal that names `--yes` and
+    edits nothing, whether the caller is a pipe, a cron entry, or a library that built no terminal.
+    """
+
+
+class ConfirmationDeclinedError(KubementatError):
+    """The operator answered no.
+
+    This is a decision and not a bug, so it gets a sentence and not a traceback: what was not done,
+    that the cluster is untouched, and how to go ahead. The bash printed one line and exited 1, and
+    declining has had the same voice since.
+    """
+
+
+class ClusterAccessDeniedError(KubementatError):
+    """The cluster will not grant kubementat the verbs this run needs.
+
+    Checked before the first write, and listed in full, so that fixing the table and re-running is
+    cheaper than discovering the next denial one run at a time. A half-configured account that
+    failed on a binding it had just been told it did not have is the failure this refuses.
+    """
+
+
+class ResolvedKubeconfigUnusableError(KubementatError):
+    """The kubeconfig this command resolved is not a document this command can copy from.
+
+    Three doors lead here — it will not parse, it declares no cluster, or it declares one without
+    both a server address and a certificate authority — and they raise one class because the
+    operator's question is the same from all three: which kubeconfig did you just read. The account
+    kubeconfig is a document and not a string, so what is missing here is what makes the printed
+    output something a person can paste.
+    """
+
+
+class ClusterManagerEmailNotConfiguredError(KubementatError):
+    """`CLUSTER_MANAGER_EMAIL` is not answered in the environment's file, or is still a placeholder.
+
+    Both ClusterIssuers register an ACME account with it, so an issuer applied without one cannot
+    issue a certificate — an issuance failure that stays invisible until a certificate expires.
+    There is no built-in default for an email address, which makes this the one key the rule that
+    answers the others cannot answer for.
+    """

@@ -20,13 +20,13 @@ and deleted nothing, which is the half that was recorded as a failure. The relea
 the cluster reports, and the claims go by name in the same command.
 """
 
+from kubementat.errors import UninstallIncompleteError
 import json
 import re
 import subprocess
 from types import SimpleNamespace
 from pathlib import Path
 
-import click
 import pytest
 
 from cluster_parity import API_PROGRAM
@@ -423,7 +423,7 @@ def test_a_release_that_will_not_uninstall_keeps_its_claims_and_raises(fixture_r
     respond(fake_binaries, recorded_api, releases=[(RELEASE, NAMESPACE)], claims=CLAIMS)
     fake_binaries.respond("helm", "release: not found", exit_code=1, subcommand="uninstall")
 
-    with pytest.raises(click.ClickException) as error:
+    with pytest.raises(UninstallIncompleteError) as error:
         uninstalled(fixture_repo, recorded_api)
 
     assert RELEASE in str(error.value)

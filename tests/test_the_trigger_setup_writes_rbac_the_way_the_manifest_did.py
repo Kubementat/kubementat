@@ -26,7 +26,7 @@ import base64
 import pytest
 from kubernetes import client
 
-from kubementat.errors import PipelineNamespaceNotConfiguredError, ResourceWithoutNameError
+from kubementat.errors import (ObsoleteTriggerDirectoryError, PipelineNamespaceNotConfiguredError, ResourceWithoutNameError)
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 from kubementat.infrastructure.tekton import triggers
 from cluster_fixture import configuration_only_context

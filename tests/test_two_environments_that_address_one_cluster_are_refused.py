@@ -30,10 +30,7 @@ from cli.commands import environments
 from kubementat.core.identity.context import Context
 from kubementat.core.identity.registry import EnvironmentRegistry
 from kubementat.core.identity.target import ClusterTarget
-from kubementat.errors import (
-    ClusterIdentityCollisionError,
-    ClusterResolutionError,
-)
+from kubementat.errors import ClusterIdentityCollisionError, ClusterResolutionError
 
 from cluster_fixture import (
     DEV_SERVER,

@@ -20,8 +20,7 @@ import requests
 
 import kubementat.infrastructure.grafana.client as grafana_client
 from kubementat.core.config.config import Config
-from kubementat.errors import (GrafanaConfigurationError, GrafanaError,
-                              GrafanaUnauthorizedError)
+from kubementat.errors import (GrafanaConfigurationError, GrafanaError, GrafanaUnauthorizedError)
 from kubementat.infrastructure.grafana.client import GrafanaClient
 
 BASE_URL = "http://grafana.test:3000"

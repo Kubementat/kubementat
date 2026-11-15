@@ -3,7 +3,6 @@ import logging
 import os
 import re
 
-import click
 from kubernetes import client
 
 from kubementat.infrastructure import shell
@@ -12,6 +11,18 @@ from kubementat.core import constants
 from kubementat.core.identity.target import ClusterTarget, helm_target_args
 from kubementat.core.config.keys import component_config_key
 from kubementat.infrastructure.kubernetes import KubernetesUtils
+
+from kubementat.errors import (
+    CommandAnswerNotParseableError,
+    DeployedReleaseNamespaceConflictError,
+    GrafanaAdminCredentialsNotConfiguredError,
+    HelmChartNotFoundError,
+    HelmChartNotSuppliedError,
+    HelmReleaseListingFailedError,
+    HelmRepositoryNotConfiguredError,
+    HelmSearchFailedError,
+    UninstallIncompleteError,
+)
 from pathlib import Path
 
 # `helm list`'s read for "what releases live here", with the statuses named instead of left to a
@@ -45,7 +56,6 @@ HELM_LIST_RELEASES_ARGV = ["helm", "list", "--all-namespaces",
                            "--deployed", "--failed", "--pending", "--superseded",
                            "--uninstalled", "--uninstalling", "--output", "json"]
 
-
 def helm_list_releases_argv(target) -> list:
     r'''
     `HELM_LIST_RELEASES_ARGV`, pointed at *target*.
@@ -69,7 +79,6 @@ def helm_list_releases_argv(target) -> list:
         list[str]: The argv, with the cluster flags after `helm list`.
     '''
     return [*HELM_LIST_RELEASES_ARGV[:2], *helm_target_args(target), *HELM_LIST_RELEASES_ARGV[2:]]
-
 
 class HelmUtils:
     """Utility class for Helm operations."""
@@ -280,8 +289,9 @@ class HelmUtils:
         Raises:
             KeyError: If `component` is not a kubementat component. A typo has to say so rather
                 than uninstall from a namespace named after the typo.
-            click.ClickException: If `helm uninstall` or `kubectl delete pvc` failed on a release
-                that is present. The message names the command and what it said.
+            kubementat.errors.UninstallIncompleteError: If `helm uninstall` or
+                `kubectl delete pvc` failed on a release that is present. The message names the
+                command and what it said.
         '''
         namespace = self.config.component_namespace(component)
         releases = self._installed_release_names(namespace)
@@ -312,7 +322,7 @@ class HelmUtils:
             outcome["claims"] += self._delete_release_claims(namespace, release, failures)
 
         if failures:
-            raise click.ClickException(
+            raise UninstallIncompleteError(
                 "uninstalling component '%s' from namespace '%s' did not work:\n  %s"
                 % (component, namespace, "\n  ".join(failures)))
         return outcome
@@ -437,10 +447,10 @@ class HelmUtils:
                 how far the check has to reach.
 
         Raises:
-            click.ClickException: When a release the apply can reach is already deployed in a
-                namespace other than the one the configuration names. The message names the
-                component, both namespaces, the reason, and the one change that is supported; the
-                command writes nothing.
+            kubementat.errors.DeployedReleaseNamespaceConflictError: When a release the
+                apply can reach is already deployed in a namespace other than the one the
+                configuration names. The message names the component, both namespaces, the reason,
+                and the one change that is supported; the command writes nothing.
         '''
         conflicts = self._namespace_renames(helmfile_path, helmfile_label_filter)
         if conflicts is None:
@@ -455,7 +465,7 @@ class HelmUtils:
                 f"* {conflict['component']}: release '{conflict['release']}' is already deployed"
                 f" in {_namespaces_phrase(conflict['deployed_in'])}, and this configuration now"
                 f" names '{conflict['configured_in']}'. Nothing is being applied to it.")
-        raise click.ClickException(
+        raise DeployedReleaseNamespaceConflictError(
             "\n".join(lines) +
             "\n\nA deployed release's namespace is convention, not configuration. helm stamps the"
             f" cluster-scoped objects a release creates with\n"
@@ -487,7 +497,8 @@ class HelmUtils:
                 manifest could not be read, which is not the same answer and is logged as such.
 
         Raises:
-            click.ClickException: When the cluster cannot be asked where its releases are.
+            kubementat.errors.HelmReleaseListingFailedError: When the cluster cannot be
+                asked where its releases are.
             KeyError: When a configuration key names a namespace for something that is not a
                 kubementat component, which `Config.component_namespace` already refuses.
         '''
@@ -581,13 +592,13 @@ class HelmUtils:
                 releases at all, which is a clean cluster and not a failure.
 
         Raises:
-            click.ClickException: When `helm` could not answer. Nothing is applied when this
-                happens, so the message says the read failed rather than let `helmfile` repeat it
-                as a traceback.
+            kubementat.errors.HelmReleaseListingFailedError: When `helm` could not answer.
+                Nothing is applied when this happens, so the message says the read failed rather
+                than let `helmfile` repeat it as a traceback.
         '''
         listing = shell.run(helm_list_releases_argv(self.target), capture=True, check=False)
         if not listing.ok:
-            raise click.ClickException(
+            raise HelmReleaseListingFailedError(
                 "kubementat could not ask the cluster which namespace each of its releases is in,"
                 " so nothing is being applied. The check that refuses a namespace rename is a read,"
                 f" not a guess, and it could not be answered:\n"
@@ -682,14 +693,16 @@ class HelmUtils:
             str: The version, e.g. ``25.8.0``.
 
         Raises:
-            click.ClickException: When nothing was searched, when the repo is not added to this
-                helm, when no chart matches, or when the search failed. Each names what was
+            kubementat.errors.HelmChartNotSuppliedError: When no chart was named.
+            kubementat.errors.HelmSearchFailedError: When `helm search` refused the target.
+            kubementat.errors.HelmRepositoryNotConfiguredError: When the repo is not added.
+            kubementat.errors.HelmChartNotFoundError: When nothing matched. Each names what was
                 looked for and what to do about it.
         '''
         chart = (chart or "").strip()
         repo = (repo or "").strip()
         if not chart:
-            raise click.ClickException(
+            raise HelmChartNotSuppliedError(
                 "No chart was named, so there is no version to look up. "
                 "The form is `kmt helm latest-version <ENVIRONMENT> <repo>/<chart>`, e.g. "
                 "`kmt helm latest-version dev prometheus-community/prometheus`.")
@@ -698,7 +711,7 @@ class HelmUtils:
         search = shell.run(["helm", "search", "repo", target, "--output", "json"],
                            capture=True, check=False)
         if not search.ok:
-            raise click.ClickException(
+            raise HelmSearchFailedError(
                 f"helm could not search for '{target}':\n"
                 f"{(search.stderr or search.stdout or '').strip()}")
 
@@ -712,11 +725,11 @@ class HelmUtils:
                 return version
 
         if repo and repo.lower() not in self._helm_repo_names():
-            raise click.ClickException(
+            raise HelmRepositoryNotConfiguredError(
                 f"helm repository '{repo}' is not added to this machine, so kubementat cannot "
                 f"ask what version '{chart}' is. Add it (`helm repo add {repo} <url>`, then "
                 f"`helm repo update`) and run again.")
-        raise click.ClickException(
+        raise HelmChartNotFoundError(
             f"helm found no chart named '{target}'."
             + (" Check the chart name, or update the repository index (`helm repo update`), "
                "which is what makes a chart that exists upstream visible here."
@@ -739,7 +752,6 @@ class HelmUtils:
         return {str(row.get("name", "")).lower()
                 for row in _parsed_json_list(listing.stdout, "helm repo list")
                 if isinstance(row, dict)}
-
 
     def _grafana_admin_credentials(self) -> tuple:
         '''
@@ -775,7 +787,7 @@ class HelmUtils:
 
         Raises
         ------
-        click.ClickException
+        kubementat.errors.GrafanaAdminCredentialsNotConfiguredError
             When either half is missing or blank in the environment's encrypted config.
         '''
         encrypted = self.config.get('env_static_encrypted')
@@ -785,13 +797,13 @@ class HelmUtils:
         if not admin_user:
             logging.warning("GRAFANA_ADMIN_USER is not set in %s; grafana cannot be installed "
                             "without one, and nothing here will be applied.", environment_file)
-            raise click.ClickException(
+            raise GrafanaAdminCredentialsNotConfiguredError(
                 f"GRAFANA_ADMIN_USER is not set in {environment_file}. grafana's admin account is "
                 f"built from that key, so there is no install to apply. Set it in that file and run "
                 f"install again -- not in your shell, where kubementat cannot see it."
             )
         if not admin_password:
-            raise click.ClickException(
+            raise GrafanaAdminCredentialsNotConfiguredError(
                 f"GRAFANA_ADMIN_PASSWORD is not set in {environment_file}. grafana's admin is built "
                 f"from both halves, and helmfile aborts the whole file without one, so nothing would be "
                 f"applied. Put it back with kmt config set {self.environment} "
@@ -840,7 +852,6 @@ class HelmUtils:
             os.environ[key] = namespaces[key]
         return namespaces
 
-
 def _components_named_by_selector(helmfile_label_filter: str):
     r'''
     The components a helmfile `-l` selector can reach, or `None` for "everything it names".
@@ -875,7 +886,6 @@ def _components_named_by_selector(helmfile_label_filter: str):
         if "component_name" in clause:
             return None  # presence or negation: it reaches more than one name
     return sorted(named) or None
-
 
 def export_configuration_coordinates(config, environment: str) -> dict:
     r'''
@@ -918,7 +928,6 @@ def export_configuration_coordinates(config, environment: str) -> dict:
     for name, value in exported.items():
         os.environ[name] = value
     return exported
-
 
 def export_component_release_knobs(config, index) -> dict:
     r'''
@@ -975,13 +984,11 @@ def export_component_release_knobs(config, index) -> dict:
             os.environ[key] = answer
     return exported
 
-
 # The component whose class the routing release names is `constants.COMPONENT` — spelled once for the
 # whole package since the routing modules started importing it from there. It used to be spelled again
 # here, because `routing.py` owned the name and this file could not import it without a cycle: routing
 # imports `HelmUtils`. That reason is gone, and a duplicate that is justified by a cycle which no
 # longer exists is a bug waiting to be believed.
-
 
 def export_ingress_class(config) -> dict:
     r'''
@@ -1026,7 +1033,6 @@ def export_ingress_class(config) -> dict:
     os.environ[key] = str(answer)
     return exported
 
-
 def _one_supported_fix(conflicts: list) -> str:
     r'''
     The only change the refusal tells the operator about, one line per component.
@@ -1054,7 +1060,6 @@ def _one_supported_fix(conflicts: list) -> str:
             " already in --\n" + "\n".join(f"* {key} -> {_namespaces_phrase(where)}"
                                           for key, where in key_and_value))
 
-
 def _namespaces_phrase(namespaces: list) -> str:
     r'''
     One or more namespaces, spelled so that both shapes read as themselves.
@@ -1068,7 +1073,6 @@ def _namespaces_phrase(namespaces: list) -> str:
         return f"namespace '{namespaces[0]}'"
     return "namespaces " + " and ".join(f"'{one}'" for one in namespaces)
 
-
 def _parsed_json_list(output: str, what: str) -> list:
     '''
     A helm command's JSON output, as a list, with the two shapes that are not one named.
@@ -1081,13 +1085,12 @@ def _parsed_json_list(output: str, what: str) -> list:
     try:
         parsed = json.loads((output or "").strip() or "[]")
     except json.JSONDecodeError as error:
-        raise click.ClickException(f"{what} returned output that is not JSON, so its answer "
+        raise CommandAnswerNotParseableError(f"{what} returned output that is not JSON, so its answer "
                                   f"cannot be read: {error}")
     if not isinstance(parsed, list):
-        raise click.ClickException(f"{what} returned {type(parsed).__name__} instead of a list "
+        raise CommandAnswerNotParseableError(f"{what} returned {type(parsed).__name__} instead of a list "
                                   f"of charts, so nothing here can be trusted about its answer.")
     return [entry for entry in parsed if isinstance(entry, dict)]
-
 
 def _is_the_chart(entry: dict, target: str) -> bool:
     '''
@@ -1110,7 +1113,6 @@ def _is_the_chart(entry: dict, target: str) -> bool:
     if not (name and repository):
         return False
     return f"{repository}/{name}" == wanted
-
 
 def _chart_version(entry: dict):
     '''

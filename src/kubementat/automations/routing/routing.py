@@ -37,7 +37,6 @@ import logging
 import sys
 from dataclasses import dataclass, field, replace
 
-import click
 import yaml
 from kubernetes import client
 
@@ -47,6 +46,12 @@ from kubementat.automations.routing import traefik_presence
 from kubementat.core.config.config import Config
 from kubementat.core.constants import COMPONENT, DEFAULT_INGRESS_CLASSES, TRAEFIK_CHART
 from kubementat.infrastructure.helm import HelmUtils
+
+from kubementat.errors import (
+    ClusterManagerEmailNotConfiguredError,
+    ConfirmationDeclinedError,
+    ConfirmationUnavailableError,
+)
 
 # What `install_routing` decided. One of these three is what the CLI and any later caller reads, and
 # the string is the one that has to survive being pasted into a bug report.
@@ -83,7 +88,6 @@ SKIP_LABEL_FILTER = "group=routing,component_name!=traefik"
 # after the verb there). It is not a constant any more because the one thing that may not travel on
 # it is the cluster: a list assembled at the call site is the only form that can carry it.
 
-
 # The two issuers `ingress.py` (once `create_ingress_yml.sh`) and both tekton
 # EventListener ingress templates name by hand, so these names are load-bearing and only the solver
 # moves. `privateKeySecretRef` is carried
@@ -106,7 +110,6 @@ CLUSTER_MANAGER_EMAIL_KEY = "CLUSTER_MANAGER_EMAIL"
 # ---------------------------------------------------------------------------------------
 # the answer
 # ---------------------------------------------------------------------------------------
-
 
 @dataclass(frozen=True)
 class RoutingInstallResult:
@@ -162,17 +165,14 @@ class RoutingInstallResult:
             lines.append(f"{self.command('--update')} is the command that would change this.")
         return "\n".join(lines)
 
-
 def _apply_note(result: RoutingInstallResult) -> None:
     """One INFO line that is the decision, readable without the log. Kept for one call site."""
     logging.info("routing decision: %s (%s), filter %s", result.action,
                  result.classification, result.label_filter)
 
-
 # ---------------------------------------------------------------------------------------
 # the command
 # ---------------------------------------------------------------------------------------
-
 
 def install_routing(ctx, update: bool = False,
                     assume_yes: bool = False) -> RoutingInstallResult:
@@ -212,9 +212,11 @@ def install_routing(ctx, update: bool = False,
         When `helmfile apply` fails, or when the `--update` CRD step fails: both raise with the
         command's output attached, like every other apply in the codebase. Nothing retries, so a run
         that half-applied is the operator's to read rather than a second attempt's to hide.
-    click.ClickException:
+    kubementat.errors.ConfirmationUnavailableError:
         When consent is needed and there is no terminal to ask in. It says so and names `--yes`, and
         applies nothing at all.
+    kubementat.errors.ConfirmationDeclinedError:
+        When the operator answered no.
     """
     environment = ctx.environment
     ingress_class, namespace = _configuration(ctx)
@@ -258,11 +260,9 @@ def install_routing(ctx, update: bool = False,
     _warn_when_nothing_serves_the_class(ctx, ingress_class)
     return result
 
-
 # ---------------------------------------------------------------------------------------
 # step 1: the two values, read the way every other component's are read
 # ---------------------------------------------------------------------------------------
-
 
 def _configuration(ctx) -> tuple:
     """The namespace and the class, from the configuration, never from a literal here.
@@ -292,11 +292,9 @@ def _configuration(ctx) -> tuple:
     ingress_class = config._component_value(COMPONENT, "INGRESS_CLASS", DEFAULT_INGRESS_CLASSES)
     return ingress_class, namespace
 
-
 # ---------------------------------------------------------------------------------------
 # steps 2 and 3: the decision table
 # ---------------------------------------------------------------------------------------
-
 
 def _decide(presence, namespace: str, update: bool, assume_yes: bool) -> tuple:
     """Read the classification, say what it means, return `(installs, action, consent)`.
@@ -355,7 +353,6 @@ def _decide(presence, namespace: str, update: bool, assume_yes: bool) -> tuple:
                         _found(presence, presence.foreign_findings()))
     return True, ACTION_INSTALL, consent
 
-
 def _consent_to_a_second_controller(presence, namespace: str, assume_yes: bool) -> str:
     """Say the second-controller sentence, then get the answer the branch is running on.
 
@@ -373,7 +370,7 @@ def _consent_to_a_second_controller(presence, namespace: str, assume_yes: bool) 
         logging.warning("Accepted because --yes was given, so this run continues without asking.")
         return CONSENT_ACCEPTED
     if not sys.stdin.isatty():
-        raise click.ClickException(
+        raise ConfirmationUnavailableError(
             f"Installing a second Traefik next to the one already running needs confirmation, but"
             f" stdin is not a terminal. Re-run with --yes (or -y) to accept the second-controller"
             f" warning, or run {_update_command(presence)} alone to see what is there: "
@@ -384,16 +381,14 @@ def _consent_to_a_second_controller(presence, namespace: str, assume_yes: bool) 
         if answer in ("y", "yes"):
             return CONSENT_ASKED
         if answer in ("n", "no"):
-            raise click.ClickException(
+            raise ConfirmationDeclinedError(
                 "Cancelled. Nothing was applied and the controller that is running was left"
                 " alone; re-run with --yes (or -y), or answer yes, to go ahead.")
         logging.info("Please answer yes or no.")
 
-
 # ---------------------------------------------------------------------------------------
 # step 4: the definitions `--update` owes, ordered before the release
 # ---------------------------------------------------------------------------------------
-
 
 def _apply_chart_crds_before_the_release(chart: str = TRAEFIK_CHART, ctx=None) -> None:
     """Refresh the repository index, then apply the chart's CRDs server-side.
@@ -461,17 +456,14 @@ def _apply_chart_crds_before_the_release(chart: str = TRAEFIK_CHART, ctx=None) -
         if line.strip():
             logging.info("  %s", line.strip())
 
-
 def shell_output(result) -> str:
     """Whatever a command printed, for an exception message that can be acted on."""
     text = ((result.stderr or "") + (result.stdout or "")).strip()
     return text if text else "(the command printed nothing)"
 
-
 # ---------------------------------------------------------------------------------------
 # step 5: the ClusterIssuers, whose solver is the one thing that has to move
 # ---------------------------------------------------------------------------------------
-
 
 def _kubectl_args(ctx) -> list:
     """The cluster a surviving `kubectl` has to carry, or the empty list when there is no Context.
@@ -486,7 +478,6 @@ def _kubectl_args(ctx) -> list:
     from kubementat.infrastructure.kubernetes import KubernetesUtils
 
     return KubernetesUtils(ctx).kubectl_args
-
 
 def _apply_cluster_issuers(ingress_class: str, ctx) -> None:
     """Apply both issuers with the solver pointed at the configured class.
@@ -519,7 +510,6 @@ def _apply_cluster_issuers(ingress_class: str, ctx) -> None:
         shell.run(["kubectl", "apply", *_kubectl_args(ctx), "-f", "-"], input=yaml.dump(
             manifest, default_flow_style=False, sort_keys=False))
 
-
 def _cluster_issuer(issuer: dict, email: str, ingress_class: str) -> dict:
     """One `ClusterIssuer`, as the deleted script wrote it, with the solver as the only delta."""
     return {
@@ -536,7 +526,6 @@ def _cluster_issuer(issuer: dict, email: str, ingress_class: str) -> dict:
         },
     }
 
-
 def _cluster_manager_email(config: Config) -> str:
     """The ACME contact address, from `platform_config/<environment>/static.json`.
 
@@ -551,7 +540,7 @@ def _cluster_manager_email(config: Config) -> str:
     value = config.get('env_static').get(CLUSTER_MANAGER_EMAIL_KEY)
     value = value.strip() if isinstance(value, str) else ""
     if not value or value.startswith("REPLACEME"):
-        raise click.ClickException(
+        raise ClusterManagerEmailNotConfiguredError(
             f"{CLUSTER_MANAGER_EMAIL_KEY} is not set in {config.env_static_config_path}. Both"
             f" ClusterIssuers register an ACME account with it, so an issuer applied without one"
             f" cannot issue a certificate. Put the address in that file -- kmt config set <environment>"
@@ -560,11 +549,9 @@ def _cluster_manager_email(config: Config) -> str:
             f" an answer that is there -- and run this command again.")
     return value
 
-
 # ---------------------------------------------------------------------------------------
 # step 6: the read that costs one call and pays for the whole feature
 # ---------------------------------------------------------------------------------------
-
 
 def _warn_when_nothing_serves_the_class(ctx, ingress_class: str) -> None:
     """Warn when the class the solvers now name is not an IngressClass the cluster has.
@@ -610,7 +597,6 @@ def _warn_when_nothing_serves_the_class(ctx, ingress_class: str) -> None:
                     f"the classes present are: {', '.join(names)}" if names
                     else "the cluster has no IngressClass at all")
 
-
 def _refusal(error) -> str:
     """The API's own sentence about a read it would not answer, without the SDK's wrapper.
 
@@ -629,11 +615,9 @@ def _refusal(error) -> str:
             return text
     return str(getattr(error, "reason", "") or error)
 
-
 # ---------------------------------------------------------------------------------------
 # the small rules the sentences are built on
 # ---------------------------------------------------------------------------------------
-
 
 def _found(presence, findings) -> str:
     """What was found, as one sentence. Namespace, release, chart and revision, class, or pod.
@@ -655,11 +639,9 @@ def _found(presence, findings) -> str:
         return "nothing a probe could name"
     return "; ".join(phrases)
 
-
 def _found_release(presence) -> tuple:
     """Every release the probes found, whatever namespace it lives in."""
     return tuple(release for finding in presence.findings for release in finding.releases)
-
 
 def _update_command(presence) -> str:
     """The command that changes this outcome, spelled so it can be pasted.
@@ -669,7 +651,6 @@ def _update_command(presence) -> str:
     one the presence was read from, so the line is the line that applies to this cluster.
     """
     return presence.command("--update")
-
 
 def _as(result: RoutingInstallResult, **changes) -> RoutingInstallResult:
     """A new result with `changes` applied. The result is frozen, so the decision is not edited."""

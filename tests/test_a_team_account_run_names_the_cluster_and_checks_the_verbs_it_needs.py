@@ -19,6 +19,7 @@ could not skip. There is one implementation now; this is what it owes:
   told it did not have.
 """
 
+from kubementat.errors import (ClusterAccessDeniedError, ConfirmationDeclinedError, ConfirmationUnavailableError)
 import base64
 import json
 import logging
@@ -27,7 +28,6 @@ from types import SimpleNamespace
 import pytest
 
 from conftest import is_a_write
-from click.exceptions import ClickException
 
 import kubementat.infrastructure.user_management as user_management
 from kubementat.automations.accounts.accounts import (
@@ -245,7 +245,7 @@ def test_a_denied_verb_stops_the_run_before_the_first_write_and_names_it(
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
     ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(ClusterAccessDeniedError) as raised:
         create_team_account(ctx, "ops-account")
 
     assert "create rolebindings" in str(raised.value)
@@ -265,7 +265,7 @@ def test_every_denied_verb_is_reported_and_not_only_the_first(
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
     ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(ClusterAccessDeniedError) as raised:
         create_team_account(ctx, "ops-account")
 
     assert "create rolebindings" in str(raised.value)
@@ -284,7 +284,7 @@ def test_answering_no_at_the_prompt_creates_nothing(
     monkeypatch.setattr("builtins.input", lambda prompt="": "n")
     ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(ConfirmationDeclinedError) as raised:
         create_team_account(ctx, "ops-account")
 
     assert "Cancelled" in str(raised.value)
@@ -348,7 +348,7 @@ def test_no_terminal_and_no_yes_is_refused_before_the_cluster_is_asked_anything(
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
     ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(ConfirmationUnavailableError) as raised:
         create_team_account(ctx, "ops-account")
 
     assert "--yes" in str(raised.value)

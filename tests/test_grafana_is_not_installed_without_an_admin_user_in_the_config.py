@@ -12,11 +12,11 @@ The tests are deliberately about the moment of the decision, not the string in a
 applied, what is exported, and what is said when nothing may be applied.
 """
 
+from kubementat.errors import GrafanaAdminCredentialsNotConfiguredError
 import json
 import logging
 
 import pytest
-from click.exceptions import ClickException
 
 from cluster_fixture import configuration_only_context
 from asset_paths import values_path
@@ -137,7 +137,7 @@ def test_an_environment_that_names_no_admin_user_applies_nothing(monkeypatch, tm
         encrypted["GRAFANA_ADMIN_USER"] = value
     shell, utils = a_helmfile_that_reads(encrypted, monkeypatch, tmp_path)
 
-    with caplog.at_level(logging.WARNING), pytest.raises(ClickException) as raised:
+    with caplog.at_level(logging.WARNING), pytest.raises(GrafanaAdminCredentialsNotConfiguredError) as raised:
         apply_it(utils)
 
     assert not shell.calls, "it refused and then applied anyway"
@@ -166,7 +166,7 @@ def test_a_missing_password_stops_the_install_it_would_have_failed(monkeypatch, 
     """
     shell, utils = a_helmfile_that_reads({"GRAFANA_ADMIN_USER": CONFIGURED_USER}, monkeypatch, tmp_path)
 
-    with caplog.at_level(logging.WARNING), pytest.raises(ClickException) as raised:
+    with caplog.at_level(logging.WARNING), pytest.raises(GrafanaAdminCredentialsNotConfiguredError) as raised:
         apply_it(utils)
 
     assert not shell.calls, "it warned that nothing would be applied, and then applied it"

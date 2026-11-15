@@ -30,7 +30,8 @@ def namespaces_kubementat_owns(ctx) -> list:
         list[str]: Namespace names, deduplicated, teams before components.
 
     Raises:
-    - click.ClickException: When the environment has no configuration directory at all.
+    - kubementat.errors.EnvironmentConfigurationDirectoryMissingError: When the
+      environment has no configuration directory at all.
     '''
     return namespace_sweep(ctx)["namespaces"]
 
@@ -84,9 +85,10 @@ def namespace_sweep(ctx) -> dict:
                missing key is a half-written team.
 
     Raises:
-    - click.ClickException: When there is no configuration directory for the environment, or
-      no environment `static.json` to read the namespaces out of. A cluster is never deleted
-      on the strength of a name that was never configured.
+    - kubementat.errors.EnvironmentConfigurationDirectoryMissingError: When there is
+      no configuration directory for the environment, or no environment `static.json` to read
+      the namespaces out of. A cluster is never deleted on the strength of a name that was
+      never configured.
     '''
 
     config = ctx.config

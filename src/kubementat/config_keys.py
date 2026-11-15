@@ -62,11 +62,19 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-import click
 import gnupg
 
 from kubementat.config_init import CREATED, EXISTED, SKIPPED, InitStep
-from kubementat.errors import DeployerKeyMissingError
+from kubementat.errors import (
+    ConfigurationRootNotUsableError,
+    DeployerIdentityNotNamedError,
+    DeployerKeyMissingError,
+    DeployerKeyPairIncompleteError,
+    GpgBinaryNotRunnableError,
+    GpgKeyFileMissingError,
+    GpgKeyNotImportableError,
+    GpgKeyWithoutPublicKeyError,
+)
 from kubementat.crypto_utils import CryptoUtils
 
 # The four names, spelled once here for the same reason `config_init` spells the manifest's filename
@@ -113,7 +121,6 @@ _SNIFF_BYTES = 64
 
 _EMAIL_PATTERN = re.compile(r"[^<>@\s,]+@[^<>@\s,]+")
 
-
 @dataclass(frozen=True)
 class DeployerKeypair:
     """The four files, and the identity they are one pair under.
@@ -128,7 +135,6 @@ class DeployerKeypair:
     gpg_private: Path
     gpg_public: Path
     gpg_email: str
-
 
 def ensure_deployer_keypair(config_dir: Path, *, gpg_key: Path | None = None,
                             gpg_email: str | None = None) -> tuple[InitStep, ...]:
@@ -166,16 +172,28 @@ def ensure_deployer_keypair(config_dir: Path, *, gpg_key: Path | None = None,
 
     Raises
     ------
-    click.ClickException
-        The directory is not there; a pair is half there; `gpg_key` names a file that is not there or
-        holds no key; a GPG pair is needed and `gpg_email` is missing. Every one of these is decided
-        before a single file is written, so a refusal always leaves the directory as it was found.
+    kubementat.errors.ConfigurationRootNotUsableError
+        The directory is not there.
+    kubementat.errors.DeployerKeyPairIncompleteError
+        A pair that is half there.
+    kubementat.errors.GpgKeyFileMissingError
+    kubementat.errors.GpgKeyNotImportableError
+    kubementat.errors.GpgKeyWithoutPublicKeyError
+        `gpg_key` names a file that is not there, holds no key, or imports without giving up its
+        public half.
+    kubementat.errors.DeployerIdentityNotNamedError
+        A GPG pair is needed and `gpg_email` is missing.
+    kubementat.errors.GpgBinaryNotRunnableError
+        The `gpg` binary the whole thing runs through is not runnable here.
+
+    Every one of these is decided before a single file is written, so a refusal always leaves the
+    directory as it was found.
     """
     directory = Path(config_dir)
     if not directory.is_dir():
         # Not "the directory is missing and here is how to make it": a keypair cannot be written into
         # a tree that does not exist, and `config init` is what lays a tree down.
-        raise click.ClickException(
+        raise ConfigurationRootNotUsableError(
             f"{directory} is not a directory, so there is nothing here to hold a deployer keypair. "
             f"{CREATE_COMMAND} <configuration directory> --environment <environment> prepares a tree "
             f"and the keypair that belongs to it.")
@@ -188,7 +206,6 @@ def ensure_deployer_keypair(config_dir: Path, *, gpg_key: Path | None = None,
     steps.extend(_ssh_steps(directory))
     steps.extend(_gpg_steps(directory, source=source, gpg_email=gpg_email))
     return tuple(steps)
-
 
 def require_deployer_keypair(config_dir: Path) -> DeployerKeypair:
     """The pair, for a caller that is about to hand it to something else.
@@ -224,7 +241,6 @@ def require_deployer_keypair(config_dir: Path) -> DeployerKeypair:
     return DeployerKeypair(paths[SSH_PRIVATE_NAME], paths[SSH_PUBLIC_NAME],
                            paths[GPG_PRIVATE_NAME], paths[GPG_PUBLIC_NAME], email)
 
-
 def _ssh_steps(directory: Path) -> tuple[InitStep, ...]:
     """One ssh pair, in the two names the directory has for it. Generated only when both are missing.
     """
@@ -242,7 +258,6 @@ def _ssh_steps(directory: Path) -> tuple[InitStep, ...]:
     os.chmod(private, PRIVATE_FILE_MODE)
     return (InitStep(SSH_PRIVATE_STEP, private, CREATED),
             InitStep(SSH_PUBLIC_STEP, public, CREATED))
-
 
 def _gpg_steps(directory: Path, *, source: Path | None, gpg_email: str | None) -> tuple[InitStep, ...]:
     """One gpg pair, imported when the caller supplied a key and generated when it did not.
@@ -262,7 +277,7 @@ def _gpg_steps(directory: Path, *, source: Path | None, gpg_email: str | None) -
         _import_gpg_key(source, private, public)
     else:
         if not gpg_email:
-            raise click.ClickException(
+            raise DeployerIdentityNotNamedError(
                 f"making a deployer gpg key needs an email and none was given: {private} is not here"
                 f" and nothing was imported. {CREATE_COMMAND}'s {GPG_EMAIL_FLAG} <email> (or"
                 f" {GPG_KEY_FLAG} <file>, to skip generation entirely) is the answer this module"
@@ -277,7 +292,6 @@ def _gpg_steps(directory: Path, *, source: Path | None, gpg_email: str | None) -
     return (InitStep(GPG_PRIVATE_STEP, private, CREATED),
             InitStep(GPG_PUBLIC_STEP, public, CREATED))
 
-
 def _import_gpg_key(source: Path, private_path: Path, public_path: Path) -> None:
     """Put the caller's own key in the directory, in both of the names the pair is read under.
 
@@ -291,14 +305,14 @@ def _import_gpg_key(source: Path, private_path: Path, public_path: Path) -> None
         imported = gpg.import_keys(material)
         fingerprints = list(imported.fingerprints)
         if not imported or not fingerprints:
-            raise click.ClickException(
+            raise GpgKeyNotImportableError(
                 f"{source} is not a gpg key kubementat can import, so {private_path} stays as it is."
                 f" {GPG_KEY_FLAG} takes a file `gpg --import` would accept — an armored secret key is"
                 f" what this module writes {private_path.name} from. Nothing was generated in its"
                 f" place, and {CREATE_COMMAND} is the verb that runs the import it could not run.")
         armor = gpg.export_keys(fingerprints[0])
         if not armor.strip():
-            raise click.ClickException(
+            raise GpgKeyWithoutPublicKeyError(
                 f"{source} imported as a key but exported no public half, so {public_path} cannot be"
                 f" written. {CREATE_COMMAND} needs a key that carries its own public key; nothing was"
                 f" generated in its place.")
@@ -307,7 +321,6 @@ def _import_gpg_key(source: Path, private_path: Path, public_path: Path) -> None
     public_path.write_text(_in_disposable_keyring(import_and_export), encoding="ascii")
     private_path.write_bytes(material)
     return None
-
 
 def _importable_key(gpg_key: Path | None) -> Path | None:
     """`gpg_key` as a path that is there, refused with the path when it is not.
@@ -320,14 +333,13 @@ def _importable_key(gpg_key: Path | None) -> Path | None:
         return None
     source = Path(gpg_key)
     if not source.is_file():
-        raise click.ClickException(
+        raise GpgKeyFileMissingError(
             f"{source} was given as the deployer's gpg key and is not a file there, so nothing is"
             f" imported — and a generated key would be a key nobody asked for, wearing the name of the"
             f" one that is missing. Point {GPG_KEY_FLAG} at a real file, or leave it out and give"
             f" {GPG_EMAIL_FLAG} if a key should be generated; either way it is {CREATE_COMMAND} that"
             f" puts the pair into the directory.")
     return source
-
 
 def _pair_steps(kind: str, paths: tuple[Path, Path], step_names: tuple[str, str],
                 recognizers) -> tuple[InitStep, ...] | None:
@@ -344,10 +356,9 @@ def _pair_steps(kind: str, paths: tuple[Path, Path], step_names: tuple[str, str]
     if len(present) != 2:
         there = present[0]
         missing = [path for path in paths if not path.exists()][0]
-        raise click.ClickException(_half_pair_message(kind, there, missing))
+        raise DeployerKeyPairIncompleteError(_half_pair_message(kind, there, missing))
     return tuple(InitStep(step_name, path, _action_of(path, recognize))
                  for step_name, path, recognize in zip(step_names, paths, recognizers))
-
 
 def _half_pair_message(kind: str, there: Path, missing: Path) -> str:
     """Why a directory with one of a pair's two files in it stops the run.
@@ -361,7 +372,6 @@ def _half_pair_message(kind: str, there: Path, missing: Path) -> str:
             f" Half a pair is not a pair: kubementat will not overwrite {there.name} to finish it and"
             f" will not make a second half that belongs to a different key. Put {missing.name} beside"
             f" it, or move {there.name} out and let {CREATE_COMMAND} make the pair in its place.")
-
 
 def _missing_pair_message(directory: Path, missing: list[str]) -> str:
     """The sentence a caller of the guard puts in front of somebody who can fix it.
@@ -385,7 +395,6 @@ def _missing_pair_message(directory: Path, missing: list[str]) -> str:
             f" {GPG_EMAIL_FLAG} <email>, which is what puts these four names in a configuration"
             f" directory.")
 
-
 def _environment_words(directory: Path) -> str:
     """The environment this directory configures, as words in a sentence.
 
@@ -397,7 +406,6 @@ def _environment_words(directory: Path) -> str:
     environment = _only_environment_inside(directory)
     return environment if environment else "<environment>"
 
-
 def _only_environment_inside(directory: Path) -> str | None:
     """One name if exactly one environment layer sits inside this directory, otherwise `None`."""
     try:
@@ -406,7 +414,6 @@ def _only_environment_inside(directory: Path) -> str | None:
     except OSError:
         return None
     return layers[0] if len(layers) == 1 else None
-
 
 def _in_disposable_keyring(work):
     """Run `work(gpg)` against a keyring built for this call and thrown away in the same breath.
@@ -428,13 +435,12 @@ def _in_disposable_keyring(work):
         except (OSError, ValueError) as error:
             # `CryptoUtils` needs this binary too, so this is not a new dependency — it is the first
             # place that says so out loud when the binary is not on the machine.
-            raise click.ClickException(
+            raise GpgBinaryNotRunnableError(
                 f"the deployer keypair needs the `gpg` binary, which is not runnable here ({error})."
                 f" {CREATE_COMMAND} writes the four keypair files through it.") from error
         return work(gpg)
     finally:
         shutil.rmtree(home, ignore_errors=True)
-
 
 def _deployer_email(public_path: Path, private_path: Path) -> str | None:
     """The identity the pair carries, read from the public half and tried in the private one.
@@ -451,7 +457,6 @@ def _deployer_email(public_path: Path, private_path: Path) -> str | None:
             return emails[0]
     return None
 
-
 def _user_id_emails(path: Path) -> list[str]:
     """Every email among the key file's user IDs, in the order gpg lists them."""
     def read(gpg: gnupg.GPG) -> list[str]:
@@ -466,7 +471,6 @@ def _user_id_emails(path: Path) -> list[str]:
 
     return _in_disposable_keyring(read)
 
-
 def _action_of(path: Path, recognized) -> str:
     """`SKIPPED` for the module's own kind of material, `EXISTED` for somebody else's.
 
@@ -478,24 +482,19 @@ def _action_of(path: Path, recognized) -> str:
     """
     return SKIPPED if recognized(path) else EXISTED
 
-
 def _is_private_key(path: Path) -> bool:
     head = _head_of(path)
     return head.startswith(b"-----BEGIN") and b"PRIVATE KEY" in head
-
 
 def _is_ssh_public_key(path: Path) -> bool:
     head = _head_of(path)
     return any(head.startswith(algorithm.encode("utf-8")) for algorithm in _SSH_PUBLIC_ALGORITHMS)
 
-
 def _is_gpg_private_key(path: Path) -> bool:
     return _head_of(path).startswith(b"-----BEGIN PGP PRIVATE KEY BLOCK-----")
 
-
 def _is_gpg_public_key(path: Path) -> bool:
     return _head_of(path).startswith(b"-----BEGIN PGP PUBLIC KEY BLOCK-----")
-
 
 def _head_of(path: Path) -> bytes:
     """The first bytes of a file, or nothing at all when the path is not a readable file.

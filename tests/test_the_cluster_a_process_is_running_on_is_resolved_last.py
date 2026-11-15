@@ -29,12 +29,7 @@ from kubementat.core.constants import (
     SOURCE_SERVICE_ACCOUNT,
     STATIC_SOURCE_PREFIX,
 )
-from kubementat.errors import (
-    ClusterIdentityCollisionError,
-    ClusterNotConfiguredError,
-    ClusterResolutionError,
-    ServiceAccountNotMountedError,
-)
+from kubementat.errors import (ClusterIdentityCollisionError, ClusterNotConfiguredError, ClusterResolutionError, ServiceAccountNotMountedError)
 
 from cluster_fixture import (
     DEV_SERVER,

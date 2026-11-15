@@ -26,11 +26,11 @@ it is a product that supports it. So one test reads the refusal for that word an
 there.
 """
 
+from kubementat.errors import DeployedReleaseNamespaceConflictError, HelmReleaseListingFailedError
 import json
 import logging
 from pathlib import Path
 
-import click
 import pytest
 
 from conftest import run_kmt
@@ -113,7 +113,7 @@ def test_a_release_deployed_in_another_namespace_is_refused_before_anything_is_w
     """
     seeded(fixture_repo, fake_binaries, GRAFANA_DEPLOYMENT_NAMESPACE="kmt-e2e-renamed")
 
-    with pytest.raises(click.ClickException) as refused:
+    with pytest.raises(DeployedReleaseNamespaceConflictError) as refused:
         applied(fixture_repo, fake_binaries)
 
     said = str(refused.value)
@@ -175,7 +175,7 @@ def test_the_refusal_names_every_component_it_found_a_rename_in(fixture_repo, dr
     seeded(fixture_repo, fake_binaries, GRAFANA_DEPLOYMENT_NAMESPACE="kmt-e2e-renamed",
            TRAEFIK_DEPLOYMENT_NAMESPACE="kmt-e2e-traefik-renamed")
 
-    with pytest.raises(click.ClickException) as refused:
+    with pytest.raises(DeployedReleaseNamespaceConflictError) as refused:
         applied(fixture_repo, fake_binaries)
 
     said = str(refused.value)
@@ -198,7 +198,7 @@ def test_a_release_the_cluster_puts_in_two_places_is_named_in_both(fixture_repo,
                      {"name": "grafana", "namespace": "kmt-old-grafana", "status": "deployed"}],
            GRAFANA_DEPLOYMENT_NAMESPACE="kmt-e2e-renamed")
 
-    with pytest.raises(click.ClickException) as refused:
+    with pytest.raises(DeployedReleaseNamespaceConflictError) as refused:
         applied(fixture_repo, fake_binaries)
 
     said = str(refused.value)
@@ -258,7 +258,7 @@ def test_a_cluster_that_cannot_say_where_its_releases_are_gets_no_write_either(
     fake_binaries.responses.joinpath("helm.list").write_text("connection refused")
     fake_binaries.responses.joinpath("helm.list.exit").write_text("1")
 
-    with pytest.raises(click.ClickException) as refused:
+    with pytest.raises(HelmReleaseListingFailedError) as refused:
         applied(fixture_repo, fake_binaries)
 
     assert "connection refused" in str(refused.value)
@@ -276,7 +276,7 @@ def test_the_refusal_never_offers_to_take_the_release_off_first(fixture_repo, dr
     """
     seeded(fixture_repo, fake_binaries, GRAFANA_DEPLOYMENT_NAMESPACE="kmt-e2e-renamed")
 
-    with pytest.raises(click.ClickException) as refused:
+    with pytest.raises(DeployedReleaseNamespaceConflictError) as refused:
         applied(fixture_repo, fake_binaries)
 
     said = str(refused.value).lower()

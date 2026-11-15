@@ -53,6 +53,7 @@ not survive a document built from data. The command says what those comments sai
 later edit to a template cannot make it stale.
 """
 
+from kubementat.errors import (GenerationInputNotFoundError, GenerationInputNotUsableError, GenerationPlaceholderNotConfiguredError, GenerationTargetExistsError)
 import os
 import shutil
 import subprocess

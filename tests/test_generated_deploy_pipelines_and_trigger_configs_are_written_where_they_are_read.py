@@ -23,6 +23,7 @@ substitution any more, so the review guidance the templates leave in comments do
 generated file, and the command says it out loud instead.
 """
 
+from kubementat.errors import (GenerationArgumentNotSuppliedError, GenerationTemplateNotFoundError, ObsoleteTriggerDirectoryError)
 import os
 import re
 import shutil

@@ -27,11 +27,17 @@ import logging
 import sys
 import time
 
-import click
 import yaml
 
 from kubementat.infrastructure import shell
 from kubementat.infrastructure.kubernetes import KubernetesUtils
+
+from kubementat.errors import (
+    ClusterAccessDeniedError,
+    ConfirmationDeclinedError,
+    ConfirmationUnavailableError,
+    ResolvedKubeconfigUnusableError,
+)
 
 # How long the token controller gets to fill in a Secret it was just told about. The Secret
 # is created empty and the controller writes the token into it, so reading immediately can
@@ -107,7 +113,6 @@ TUNNEL_COMPONENTS = (
     ("polaris", POLARIS_TUNNELING_ROLE),
 )
 
-
 def check_cluster_and_access(kubernetes_utils: KubernetesUtils, assume_yes: bool,
                              action: str) -> None:
     """Say which cluster this is, ask, and prove the verbs the flow will need.
@@ -127,7 +132,9 @@ def check_cluster_and_access(kubernetes_utils: KubernetesUtils, assume_yes: bool
     * A "no" cancels.
 
     Raises:
-    - click.ClickException: On a refusal, or on a verb the cluster will not grant.
+    - kubementat.errors.ConfirmationUnavailableError: No terminal, no `--yes`.
+    - kubementat.errors.ConfirmationDeclinedError: The operator answered no.
+    - kubementat.errors.ClusterAccessDeniedError: A verb the cluster will not grant.
     """
     logging.info("Checking cluster access")
     # Which cluster this is has become a property of the target rather than a question asked of
@@ -144,7 +151,7 @@ def check_cluster_and_access(kubernetes_utils: KubernetesUtils, assume_yes: bool
     if assume_yes:
         logging.info("Skipping the cluster confirmation because --yes was given.")
     elif not sys.stdin.isatty():
-        raise click.ClickException(
+        raise ConfirmationUnavailableError(
             f"Confirmation required, but stdin is not a terminal. Re-run with --yes for: {action}"
         )
     else:
@@ -153,7 +160,7 @@ def check_cluster_and_access(kubernetes_utils: KubernetesUtils, assume_yes: bool
             if answer in ("y", "yes"):
                 break
             if answer in ("n", "no"):
-                raise click.ClickException("Cancelled.")
+                raise ConfirmationDeclinedError("Cancelled.")
             logging.info("Please answer yes or no.")
 
     denied = []
@@ -162,11 +169,10 @@ def check_cluster_and_access(kubernetes_utils: KubernetesUtils, assume_yes: bool
             continue
         denied.append(f"{verb} {resource} (no)")
     if denied:
-        raise click.ClickException(
+        raise ClusterAccessDeniedError(
             "This cluster will not let kubementat manage team accounts, so nothing was "
             "created. Missing:\n  " + "\n  ".join(denied))
     logging.info("Finished checking cluster access")
-
 
 def role_body(name: str, rules: list) -> dict:
     """A namespaced Role, as data.
@@ -181,7 +187,6 @@ def role_body(name: str, rules: list) -> dict:
         "metadata": {"name": name},
         "rules": rules,
     }
-
 
 def role_binding_body(name: str, role_name: str, service_account_name: str,
                       service_account_namespace: str) -> dict:
@@ -206,11 +211,9 @@ def role_binding_body(name: str, role_name: str, service_account_name: str,
         },
     }
 
-
 def role_binding_name(role_name: str, service_account_name: str) -> str:
     """The name this flow binds a role under. Delete has to derive it the same way."""
     return f"{role_name}-{service_account_name}-binding"
-
 
 def service_account_secret_name(service_account_name: str) -> str:
     """The token Secret that carries a team account's credentials.
@@ -219,7 +222,6 @@ def service_account_secret_name(service_account_name: str) -> str:
     readable token after it.
     """
     return f"{service_account_name}-sa-secret"
-
 
 def read_service_account_token(kubernetes_utils: KubernetesUtils, namespace: str,
                                service_account_name: str) -> str:
@@ -240,7 +242,6 @@ def read_service_account_token(kubernetes_utils: KubernetesUtils, namespace: str
             logging.info(f"Token for '{service_account_name}' is not filled in yet, waiting: {error}")
             time.sleep(TOKEN_POLL_INTERVAL_SECONDS)
 
-
 def local_cluster_settings(kubernetes_utils) -> tuple:
     """The server address and CA the cluster this command resolved answers to.
 
@@ -260,9 +261,9 @@ def local_cluster_settings(kubernetes_utils) -> tuple:
     try:
         clusters = json.loads(result.stdout).get("clusters") or []
     except ValueError as error:
-        raise click.ClickException(f"Could not read the kubeconfig this command resolved: {error}")
+        raise ResolvedKubeconfigUnusableError(f"Could not read the kubeconfig this command resolved: {error}")
     if not clusters:
-        raise click.ClickException(
+        raise ResolvedKubeconfigUnusableError(
             "The kubeconfig this command resolved has no cluster to copy, so there is nothing to "
             "hand to the account. Run kubectl config view --minify to see what that context is "
             "configured for.")
@@ -271,14 +272,13 @@ def local_cluster_settings(kubernetes_utils) -> tuple:
     server = cluster.get("server")
     authority = cluster.get("certificate-authority-data")
     if not server or not authority:
-        raise click.ClickException(
+        raise ResolvedKubeconfigUnusableError(
             "The kubeconfig this command resolved does not give its cluster both a server address "
             f"and a certificate-authority-data entry (server={server!r}, "
             "certificate-authority-data is "
             f"{'present' if authority else 'absent'}). Without both, the kubeconfig this "
             "prints is not something a person can paste into ~/.kube/config.")
     return server, authority
-
 
 def kubeconfig_for_service_account(ctx, service_account_name: str, namespace: str, token: str,
                                    server: str, certificate_authority_data: str) -> str:

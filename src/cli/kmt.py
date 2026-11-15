@@ -15,7 +15,7 @@ from cli.commands import environments
 from cli.commands import users
 from cli.commands import kubernetes
 from cli.commands import config
-from cli.context import RENDERED_REFUSALS
+from cli.context import RENDERED_REFUSALS, RenderingGroup
 from kubementat.core.version import get_version
 
 
@@ -49,7 +49,7 @@ def print_version(ctx, param, value):
     ctx.exit()
 
 
-class KmtGroup(click.Group):
+class KmtGroup(RenderingGroup):
     """The root group, which renders the refusals no decorated command met on its way.
 
     `@kmt_context` renders the refusals the decorated commands can raise; the `config` and
@@ -60,16 +60,11 @@ class KmtGroup(click.Group):
     exit 1, because "only the CLI decides how a refusal is printed" has to hold for the whole surface
     and not only for the half of it that opens a socket.
 
-    The tuple caught below is `cli.context`'s, imported rather than restated: two allowlists for one
-    doctrine is how the same refusal gets printed by one door and traced by the other, and the
-    stamp and root refusals above reach this door from `_resolve`, outside the decorator's `try`.
+    The rendering it inherits is `cli.context.RenderingGroup`'s — the same class the `config` and
+    `environments` groups now carry, so the doctrine has one implementation and not three. The tuple
+    it catches is imported and not restated: one allowlist, caught by every door, and the stamp and
+    root refusals above still reach this door from `_resolve`, outside the decorator's `try`.
     """
-
-    def invoke(self, ctx):
-        try:
-            return super().invoke(ctx)
-        except RENDERED_REFUSALS as error:
-            raise click.ClickException(str(error))
 
 
 @click.group(cls=KmtGroup, help='Kubementat CLI')

@@ -28,12 +28,11 @@ import json
 import logging
 from pathlib import Path
 
-import click
 import pytest
 
 from kubementat.core import constants
 from kubementat.automations.ci import CiUtils
-from kubementat.errors import CiImageNotConfiguredError, TeamConfigurationFileMissingError
+from kubementat.errors import (CiImageNotConfiguredError, ClusterManagerEmailNotConfiguredError, GrafanaAdminCredentialsNotConfiguredError, TeamConfigurationFileMissingError, TeamNotSuppliedError)
 from kubementat.core.config.config import Config
 from kubementat.automations.routing import routing
 from kubementat.infrastructure.helm import HelmUtils
@@ -352,12 +351,12 @@ def test_the_refusals_that_fire_on_an_absent_key_still_fire_the_same_way(tmp_pat
     helm.config = seed(tmp_path, environment_level={}, environment_encrypted={})
     helm.environment = ENVIRONMENT
     helm.team = TEAM
-    with pytest.raises(click.ClickException) as error:
+    with pytest.raises(GrafanaAdminCredentialsNotConfiguredError) as error:
         helm._grafana_admin_credentials()
     assert "GRAFANA_ADMIN_USER is not set in" in str(error.value)
 
     config = seed(tmp_path, environment_level={})
-    with pytest.raises(click.ClickException) as error:
+    with pytest.raises(ClusterManagerEmailNotConfiguredError) as error:
         routing._cluster_manager_email(config)
     assert "CLUSTER_MANAGER_EMAIL is not set in" in str(error.value)
 

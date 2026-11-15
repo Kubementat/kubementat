@@ -18,10 +18,7 @@ import pytest
 from cluster_fixture import (DEV_SERVER, checkout, configuration_only_context, redirect_checkout,
                              write_environment, write_kubeconfig)
 from kubementat.core.identity.context import Context
-from kubementat.errors import (
-    ClusterNotConfiguredError,
-    TeamNotSuppliedError,
-)
+from kubementat.errors import ClusterNotConfiguredError, TeamNotSuppliedError
 
 ENVIRONMENT = "dev"
 TEAM = "ops"

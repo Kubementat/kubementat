@@ -5,7 +5,7 @@ in how many places?** The answer is a tuple of findings and never a raised sente
 because the established idiom when there is more than one problem is the library's own — collect
 them all, then say all of them rather than the first (`HelmUtils.uninstall_release`, and `Context.build`, which
 reports every collision it resolved instead of refusing at the first match).
-CLI turns the collected errors into one `click.ClickException` and prints the warnings itself with
+CLI turns the collected errors into one `Error:` line and prints the warnings itself with
 `err=True` (`utilities.py:66`'s shape); this module raises nothing over a verdict except the two
 refusals that mean "there is no tree to read".
 
@@ -56,7 +56,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-import click
 import yaml
 
 from kubementat import config_init
@@ -75,7 +74,10 @@ from kubementat.core.config.reads import read_decrypted
 from kubementat.errors import (
     ConfigurationStampInvalidError,
     ConfigurationStampMissingError,
+    EnvironmentConfigurationFileMissingError,
+    EnvironmentNotSuppliedError,
     LockedConfigFileError,
+    TeamConfigurationFileMissingError,
 )
 
 # The finding kinds. Exactly two, because the exit code is decided by their presence and nothing
@@ -118,7 +120,6 @@ _LAYER_NAMES = config_init.LAYER_DIRECTORY_NAMES
 # Where product shape is not allowed to live: no helmfile template inside a config tree.
 _HELMFILE_PATTERN = "helmfile*.gotmpl"
 
-
 @dataclass(frozen=True)
 class Finding:
     """One statement about the tree, with enough on it to act on without opening the file.
@@ -132,7 +133,6 @@ class Finding:
     code: str
     message: str
     path: Optional[Path]
-
 
 @dataclass(frozen=True)
 class ValidationReport:
@@ -153,10 +153,8 @@ class ValidationReport:
     def warnings(self) -> tuple[Finding, ...]:
         return tuple(f for f in self.findings if f.kind == WARNING)
 
-
 def _sorted(findings: list[Finding]) -> tuple[Finding, ...]:
     return tuple(sorted(findings, key=lambda f: (f.kind, str(f.path or ""), f.code)))
-
 
 def validate_tree(root, environment, team=None) -> ValidationReport:
     """Every finding the tree warrants, in the order the CLI will print them.
@@ -168,7 +166,8 @@ def validate_tree(root, environment, team=None) -> ValidationReport:
 
     Raises
     ------
-    click.ClickException
+    kubementat.errors.ConfigurationRootNotUsableError
+    kubementat.errors.EnvironmentNotSuppliedError
         For the two states that mean there is nothing to validate: `root` is not a directory, and
         no environment was named. Every *fault* inside a tree that exists becomes a finding and
         never a raise.
@@ -179,7 +178,7 @@ def validate_tree(root, environment, team=None) -> ValidationReport:
     config_init._require_configuration_root(
         root, "config validate reads a tree that exists and writes nothing into one")
     if not environment:
-        raise click.ClickException(
+        raise EnvironmentNotSuppliedError(
             "config validate needs an environment: it answers the files of one environment and "
             "the root that holds them, and no environment means 'all of them'.")
 
@@ -193,11 +192,9 @@ def validate_tree(root, environment, team=None) -> ValidationReport:
     _layer_findings(root, environment, team, findings)
     return ValidationReport(_sorted(findings))
 
-
 # ---------------------------------------------------------------------------------------------
 # The root-wide half.
 # ---------------------------------------------------------------------------------------------
-
 
 def _manifest_findings(root: Path, findings: list[Finding]) -> None:
     """What `kubementat.yaml` is allowed to say — decided here, for the first time.
@@ -275,7 +272,6 @@ def _manifest_findings(root: Path, findings: list[Finding]) -> None:
             f"{type(document['kubementat']).__name__} and not a version-constraint string like "
             f"'>=2,<3', so there is nothing here to compare a release against.", path))
 
-
 def _stamp_findings(root: Path, findings: list[Finding]) -> None:
     """The version window, which is this verb's job and not every cluster command's.
 
@@ -301,13 +297,14 @@ def _stamp_findings(root: Path, findings: list[Finding]) -> None:
     path = root / _MANIFEST
     try:
         stamp = ConfigurationStamp.read(root)
-    except (click.ClickException, ConfigurationStampMissingError, ConfigurationStampInvalidError):
+    except (ConfigurationStampMissingError, ConfigurationStampInvalidError):
         # A tree that cannot be stamped at all is the manifest check's business, reported there in
-        # sentences that name the file and the verb that writes it. The stamp refused for one of two
-        # named reasons — `ConfigurationStampMissingError` when there is no manifest, 
+        # sentences that name the file and the verb that writes it. The stamp refuses for one of two
+        # named reasons — `ConfigurationStampMissingError` when there is no manifest,
         # `ConfigurationStampInvalidError` when the manifest is not the two keys — and both arrive
-        # from `core/config/stamp.py` now that the library refuses in its own classes, so both are
-        # caught here next to the `ClickException` that still answers for the rest of the library.
+        # from `core/config/stamp.py`. Nothing else this reads can raise here: item 4 took the last
+        # `ClickException` out of the library, so the two named classes are the whole catch and not
+        # half of one, and a third reason would have to arrive as a crash for it to be missed.
         return
 
     if stamp.schema_is_too_old:
@@ -347,7 +344,6 @@ def _stamp_findings(root: Path, findings: list[Finding]) -> None:
             "is; nothing about the tree is wrong.",
             path))
 
-
 def _single_manifest_findings(root: Path, findings: list[Finding]) -> None:
     """Exactly one `kubementat.yaml` anywhere: no manifest below the root, and today
     nothing in `src/` looks for a second one (census Q2: no merging, no layer-level acceptance, no
@@ -368,7 +364,6 @@ def _single_manifest_findings(root: Path, findings: list[Finding]) -> None:
             f"product than its neighbours, which is what the single manifest refuses. Delete it; "
             f"what a directory declares belongs in that environment's static.json.", path))
 
-
 def _helmfile_findings(root: Path, findings: list[Finding]) -> None:
     """No `helmfile*.gotmpl` inside a configuration tree — product shape belongs to the product,
     and `config validate` is the verb that refuses it. Nothing today refuses a
@@ -380,7 +375,6 @@ def _helmfile_findings(root: Path, findings: list[Finding]) -> None:
             f"{path} is a helmfile template inside the configuration tree. Product shape is "
             f"kubementat's half and configuration is yours: this file belongs to the product's "
             f"helmfile, and putting it here makes two places decide what gets applied.", path))
-
 
 def _layout_findings(root: Path, findings: list[Finding]) -> None:
     """The near-misses the two enumerations cannot report.
@@ -429,7 +423,6 @@ def _layout_findings(root: Path, findings: list[Finding]) -> None:
                     f"kmt config show's layer listing and as kubementat's {entry.name} layer by "
                     f"every reader that opens it. Name the team something else.", entry))
 
-
 def _collision_findings(root: Path, findings: list[Finding]) -> None:
     """The 1:1 decision, carried and not re-decided.
 
@@ -456,11 +449,9 @@ def _collision_findings(root: Path, findings: list[Finding]) -> None:
         findings.append(Finding(ERROR, "cluster-collision", sentence,
                                 root / name / "static.json"))
 
-
 # ---------------------------------------------------------------------------------------------
 # The layer-scoped half: the named environment, and its team when one is named.
 # ---------------------------------------------------------------------------------------------
-
 
 def _layer_findings(root: Path, environment: str, team: Optional[str],
                     findings: list[Finding]) -> None:
@@ -492,7 +483,12 @@ def _layer_findings(root: Path, environment: str, team: Optional[str],
                        platform_config_dir=root, preload_configs=False)
         try:
             config_init._require_answerable_layer(probe, root, environment, probe.team)
-        except click.ClickException as exc:
+        except (EnvironmentConfigurationFileMissingError, TeamConfigurationFileMissingError) as exc:
+            # A layer that is not there is a finding here and not a refusal: this verb reports every
+            # fault in a tree and writes nothing. The two classes are what `_require_answerable_layer`
+            # raises now that the library no longer raises Click; the sentence it carries is the
+            # finding's text verbatim, which is why this catcher is the one thing in the file that
+            # must not be edited into a re-wording.
             findings.append(Finding(ERROR, "missing-layer-file",
                                     str(exc), next(p for name, p in missing if name == layer)))
 
@@ -504,7 +500,6 @@ def _layer_findings(root: Path, environment: str, team: Optional[str],
         _absolute_kubeconfig_findings(path, document, findings)
 
     _cluster_fact_finding(root, environment, findings)
-
 
 def _read_object_file(path: Path, label: str, findings: list[Finding]) -> Optional[dict]:
     """One layer file as a mapping, with the finding attached when it is not one.
@@ -545,7 +540,6 @@ def _read_object_file(path: Path, label: str, findings: list[Finding]) -> Option
         return None
     return document
 
-
 def _placeholder_findings(path: Path, document: dict, findings: list[Finding]) -> None:
     """Answers the templates left blank.
 
@@ -560,7 +554,6 @@ def _placeholder_findings(path: Path, document: dict, findings: list[Finding]) -
             f"{key} in {path} is still the template placeholder {value!r}, so the answer it "
             f"should hold is not there. kmt config set answers it, or deleting the key lets the "
             f"default answer, which is the same outcome and a smaller file.", path))
-
 
 def _absolute_kubeconfig_findings(path: Path, document: dict, findings: list[Finding]) -> None:
     """The split: the config repo declares the cluster, the machine declares how to reach it.
@@ -578,7 +571,6 @@ def _absolute_kubeconfig_findings(path: Path, document: dict, findings: list[Fin
             f"declares how to reach it, so a path that works on this laptop is a path that will "
             f"break the next one. Leave the key unset to let the kubeconfig on the machine answer.",
             path))
-
 
 def _cluster_fact_finding(root: Path, environment: str, findings: list[Finding]) -> None:
     """The cluster-not-addressed fact, warned and not errored.
@@ -611,11 +603,9 @@ def _cluster_fact_finding(root: Path, environment: str, findings: list[Finding])
             f"{CLUSTER_KUBE_CONTEXT_KEY} is null in {path}. Name the context there, then "
             f"kmt environments list prints what every configured environment addresses.", path))
 
-
 # ---------------------------------------------------------------------------------------------
 # The small reads.
 # ---------------------------------------------------------------------------------------------
-
 
 def _skip_directories(directory: Path) -> bool:
     """The one traversal rule that is a correctness matter and not a preference.
@@ -625,7 +615,6 @@ def _skip_directories(directory: Path) -> bool:
     configuration at all.
     """
     return directory.name == ".git"
-
 
 def _walk_files(root: Path, name: Optional[str] = None, *, pattern: Optional[str] = None):
     """Every file under `root` matching `name` (exact) or `pattern` (fnmatch)."""
@@ -638,14 +627,12 @@ def _walk_files(root: Path, name: Optional[str] = None, *, pattern: Optional[str
             elif pattern is not None and fnmatch.fnmatch(filename, pattern):
                 yield Path(directory) / filename
 
-
 def _walk_directories(root: Path):
     for directory, subdirs, _files in os.walk(root):
         here = Path(directory)
         subdirs[:] = [d for d in subdirs if not _skip_directories(here / d)]
         if here != root:
             yield here
-
 
 def _placeholder_values(document, prefix: str = _PLACEHOLDER_PREFIX):
     """`((key, value), ...)` for every string in a document that still begins with the prefix.

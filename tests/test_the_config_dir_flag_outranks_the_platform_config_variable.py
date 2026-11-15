@@ -23,8 +23,7 @@ Two properties are worth more than the flag's help text:
 """
 
 import pytest
-from kubementat.errors import (ConfigurationRootNotNamedError,
-                           RootDirectoryVariableIsEmptyError)
+from kubementat.errors import ConfigurationRootNotNamedError
 from click.testing import CliRunner
 
 from cli.commands import environments

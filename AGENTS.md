@@ -129,6 +129,13 @@ holds, and `git log --oneline 0.3.0..develop` is the raw list for anything cut a
 
 We separate the cli implementation ( `src/cli` ) strictly from the core kubementat logic ( `src/kubementat` )
 
+After item 4 that claim is testable rather than aspirational: `import click` appears under `src/cli/**` and
+nowhere else (`grep -rn "^import click\|^from click" src/kubementat/` is empty), and every refusal the library
+raises is a named `kubementat.errors` class. The one line that decides how a refusal reaches a terminal is
+`RENDERED_REFUSALS` in `cli/context.py`, caught by `RenderingGroup` — which the root group inherits and the
+`config` and `environments` groups carry directly, because those two verbs build no `Context` on purpose. So a
+library consumer is handed a class name and a sentence, and `kmt` decides the exit code and the `Error:` prefix
+
 ## Configuration Management
 
 ### The configuration directory

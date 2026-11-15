@@ -23,6 +23,7 @@ from pathlib import Path
 
 from cli.context import config_dir_option
 from kubementat.core.constants import STATIC_SOURCE_PREFIX
+from cli.context import RenderingGroup
 from kubementat.core.config.paths import resolve_platform_config_dir
 # Imported by name and not as the module, the way `kubementat/infrastructure/kubernetes/clients.py`
 # imports `ClusterTarget`: this file calls the class, patches nothing on it, and has no second door
@@ -39,7 +40,7 @@ UNRESOLVED_ADDRESS = "(unresolved)"
 CONTEXT_NOT_DECLARED = "(not declared)"
 
 
-@click.group(name='environments',
+@click.group(name='environments', cls=RenderingGroup,
              help='List the environments this configuration directory has, and the cluster each addresses.')
 def environments():
     pass

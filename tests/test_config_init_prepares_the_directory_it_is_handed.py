@@ -36,11 +36,11 @@ kept in two files is a fixture that can drift, and the drift would show up as th
 still writing a keystore file while the verb's had stopped.
 """
 
+from kubementat.errors import DeployerIdentityNotNamedError
 import stat
 import subprocess
 from pathlib import Path
 
-import click
 import pytest
 
 from bootstrap_tools import (EMAIL, FINGERPRINT, GPG_PRIVATE, GPG_PUBLIC, actions, argv,
@@ -372,7 +372,7 @@ def test_a_run_with_no_identity_refuses_before_it_creates_anything(root, tools):
     decided before a file is written, and this is the case where that promise was being broken from
     outside the module that made it.
     """
-    with pytest.raises(click.ClickException) as refused:
+    with pytest.raises(DeployerIdentityNotNamedError) as refused:
         prepare_configuration_directory(root, "dev")
 
     assert not root.exists(), (f"the run refused and still made the directory: {argv(tools)}")

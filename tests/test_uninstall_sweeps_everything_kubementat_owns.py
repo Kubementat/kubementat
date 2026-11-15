@@ -38,7 +38,6 @@ import shutil
 from types import SimpleNamespace
 
 import pytest
-from click.exceptions import ClickException
 from kubernetes.client.exceptions import ApiException
 
 from conftest import as_k8s_object
@@ -50,7 +49,8 @@ from kubementat.infrastructure.kubernetes import KubernetesUtils
 from kubementat.infrastructure import shell
 from kubementat.core import constants
 from kubementat.automations.uninstall.kubementat import uninstall_kubementat
-from kubementat.errors import UninstallIncompleteError
+from cli.context import RENDERED_REFUSALS
+from kubementat.errors import (ConfirmationDeclinedError, ConfirmationUnavailableError, EnvironmentConfigurationFileMissingError, UninstallIncompleteError)
 from cluster_fixture import configuration_only_context
 from conftest import cluster_deletes, cluster_state
 
@@ -769,7 +769,7 @@ def test_an_environment_that_was_never_initialized_still_refuses_to_delete_anyth
     recorded_api.calls.clear()
     fake_binaries.take_calls()
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(EnvironmentConfigurationFileMissingError) as raised:
         uninstall_kubementat(uninstaller, assume_yes=True)
 
     assert "static.json" in str(raised.value)
@@ -1626,14 +1626,18 @@ def test_answering_no_deletes_nothing(fixture_repo, dry_run_env, fake_binaries, 
     recorded_api.calls.clear()
     fake_binaries.take_calls()
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(ConfirmationDeclinedError) as raised:
         uninstall_kubementat(configuration_only_context(fixture_repo.environment, None))
 
     message = str(raised.value)
     assert "Cancelled uninstall script" in message
     assert "nothing was deleted" in message.lower(), \
         "the cancellation has to say what it did, and that is the half the operator is blind to"
-    assert raised.value.exit_code != 0, "declining has to fail for a reason"
+    # "Fails for a reason" is no longer a number on the exception: since the library names its own
+    # refusals, the exit code belongs to the CLI's rendering of them. A refusal that is in that
+    # list exits 1; one that is not reaches the terminal as a traceback.
+    assert type(raised.value) in RENDERED_REFUSALS, \
+        "declining has to be a refusal kmt prints, and printing is what decides the exit code"
     assert client_writes(recorded_api) == [], "answering no deleted something through the client"
     assert written(fake_binaries) == [], "answering no deleted something with a command"
 
@@ -1654,7 +1658,7 @@ def test_a_run_with_no_terminal_fails_closed_and_names_the_flag(fixture_repo, dr
     recorded_api.calls.clear()
     fake_binaries.take_calls()
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(ConfirmationUnavailableError) as raised:
         uninstall_kubementat(configuration_only_context(fixture_repo.environment, None))
 
     assert "--yes" in str(raised.value)

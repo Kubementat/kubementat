@@ -15,6 +15,7 @@ asserts that the ciphertext refusal arrives rather than a YAML error, and one as
 does not quarantine the file it is telling people to create.
 """
 
+from kubementat.errors import ClusterFileUnreadableError, ForeignConfigurationMaterialError
 import json
 import os
 import subprocess
@@ -212,6 +213,6 @@ def test_a_genuinely_foreign_file_is_still_refused_after_the_exception(tmp_path)
     (root / "dev" / "somebody-elses-file.json").write_text("{}")
 
     import click
-    with pytest.raises(click.ClickException) as refused:
+    with pytest.raises(ForeignConfigurationMaterialError) as refused:
         init_configuration(root, "dev", "fixture")
     assert "foreign" in str(refused.value)

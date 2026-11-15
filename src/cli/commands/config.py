@@ -65,10 +65,11 @@ import click
 
 from cli.context import config_dir_option
 from kubementat import config_answers, config_bootstrap, config_init, config_keys, config_validate
+from cli.context import RenderingGroup
 from kubementat.core.config.paths import resolve_platform_config_dir
 
 
-@click.group(name='config',
+@click.group(name='config', cls=RenderingGroup,
              help='Create and edit a kubementat configuration directory. init lays a tree down; '
                   'add-environment and add-team add one layer to a tree that already exists and write '
                   'no answers, because config set is the verb that answers one key and config unset '

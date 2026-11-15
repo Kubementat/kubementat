@@ -11,11 +11,11 @@ way a cluster answers them (`tests/shims/` on `PATH`, the same recorder the unin
 against), and the real `Config`, `HelmUtils` and `kubementat.infrastructure.shell` run on top of them.
 """
 
+from kubementat.errors import ClusterManagerEmailNotConfiguredError
 import json
 import logging
 from types import SimpleNamespace
 
-import click
 import pytest
 import yaml
 
@@ -392,7 +392,7 @@ def test_an_issuer_cannot_be_applied_without_a_contact_to_register_the_account_w
     """
     no_acme_contact(fixture_repo)
 
-    with pytest.raises(click.ClickException) as refused:
+    with pytest.raises(ClusterManagerEmailNotConfiguredError) as refused:
         install(a_clean_cluster)
 
     sentence = str(refused.value)
@@ -416,7 +416,7 @@ def test_the_refusal_stops_the_issuer_and_not_the_releases_it_would_have_needed(
     """
     no_acme_contact(fixture_repo)
 
-    with pytest.raises(click.ClickException):
+    with pytest.raises(ClusterManagerEmailNotConfiguredError):
         install(a_clean_cluster)
 
     started = commands(a_clean_cluster)
@@ -435,7 +435,7 @@ def test_a_placeholder_address_is_refused_the_way_an_absent_one_is(a_clean_clust
     """
     no_acme_contact(fixture_repo, "REPLACEME_CLUSTER_MANAGER_EMAIL")
 
-    with pytest.raises(click.ClickException) as refused:
+    with pytest.raises(ClusterManagerEmailNotConfiguredError) as refused:
         install(a_clean_cluster)
 
     assert "CLUSTER_MANAGER_EMAIL" in str(refused.value), str(refused.value)

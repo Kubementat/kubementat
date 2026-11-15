@@ -27,13 +27,12 @@ Idempotence is the same rule that governs the files: a directory that is already
 bytes.
 """
 
-import click
 import pytest
 
 from kubementat import config_init
 from kubementat.core.config.config import Config
 from kubementat.config_init import CREATED, SKIPPED, init_configuration
-from kubementat.errors import TeamNotSuppliedError
+from kubementat.errors import (LayerNameAlreadyTakenError, LayerNameUnusableError, ObsoleteTriggerDirectoryError, TeamNotSuppliedError)
 
 ENVIRONMENT = "dev"
 TEAM = "ops"
@@ -259,7 +258,7 @@ def test_a_tree_with_the_old_trigger_directory_is_refused_and_nothing_is_written
     (obsolete / "kept-manifest.yml").write_text("apiVersion: triggers.tekton.dev/v1beta1\n")
     before = tree(root)
 
-    with pytest.raises(click.ClickException) as excinfo:
+    with pytest.raises(ObsoleteTriggerDirectoryError) as excinfo:
         init_configuration(root, ENVIRONMENT, TEAM)
 
     message = str(excinfo.value)
@@ -279,7 +278,7 @@ def test_removing_the_old_directory_by_hand_is_the_way_through(tmp_path):
     obsolete = obsolete_trigger_dir(root)
     obsolete.mkdir(parents=True)
     (obsolete / "kept-manifest.yml").write_text("apiVersion: triggers.tekton.dev/v1beta1\n")
-    with pytest.raises(click.ClickException):
+    with pytest.raises(ObsoleteTriggerDirectoryError):
         init_configuration(root, ENVIRONMENT, TEAM)
 
     config = layers(root, ENVIRONMENT, TEAM)
@@ -303,7 +302,7 @@ def test_add_team_refuses_the_old_trigger_directory_the_same_way(tmp_path):
     obsolete.mkdir(parents=True)
     before = tree(root)
 
-    with pytest.raises(click.ClickException) as excinfo:
+    with pytest.raises(ObsoleteTriggerDirectoryError) as excinfo:
         config_init.add_team(root, ENVIRONMENT, "latecomer")
 
     assert str(obsolete) in str(excinfo.value), str(excinfo.value)
@@ -331,7 +330,7 @@ def test_an_environment_named_after_a_reserved_root_name_is_refused(tmp_path, na
     """
     root = unbuilt_root(tmp_path)
 
-    with pytest.raises(click.ClickException) as excinfo:
+    with pytest.raises(LayerNameAlreadyTakenError) as excinfo:
         init_configuration(root, name, TEAM)
 
     message = str(excinfo.value)
@@ -349,7 +348,7 @@ def test_a_team_named_after_a_layer_directory_is_refused(tmp_path, name):
     """
     root = unbuilt_root(tmp_path)
 
-    with pytest.raises(click.ClickException) as excinfo:
+    with pytest.raises(LayerNameAlreadyTakenError) as excinfo:
         init_configuration(root, ENVIRONMENT, name)
 
     message = str(excinfo.value)
@@ -364,7 +363,7 @@ def test_a_team_name_that_is_not_a_name_is_refused(tmp_path, name):
     says what a layer directory's name is allowed to be."""
     root = unbuilt_root(tmp_path)
 
-    with pytest.raises(click.ClickException) as excinfo:
+    with pytest.raises(LayerNameUnusableError) as excinfo:
         init_configuration(root, ENVIRONMENT, name)
 
     message = str(excinfo.value)
@@ -379,7 +378,7 @@ def test_an_environment_name_that_is_not_a_name_is_refused(tmp_path, name):
     that says a tree needs an environment at all, which is the truer one."""
     root = unbuilt_root(tmp_path)
 
-    with pytest.raises(click.ClickException) as excinfo:
+    with pytest.raises(LayerNameUnusableError) as excinfo:
         init_configuration(root, name)
 
     message = str(excinfo.value)
@@ -400,7 +399,11 @@ def test_a_refused_name_leaves_the_tree_it_refused_exactly_as_it_found_it(tmp_pa
     directories = {path for path in tree(root) if (root / path).is_dir()}
 
     for bad in ("kubementat.yaml", "secrets", "with/slash", "."):
-        with pytest.raises(click.ClickException):
+        # Two different refusals, and the loop names which: a name that is already taken, and a name
+        # that could never be used. Saying "one of these" would be the weaker assertion.
+        refusal = LayerNameAlreadyTakenError if bad in ("kubementat.yaml", "secrets") \
+            else LayerNameUnusableError
+        with pytest.raises(refusal):
             init_configuration(root, bad, TEAM)
 
     assert {path: (root / path).read_bytes() for path in tree(root)

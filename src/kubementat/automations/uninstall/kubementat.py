@@ -12,11 +12,8 @@ plan the operator is shown before being asked, and the summary that says which d
 read as teams and which were not.
 """
 
-
 import logging
 import sys
-
-import click
 
 from kubementat import errors
 from kubementat.core.config.teams import TEAM_NAMESPACE_KEYS
@@ -46,9 +43,13 @@ from kubementat.automations.uninstall.residue import (
 )
 from kubementat.automations.uninstall.sweep import namespace_sweep
 
+from kubementat.errors import (
+    ConfirmationDeclinedError,
+    ConfirmationUnavailableError,
+    EnvironmentConfigurationFileMissingError,
+)
 
 HELM_DEPLOYER_CLUSTER_ROLE = tekton_install.HELM_DEPLOYER_CLUSTER_ROLE_NAME
-
 
 ## uninstall kubementat
 #
@@ -62,7 +63,6 @@ HELM_DEPLOYER_CLUSTER_ROLE = tekton_install.HELM_DEPLOYER_CLUSTER_ROLE_NAME
 # * every program kubementat starts goes through `kubementat.infrastructure.shell.run` as an argv list,
 #   and every cluster mutation the generated client can express goes through
 #   `KubernetesUtils`.
-
 
 def uninstall_kubementat(ctx, assume_yes: bool = False) -> None:
     '''
@@ -109,8 +109,9 @@ def uninstall_kubementat(ctx, assume_yes: bool = False) -> None:
 
     Raises:
 
-    - click.ClickException: On "no" at the confirmation, so a cancellation is one line
-      rather than a traceback of the CLI's own argument parsing.
+    - kubementat.errors.ConfirmationDeclinedError: On "no" at the confirmation, so a
+      cancellation is one line rather than a traceback of the CLI's own argument parsing.
+    - kubementat.errors.ConfirmationUnavailableError: When there is no terminal to answer in.
     - kubementat.errors.UninstallIncompleteError: When the cluster still carries something
       kubementat owned, named in the message. An uninstall that says DONE while releases survive
       is the failure this command exists to stop.
@@ -198,9 +199,10 @@ def read_uninstall_plan(ctx) -> dict:
     are agreeing to, and the same reading drives the deletion.
 
     Raises:
-    - click.ClickException: When the environment has no `static.json` to read the namespaces
-      from. The script this replaced said so and exited 1; deleting a cluster on the strength
-      of an environment name nobody configured is not what a typo should be able to do.
+    - kubementat.errors.EnvironmentConfigurationFileMissingError: When the environment
+      has no `static.json` to read the namespaces from. The script this replaced said so and
+      exited 1; deleting a cluster on the strength of an environment name nobody configured is
+      not what a typo should be able to do.
     '''
 
     config = ctx.config
@@ -208,7 +210,7 @@ def read_uninstall_plan(ctx) -> dict:
     kubernetes_utils = KubernetesUtils(ctx)
 
     if not config.env_static_config_path.is_file():
-        raise click.ClickException(
+        raise EnvironmentConfigurationFileMissingError(
             f"No environment configuration at {config.env_static_config_path}."
             f" Uninstall reads the namespaces it deletes from that file, so it cannot guess"
             f" them. Run kmt config init --environment {environment} --config-dir <configuration-root>, "
@@ -240,7 +242,6 @@ def read_uninstall_plan(ctx) -> dict:
         "teams": sweep["teams"],
     }
 
-
 def print_uninstall_plan(ctx, plan: dict) -> None:
 
     environment = ctx.environment
@@ -265,7 +266,6 @@ def print_uninstall_plan(ctx, plan: dict) -> None:
     logging.info("This cannot be undone. Every resource inside those namespaces goes with them.")
     logging.info("###################################")
 
-
 def confirm_uninstall() -> None:
     '''
     Ask. Failing closed is the whole contract: no terminal, no deletion.
@@ -276,7 +276,7 @@ def confirm_uninstall() -> None:
     delete nothing.
     '''
     if not sys.stdin.isatty():
-        raise click.ClickException(
+        raise ConfirmationUnavailableError(
             "uninstall requires confirmation, but stdin is not a terminal."
             " Re-run with --yes (or -y) to uninstall kubementat without prompting."
         )
@@ -290,17 +290,15 @@ def confirm_uninstall() -> None:
             # voice. Raising is the right shape for the library -- it gives the CLI a clean
             # one-line `Error:` and a non-zero exit -- but the answer still has to say what
             # happened and what would have happened, in the same words a test can grep.
-            raise click.ClickException(
+            raise ConfirmationDeclinedError(
                 "Cancelled uninstall script. Nothing was deleted and the cluster is untouched"
                 "; re-run with --yes (or -y), or answer yes, to go ahead."
             )
         logging.info("Please answer yes or no.")
 
-
 ###########################
 
 ## uninstall kubementat, the deletion half
-
 
 def team_sweep_summary(ctx, teams: dict) -> list:
     '''
@@ -379,7 +377,6 @@ def team_sweep_summary(ctx, teams: dict) -> list:
                 f"Team '{team}' was swept for {', '.join(swept)}."
             )
     return lines
-
 
 def print_uninstall_result(ctx, plan: dict, residue: list = ()) -> None:
     '''

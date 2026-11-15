@@ -57,23 +57,63 @@ from kubementat.core.constants import CLUSTER_KUBE_CONTEXT_KEY
 from kubementat.core.config.paths import resolve_platform_config_dir
 from kubementat.core.config.stamp import check_configuration_stamp
 from kubementat.errors import (
+    AnswerAlreadyPresentError,
+    AnswerArgumentNotKeyValueError,
+    ClusterAccessDeniedError,
     ClusterIdentityCollisionError,
     ClusterResolutionError,
+    ClusterManagerEmailNotConfiguredError,
+    CommandAnswerNotParseableError,
+    ConfigurationFileDiffersError,
+    ConfigurationRootNotUsableError,
     ConfigurationRootNotNamedError,
     ConfigurationStampInvalidError,
     ConfigurationStampMissingError,
+    ConfigurationTreeNotLaidDownError,
+    ConfirmationDeclinedError,
+    ConfirmationUnavailableError,
+    DeployedReleaseNamespaceConflictError,
+    DeployerIdentityNotNamedError,
     DeployerKeyMissingError,
+    DeployerKeyPairIncompleteError,
+    DeployerPublicKeyMissingError,
+    DuplicateAnswerKeyError,
     EnvironmentConfigurationDirectoryMissingError,
     EnvironmentConfigurationFileMissingError,
+    EnvironmentNotSuppliedError,
+    ForeignConfigurationMaterialError,
+    GitCryptSymmetricKeyMissingError,
+    GpgBinaryNotRunnableError,
+    GpgCollaboratorNotRegistrableError,
+    GpgKeyFileMissingError,
+    GpgKeyNotImportableError,
+    GpgKeyWithoutPublicKeyError,
+    GrafanaAdminCredentialsNotConfiguredError,
+    HelmChartNotFoundError,
+    HelmChartNotSuppliedError,
+    HelmReleaseListingFailedError,
+    HelmRepositoryNotConfiguredError,
+    HelmSearchFailedError,
+    KeyDeclaredByNoLayerError,
+    LayerNameAlreadyTakenError,
+    LayerNameUnusableError,
     LockedConfigFileError,
+    NullAnswerNotAcceptedError,
     ObsoleteTriggerDirectoryError,
+    PipelineNamespaceNotConfiguredError,
     ReleaseKnobNotABooleanOrStringError,
+    ResolvedKubeconfigUnusableError,
     RootDirectoryVariableIsEmptyError,
     SchemaVersionTooOldError,
+    StaticLayerFileInvalidError,
+    StaticLayerFileUnreadableError,
     TeamConfigurationFileMissingError,
     TeamConfigurationUnreadableError,
+    TeamLayerCarriesClusterKeyError,
     TeamNamespaceNotConfiguredError,
     TeamNotSuppliedError,
+    TeamWithoutEnvironmentError,
+    UninstallIncompleteError,
 )
 
 # Every domain refusal the terminal is allowed to print, spelled once.
@@ -87,16 +127,30 @@ from kubementat.errors import (
 #
 # `ClusterResolutionError` and `ClusterIdentityCollisionError` are absent on purpose — `_resolve`
 # catches those two itself, beside the resolution they belong to, and they never reach this list.
+# Every domain refusal the terminal is allowed to print, spelled once.
+#
+# `kmt` renders a refusal as one `Error:` line and exit 1, and two places decide that: this
+# decorator, for the commands that open a socket, and `KmtGroup.invoke` in `cli/kmt.py`, for the
+# `config` and `environments` verbs that deliberately build no `Context`. The same classes have to
+# be on both lists or a refusal walks out of one door as a traceback and out of the other as a
+# sentence, which is the failure this tuple exists to make impossible: one owner, imported by both,
+# so a new refusal is added once.
+#
+# The tuple is not decorative. A class that is raised by the library and missing from it is not
+# "not rendered yet" — it escapes both allowlists and reaches the operator as a traceback with an
+# exit code of 1 that came from Python and not from kubementat. Item 4 put every library refusal
+# behind a named class, so the size of this tuple is now the count of refusals the CLI can print,
+# and the check on it is a corpus: each class here is one of the 63 raise sites item 4 renamed.
+#
+# `ClusterResolutionError` and `ClusterIdentityCollisionError` are absent on purpose — `_resolve`
+# catches those two itself, beside the resolution they belong to, and they never reach this list.
 RENDERED_REFUSALS = (
     # What this decorator was already rendering before `core/config/` was de-clicked.
     TeamNotSuppliedError,
     DeployerKeyMissingError,
     LockedConfigFileError,
     ObsoleteTriggerDirectoryError,
-    # The configuration tree's own refusals. They used to be `ClickException`s, which is the shape
-    # that says "a command printed this" instead of "kubementat refused", and the only gap left
-    # open by the doctrine above: the library no longer raises Click, so these now travel to the
-    # two places that decide how a refusal is printed.
+    # The configuration tree's refusals, named by item 3.
     ConfigurationRootNotNamedError,
     RootDirectoryVariableIsEmptyError,
     ConfigurationStampMissingError,
@@ -108,6 +162,50 @@ RENDERED_REFUSALS = (
     ReleaseKnobNotABooleanOrStringError,
     TeamConfigurationUnreadableError,
     TeamNamespaceNotConfiguredError,
+    # What the configuration verbs refuse (item 4: `config_init`, `config_validate`).
+    AnswerArgumentNotKeyValueError,
+    DuplicateAnswerKeyError,
+    LayerNameUnusableError,
+    LayerNameAlreadyTakenError,
+    EnvironmentNotSuppliedError,
+    TeamWithoutEnvironmentError,
+    ForeignConfigurationMaterialError,
+    ConfigurationFileDiffersError,
+    ConfigurationRootNotUsableError,
+    ConfigurationTreeNotLaidDownError,
+    StaticLayerFileUnreadableError,
+    StaticLayerFileInvalidError,
+    TeamLayerCarriesClusterKeyError,
+    NullAnswerNotAcceptedError,
+    KeyDeclaredByNoLayerError,
+    AnswerAlreadyPresentError,
+    # The deployer keypair and git-crypt (`config_keys`, `config_bootstrap`).
+    DeployerIdentityNotNamedError,
+    DeployerKeyPairIncompleteError,
+    GpgKeyNotImportableError,
+    GpgKeyWithoutPublicKeyError,
+    GpgKeyFileMissingError,
+    GpgBinaryNotRunnableError,
+    GitCryptSymmetricKeyMissingError,
+    DeployerPublicKeyMissingError,
+    GpgCollaboratorNotRegistrableError,
+    # What helm refuses.
+    DeployedReleaseNamespaceConflictError,
+    HelmReleaseListingFailedError,
+    HelmChartNotSuppliedError,
+    HelmSearchFailedError,
+    HelmRepositoryNotConfiguredError,
+    HelmChartNotFoundError,
+    GrafanaAdminCredentialsNotConfiguredError,
+    CommandAnswerNotParseableError,
+    UninstallIncompleteError,
+    # Confirmations, cluster permission, and the kubeconfig a credential is copied from.
+    ConfirmationUnavailableError,
+    ConfirmationDeclinedError,
+    ClusterAccessDeniedError,
+    ResolvedKubeconfigUnusableError,
+    ClusterManagerEmailNotConfiguredError,
+    PipelineNamespaceNotConfiguredError,
 )
 
 # The variable Click's `envvar='ENVIRONMENT'` reads, spelled once because two halves of the CLI need
@@ -216,6 +314,27 @@ def kmt_context(func):
             raise click.ClickException(str(error))
 
     return with_context
+
+
+class RenderingGroup(click.Group):
+    """A group whose commands build no `Context`, and which therefore prints refusals itself.
+
+    `@kmt_context` renders the tuple for the commands that resolve a cluster, and `KmtGroup.invoke`
+    does it for the root. Between them, that is every command on the surface — but only when the run
+    enters through the root: `kmt config set dev KEY=1` is dispatched by `KmtGroup`, and a caller
+    that invokes the `config` group on its own (which is what every `CliRunner` test that never
+    builds a root group does, and what a future subcommand tree would do) would hand the operator a
+    traceback where the same command prints one `Error:` line.
+
+    The tuple is the same one object both other doors catch, imported and not restated. What changes
+    is only *where* the run is entered, and it must not change what the operator reads.
+    """
+
+    def invoke(self, ctx):
+        try:
+            return super().invoke(ctx)
+        except RENDERED_REFUSALS as error:
+            raise click.ClickException(str(error))
 
 
 def _environment_of(parameters, params):

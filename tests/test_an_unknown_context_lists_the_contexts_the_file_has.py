@@ -15,10 +15,7 @@ import pytest
 
 from kubementat.core.identity.context import Context
 from kubementat.core.identity.target import ClusterTarget
-from kubementat.errors import (
-    ClusterContextNotFoundError,
-    ClusterFileUnreadableError,
-)
+from kubementat.errors import ClusterContextNotFoundError, ClusterFileUnreadableError
 
 from cluster_fixture import (
     DEV_SERVER,

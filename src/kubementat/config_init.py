@@ -83,12 +83,33 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-import click
-
 from kubementat.core import constants
 from kubementat.core.config.config import Config
 from kubementat.core.config.reads import read_decrypted
 from kubementat.core.identity.kubeconfig import IN_TREE_KUBECONFIG_FILENAME
+
+from kubementat.errors import (
+    AnswerAlreadyPresentError,
+    AnswerArgumentNotKeyValueError,
+    ConfigurationFileDiffersError,
+    ConfigurationRootNotUsableError,
+    ConfigurationTreeNotLaidDownError,
+    DuplicateAnswerKeyError,
+    EnvironmentConfigurationFileMissingError,
+    EnvironmentNotSuppliedError,
+    ForeignConfigurationMaterialError,
+    KeyDeclaredByNoLayerError,
+    LayerNameAlreadyTakenError,
+    LayerNameUnusableError,
+    NullAnswerNotAcceptedError,
+    ObsoleteTriggerDirectoryError,
+    StaticLayerFileInvalidError,
+    StaticLayerFileUnreadableError,
+    TeamConfigurationFileMissingError,
+    TeamLayerCarriesClusterKeyError,
+    TeamNotSuppliedError,
+    TeamWithoutEnvironmentError,
+)
 
 # Step actions. `existed` is the one that belongs to foreign material: `force=True` accepts it and
 # touches nothing of it, so recording it as `created` or `skipped` would both be false.
@@ -137,7 +158,6 @@ RESERVED_ROOT_NAMES = ("kubementat.yaml", "secrets", "deployer_ssh_key", "deploy
 LAYER_DIRECTORY_NAMES = ("values", "values.encrypted", "tekton", "triggers", "pipeline-runs",
                          "kubementat_components")
 
-
 @dataclass(frozen=True)
 class InitStep:
     """One thing `init_configuration` did to one path.
@@ -155,7 +175,6 @@ class InitStep:
     def __str__(self) -> str:
         return f"{self.name}: {self.action} {self.path}"
 
-
 def _canonical(path: Path | str) -> str:
     """The comparison key for a path: absolute, without resolving symlinks.
 
@@ -165,7 +184,6 @@ def _canonical(path: Path | str) -> str:
     """
     return os.path.abspath(str(path))
 
-
 def _json_bytes(document: dict) -> bytes:
     """A JSON document as bytes, stable enough that a second run is byte-identical to the first.
 
@@ -174,7 +192,6 @@ def _json_bytes(document: dict) -> bytes:
     dictionary's, so a tuple of answers keeps the order it was given in.
     """
     return (json.dumps(document, indent=2) + "\n").encode("utf-8")
-
 
 def _manifest_bytes() -> bytes:
     """`kubementat.yaml`: the two keys that say which product this tree is for.
@@ -186,7 +203,6 @@ def _manifest_bytes() -> bytes:
     """
     return (f'kubementat: "{constants.CONFIG_KUBEMENTAT_CONSTRAINT}"\n'
             f"schema_version: {constants.CONFIG_SCHEMA_VERSION}\n").encode("utf-8")
-
 
 def parse_answer_argument(text, flag='--set') -> tuple[str, Any]:
     """`KEY=VALUE` into `(key, value)`: the value is JSON when it parses, otherwise the string.
@@ -206,17 +222,16 @@ def parse_answer_argument(text, flag='--set') -> tuple[str, Any]:
     """
     key, separator, value = str(text).partition('=')
     if not separator:
-        raise click.ClickException(
+        raise AnswerArgumentNotKeyValueError(
             f"{flag} takes KEY=VALUE and got {text!r}. Pass the key, an equals sign, and the "
             f"answer -- the same shape config set will take.")
     if not key:
-        raise click.ClickException(
+        raise AnswerArgumentNotKeyValueError(
             f"{flag} takes KEY=VALUE and got {text!r}: there is no key before the equals sign.")
     try:
         return key, json.loads(value)
     except ValueError:
         return key, value
-
 
 def _answers_to_document(pairs: Iterable[tuple[str, Any]]) -> dict:
     """A tuple of `(key, value)` pairs, in order, into a document.
@@ -228,12 +243,11 @@ def _answers_to_document(pairs: Iterable[tuple[str, Any]]) -> dict:
     document: dict = {}
     for key, value in pairs:
         if key in document:
-            raise click.ClickException(
+            raise DuplicateAnswerKeyError(
                 f"answers declare {key} twice. One key has one answer per file, and a JSON object "
                 f"cannot say otherwise; pass each key once.")
         document[key] = value
     return document
-
 
 def _name_is_unusable(name: str) -> str | None:
     """Why `name` cannot name a layer directory, or `None` when it can.
@@ -256,7 +270,6 @@ def _name_is_unusable(name: str) -> str | None:
         return "it begins or ends with whitespace"
     return None
 
-
 def _validate_layer_names(environment: str, team) -> None:
     """Refuse a layer name the tree cannot hold, before anything is planned or written.
 
@@ -274,13 +287,13 @@ def _validate_layer_names(environment: str, team) -> None:
     """
     unusable = _name_is_unusable(environment)
     if unusable:
-        raise click.ClickException(
+        raise LayerNameUnusableError(
             f"environment name {environment!r} is not a name kubementat can use: {unusable}. A "
             f"layer is exactly one directory under the configuration root, so its name is that one "
             f"directory's name: not empty, not '.' or '..', with no '/' and no NUL inside it and no "
             f"whitespace at either end.")
     if environment in RESERVED_ROOT_NAMES:
-        raise click.ClickException(
+        raise LayerNameAlreadyTakenError(
             f"environment name {environment!r} is already taken. kubementat uses "
             f"{', '.join(RESERVED_ROOT_NAMES)} at the root of a configuration directory, and an "
             f"environment wearing one of those names is read as that root entry instead of as a "
@@ -290,17 +303,16 @@ def _validate_layer_names(environment: str, team) -> None:
         return
     unusable = _name_is_unusable(team)
     if unusable:
-        raise click.ClickException(
+        raise LayerNameUnusableError(
             f"team name {team!r} is not a name kubementat can use: {unusable}. A team is exactly one "
             f"directory under an environment, so its name is that one directory's name: not empty, "
             f"not '.' or '..', with no '/' and no NUL inside it and no whitespace at either end.")
     if team in LAYER_DIRECTORY_NAMES:
-        raise click.ClickException(
+        raise LayerNameAlreadyTakenError(
             f"team name {team!r} is already taken. {', '.join(LAYER_DIRECTORY_NAMES)} are kubementat's "
             f"own layer directories inside every environment, and a team that shares one of them is a "
             f"directory two rules both claim — kubementat_components is already filtered out of the "
             f"team listing for the same reason. Pick a name that is not one of them.")
-
 
 def _refuse_obsolete_team_trigger_dir(config: Config) -> None:
     """Refuse a tree that still has the old `<team>/triggers/` directory, naming both paths.
@@ -319,7 +331,7 @@ def _refuse_obsolete_team_trigger_dir(config: Config) -> None:
         return
     obsolete = config.team_static_config_path.parent / "triggers"
     if obsolete.is_dir():
-        raise click.ClickException(
+        raise ObsoleteTriggerDirectoryError(
             f"{obsolete} is the trigger directory a pre-move kubementat wrote, and the team's trigger "
             f"configuration now lives under {config.tekton_team_trigger_dir}. This verb will not "
             f"leave a tree holding both, because only the new path is ever read and the old one "
@@ -327,7 +339,6 @@ def _refuse_obsolete_team_trigger_dir(config: Config) -> None:
             f"the new directory by hand and remove the old one, then run the same command again. "
             f"Nothing will do this for you: kubementat records no rename table and rewrites no "
             f"operator tree.")
-
 
 def init_configuration(root, environment, team=None, answers=(), encrypted_answers=(),
                        force=False, own_paths=()) -> tuple[InitStep, ...]:
@@ -381,17 +392,30 @@ def init_configuration(root, environment, team=None, answers=(), encrypted_answe
 
     Raises
     ------
-    click.ClickException
-        No environment; an environment or team name that is not a name, or that is already taken by
-        a root entry or a layer directory; a repeated answer key; foreign material without `force`; a
-        file init would write that already differs; a tree that still has the old
-        `<team>/triggers/` directory. Only the differing file is not lifted by `force`; a refused
+    kubementat.errors.EnvironmentNotSuppliedError
+        No environment.
+    kubementat.errors.TeamWithoutEnvironmentError
+        A team named with no environment to be a layer under.
+    kubementat.errors.LayerNameUnusableError
+    kubementat.errors.LayerNameAlreadyTakenError
+        An environment or team name that is not a name, or one already taken by a root entry or a
+        layer directory.
+    kubementat.errors.AnswerArgumentNotKeyValueError
+    kubementat.errors.DuplicateAnswerKeyError
+        The shape of a `KEY=VALUE` answer, and the same key answered twice in one run.
+    kubementat.errors.ForeignConfigurationMaterialError
+        Material kubementat did not write, without `force`.
+    kubementat.errors.ConfigurationFileDiffersError
+        A file init would write that already exists and differs. This is the one refusal `force`
+        does not lift.
+    kubementat.errors.ObsoleteTriggerDirectoryError
+        A tree that still has the old `<team>/triggers/` directory. Only the differing file is not lifted by `force`; a refused
         name writes nothing at all, and the obsolete trigger directory is refused before the plan
         is built, so it writes nothing either.
     """
     root = Path(root)
     if not environment:
-        raise click.ClickException(
+        raise EnvironmentNotSuppliedError(
             "creating a configuration tree needs an environment: every file but kubementat.yaml is "
             "written under <root>/<environment>/, and no environment means 'all of them'.")
     # Names first, before a plan exists: the two refusals here are claims about the tree and not
@@ -401,7 +425,7 @@ def init_configuration(root, environment, team=None, answers=(), encrypted_answe
         # Spelled for whoever reads it off a terminal: a team is one layer under one environment, so
         # a team without an environment is a question the tree cannot answer. Named from the library,
         # because both `kmt config init` and the legacy `initialize` reach this one sentence.
-        raise click.ClickException(
+        raise TeamWithoutEnvironmentError(
             "a team is a layer under one environment, so a team needs an environment too.")
 
     team_static: dict = {}
@@ -485,7 +509,7 @@ def init_configuration(root, environment, team=None, answers=(), encrypted_answe
     steps: list[InitStep] = []
     foreign = _foreign_material(layer_directories, owned)
     if foreign and not force:
-        raise click.ClickException(
+        raise ForeignConfigurationMaterialError(
             f"{root} contains material kubementat did not write: "
             f"{', '.join(str(p.relative_to(root)) for p in sorted(foreign, key=str))}. "
             f"init_configuration will not lay its own files beside files it cannot account for. "
@@ -533,7 +557,6 @@ def init_configuration(root, environment, team=None, answers=(), encrypted_answe
 
     return tuple(steps)
 
-
 def _foreign_material(directories: list[Path], owned: set[str]) -> list[Path]:
     """Files in `directories` that kubementat did not write and this init does not own.
 
@@ -565,7 +588,6 @@ def _foreign_material(directories: list[Path], owned: set[str]) -> list[Path]:
             foreign.append(entry)
     return foreign
 
-
 def _apply_layer_plan(plan: list[tuple[str, Path, bytes]]) -> list[InitStep]:
     """Apply a layer plan and say what happened to each of its paths.
 
@@ -589,7 +611,7 @@ def _apply_layer_plan(plan: list[tuple[str, Path, bytes]]) -> list[InitStep]:
         if path.read_bytes() == payload:
             steps.append(InitStep(name, path, SKIPPED))
             continue
-        raise click.ClickException(
+        raise ConfigurationFileDiffersError(
             f"{path} already exists and is not what kubementat would write there. That is not a "
             f"conflict to overwrite: someone wrote that file, and the difference between an edited "
             f"answer and a half-written one is not something a flag can tell apart. Edit or remove "
@@ -602,7 +624,6 @@ def _apply_layer_plan(plan: list[tuple[str, Path, bytes]]) -> list[InitStep]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(payload)
     return steps
-
 
 def _make_layer_directories(layer_directories: list[tuple[str, Path]]) -> list[InitStep]:
     """Make the layer directories that are missing, and report the ones that were already there.
@@ -621,13 +642,11 @@ def _make_layer_directories(layer_directories: list[tuple[str, Path]]) -> list[I
             steps.append(InitStep(name, directory, CREATED))
     return steps
 
-
 # The sentence every verb that writes *into* a tree says about a root that is not there. The claim is
 # the one thing that differs per verb — `add-environment`/`add-team` add one layer, `set`/`unset` put
 # one answer on one layer — so only it is a parameter and the rest of the refusal has one owner.
 _CONFIGURATION_ROOT_CLAIM = ("kmt config add-environment and kmt config add-team add one layer to a "
                              "tree that already exists and write nothing else")
-
 
 def _require_configuration_root(root: Path,
                                 claim: str = _CONFIGURATION_ROOT_CLAIM) -> None:
@@ -642,11 +661,10 @@ def _require_configuration_root(root: Path,
     run.
     """
     if not root.is_dir():
-        raise click.ClickException(
+        raise ConfigurationRootNotUsableError(
             f"{root} is not a configuration directory. {claim}, so a root that is not there is not a "
             f"tree to write into. Pass the directory kmt config init wrote, or make one: kmt config "
             f"init --environment <environment> --config-dir <configuration-root>.")
-
 
 def add_environment(root, environment) -> tuple[InitStep, ...]:
     """Add one environment layer to a configuration tree, and report what was done.
@@ -668,7 +686,7 @@ def add_environment(root, environment) -> tuple[InitStep, ...]:
     _validate_layer_names(environment, None)
 
     if not (root / CONFIG_MANIFEST_FILENAME).is_file():
-        raise click.ClickException(
+        raise ConfigurationTreeNotLaidDownError(
             f"{root / CONFIG_MANIFEST_FILENAME} is absent, so {root} is not a kubementat "
             f"configuration tree yet. kmt config add-environment adds a layer to a tree and lays no "
             f"tree down: kubementat.yaml is what says which product this tree is for, and one verb "
@@ -695,7 +713,6 @@ def add_environment(root, environment) -> tuple[InitStep, ...]:
     ])
     return tuple(steps)
 
-
 def add_team(root, environment, team) -> tuple[InitStep, ...]:
     """Add one team layer under one environment, and report what was done.
 
@@ -717,14 +734,14 @@ def add_team(root, environment, team) -> tuple[InitStep, ...]:
     root = Path(root)
     _require_configuration_root(root)
     if team is None:
-        raise click.ClickException(
+        raise TeamNotSuppliedError(
             f"add-team needs a team: a team is exactly one directory under {environment!r}, and "
             f"naming one for the operator would be inventing a layer nobody asked for.")
     _validate_layer_names(environment, team)
 
     config = Config(environment, team, platform_config_dir=root, preload_configs=False)
     if not config.env_static_config_path.is_file():
-        raise click.ClickException(
+        raise EnvironmentConfigurationFileMissingError(
             f"{config.env_static_config_path} is absent, so environment {environment!r} is not a "
             f"layer of {root} yet. kmt config add-team puts a team under an environment and lays no "
             f"environment down — the same reason config init refuses --team without --environment. "
@@ -745,12 +762,10 @@ def add_team(root, environment, team) -> tuple[InitStep, ...]:
     ])
     return tuple(steps)
 
-
 # What the two answer verbs say about themselves when the root they were handed is not a tree. One
 # sentence's subject differs per verb, so it is a parameter of the one check that is shared.
 _ANSWER_CLAIM = "kmt config set and kmt config unset put one answer on one layer of a tree that " \
                 "already exists and write nothing else"
-
 
 # ---------------------------------------------------------------------------------------------
 # One key, in one file, everything else exactly as it was.
@@ -785,7 +800,6 @@ def _layer_files(config: Config, team) -> list[tuple[str, Path]]:
     return [(TEAM_ENCRYPTED_STEP, config.team_static_encrypted_config_path),
             (TEAM_STATIC_STEP, config.team_static_config_path)]
 
-
 def _require_answerable_layer(config: Config, root: Path, environment: str, team) -> list[tuple[str, Path]]:
     """The layer's two files, when the layer exists; a refusal naming the verb that makes it, when it does not.
 
@@ -805,7 +819,7 @@ def _require_answerable_layer(config: Config, root: Path, environment: str, team
     if not missing:
         return pair
     if team is None:
-        raise click.ClickException(
+        raise EnvironmentConfigurationFileMissingError(
             f"{missing[0]} is absent, so environment {environment!r} is not a layer of {root}. "
             f"config set and config unset put one answer on one layer that already exists and lay no "
             f"layer down, so a file that is not there is refused and not created — the same "
@@ -813,13 +827,12 @@ def _require_answerable_layer(config: Config, root: Path, environment: str, team
             f"kmt config add-environment {environment} --config-dir {root} (or kmt config init "
             f"--environment {environment} --config-dir {root}, if this tree has no manifest yet) "
             f"and come back.")
-    raise click.ClickException(
+    raise TeamConfigurationFileMissingError(
         f"{missing[0]} is absent, so team {team!r} is not a layer of environment {environment!r} in "
         f"{root}. config set and config unset put one answer on one layer that already exists and lay "
         f"no layer down, and a team layer that is only half there is read through the environment's "
         f"file — so a hand-made directory is an answer that comes back from the layer below. Run "
         f"kmt config add-team {environment} {team} --config-dir {root} first, then answer the key.")
-
 
 def _read_document(path: Path) -> dict:
     """The document one layer file holds, or a refusal that says which file is unreadable.
@@ -836,24 +849,23 @@ def _read_document(path: Path) -> dict:
         # which is what the docstring's promise needed to mean for this input.
         raw = read_decrypted(path, "static layer file")
     except OSError as error:
-        raise click.ClickException(
+        raise StaticLayerFileUnreadableError(
             f"{path} cannot be read ({error}). config set and config unset edit the file that is "
             f"there and write nothing else, so they cannot go on without it: fix the file or its "
             f"permissions and run the same command again.")
     try:
         document = json.loads(raw)
     except ValueError as error:
-        raise click.ClickException(
+        raise StaticLayerFileInvalidError(
             f"{path} is not valid JSON ({error}), so there is no document here to put one answer "
             f"into. kubementat will not rewrite a file it cannot read and call the result a "
             f"configuration; repair the file and run the same command again.")
     if not isinstance(document, dict):
-        raise click.ClickException(
+        raise StaticLayerFileInvalidError(
             f"{path} holds a JSON {type(document).__name__} and not the object a static layer is, so "
             f"there is no key in it to answer or remove. A layer file is one object keyed by answer "
             f"name; repair the file and run the same command again.")
     return document
-
 
 def _require_keyable_team_layer(key: str, team, root: Path, environment: str) -> None:
     """Refuse a cluster key on `--team`, and nothing else.
@@ -871,7 +883,7 @@ def _require_keyable_team_layer(key: str, team, root: Path, environment: str) ->
     """
     if team is None or key not in (constants.CLUSTER_KUBE_CONTEXT_KEY, constants.CLUSTER_KUBECONFIG_PATH_KEY):
         return
-    raise click.ClickException(
+    raise TeamLayerCarriesClusterKeyError(
         f"{key} on --team is refused. One directory is exactly one cluster: what resolves a "
         f"cluster reads the environment's own static file, "
         f"{Config(environment, None, platform_config_dir=root, preload_configs=False).env_static_config_path}, "
@@ -879,7 +891,6 @@ def _require_keyable_team_layer(key: str, team, root: Path, environment: str) ->
         f"answer here is read by nothing and leaves the tree with two accounts of the same key. "
         f"Answer it on the environment instead, with no --team: kmt config set {environment} "
         f"{key}=… --config-dir {root}")
-
 
 def set_answer(root, environment, key, value, team=None, encrypted=False) -> tuple[InitStep, ...]:
     """Put one answer into one layer's file, keeping every key this verb was not told about.
@@ -907,7 +918,7 @@ def set_answer(root, environment, key, value, team=None, encrypted=False) -> tup
     root = Path(root)
     _require_configuration_root(root, _ANSWER_CLAIM)
     if value is None:
-        raise click.ClickException(
+        raise NullAnswerNotAcceptedError(
             f"{key} = null is not an answer, and this verb writes answers. null is the absence of one, "
             f"and only one verb should be able to create it: kmt config unset {environment} "
             f"{key}{' --team ' + team if team else ''} --config-dir {root} takes it away, and a key "
@@ -939,7 +950,6 @@ def set_answer(root, environment, key, value, team=None, encrypted=False) -> tup
         return (InitStep(name, path, SKIPPED),)
     path.write_bytes(payload)
     return (InitStep(name, path, CREATED),)
-
 
 def unset_answer(root, environment, key, team=None) -> tuple[InitStep, ...]:
     """Take one answer away from a layer, from **both** of its files.
@@ -990,7 +1000,7 @@ def unset_answer(root, environment, key, team=None) -> tuple[InitStep, ...]:
             f"it; without it this verb addresses environment {environment!r} and nothing else.")
         scope = (f"environment {environment!r}, team {team!r}" if team is not None
                  else f"environment {environment!r}")
-        raise click.ClickException(
+        raise KeyDeclaredByNoLayerError(
             f"{key} is declared by no layer of {scope}, so there is no answer here to take away. "
             f"kubementat searched {', '.join(str(path) for _, path in searched)} and found the key in "
             f"none of them. That is a different fact from \"the answer is null\": the file that "
@@ -1015,7 +1025,6 @@ def unset_answer(root, environment, key, team=None) -> tuple[InitStep, ...]:
         path.write_bytes(payload)
         steps.append(InitStep(name, path, CREATED))
     return tuple(steps)
-
 
 # ---------------------------------------------------------------------------------------------
 # One key, in one file, invented rather than typed.
@@ -1042,7 +1051,6 @@ def unset_answer(root, environment, key, team=None) -> tuple[InitStep, ...]:
 # not two owners.)
 GENERATED_ANSWER_BYTES = 32
 
-
 def _layer_phrase(step_name: str, environment: str, team) -> str:
     """Which layer a searched file belongs to, in the words a refusal uses to say so.
 
@@ -1052,7 +1060,6 @@ def _layer_phrase(step_name: str, environment: str, team) -> str:
     if step_name in (TEAM_STATIC_STEP, TEAM_ENCRYPTED_STEP):
         return f"team {team!r} of environment {environment!r}"
     return f"environment {environment!r}"
-
 
 def generate_answer(root, environment, key, team=None, encrypted=False) -> tuple[InitStep, ...]:
     """Invent one answer for one key, and only where that key currently answers nothing.
@@ -1110,7 +1117,7 @@ def generate_answer(root, environment, key, team=None, encrypted=False) -> tuple
             f"kmt config unset {environment} {key}{scope}, then kmt config set {environment} "
             f"--generate {key}{scope} --config-dir {root}"
             for scope in scopes)
-        raise click.ClickException(
+        raise AnswerAlreadyPresentError(
             f"{key} already answers in {where}, so --generate refuses and writes nothing. kubementat "
             f"keeps a value that is there rather than rewriting it in place: a verb that "
             f"generated while it wrote would make the act of touching a directory the way a "
@@ -1119,7 +1126,6 @@ def generate_answer(root, environment, key, team=None, encrypted=False) -> tuple
 
     return set_answer(root, environment, key, secrets.token_urlsafe(GENERATED_ANSWER_BYTES),
                       team=team, encrypted=encrypted)
-
 
 def cluster_is_unaddressed(static_json_path) -> bool:
     """Whether that `static.json` leaves its environment addressing no cluster.
@@ -1148,7 +1154,6 @@ def cluster_is_unaddressed(static_json_path) -> bool:
         return True
     value = document.get(constants.CLUSTER_KUBE_CONTEXT_KEY)
     return value is None or (isinstance(value, str) and not value.strip())
-
 
 def warn_cluster_not_addressed(environment, static_json_path) -> None:
     """Say that `<environment>` exists but does not yet reach a cluster.

@@ -35,10 +35,7 @@ import pytest
 
 from kubementat.core.identity.context import Context
 from kubementat.core.constants import SOURCE_FLAG
-from kubementat.errors import (
-    ClusterFileUnreadableError,
-    StatedClusterMismatchError,
-)
+from kubementat.errors import ClusterFileUnreadableError, StatedClusterMismatchError
 
 from cluster_fixture import (
     DEV_SERVER,

@@ -6,13 +6,13 @@ happens to be on this cluster -- so the one read here is `declared`, and a team 
 written its namespace down gets the reason rather than a deletion.
 """
 
-
 import logging
-
-import click
 
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 
+from kubementat.errors import (
+    PipelineNamespaceNotConfiguredError,
+)
 
 def uninstall_pipelines(ctx):
     '''
@@ -42,7 +42,7 @@ def uninstall_pipelines(ctx):
     # not a licence to remove whatever that name happens to be on this cluster.
     pipeline_ns = config.declared('team_static').get('PIPELINE_NAMESPACE')
     if not pipeline_ns:
-        raise click.ClickException(
+        raise PipelineNamespaceNotConfiguredError(
             f"{config.team_static_config_path} does not declare PIPELINE_NAMESPACE, so no"
             f" namespace can be deleted for team '{team}'. The pipelines namespace follows"
             f" from a team's name when kubementat deploys into it, and from nothing at all when"

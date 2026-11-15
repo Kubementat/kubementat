@@ -31,10 +31,7 @@ from kubementat.core.constants import (
     SOURCE_FLAG,
     STATIC_SOURCE_PREFIX,
 )
-from kubementat.errors import (
-    ClusterFileUnreadableError,
-    ClusterNotConfiguredError,
-)
+from kubementat.errors import ClusterFileUnreadableError, ClusterNotConfiguredError
 
 from cluster_fixture import (
     DEV_SERVER,

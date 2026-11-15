@@ -1,4 +1,67 @@
 # Unreleased
+- **The rest of the library refuses in kubementat's own error classes too. Sixty-three raise sites in nine
+  modules moved to named classes in `errors.py`, `import click` now survives only under `src/cli/`, and the
+  CLI has one class that renders refusals instead of three.**
+
+  Nothing operator-visible moved. No refusal text, no exit code, no flag and no command changed, and a fixed
+  corpus of 32 real `kmt` invocations plus the 61 library-side refusals a shell without a cluster cannot
+  reach came out byte-identical across the change — the only line that differs in it is the exception's own
+  class name, which is what this changed and never reaches a terminal. What did change is what a caller that
+  is not `kmt` is handed when kubementat says no: a named class, and not a CLI one.
+
+  * **What the nine modules refuse, by name.** Configuration verbs
+    (`config_init.py`, 25 sites) name unusable layer names (`LayerNameUnusableError`), names that collide
+    with a root entry or a layer directory (`LayerNameAlreadyTakenError`), a tree that carries the obsolete
+    trigger directory (`ObsoleteTriggerDirectoryError`), answers that are not `KEY=VALUE`
+    (`AnswerArgumentNotKeyValueError`) or declare one key twice (`DuplicateAnswerKeyError`), a file
+    kubementat did not write (`ForeignConfigurationMaterialError`), a file that already differs from what
+    init writes (`ConfigurationFileDiffersError`), a null answer (`NullAnswerNotAcceptedError`), a key no
+    layer declares (`KeyDeclaredByNoLayerError`), a layer file that cannot be read
+    (`StaticLayerFileUnreadableError`) or parses as something other than an object
+    (`StaticLayerFileInvalidError`), and a `--team` layer asked to carry a cluster key
+    (`TeamLayerCarriesClusterKeyError`). `helm.py` (11) names an incomplete uninstall
+    (`UninstallIncompleteError`), a release the cluster puts elsewhere
+    (`DeployedReleaseNamespaceConflictError`) and the reads that refuse to guess
+    (`HelmReleaseListingFailedError`, `HelmSearchFailedError`, `HelmChartNotFoundError`,
+    `HelmChartNotSuppliedError`, `HelmRepositoryNotConfiguredError`). `config_keys.py` (7) and
+    `config_bootstrap.py` (6) name what is missing from a keypair rather than what a subprocess said —
+    `DeployerKeyPairIncompleteError`, `DeployerPublicKeyMissingError`, `GitCryptSymmetricKeyMissingError`,
+    `GpgKeyFileMissingError`, `GpgKeyNotImportableError`, `GpgKeyWithoutPublicKeyError`,
+    `GpgBinaryNotRunnableError`, `GpgCollaboratorNotRegistrableError`. `user_management.py` (6) names denied
+    verbs (`ClusterAccessDeniedError`), an unusable resolved kubeconfig
+    (`ResolvedKubeconfigUnusableError`) and a declined or unaskable confirmation
+    (`ConfirmationDeclinedError`, `ConfirmationUnavailableError`). And the last four belong to routing,
+    uninstall and validate: `ClusterManagerEmailNotConfiguredError`,
+    `PipelineNamespaceNotConfiguredError`, `EnvironmentConfigurationFileMissingError`,
+    `TeamConfigurationFileMissingError`.
+
+  * **The CLI has one renderer, not three.** `@kmt_context` caught the tuple, `KmtGroup.invoke` caught the
+    tuple, and both were written out. They now share `cli.context.RenderingGroup`, which the `config` and
+    `environments` groups carry directly — and that is not cosmetic. Those two verbs build no `Context` on
+    purpose, so before this they were rendered only when the run entered through the root group; a caller
+    that dispatches `config` alone got a traceback where `kmt config set` prints one `Error:` line. It is a
+    difference no operator can hit and every test could, which is exactly why it stood for this long.
+  * **Two catchers had to be taught the new names.** `config_validate` read the stamp inside a handler that
+    caught `ClickException`, and read the layer files inside another. A renamed class would have escaped both
+    as a traceback instead of reporting a finding, so both now catch the stamp and layer classes by name.
+  * **`ClusterResolutionError` stays what it was.** It is caught beside the resolution it belongs to, not in
+    the rendered tuple, and it is still what `except ClusterResolutionError` means to every caller. Five
+    resolution failures descend from it and `ClusterIdentityCollisionError` deliberately does not — that one
+    is not something a caller gets to sweep up as "no cluster was named", and the test for that has not
+    moved.
+
+  * **The tests stopped naming a CLI class.** 29 test files named `ClickException`; they now name the class
+    their subject raises, decided by running each failing test and reading the answer off its own traceback
+    rather than by searching for a message string. One assertion moved on purpose: `test_answering_no_deletes_nothing`
+    used to read `excinfo.value.exit_code`, which was Click's. An exit code is the CLI's decision, so that
+    test now asserts the refusal is one `kmt` renders — which is the same claim, made where it is owned.
+
+  * **The corpus's own trap.** Both capture drivers had pinned the working checkout's `src/`, so the
+    "before" half of the corpus silently ran the new code and the two halves came out byte-identical. That is
+    a false pass, not an empty diff: the drivers now take the checkout under test from the environment, and
+    the baseline half is captured from a detached worktree of the parent commit. The difference between the
+    two halves is the change.
+
 - **`core/config/` refuses in kubementat's own error classes, not in Click's. Fifteen raise sites moved
   to named classes in `errors.py`, and the two CLI allowlists that render them were extended to meet
   them.**

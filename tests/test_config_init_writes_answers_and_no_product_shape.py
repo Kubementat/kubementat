@@ -27,11 +27,11 @@ The tree is rooted in `tmp_path` per `tests/test_no_test_loads_config_from_the_c
 `--config-dir` names it.
 """
 
+from kubementat.errors import (ConfigurationFileDiffersError, DuplicateAnswerKeyError, EnvironmentNotSuppliedError, ForeignConfigurationMaterialError)
 import inspect
 import json
 import logging
 from pathlib import Path
-import click
 import pytest
 
 from kubementat import automations as automations_layer, config_init
@@ -214,7 +214,7 @@ def test_a_file_kubementat_did_not_write_is_named_and_stops_the_write(tmp_path):
     stray = root / "operator-notes.yaml"
     stray.write_text("# a human put this here\n")
 
-    with pytest.raises(click.ClickException) as excinfo:
+    with pytest.raises(ForeignConfigurationMaterialError) as excinfo:
         init_configuration(root, ENVIRONMENT, TEAM)
 
     assert "operator-notes.yaml" in str(excinfo.value), str(excinfo.value)
@@ -269,7 +269,7 @@ def test_a_file_that_already_differs_is_refused_and_force_does_not_lift_that(tmp
     (root / ENVIRONMENT / "static.json").write_text('{"CLUSTER_KUBE_CONTEXT": "mine"}\n')
 
     for kwargs in ({}, {"force": True}):
-        with pytest.raises(click.ClickException) as excinfo:
+        with pytest.raises(ConfigurationFileDiffersError) as excinfo:
             init_configuration(root, ENVIRONMENT, **kwargs)
         assert str(root / ENV_STATIC) in str(excinfo.value), str(excinfo.value)
         assert "force" in str(excinfo.value)
@@ -280,7 +280,7 @@ def test_the_manifest_is_refused_on_the_same_rule_because_its_two_keys_are_one_a
     root = config_root(tmp_path)
     (root / MANIFEST).write_text('kubementat: ">=1.0"\nschema_version: 9\n')
 
-    with pytest.raises(click.ClickException) as excinfo:
+    with pytest.raises(ConfigurationFileDiffersError) as excinfo:
         init_configuration(root, ENVIRONMENT, force=True)
 
     assert str(root / MANIFEST) in str(excinfo.value)
@@ -336,7 +336,7 @@ def test_a_key_answered_twice_is_refused_because_json_cannot_hold_it_twice(tmp_p
     """
     root = config_root(tmp_path)
 
-    with pytest.raises(click.ClickException) as excinfo:
+    with pytest.raises(DuplicateAnswerKeyError) as excinfo:
         init_configuration(root, ENVIRONMENT, answers=(("A_KEY", "one"), ("A_KEY", "two")))
 
     assert "A_KEY" in str(excinfo.value)
@@ -346,7 +346,7 @@ def test_an_environment_is_not_defaultable(tmp_path):
     """No `--environment` is a refusal and not `""` or `all`, and a team without one is the same."""
     root = config_root(tmp_path)
 
-    with pytest.raises(click.ClickException) as excinfo:
+    with pytest.raises(EnvironmentNotSuppliedError) as excinfo:
         init_configuration(root, None)
 
     assert "environment" in str(excinfo.value).lower()
