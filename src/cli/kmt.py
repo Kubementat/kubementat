@@ -15,12 +15,8 @@ from cli.commands import environments
 from cli.commands import users
 from cli.commands import kubernetes
 from cli.commands import config
+from cli.context import RENDERED_REFUSALS
 from kubementat.core.version import get_version
-from kubementat.errors import (
-    DeployerKeyMissingError,
-    LockedConfigFileError,
-    ObsoleteTriggerDirectoryError,
-)
 
 
 # The library configures nothing when it is imported, so the CLI configures logging for
@@ -58,17 +54,21 @@ class KmtGroup(click.Group):
 
     `@kmt_context` renders the refusals the decorated commands can raise; the `config` and
     `environments` verbs deliberately build no `Context` (they touch no cluster), so a tree refusal
-    raised on their way — a locked configuration file, the obsolete trigger directory, a missing
-    deployer keypair — would reach the terminal as a traceback. The CLI still renders them here,
-    one `Error:` line and exit 1, because "only the CLI decides how a refusal is printed" has to
-    hold for the whole surface and not only for the half of it that opens a socket.
+    raised on their way — no configuration root, a stamp that is absent or unreadable or two steps
+    behind, a locked configuration file, the obsolete trigger directory, a missing deployer keypair —
+    would reach the terminal as a traceback. The CLI still renders them here, one `Error:` line and
+    exit 1, because "only the CLI decides how a refusal is printed" has to hold for the whole surface
+    and not only for the half of it that opens a socket.
+
+    The tuple caught below is `cli.context`'s, imported rather than restated: two allowlists for one
+    doctrine is how the same refusal gets printed by one door and traced by the other, and the
+    stamp and root refusals above reach this door from `_resolve`, outside the decorator's `try`.
     """
 
     def invoke(self, ctx):
         try:
             return super().invoke(ctx)
-        except (DeployerKeyMissingError, LockedConfigFileError,
-                ObsoleteTriggerDirectoryError) as error:
+        except RENDERED_REFUSALS as error:
             raise click.ClickException(str(error))
 
 

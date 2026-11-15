@@ -72,7 +72,11 @@ from kubementat.core.identity import registry as _registry
 from kubementat.core.identity.context import Context
 from kubementat.core.config.stamp import ConfigurationStamp
 from kubementat.core.config.reads import read_decrypted
-from kubementat.errors import LockedConfigFileError
+from kubementat.errors import (
+    ConfigurationStampInvalidError,
+    ConfigurationStampMissingError,
+    LockedConfigFileError,
+)
 
 # The finding kinds. Exactly two, because the exit code is decided by their presence and nothing
 # else: `error` refuses, `warning` prints and continues. That second shape is not invented here --
@@ -297,7 +301,13 @@ def _stamp_findings(root: Path, findings: list[Finding]) -> None:
     path = root / _MANIFEST
     try:
         stamp = ConfigurationStamp.read(root)
-    except click.ClickException:
+    except (click.ClickException, ConfigurationStampMissingError, ConfigurationStampInvalidError):
+        # A tree that cannot be stamped at all is the manifest check's business, reported there in
+        # sentences that name the file and the verb that writes it. The stamp refused for one of two
+        # named reasons — `ConfigurationStampMissingError` when there is no manifest, 
+        # `ConfigurationStampInvalidError` when the manifest is not the two keys — and both arrive
+        # from `core/config/stamp.py` now that the library refuses in its own classes, so both are
+        # caught here next to the `ClickException` that still answers for the rest of the library.
         return
 
     if stamp.schema_is_too_old:

@@ -22,12 +22,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-import click
 import yaml
 
 from kubementat.core import constants
 from kubementat.core.config import versions
 from kubementat.core.config.reads import read_decrypted
+from kubementat.errors import (ConfigurationStampInvalidError, ConfigurationStampMissingError,
+                               SchemaVersionTooOldError)
 
 
 # The read side of the tree's version stamp, and the reason it had to be written is that the write side has existed
@@ -46,26 +47,26 @@ def read_configuration_stamp(root: Path) -> tuple:
     '''
     path = Path(root) / constants.CONFIG_MANIFEST_FILENAME
     if not path.is_file():
-        raise click.ClickException(
+        raise ConfigurationStampMissingError(
             f"{path} is absent, so {root} does not say which product it was prepared for. "
             "kmt config init writes this file; a directory that predates the stamp has never been "
             "stamped and cannot be assumed to agree with this build.")
     try:
         stamp = yaml.safe_load(read_decrypted(path))
     except yaml.YAMLError as error:
-        raise click.ClickException(f"{path} is not readable YAML: {error}")
+        raise ConfigurationStampInvalidError(f"{path} is not readable YAML: {error}")
     if not isinstance(stamp, dict):
-        raise click.ClickException(
+        raise ConfigurationStampInvalidError(
             f"{path} must be a mapping of the two keys this product stamps, and reads as "
             f"{type(stamp).__name__}")
     constraint, schema = stamp.get("kubementat"), stamp.get("schema_version")
     if constraint is None or schema is None:
-        raise click.ClickException(
+        raise ConfigurationStampInvalidError(
             f"{path} declares kubementat={constraint!r} and schema_version={schema!r}; both keys are "
             "required, one because it is the constraint this tree was validated against and one "
             "because it is the only thing that says what its answers mean.")
     if isinstance(schema, bool) or not isinstance(schema, int):
-        raise click.ClickException(f"{path} declares schema_version={schema!r}; it must be an integer")
+        raise ConfigurationStampInvalidError(f"{path} declares schema_version={schema!r}; it must be an integer")
     return str(constraint), int(schema)
 
 
@@ -174,7 +175,7 @@ def check_configuration_stamp(root: Path) -> list:
     constraint, schema = read_configuration_stamp(root)
     stamp = ConfigurationStamp(root=root, constraint=constraint, schema=schema)
     if stamp.schema_is_too_old:
-        raise click.ClickException(
+        raise SchemaVersionTooOldError(
             f"{root} declares schema_version {schema} and this kubementat is at "
             f"{stamp.current}, which is more than {stamp.window} step(s) "
             "behind. Answers this tree does not name for itself would come from built-in defaults, "

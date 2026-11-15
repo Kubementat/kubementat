@@ -31,6 +31,7 @@ from cli.commands import routing
 from kubementat.core.config import config, versions
 from kubementat.core.config import stamp as stamp_module
 from kubementat.core import constants
+from kubementat import errors
 
 # What the running build is told to be, for the tests that must not depend on whatever version this
 # checkout happens to report. `constants` is what the stamp is written from, so pinning it here means
@@ -74,7 +75,7 @@ def test_the_stamp_answers_both_questions_and_nobody_else_reads_them():
 
 def test_a_tree_two_schemas_behind_is_refused_and_the_refusal_names_both_numbers():
     root = root_with_stamp(Path("/tmp/unused") / "x", schema_version=constants.CONFIG_SCHEMA_VERSION - 2)
-    with pytest.raises(config.click.ClickException) as refusal:
+    with pytest.raises(errors.SchemaVersionTooOldError) as refusal:
         stamp_module.check_configuration_stamp(root)
     said = str(refusal.value)
     assert str(constants.CONFIG_SCHEMA_VERSION - 2) in said and str(constants.CONFIG_SCHEMA_VERSION) in said
@@ -120,7 +121,7 @@ def test_an_unknown_product_version_warns_rather_than_asking_a_question_it_canno
 def test_a_tree_with_no_stamp_is_refused_and_names_the_verb_that_writes_it():
     root = Path("/tmp/unused") / "unstamped"
     (root / "platform_config").mkdir(parents=True, exist_ok=True)
-    with pytest.raises(config.click.ClickException) as refusal:
+    with pytest.raises(errors.ConfigurationStampMissingError) as refusal:
         stamp_module.check_configuration_stamp(root)
     assert constants.CONFIG_MANIFEST_FILENAME in str(refusal.value)
     assert "config init" in str(refusal.value)
@@ -137,7 +138,7 @@ def test_a_stamp_that_is_there_but_wrong_is_refused_with_a_sentence_about_itself
     path = tmp_path / "platform_config" / constants.CONFIG_MANIFEST_FILENAME
     path.parent.mkdir(parents=True)
     path.write_text(stamp)
-    with pytest.raises(config.click.ClickException) as refusal:
+    with pytest.raises(errors.ConfigurationStampInvalidError) as refusal:
         stamp_module.check_configuration_stamp(path.parent)
     assert expected in str(refusal.value)
 

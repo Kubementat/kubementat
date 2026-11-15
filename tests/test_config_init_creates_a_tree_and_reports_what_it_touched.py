@@ -91,11 +91,7 @@ def run_init(root, *arguments):
     The root travels as the flag the surface names it with, so every assertion below is evidence
     about the command a human or a container types and not about a private argv.
     """
-    result = CliRunner(mix_stderr=False).invoke(config_module.config,
-                                                ["init", *arguments, "--config-dir", str(root)])
-    if result.exception is not None and not isinstance(result.exception, SystemExit):
-        raise result.exception
-    return result
+    return in_root_group(["init", *arguments, "--config-dir", str(root)])
 
 
 def run_init_without_root(*arguments):
@@ -105,7 +101,22 @@ def run_init_without_root(*arguments):
     command does when neither of its two spellings of a root is present, and that is the verb's own
     decision and not the library's.
     """
-    result = CliRunner(mix_stderr=False).invoke(config_module.config, ["init", *arguments])
+    return in_root_group(["init", *arguments])
+
+
+def in_root_group(argv):
+    """`kmt config …`, dispatched the way `main()` dispatches it: through the root group class.
+
+    The root group is what renders a named refusal into one `Error:` line, so a test that invoked the
+    `config` sub-group directly would be asserting the shape of a run no operator can have. Same
+    argv, same `CliRunner`, one more level of dispatch — which is also what `main()` builds when it
+    hangs `config` off `cli` before calling it.
+    """
+    from cli.kmt import KmtGroup
+
+    root_group = KmtGroup(name="kmt")
+    root_group.add_command(config_module.config, "config")
+    result = CliRunner(mix_stderr=False).invoke(root_group, ["config", *argv])
     if result.exception is not None and not isinstance(result.exception, SystemExit):
         raise result.exception
     return result

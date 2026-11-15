@@ -386,14 +386,22 @@ class MysqlNotConfiguredError(KubementatError):
 # ---------------------------------------------------------------------------
 # What the configuration tree itself refuses.
 #
-# These three refused from inside the modules that read or prepare the tree, each one descending
+# These refused from inside the modules that read or prepare the tree, and they used to descend
 # from `click.ClickException` — the shape that says "a command printed this" rather than
-# "kubementat refused", and the only gap left open by `cli/context.py`'s doctrine (the library
-# stays Click-free to raise; only the CLI decides how a refusal is printed). They now descend from
-# `KubementatError` like every other refusal, and the CLI renders them: the same one `Error:` line
-# and exit 1 they got for free as `ClickException`s, produced where they are caught and re-raised
-# rather than where they are raised. The prose below still says what each refusal means, because
-# that is the part no raise site may rewrite locally.
+# "kubementat refused", and the gap `cli/context.py`'s doctrine cannot accept (the library stays
+# Click-free to raise; only the CLI decides how a refusal is printed). They all descend from
+# `KubementatError` now, and the CLI renders them: the same one `Error:` line and exit 1 they got
+# for free as `ClickException`s, produced where they are caught and re-raised rather than where
+# they are raised. The prose below still says what each refusal means, because that is the part no
+# raise site may rewrite locally.
+#
+# The grouping is deliberate and it is not by file: `core/config/` raised fifteen of these, and
+# they are named here by *the question the operator has to answer*, not by which module was asked.
+# A tree with no root, a tree stamped twice behind, a team that named no namespace — those are the
+# fifteen, and a class per raise site would restate fifteen messages in fifteen places. Where two
+# sites raise the same sentence-shaped refusal they raise one class, and where a refusal has a
+# sibling that reads differently (`config.py`'s two "no layer file here" doors, `get` and
+# `declared`) the two stay one class because the operator cannot tell them apart either.
 # ---------------------------------------------------------------------------
 
 
@@ -443,6 +451,129 @@ class ObsoleteTriggerDirectoryError(KubementatError):
     there is a set of manifests that are silently applied nowhere. Both points that would make
     that silent — the reader and the writer — refuse instead, and the message names what was
     found, what the new layout needs, and the verb that closes the gap.
+    """
+
+
+class ConfigurationRootNotNamedError(KubementatError):
+    """Nothing named the configuration root, so there is no tree to read.
+
+    A configuration root is *named, never located*: the `--config-dir` flag or the variable a
+    container already sets. This is that refusal, and it is the one place in the library that says
+    it — `core/config/paths.default_platform_config_dir`, which is what every reader falls back to.
+    The deleted fallback (`platform_config` beside wherever the wheel was installed) answered every
+    command that had been told nothing, from a tree nobody pointed at; that is the D11 bug in its
+    last remaining form, which is why the answer is one line naming the two spellings and not a
+    guess. The same sentence reaches `resolve_platform_config_dir`, so a `--config-dir` that was
+    never passed and a library argument that was never handed are refused in one voice.
+    """
+
+
+class RootDirectoryVariableIsEmptyError(KubementatError):
+    """A directory variable that is set to nothing — which is not the same as unset.
+
+    Shared by both roots, because both roots read the same rule: `KUBEMENTAT_HOME` for the tree a
+    run writes into, `KUBEMENTAT_PLATFORM_CONFIG_DIR` for the tree it reads. A variable set to the
+    empty string used to fall back to the built-in default, which read configuration out of
+    site-packages while saying nothing about it; the refusal is here so the empty case is decided
+    once and not in each root's own words.
+    """
+
+
+class ConfigurationStampMissingError(KubementatError):
+    """A directory that carries no `kubementat.yaml`, so it does not say what prepared it.
+
+    A missing stamp is a refusal and not a default. Assuming `schema_version: 1` when the file is
+    absent rescues a tree that was never stamped, which is the same mistake as a library function
+    silently bumping it, so the reader refuses and names the verb that writes the file.
+    """
+
+
+class ConfigurationStampInvalidError(KubementatError):
+    """The stamp exists and is not the two keys this product stamps.
+
+    Four readings are one refusal, and the message says which of the four it found: bytes that are
+    not YAML, a document that is not a mapping, a mapping that declares neither key, and a
+    `schema_version` that is not an integer. All four answer the same operator question — *what does
+    this tree say it was prepared for?* — and none of them can be answered by guessing, which is
+    why none of them is a warning. `config validate` collects this one as a finding instead of
+    ending the run, which is the only place the difference in severity is allowed to show.
+    """
+
+
+class SchemaVersionTooOldError(KubementatError):
+    """A tree two or more schema steps behind is refused before anything touches the cluster.
+
+    The severity is the requirement: a version string that drifted warns and continues, a schema
+    that far behind means every answer this tree gives that its own layer does not name is coming
+    from a built-in default, so the cluster is configured by kubementat's assumptions and not by the
+    operator's. The bump that closes the gap is a decision, and no command makes it — hence a
+    refusal with a remedy sentence instead of a default.
+    """
+
+
+class TeamConfigurationFileMissingError(KubementatError):
+    """A team-scoped read whose layer file the loader had to mark missing.
+
+    The warning at load time already named that file; this is the same file named in an error the
+    operator can act on, raised by the door that reads the answer rather than the door that logged
+    it. Both doors use this class: `Config.get` (which fills the rule over a team's name) and
+    `Config.declared` (which asks only what the files say). A destructive path asks the second
+    question, and a refusal that differed between the two would be a second owner of one rule.
+    """
+
+
+class EnvironmentConfigurationFileMissingError(KubementatError):
+    """The environment's own `static.json` is not there, so nothing is addressable.
+
+    The namespaces a team is addressed through are read from that file, so a create, a bind or a
+    sweep against this environment is a guess — and a guess is the answer this refusal exists to
+    forbid. It lives beside `TeamConfigurationFileMissingError` rather than under it because the
+    two files are different layers and the remediation verbs differ.
+    """
+
+
+class EnvironmentConfigurationDirectoryMissingError(KubementatError):
+    """There is no directory for the environment at all — which is not an environment with no teams.
+
+    The distinction is the refusal: a listing that treated the absent directory as an empty one
+    would report success on a teardown that deleted nothing. Enumerating the teams is a directory
+    listing and nothing else, so when the directory is not there the answer is the verb that lays
+    it down.
+    """
+
+
+class ReleaseKnobNotABooleanOrStringError(KubementatError):
+    """A release knob declared as a number, a list or a dict.
+
+    Both knobs and both accessors come through the one implementation, so one class answers for
+    `<COMPONENT>_ENABLED` and `<COMPONENT>_VERSION`. There is no valid answer for either that is not
+    a boolean or a string, and the shape is what the refusal is about: a version that reads like `1.0`
+    is a JSON number, which is not the string `"1.0"` and resolves to a chart helm has never seen, and
+    a `false` that falls through a type test becomes the default of `true` — the operator who said
+    "do not install this" gets it installed and is told the opposite. So it stops where it was typed,
+    and the message names the key, the file that declared it, and the two files of that layer the key
+    could have lived in.
+    """
+
+
+class TeamConfigurationUnreadableError(KubementatError):
+    """A team's `static.json` will not parse, so it names no namespaces.
+
+    A file that will not parse is not a file that says nothing, and the tolerant reader's answer —
+    skip the directory and sweep the rest — is not an answer a command asked to bind a Role can take.
+    Letting a `JSONDecodeError` through is how a configuration problem arrives as a traceback of the
+    tool's own stack, so it is refused with the path, the team and the parse error in one sentence.
+    """
+
+
+class TeamNamespaceNotConfiguredError(KubementatError):
+    """A team's configuration names fewer than both namespaces a command has to bind in.
+
+    The rule over a team's name yields an address and not a deed: `pandas` team's pipelines
+    namespace is `pandas-pipelines` whether or not a file says so, and a Role bound there is bound on
+    the strength of a directory name. A strict reader therefore asks for the key that is *set*, and
+    refuses when it is not. The sweep is the tolerant one by comparison — it deletes only what a file
+    named — which is why the two readers share the file and the keys and not the appetite.
     """
 
 

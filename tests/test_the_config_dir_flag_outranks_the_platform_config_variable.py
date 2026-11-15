@@ -23,10 +23,12 @@ Two properties are worth more than the flag's help text:
 """
 
 import pytest
-from click.exceptions import ClickException
+from kubementat.errors import (ConfigurationRootNotNamedError,
+                           RootDirectoryVariableIsEmptyError)
 from click.testing import CliRunner
 
 from cli.commands import environments
+from cli.kmt import KmtGroup
 from cluster_fixture import (DEV_SERVER, PROD_SERVER, redirect_checkout, STAGING_SERVER,
                              write_environment, write_kubeconfig)
 from kubementat.core.identity.context import Context
@@ -138,7 +140,7 @@ def test_neither_dial_named_is_a_refusal_and_not_the_checkouts_own_answer(tmp_pa
     redirect_checkout(monkeypatch, root)
     monkeypatch.delenv(PLATFORM_CONFIG_VARIABLE, raising=False)
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(ConfigurationRootNotNamedError) as raised:
         Context.build("dev", platform_config_dir=None)
 
     assert PLATFORM_CONFIG_VARIABLE in str(raised.value), "the variable was not named"
@@ -200,10 +202,14 @@ def test_the_listing_and_a_command_answer_one_root_because_they_read_one_rule(tm
     redirect_checkout(monkeypatch, root)
     monkeypatch.delenv(PLATFORM_CONFIG_VARIABLE, raising=False)
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(ConfigurationRootNotNamedError) as raised:
         Context.build("dev")
 
-    refusal = CliRunner(mix_stderr=False).invoke(environments.environments, ["list"])
+    # Through the root group class, the same dispatch `main()` builds: the sentence is rendered by
+    # the group that decides how a refusal is printed, not by the sub-group that raised it.
+    root_group = KmtGroup(name="kmt")
+    root_group.add_command(environments.environments, "environments")
+    refusal = CliRunner(mix_stderr=False).invoke(root_group, ["environments", "list"])
     assert refusal.exit_code != 0, "the listing answered a run that named no root"
     assert str(raised.value) in refusal.stderr, \
         "the listing refuses in its own words now, which is what a second owner of the rule does"

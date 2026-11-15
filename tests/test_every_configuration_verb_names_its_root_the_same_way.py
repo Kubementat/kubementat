@@ -113,10 +113,15 @@ def tree(tmp_path) -> Path:
 def run(*argv):
     """`kmt config …`, through the group so the verb's own name is exercised.
 
-    A bug inside the command re-raises instead of hiding in an exit code; a `ClickException` refusal
-    is allowed to stand, because "I will not run" is an answer and not a crash.
+    A bug inside the command re-raises instead of hiding in an exit code; a named refusal is allowed
+    to stand, because "I will not run" is an answer and not a crash. It is rendered on its way out by
+    the root group, which is why this helper dispatches through it.
     """
-    result = CliRunner(mix_stderr=False).invoke(config_module.config, list(argv))
+    from cli.kmt import KmtGroup
+
+    root_group = KmtGroup(name="kmt")
+    root_group.add_command(config_module.config, "config")
+    result = CliRunner(mix_stderr=False).invoke(root_group, ["config", *argv])
     if result.exception is not None and not isinstance(result.exception, SystemExit):
         raise result.exception
     return result

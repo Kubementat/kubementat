@@ -31,12 +31,15 @@ in Click's sense — `err=True`, always there on a terminal, never inside a pipe
   (`require_team`).
 * **A named refusal is rendered, not rethrown.** Three families of refusal this decorator can meet —
   `Context.build`'s cluster resolution, a service's `require_team`, and the tree refusals that ride
-  in on a command body (`TeamNotSuppliedError`, a missing deployer keypair, a locked configuration
-  file, an obsolete trigger directory) are wrapped as `ClickException` so the operator gets one
-  sentence and exit 1, not the tool's own traceback. The library stays free of Click to raise them;
-  only the CLI decides how they are printed, because a refusal that arrives as a bug report teaches
-  nothing the message did not. The same rendering covers the commands that build no `Context` at
-  all, through the group class in `cli.kmt`.
+  in on a command body (a missing deployer keypair, a locked configuration file, an obsolete trigger
+  directory, the `core/config/` refusals this module lists in `RENDERED_REFUSALS`: no configuration
+  root, an unreadable stamp, a team layer that is not there, a release knob declared as the wrong
+  type) are wrapped as `ClickException` so the operator gets one sentence and exit 1, not the tool's
+  own traceback. The library stays free of Click to raise them; only the CLI decides how they are
+  printed, because a refusal that arrives as a bug report teaches nothing the message did not. The
+  same rendering covers the commands that build no `Context` at all, through the group class in
+  `cli.kmt`, and both places catch the same tuple — two allowlists for one doctrine is how a refusal
+  ends up printed by one door and traced by the other.
 * **Nothing here asks `kubectl`.** The answer comes from `Context.build`, which reads
   the configuration directory and a kubeconfig file and opens no socket. Both
   `kubectl config current-context` call sites are deleted for the same reason: a command whose cluster came
@@ -56,10 +59,55 @@ from kubementat.core.config.stamp import check_configuration_stamp
 from kubementat.errors import (
     ClusterIdentityCollisionError,
     ClusterResolutionError,
+    ConfigurationRootNotNamedError,
+    ConfigurationStampInvalidError,
+    ConfigurationStampMissingError,
+    DeployerKeyMissingError,
+    EnvironmentConfigurationDirectoryMissingError,
+    EnvironmentConfigurationFileMissingError,
+    LockedConfigFileError,
+    ObsoleteTriggerDirectoryError,
+    ReleaseKnobNotABooleanOrStringError,
+    RootDirectoryVariableIsEmptyError,
+    SchemaVersionTooOldError,
+    TeamConfigurationFileMissingError,
+    TeamConfigurationUnreadableError,
+    TeamNamespaceNotConfiguredError,
+    TeamNotSuppliedError,
+)
+
+# Every domain refusal the terminal is allowed to print, spelled once.
+#
+# `kmt` renders a refusal as one `Error:` line and exit 1, and two places decide that: this
+# decorator, for the commands that open a socket, and `KmtGroup.invoke` in `cli/kmt.py`, for the
+# `config` and `environments` verbs that deliberately build no `Context`. The same fifteen classes
+# have to be on both lists or a refusal walks out of one door as a traceback and out of the other
+# as a sentence, which is the failure this tuple exists to make impossible: one owner, imported by
+# both, so a new refusal is added once.
+#
+# `ClusterResolutionError` and `ClusterIdentityCollisionError` are absent on purpose — `_resolve`
+# catches those two itself, beside the resolution they belong to, and they never reach this list.
+RENDERED_REFUSALS = (
+    # What this decorator was already rendering before `core/config/` was de-clicked.
+    TeamNotSuppliedError,
     DeployerKeyMissingError,
     LockedConfigFileError,
     ObsoleteTriggerDirectoryError,
-    TeamNotSuppliedError,
+    # The configuration tree's own refusals. They used to be `ClickException`s, which is the shape
+    # that says "a command printed this" instead of "kubementat refused", and the only gap left
+    # open by the doctrine above: the library no longer raises Click, so these now travel to the
+    # two places that decide how a refusal is printed.
+    ConfigurationRootNotNamedError,
+    RootDirectoryVariableIsEmptyError,
+    ConfigurationStampMissingError,
+    ConfigurationStampInvalidError,
+    SchemaVersionTooOldError,
+    TeamConfigurationFileMissingError,
+    EnvironmentConfigurationFileMissingError,
+    EnvironmentConfigurationDirectoryMissingError,
+    ReleaseKnobNotABooleanOrStringError,
+    TeamConfigurationUnreadableError,
+    TeamNamespaceNotConfiguredError,
 )
 
 # The variable Click's `envvar='ENVIRONMENT'` reads, spelled once because two halves of the CLI need
@@ -149,20 +197,22 @@ def kmt_context(func):
         context_arg = params.pop(CONTEXT_PARAMETER, None)
         kubeconfig_arg = params.pop(KUBECONFIG_PARAMETER, None)
         config_dir_arg = params.pop(CONFIG_DIR_PARAMETER, None)
-        resolved = _resolve(_environment_of(command_parameters, params),
-                            _team_of(command_parameters, params),
-                            context_arg, kubeconfig_arg,
-                            config_dir_arg=config_dir_arg)
-        for line in resolved.resolution_report:
-            click.echo(line, err=True)
-        # The report above is the answer to "which cluster"; the body below is where "which team"
-        # is asked, and a `Context` that was handed no team answers it with a named error. Which
-        # half of the run raised is not the operator's problem, so both are turned into the same
-        # `Error: …` line the resolution failures already produce -- see `_resolve`'s docstring.
+        # The `try` covers the whole decorated run and not only its body, because that is where the
+        # tree refusals are raised: the stamp check and the root resolution happen in `_resolve`,
+        # before the command has been handed anything. Which half of the run raised is not the
+        # operator's problem, so both halves are turned into the same `Error: …` line the resolution
+        # failures already produce — see `_resolve`'s docstring. The group class in `cli.kmt` renders
+        # the same tuple; this decorator catches it first, so a command invoked without its group
+        # (which is what every `CliRunner` test does) prints the sentence rather than a traceback.
         try:
+            resolved = _resolve(_environment_of(command_parameters, params),
+                                _team_of(command_parameters, params),
+                                context_arg, kubeconfig_arg,
+                                config_dir_arg=config_dir_arg)
+            for line in resolved.resolution_report:
+                click.echo(line, err=True)
             return func(*args, resolved, **params)
-        except (TeamNotSuppliedError, DeployerKeyMissingError,
-                LockedConfigFileError, ObsoleteTriggerDirectoryError) as error:
+        except RENDERED_REFUSALS as error:
             raise click.ClickException(str(error))
 
     return with_context

@@ -3,15 +3,18 @@ import logging
 import os
 from pathlib import Path
 
-import click
-
 from kubementat.core.config import derived as config_derived
 from kubementat.core.config import paths
 from kubementat.core.config import keys
 from kubementat.core import constants
 from kubementat.core.assets import asset_path
 from kubementat.core.config.reads import read_decrypted
-from kubementat.errors import TeamNotSuppliedError
+from kubementat.errors import (
+    EnvironmentConfigurationDirectoryMissingError,
+    ReleaseKnobNotABooleanOrStringError,
+    TeamConfigurationFileMissingError,
+    TeamNotSuppliedError,
+)
 
 # Importing this module configures logging and nothing else. The `logging.basicConfig`
 # call that used to sit here ran for every library consumer — importing `kubementat`
@@ -440,7 +443,7 @@ class Config:
 
         Raises
         ------
-        click.ClickException
+        TeamConfigurationFileMissingError
             If the category comes from a team-level file that does not exist. The warning
             already named that file when the config was loaded; this is the same file named
             in an error the user can act on.
@@ -460,7 +463,7 @@ class Config:
         self._ensure_config_loaded()
         missing_file = self.missing_team_config_files.get(category)
         if missing_file is not None:
-            raise click.ClickException(
+            raise TeamConfigurationFileMissingError(
                 f"No {category} config found at {missing_file}. "
                 f"Environment: {self.environment}, team: {self.team} - create the file or "
                 f"pass the environment and team you actually mean."
@@ -497,7 +500,7 @@ class Config:
         self._ensure_config_loaded()
         missing_file = self.missing_team_config_files.get(category)
         if missing_file is not None:
-            raise click.ClickException(
+            raise TeamConfigurationFileMissingError(
                 f"No {category} config found at {missing_file}. "
                 f"Environment: {self.environment}, team: {self.team} - create the file or "
                 f"pass the environment and team you actually mean."
@@ -611,7 +614,7 @@ class Config:
 
         Raises
         ------
-        click.ClickException
+        ReleaseKnobNotABooleanOrStringError
             When the key is declared as a number, a list or a dict. There is no valid answer for
             this knob that is not a boolean or a string, so a mis-typed value is refused where it
             was typed and not papered over with the default.
@@ -642,7 +645,7 @@ class Config:
 
         Raises
         ------
-        click.ClickException
+        ReleaseKnobNotABooleanOrStringError
             When the key is declared as a number, a list or a dict. A version that reads like
             `1.0` is the shape this refusal exists for: JSON would have stored it as the number
             `1.0`, which is not the string `"1.0"` and resolves to a chart helm has never seen.
@@ -673,7 +676,7 @@ class Config:
 
         Raises
         ------
-        click.ClickException
+        ReleaseKnobNotABooleanOrStringError
             A declared value that is a number, list or dict. The message names the key, the file
             that declared it, and the two files of that layer the key could have lived in, since
             "which file did I edit" is the only question left once the type is known to be wrong.
@@ -697,7 +700,7 @@ class Config:
                             for name in ("static.json", "static.encrypted.json"))
                 if declared_in is not None
                 else self._layers_to_check(self._component_layers()))
-        raise click.ClickException(
+        raise ReleaseKnobNotABooleanOrStringError(
             f"{key} is a {type(value).__name__} in {where}. kubementat reads that knob as a "
             f"boolean or a string and nothing else, so there is no default here to rescue it and "
             f"the run stops instead of installing something nobody chose. The key can only live in "
@@ -723,14 +726,14 @@ class Config:
 
         Raises
         ------
-        click.ClickException
+        EnvironmentConfigurationDirectoryMissingError
             If there is no configuration directory for the environment at all. An environment
             that has never been prepared is not the same thing as an environment with no
             teams, and guessing the difference would delete nothing while reporting success.
         '''
         environment_directory = self.platform_config_dir / self.environment
         if not environment_directory.is_dir():
-            raise click.ClickException(
+            raise EnvironmentConfigurationDirectoryMissingError(
                 f"No configuration directory for environment '{self.environment}' at"
                 f" {environment_directory}. Run kmt config init --environment"
                 f" {self.environment}, or pass the environment you actually mean."

@@ -33,7 +33,7 @@ import pytest
 
 from kubementat.core import constants
 from kubementat.automations.ci import CiUtils
-from kubementat.errors import CiImageNotConfiguredError
+from kubementat.errors import CiImageNotConfiguredError, TeamConfigurationFileMissingError
 from kubementat.core.config.config import Config
 from kubementat.automations.routing import routing
 from kubementat.infrastructure.helm import HelmUtils
@@ -332,7 +332,7 @@ def test_a_key_no_layer_declares_still_answers_as_nothing(tmp_path, category, ke
 def test_the_refusals_that_fire_on_an_absent_key_still_fire_the_same_way(tmp_path):
     """Every refusal census E listed as "when nothing declares it" still raises what it raised.
 
-    Same class, same sentence, for the four shapes of refusal the tree has: a `ClickException` that
+    Same class, same sentence, for the four shapes of refusal the tree has: a named error that
     names a file, a library error that names the keys, the code default that is not a default, and
     the two refusals that were never about a key at all (no team named, no team file).
     """
@@ -365,7 +365,7 @@ def test_the_refusals_that_fire_on_an_absent_key_still_fire_the_same_way(tmp_pat
     # in the error, and the layering does not talk its way past it. Seeded on its own root, so the
     # team files this test wrote for the reads above cannot answer for it.
     no_team_files = seed(tmp_path / "no-team-tree", environment_level={}, team_files_exist=False)
-    with pytest.raises(click.ClickException) as error:
+    with pytest.raises(TeamConfigurationFileMissingError) as error:
         no_team_files.get("team_static")
     assert "No team_static config found at" in str(error.value)
 

@@ -116,7 +116,8 @@ def _declare_in_layers(key, layers, sources, path_of, derived=None):
     layer when both declare it, because the layer is ordered that way — or
     `(_NOTHING_DECLARED, None)` when no file of any layer named it. `sources` is the loaded
     dictionaries keyed by category; a layer whose file was never read is simply absent and is
-    skipped, which is what keeps "the team named no file" (a `ClickException` from `get`) a
+    skipped, which is what keeps "the team named no file" (a
+    `TeamConfigurationFileMissingError` from `get`) a
     different fact from "no layer declared this key" (a fall-through to L0).
 
     `derived` is `(team, rules)` for the chain — the rules that answer what a team's name determines,

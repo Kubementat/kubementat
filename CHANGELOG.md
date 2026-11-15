@@ -1,4 +1,38 @@
 # Unreleased
+- **`core/config/` refuses in kubementat's own error classes, not in Click's. Fifteen raise sites moved
+  to named classes in `errors.py`, and the two CLI allowlists that render them were extended to meet
+  them.**
+
+  This is a change in vocabulary and nothing else: no refusal text, no exit code, no flag and no command
+  moved, and `uv run pytest -q` still reports a green suite. What changed is what a library consumer is
+  handed when `kmt` says no.
+
+  * **What the configuration tree refuses, by name.** A root that was never named
+    (`ConfigurationRootNotNamedError`) or named as an empty variable
+    (`RootDirectoryVariableIsEmptyError`); a stamp that is absent (`ConfigurationStampMissingError`) or
+    is not the two keys it has to be (`ConfigurationStampInvalidError`) or sits two steps behind
+    (`SchemaVersionTooOldError`); a team layer whose file is not there
+    (`TeamConfigurationFileMissingError`), will not parse (`TeamConfigurationUnreadableError`) or names
+    only one namespace (`TeamNamespaceNotConfiguredError`); an environment with no file
+    (`EnvironmentConfigurationFileMissingError`) or no directory at all
+    (`EnvironmentConfigurationDirectoryMissingError`); and a release knob declared as the wrong type
+    (`ReleaseKnobNotABooleanOrStringError`). Each is what `KubementatError` already means — a refusal
+    kubementat means — so one `except` can now tell "the library said no" from "the library crashed"
+    without knowing Click.
+  * **The rendering did not move.** Both allowlists — the root group class in `src/cli/kmt.py` and
+    `@kmt_context` in `src/cli/context.py` — catch one shared tuple,
+    `cli.context.RENDERED_REFUSALS`, imported rather than restated, so a new refusal cannot be added on
+    one door and forgotten on the other. A refusal that reaches neither prints a traceback, which is the
+    failure that tuple exists to make impossible.
+  * **The operator's half is provably unchanged.** A fixed corpus of commands exercising all fifteen
+    sites was run against the tree before and after: eleven real `kmt` invocations, byte-compared on
+    stdout, stderr and exit code, plus the library-side text of the seven sites that sit behind a
+    cluster resolution and so cannot be reached from a shell without a live cluster. Both sides came
+    back identical; the only line that moves is the exception's own class name, which is the thing the
+    item changed and which never reaches a terminal.
+  * **One consumer is affected.** `config validate` reads the stamp inside a handler that used to catch
+    `ClickException`; it catches the two stamp refusals by name alongside it now, so a tree that cannot
+    be stamped is still reported as a finding by the manifest check and not by a traceback.
 
 - **The suite no longer polices this repository's own source. Nine bash-parity files and the static
   repository sweeps are retired, and the agreement literals they wrote down are derived instead.**

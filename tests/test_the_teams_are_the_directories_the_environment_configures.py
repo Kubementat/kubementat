@@ -18,7 +18,7 @@ environment's own business and not a team.
 from pathlib import Path
 
 import pytest
-from click.exceptions import ClickException
+from kubementat.errors import EnvironmentConfigurationDirectoryMissingError
 
 from kubementat.core.config.config import Config
 
@@ -100,7 +100,7 @@ def test_an_environment_that_was_never_initialized_names_itself_rather_than_retu
     root = tmp_path / "checkout"
     (root / "platform_config").mkdir(parents=True)
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(EnvironmentConfigurationDirectoryMissingError) as raised:
         config_for(root, environment="staging").teams()
 
     assert "staging" in str(raised.value)

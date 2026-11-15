@@ -22,10 +22,11 @@ Two claims are worth more than the sentence's wording, and they are asserted her
 from pathlib import Path
 
 import pytest
-from click.exceptions import ClickException
+from kubementat.errors import ConfigurationRootNotNamedError
 from click.testing import CliRunner
 
 from cli.commands import config as config_command
+from cli.kmt import KmtGroup
 from cli.commands import kubementat
 from cluster_fixture import (DEV_SERVER, checkout, redirect_checkout, write_environment,
                              write_kubeconfig)
@@ -60,7 +61,7 @@ def test_context_build_refuses_before_it_builds_a_target(tmp_path, monkeypatch):
     monkeypatch.setattr(ClusterTarget, "from_kubeconfig",
                         lambda *args, **kwargs: built.append(args) or None)
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(ConfigurationRootNotNamedError) as raised:
         Context.build(ENVIRONMENT)
 
     assert built == [], "a run with no configuration root read a kubeconfig and addressed a cluster"
@@ -154,8 +155,12 @@ def test_config_init_names_no_root_and_scaffolds_nowhere(tmp_path, monkeypatch):
     redirect_checkout(monkeypatch, root)
     monkeypatch.delenv(PLATFORM_CONFIG_VARIABLE, raising=False)
 
-    result = CliRunner().invoke(config_command.init_command,
-                                ["--environment", ENVIRONMENT, "--team", TEAM])
+    # Dispatched through the root group class, which is what `main()` builds before it runs, because
+    # the root group is what renders a named refusal into the `Error:` line these assertions read.
+    root_group = KmtGroup(name="kmt")
+    root_group.add_command(config_command.config, "config")
+    result = CliRunner().invoke(root_group,
+                                ["config", "init", "--environment", ENVIRONMENT, "--team", TEAM])
 
     assert result.exit_code != 0, result.output
     assert "--config-dir" in result.output, \

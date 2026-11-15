@@ -31,7 +31,8 @@ import sys
 from pathlib import Path
 
 import pytest
-from click.exceptions import ClickException
+from kubementat.errors import (ConfigurationRootNotNamedError,
+                           RootDirectoryVariableIsEmptyError)
 
 from kubementat.core.config.config import Config
 from kubementat.core.config.paths import default_kubementat_main_dir
@@ -204,7 +205,7 @@ def test_an_empty_kubementat_home_cannot_refuse_a_command_that_was_handed_a_root
     assert config.kubementat_main_dir == handed.resolve(), \
         "an empty variable answered a command that had been handed a root"
 
-    with pytest.raises(ClickException) as raised:
+    with pytest.raises(RootDirectoryVariableIsEmptyError) as raised:
         Config(ENVIRONMENT, TEAM, preload_configs=False)
 
     assert HOME_VAR in str(raised.value), \
@@ -234,7 +235,7 @@ def test_a_root_that_is_set_but_empty_is_an_error_naming_the_variable(monkeypatc
     """
     monkeypatch.setenv(HOME_VAR, "   ")
 
-    with pytest.raises(ClickException) as excinfo:
+    with pytest.raises(RootDirectoryVariableIsEmptyError) as excinfo:
         Config(ENVIRONMENT, TEAM, preload_configs=False)
 
     assert HOME_VAR in str(excinfo.value)
@@ -271,7 +272,7 @@ def test_a_platform_config_directory_that_is_set_but_empty_names_the_variable(mo
     """
     monkeypatch.setenv(PLATFORM_CONFIG_VAR, "")
 
-    with pytest.raises(ClickException) as excinfo:
+    with pytest.raises(RootDirectoryVariableIsEmptyError) as excinfo:
         Config(ENVIRONMENT, TEAM, preload_configs=False)
 
     assert PLATFORM_CONFIG_VAR in str(excinfo.value)
@@ -289,7 +290,7 @@ def test_no_platform_config_root_is_named_and_the_refusal_names_both_dials(monke
     """
     unset_path_variables(monkeypatch)
 
-    with pytest.raises(ClickException) as excinfo:
+    with pytest.raises(ConfigurationRootNotNamedError) as excinfo:
         Config(ENVIRONMENT, TEAM, preload_configs=False)
 
     message = str(excinfo.value)
@@ -308,7 +309,7 @@ def test_no_root_named_still_refuses_with_a_preload_turned_off(monkeypatch):
     """
     unset_path_variables(monkeypatch)
 
-    with pytest.raises(ClickException):
+    with pytest.raises(ConfigurationRootNotNamedError):
         Config(ENVIRONMENT, TEAM, preload_configs=False)
 
 

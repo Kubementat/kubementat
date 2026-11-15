@@ -18,7 +18,7 @@ import json
 import logging
 
 import pytest
-from click.exceptions import ClickException
+from kubementat.errors import TeamConfigurationFileMissingError
 
 from kubementat.core.config.config import Config
 
@@ -69,10 +69,10 @@ def test_missing_team_config_error_names_the_file_to_create(tmp_path, caplog):
     config = config_for(root, platform_config_dir)
 
     with caplog.at_level(logging.WARNING):
-        with pytest.raises(ClickException) as excinfo:
+        with pytest.raises(TeamConfigurationFileMissingError) as excinfo:
             config.get("team_static")
         # the state is not consumed: a second read of the same category fails the same way
-        with pytest.raises(ClickException):
+        with pytest.raises(TeamConfigurationFileMissingError):
             config.get("team_static")
 
     assert expected_path in str(excinfo.value)
@@ -86,7 +86,7 @@ def test_missing_encrypted_team_config_is_reported_the_same_way(tmp_path):
     expected_path = str((platform_config_dir / ENVIRONMENT / TEAM / "static.encrypted.json").resolve())
     config = config_for(root, platform_config_dir)
 
-    with pytest.raises(ClickException) as excinfo:
+    with pytest.raises(TeamConfigurationFileMissingError) as excinfo:
         config.get("team_static_encrypted")
 
     assert expected_path in str(excinfo.value)
@@ -99,7 +99,7 @@ def test_lazy_loading_reads_environment_config_before_any_team_read(tmp_path):
 
     assert config.get("env_static_encrypted")["GRAFANA_ADMIN_USER"] == "admin"
 
-    with pytest.raises(ClickException):
+    with pytest.raises(TeamConfigurationFileMissingError):
         config.get("team_static")
 
 

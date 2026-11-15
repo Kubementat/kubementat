@@ -15,9 +15,9 @@ says kubementat may delete what lives there.
 
 import logging
 
-import click
-
 from kubementat.core.config.config import Config
+from kubementat.errors import (EnvironmentConfigurationFileMissingError,
+                               TeamConfigurationUnreadableError, TeamNamespaceNotConfiguredError)
 
 
 # The keys a team directory has to name for uninstall to be able to sweep it, in the order
@@ -51,7 +51,7 @@ def declared_team_namespaces(ctx, team: str) -> dict:
     environment = ctx.environment
 
     if not config.env_static_config_path.is_file():
-        raise click.ClickException(
+        raise EnvironmentConfigurationFileMissingError(
             f"No environment configuration at {config.env_static_config_path}. The"
             f" namespaces team '{team}' is addressed through are read from that file, so"
             f" nothing can be created or deleted without guessing. Run kmt config init"
@@ -167,10 +167,11 @@ def team_namespaces(ctx, team: str) -> list:
     both raise, so the two cannot disagree about what `static.json` says.
 
     Raises:
-    - click.ClickException: When the environment config is missing, when `team`'s
-      configuration names fewer than both namespaces, or when the file it names cannot be read
-      as JSON. The last of these is a skip for the sweep and a refusal here, and the difference
-      is which namespaces the operator took responsibility for naming.
+    - TeamConfigurationUnreadableError: When the environment config is missing, or when `team`'s
+      `static.json` cannot be read as JSON. The unreadable file is a skip for the sweep and a
+      refusal here, and the difference is which namespaces the operator took responsibility for
+      naming.
+    - TeamNamespaceNotConfiguredError: When `team`'s configuration names fewer than both namespaces.
     '''
 
     config = ctx.config
@@ -182,13 +183,13 @@ def team_namespaces(ctx, team: str) -> list:
         # A file that will not parse is not a file that says nothing: a command asked to edit
         # this team's namespaces cannot answer that question, and letting a `JSONDecodeError`
         # through is how a config problem arrives as a traceback of the tool's own stack.
-        raise click.ClickException(
+        raise TeamConfigurationUnreadableError(
             f"{config.platform_config_dir / environment / team / 'static.json'} is"
             f" not readable as JSON, so team '{team}' names no namespaces and nothing can be"
             f" created or bound for it: {error}"
         )
     if entry["missing"]:
-        raise click.ClickException(
+        raise TeamNamespaceNotConfiguredError(
             f"{entry['missing'][0]} is not set in {entry['path']}. This command reads the"
             f" namespaces it binds a team account in from that file, so team '{team}' has to"
             f" name both - add the key, or pass the team you actually mean."

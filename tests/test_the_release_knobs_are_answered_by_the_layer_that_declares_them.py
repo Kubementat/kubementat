@@ -21,7 +21,7 @@ otherwise duplicate.
 import json
 import logging
 
-import click
+from kubementat.errors import ReleaseKnobNotABooleanOrStringError
 import pytest
 
 from kubementat.core.config.config import Config
@@ -234,7 +234,7 @@ def test_a_version_declared_as_anything_but_a_string_is_refused_where_it_was_typ
     """
     config = seed(tmp_path, environment_level={VERSION_KEY: value})
 
-    with pytest.raises(click.ClickException) as error:
+    with pytest.raises(ReleaseKnobNotABooleanOrStringError) as error:
         config.component_release_version("grafana")
 
     assert VERSION_KEY in str(error.value)
@@ -252,7 +252,7 @@ def test_an_enabled_knob_declared_as_a_number_is_refused_and_not_fallen_through_
     """
     config = seed(tmp_path, environment_level={ENABLED_KEY: 0})
 
-    with pytest.raises(click.ClickException) as error:
+    with pytest.raises(ReleaseKnobNotABooleanOrStringError) as error:
         config.component_release_enabled("grafana")
 
     assert ENABLED_KEY in str(error.value)

@@ -23,7 +23,7 @@ same number the function had beside it, because this module sits in the director
 import os
 from pathlib import Path
 
-import click
+from kubementat.errors import ConfigurationRootNotNamedError, RootDirectoryVariableIsEmptyError
 
 
 # `Path(__file__).parents[4]` is the repository root for a checkout and *site-packages*
@@ -48,7 +48,7 @@ def _directory_from_environment(name):
 
     Raises
     ------
-    click.ClickException
+    RootDirectoryVariableIsEmptyError
         If the variable is set but empty. Falling back to the default there would be the
         D11 failure again, silently: an empty `KUBEMENTAT_HOME` would read config out of
         site-packages and say nothing about it.
@@ -57,7 +57,7 @@ def _directory_from_environment(name):
     if value is None:
         return None
     if not value.strip():
-        raise click.ClickException(
+        raise RootDirectoryVariableIsEmptyError(
             f"{name} is set but empty. Give it the path of the directory it names, "
             f"or unset it to use the built-in default."
         )
@@ -101,15 +101,15 @@ def default_platform_config_dir() -> Path:
 
     Raises
     ------
-    click.ClickException
-        If the variable is unset, or set but empty. The empty case is
-        `_directory_from_environment`'s rule verbatim: falling back when someone set the variable
-        to nothing is the silent default again, just further from view.
+    ConfigurationRootNotNamedError
+        If the variable is unset, or `RootDirectoryVariableIsEmptyError` when it is set but empty.
+        The empty case is `_directory_from_environment`'s rule verbatim: falling back when someone
+        set the variable to nothing is the silent default again, just further from view.
     '''
     declared = _directory_from_environment(KUBEMENTAT_PLATFORM_CONFIG_DIR_ENV_VAR)
     if declared is not None:
         return declared
-    raise click.ClickException(
+    raise ConfigurationRootNotNamedError(
         f"no configuration root is named. Give this command --config-dir PATH, or set "
         f"{KUBEMENTAT_PLATFORM_CONFIG_DIR_ENV_VAR} to the directory that holds the "
         f"environments' static.json. kubementat does not read configuration out of the directory "
@@ -146,8 +146,9 @@ def resolve_platform_config_dir(config_dir=None) -> Path:
 
     Raises
     ------
-    click.ClickException
-        When neither names one, with `default_platform_config_dir`'s sentence verbatim.
+    ConfigurationRootNotNamedError
+        When neither names one, with `default_platform_config_dir`'s sentence verbatim; and
+        `RootDirectoryVariableIsEmptyError` when the variable was set to nothing.
     '''
     if config_dir is not None:
         return Path(config_dir).resolve()
