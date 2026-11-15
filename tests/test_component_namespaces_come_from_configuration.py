@@ -314,12 +314,13 @@ def template_release_namespaces():
 
 
 class RecordingHelmfile:
-    """`shell.run` for helmfile: records argv *and* what the environment held when it started.
+    """`shell.run` for helmfile: records argv *and* the environment the child was handed.
 
-    The order is the fact being tested. helmfile reads its variables from the environment of the
-    process it starts, so anything the export does after the command is launched is invisible to
-    it -- which is also the only way a unit test can tell "exported before apply" apart from
-    "exported at some point during it".
+    What the child is given is the only thing that reaches a template, so that is what is recorded.
+    The recorder used to read `os.environ` inside `run`, which was the same fact while the apply
+    wrote its exports into the process -- and is a fact about the test's own interpreter the moment
+    the exports travel as an argument. Reading `kwargs["env"]` keeps the ordering claim intact: a
+    value that is not in the mapping was not in the child either, no matter when it was decided.
 
     The cluster reads an apply makes on the way to the apply answer as a clean cluster, and that
     is not a shortcut: until the shipped manifest existed on the fixture's tree, nothing there asked
@@ -337,9 +338,11 @@ class RecordingHelmfile:
         if argv and argv[0] != "helmfile":
             return types.SimpleNamespace(returncode=0, ok=True, argv=argv, stdout="[]", stderr="")
         exported = set(exported_namespaces())
+        environment = kwargs.get("env") or {}
         self.calls.append({
             "argv": argv,
-            "namespaces": {key: os.environ[key] for key in sorted(exported) if key in os.environ},
+            "namespaces": {key: environment[key] for key in sorted(exported) if key in environment},
+            "inherited_from_the_process": environment.get("PATH") is not None,
         })
         return types.SimpleNamespace(returncode=0, ok=True, argv=argv, stdout="", stderr="")
 
@@ -367,8 +370,8 @@ def helmfile_over(tmp_path, env_static, monkeypatch):
     # module-level lie.
     recorder = RecordingHelmfile()
     monkeypatch.setattr(helm_utils, "shell", recorder)
-    # The export writes into the process environment; `monkeypatch` puts it back, so a test that
-    # runs before does not decide what a test that runs after thinks the cluster looks like.
+    # The variables this fixture cares about must not be sitting in the process environment for the
+    # test, so a child that sees them can only have been handed them.
     for key in exported_namespaces():
         monkeypatch.delenv(key, raising=False)
     return HelmUtils(configuration_only_context(ENVIRONMENT, TEAM, config)), recorder

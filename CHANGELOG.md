@@ -1,4 +1,43 @@
 # Unreleased
+- **`helmfile_apply` hands its child one environment instead of editing the process sixty times. Nothing
+  an operator reads moved; two applies in one process no longer overwrite each other's answers.**
+
+  `helmfile_apply` used to publish what it had decided by writing it into `os.environ` — grafana's admin
+  pair, every component namespace, the ingress class, the run's three coordinates and the release knobs,
+  six assignment sites per apply — because `helmfile.yaml.gotmpl` reads its templates out of the child's
+  environment and an argument that reaches only `argv` never reaches a template. That worked while one
+  apply ran at a time. It stopped working the moment two ran in the same process: the second apply wrote
+  over the first one's values, and if the first had not spawned yet it spawned holding somebody else's
+  configuration. `helmfile_apply` now builds one dictionary and passes it to
+  `shell.run(argv, cwd=..., env=...)`, which has accepted one since the command-execution policy existed.
+
+  * **The variables are the same ones, spelled the same.** `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`,
+    the thirteen `<COMPONENT>_DEPLOYMENT_NAMESPACE`, `<COMPONENT>_ENABLED` and `<COMPONENT>_VERSION` for
+    whatever a layer declared, `TRAEFIK_INGRESS_CLASS`, `KUBEMENTAT_CONFIG_ROOT`, `KUBEMENTAT_ENVIRONMENT`
+    and `KUBEMENTAT_TEAM`. The key universe is what the template reads and it did not change: a 2.x tree
+    resolves to the same values it resolved to before this change, and the template's own `default` still
+    answers a knob nobody declared. Proven by capturing the recorded environment mapping of the helmfile
+    invocation before and after — three traces, 20 / 19 / 11 decided keys each, identical keys and values
+    on both sides — while the writes it replaced went from 50 across those traces to 0.
+  * **A single apply is unchanged.** The dictionary is `{**os.environ, **<this apply's answers>}`, so
+    `PATH`, `HOME` and a resolved `KUBECONFIG` are inherited exactly as they were, and a value that the
+    configuration answers still outranks one the operator's shell happens to be carrying — the same
+    precedence the assignments used to force, with the same lifetime for the child.
+  * **What is new is re-entrancy, and it is only re-entrancy.** Two applies interleaved in one process do
+    not share their variables; a new test runs one apply inside the other's last cluster read before its
+    spawn and asserts each child was handed its own apply's answers, including the knob only one of the
+    two trees declared. **This is not thread-safety**, and it would be wrong to read it as an invitation
+    to reach for a pool: `Context` resolution, the packaged manifest's path and the logging stream are
+    still process-wide, and no thread, pool or lock was added anywhere. Two `kmt` processes were already
+    independent.
+  * **The five helpers kept their names** (`_export_component_namespaces`, `export_configuration_coordinates`,
+    `export_component_release_knobs`, `export_ingress_class`) and are now pure: each returns the
+    `{variable: value}` mapping it contributes, which is the only record of the handover. The apply's log
+    lines say "handed to helmfile" where they used to say "exported", because that is what they did.
+  * Test: `tests/test_two_applies_in_one_process_do_not_share_their_variables.py`, four cases. It fails
+    against the parent commit — three of the four, with the other one proving the interleaving happened —
+    which is the point of writing it as a trace and not as two sequential applies.
+
 - **The rest of the library refuses in kubementat's own error classes too. Sixty-three raise sites in nine
   modules moved to named classes in `errors.py`, `import click` now survives only under `src/cli/`, and the
   CLI has one class that renders refusals instead of three.**

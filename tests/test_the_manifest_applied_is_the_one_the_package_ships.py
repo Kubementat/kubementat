@@ -74,6 +74,7 @@ class RecordingShell:
             "argv": argv,
             "argv0": argv[0] if argv else "",
             "cwd": kwargs.get("cwd"),
+            "environment": kwargs.get("env"),
             "helmfile": argv[0] == "helmfile",
         })
         return type("Result", (), {"returncode": 0, "ok": True, "argv": argv,
@@ -283,12 +284,13 @@ def test_the_three_coordinates_are_what_helmfile_sees(tmp_path, monkeypatch, tea
     recorder = apply_helmfile(utils, monkeypatch)
 
     seen = helmfile_call(recorder)
-    assert os.environ["KUBEMENTAT_CONFIG_ROOT"] == str(Path(str(root)).absolute()), seen
-    assert os.environ["KUBEMENTAT_ENVIRONMENT"] == ENVIRONMENT, seen
-    assert ("KUBEMENTAT_TEAM" in os.environ) is expect_team, os.environ
+    handed = seen["environment"] or {}
+    assert handed["KUBEMENTAT_CONFIG_ROOT"] == str(Path(str(root)).absolute()), seen
+    assert handed["KUBEMENTAT_ENVIRONMENT"] == ENVIRONMENT, seen
+    assert ("KUBEMENTAT_TEAM" in handed) is expect_team, handed
     if expect_team:
-        assert os.environ["KUBEMENTAT_TEAM"] == TEAM, seen
-    assert os.environ.get("KUBEMENTAT_PLATFORM_CONFIG_DIR") == str(root), \
+        assert handed["KUBEMENTAT_TEAM"] == TEAM, seen
+    assert handed.get("KUBEMENTAT_PLATFORM_CONFIG_DIR") == str(root), \
         "the export must not rewrite the variable the root was resolved from"
 
 
@@ -306,7 +308,7 @@ def test_the_exports_come_before_helmfile_runs(tmp_path, monkeypatch):
     class WatchingShell(RecordingShell):
         def run(self, argv, **kwargs):
             if list(argv)[:1] == ["helmfile"]:
-                seen.update({name: os.environ.get(name) for name in
+                seen.update({name: (kwargs.get("env") or {}).get(name) for name in
                              ("KUBEMENTAT_CONFIG_ROOT", "KUBEMENTAT_ENVIRONMENT", "KUBEMENTAT_TEAM")})
             return super().run(argv, **kwargs)
 

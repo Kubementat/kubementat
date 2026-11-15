@@ -122,8 +122,8 @@ def test_only_the_knob_that_was_declared_is_written_and_the_other_is_left_alone(
     exported = export_component_release_knobs(config, index)
 
     assert exported == {component_config_key("grafana", "ENABLED"): "false"}
-    assert os.environ[component_config_key("grafana", "ENABLED")] == "false"
-    assert os.environ.get(component_config_key("grafana", "VERSION")) is None
+    assert os.environ.get(component_config_key("grafana", "VERSION")) is None, \
+        "the half nobody typed has to stay absent from the environment it is handed out of"
 
 
 def test_the_knobs_are_exported_for_the_releases_the_manifest_names_and_not_for_the_namespaces_it_creates(
@@ -188,9 +188,11 @@ def test_the_export_does_not_write_a_knob_the_release_it_belongs_to_does_not_exi
 
 def test_the_export_is_the_values_it_was_given_and_not_a_copy_of_what_the_environment_held(
         tmp_path, monkeypatch):
-    """What is returned is what was written, so the log line and the child agree.
+    """What is returned is what the layers declared, and it is the only record of the handover.
 
-    A dict that was assembled separately from the writes is how a log becomes fiction.
+    There is no longer a second copy anywhere for the log line to disagree with: the export writes
+    nothing into the process environment, so the dictionary it returns *is* what the child is
+    handed, and a mapping assembled separately from it is how a log becomes fiction.
     """
     index = live_index()
     keys = knob_keys(index)
@@ -202,7 +204,9 @@ def test_the_export_is_the_values_it_was_given_and_not_a_copy_of_what_the_enviro
 
     assert exported == {component_config_key("loki", "VERSION"): "20.1.0",
                         component_config_key("loki", "ENABLED"): "true"}
-    assert exported == {key: os.environ[key] for key in exported}
+    assert {key: os.environ.get(key) for key in exported} == dict.fromkeys(exported), \
+        "an exported knob was also written into the process environment, which is the channel " \
+        "this item is closing: the next apply in this process would read it back as its own answer"
 
 
 @pytest.mark.parametrize("component", sorted(live_index()))

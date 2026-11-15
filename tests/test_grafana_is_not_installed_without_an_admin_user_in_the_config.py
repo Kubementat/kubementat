@@ -15,6 +15,7 @@ applied, what is exported, and what is said when nothing may be applied.
 from kubementat.errors import GrafanaAdminCredentialsNotConfiguredError
 import json
 import logging
+import os
 
 import pytest
 
@@ -31,14 +32,22 @@ CONFIGURED_USER = "grafadmin"
 
 
 class RecordingShell:
-    """`kubementat.infrastructure.shell` for these tests: remembers argv, runs nothing."""
+    """`kubementat.infrastructure.shell` for these tests: remembers argv and the environment per call.
+
+    The environment travels with the call and not with the process, which is the whole point of the
+    mechanism under test -- so the recorder keeps one entry per call rather than reading
+    `os.environ`, where a grafana that was never handed to anybody would still be sitting there
+    from the last apply if the channel were still open.
+    """
 
     def __init__(self):
         self.calls = []
+        self.environments = []
 
     def run(self, argv, **kwargs):
         argv = list(argv)
         self.calls.append(argv)
+        self.environments.append(kwargs.get("env"))
         # The cluster read a helmfile apply makes before it applies, answered as a cluster holding
         # no releases. It is the state these fixtures were in before the manifest moved into the
         # package -- nothing could be read out of it, so nothing was asked -- and these tests are
@@ -46,6 +55,13 @@ class RecordingShell:
         return type("Result", (), {"returncode": 0, "ok": True, "argv": argv,
                                    "stdout": "[]" if argv and argv[0] != "helmfile" else "",
                                    "stderr": ""})()
+
+    def helmfile_environment(self):
+        """The environment handed to the last `helmfile` call -- what the templates are evaluated in."""
+        for argv, environment in zip(reversed(self.calls), reversed(self.environments)):
+            if argv and argv[0] == "helmfile":
+                return environment or {}
+        return {}
 
 
 def a_helmfile_that_reads(encrypted, monkeypatch, tmp_path):
@@ -117,9 +133,14 @@ def test_the_admin_user_the_configuration_names_is_the_one_helmfile_is_given(mon
     apply_it(utils)
 
     assert shell.calls, "helmfile was expected to run and did not, so nothing is being tested"
-    import os
-    assert os.environ["GRAFANA_ADMIN_USER"] == CONFIGURED_USER, \
+    handed = shell.helmfile_environment()
+    assert handed["GRAFANA_ADMIN_USER"] == CONFIGURED_USER, \
         "the exported value won over the file that decides"
+    # The other half of the same fact: deciding it is not the same as writing it down where the next
+    # command will read it. The operator's own variable is still sitting there, untouched.
+    assert os.environ["GRAFANA_ADMIN_USER"] == "what-an-operator-exported", \
+        "the apply overwrote the process environment it was handed, which is the channel this "\
+        "change exists to close"
     assert "helmfile" in shell.calls[-1]
 
 

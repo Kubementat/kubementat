@@ -138,14 +138,25 @@ class HelmUtils:
         return self.kubernetes_utils.target
 
     def helmfile_apply(self, environment_name: str, helmfile_label_filter: str, interactive: bool = False, helmfile_working_directory=None, helmfile_path=None):
-        """
+        r'''
         Apply a Helmfile configuration
 
         `interactive` is the only dial: True asks helmfile for confirmation, False lets it
         apply. It defaults to False, so a caller that says nothing never gets a prompt it
         cannot answer. Whether a human is present is not something this class can see, so the
         CLI (`kmt helm apply`) decides that and passes the answer in.
-        """
+
+        **One `env` dict, built here, handed to `shell.run`.** Everything the manifest's
+        templates read is collected into one dictionary and passed as the child's environment;
+        nothing is written into `os.environ` on the way. That is what makes this function
+        *re-entrant*: two applies can be interleaved in one process and neither one's child sees
+        a variable the other one decided, because there is no shared place left to decide it
+        in. The claim stops there and must not be read further: **this is not thread-safe**.
+        `Context` resolution, the packaged manifest's path and the cluster reads this method makes
+        on the way to the spawn are not synchronised, `logging` is one stream, and a real thread
+        pool would race on all of that while the environment it would have raced on is fixed.
+        Nothing in Phase B adds a thread, and nothing here invites one.
+        '''
         # Get default variables from the environment if not set
         # Access encrypted static JSON from env_static_encrypted
         # Grafana's admin credentials come from `platform_config/{environment}/static.encrypted.json`
@@ -155,8 +166,10 @@ class HelmUtils:
         # read here and handed to the template, and what happened to be in the operator's shell is
         # not consulted.
         grafana_admin_user, grafana_admin_password = self._grafana_admin_credentials()
-        os.environ['GRAFANA_ADMIN_USER'] = grafana_admin_user
-        os.environ['GRAFANA_ADMIN_PASSWORD'] = grafana_admin_password
+        grafana_credentials = {
+            'GRAFANA_ADMIN_USER': grafana_admin_user,
+            'GRAFANA_ADMIN_PASSWORD': grafana_admin_password,
+        }
 
         # ...and for every namespace a release can be deployed into, for the same reason and by
         # the same route: the template reads them, so they have to be in the environment the
@@ -165,17 +178,16 @@ class HelmUtils:
 
         # ...and the one routing answer that is neither a namespace nor a release knob: the ingress
         # class the traefik release names. Same destination and same reason -- helmfile reads its
-        # templates out of this process's environment -- and this one was missing for a while, so the
+        # templates out of the environment it is handed -- and this one was missing for a while, so the
         # manifest answered for itself and the cluster's release could disagree with every Ingress the
         # Python side wrote.
         ingress_class = export_ingress_class(self.config)
 
         # ...and the three that let a manifest shipped inside a wheel say where the operator's own
-        # values live. Exporting is the only new mechanism on this surface: the manifest used to sit
-        # next to the configuration, so a relative path was enough to reach it, and now it does not,
-        # so a path that has to cross out of the package is told where to cross to. The manifest
-        # names the root, the environment and the team, and nothing here guesses at a fourth
-        # variable the operator's shell might happen to be carrying.
+        # values live. The manifest used to sit next to the configuration, so a relative path was
+        # enough to reach it, and now it does not, so a path that has to cross out of the package is
+        # told where to cross to. The manifest names the root, the environment and the team, and
+        # nothing here guesses at a fourth variable the operator's shell might happen to be carrying.
         exported_coordinates = export_configuration_coordinates(self.config, self.environment)
 
         # The helmfile working directory and the manifest inside it. One resolution of each, in
@@ -193,24 +205,24 @@ class HelmUtils:
         helmfile_path = Path(helmfile_path).absolute()
         helmfile_working_directory = Path(helmfile_working_directory).absolute()
 
-        # ...and the two knobs every release that manifest names carries. It is exported after the
-        # paths are resolved and not straight after the namespaces above for one reason: the set is
-        # read out of *this* manifest's labels, so a check -- and an export -- that looked at a
-        # different file than the one helmfile is about to apply would say nothing. The order it
-        # needs is the same one the namespaces need: the template is evaluated by the child, so
-        # everything has to be in the environment before argv is assembled.
+        # ...and the two knobs every release that manifest names carries. They are collected after
+        # the paths are resolved and not straight after the namespaces above for one reason: the set
+        # is read out of *this* manifest's labels, so a check -- and a collection -- that looked at a
+        # different file than the one helmfile is about to apply would say nothing. The order they
+        # need is the same one the namespaces need: the template is evaluated by the child, so
+        # everything has to be in the child's environment before argv is assembled.
         release_knobs = export_component_release_knobs(
             self.config, self.component_release_index(helmfile_path))
 
         logging.info(f"Environment name: {self.environment}")
         logging.info(f"Grafana admin user: {grafana_admin_user}")
         logging.info(f"Release namespaces: {namespaces}")
-        logging.info(f"Release knobs exported to helmfile: {release_knobs}")
-        logging.info(f"Ingress class exported to helmfile: {ingress_class}")
+        logging.info(f"Release knobs handed to helmfile: {release_knobs}")
+        logging.info(f"Ingress class handed to helmfile: {ingress_class}")
         logging.info(f"Helmfile working directory: {helmfile_working_directory}")
         logging.info(f"Helmfile path: {helmfile_path}")
         logging.info(f"Helmfile label filter: {helmfile_label_filter}")
-        logging.info(f"Configuration coordinates exported to helmfile: {exported_coordinates}")
+        logging.info(f"Configuration coordinates handed to helmfile: {exported_coordinates}")
 
         # A release that is already running somewhere is not free to be told to live somewhere
         # else, and this is the last line every one of those applies is about to cross. Ask the
@@ -228,9 +240,27 @@ class HelmUtils:
         if interactive:
             argv.append("--interactive")
 
+        # The one environment this apply is worth. It is assembled here and nowhere else: this
+        # process's environment as it already stands, with the five groups of decided values laid on
+        # top of it. Inheriting what is already there is deliberate -- PATH, HOME, a KUBECONFIG the
+        # operator resolved, the proxy variables -- and the merge is what makes a value that the
+        # *configuration* answers outrank a value the operator's shell happened to be carrying, the
+        # same way `os.environ[...] = ...` used to make it outrank. What changes is only the lifetime:
+        # a value decided here is decided for this child and dies with it, so an apply that runs after
+        # this one, or between this one's first line and its spawn, is handed its own dictionary and
+        # not somebody else's leftovers.
+        child_environment = {
+            **os.environ,
+            **grafana_credentials,
+            **namespaces,
+            **ingress_class,
+            **exported_coordinates,
+            **release_knobs,
+        }
+
         # Execute the command. Output is not captured: helmfile prints the diff the operator
         # is here to read, and the [y/n] prompt has to reach a terminal when there is one.
-        return shell.run(argv, cwd=str(helmfile_working_directory))
+        return shell.run(argv, cwd=str(helmfile_working_directory), env=child_environment)
 
     def uninstall_release(self, component: str) -> dict:
         '''
@@ -828,8 +858,8 @@ class HelmUtils:
         component that is added there is exported without a second edit anywhere, and a
         component nobody named cannot be exported under a guessed name.
 
-        helmfile evaluates its templates with the process environment, which is why this is
-        an `os.environ` export and not an argument. The template falls back to the very same
+        helmfile evaluates its templates in the environment it is handed, which is why the answer
+        is a `{variable: value}` dict for the apply's environment and not an argument. The template falls back to the very same
         default when a variable is missing (`env ... | default`), so the two halves of the
         rule are both met: renaming a key moves the release, and a key that is not there does
         not fail the install. No release in `helmfile.yaml.gotmpl` keeps a literal namespace, so
@@ -849,7 +879,6 @@ class HelmUtils:
         for component in sorted(constants.DEFAULT_NAMESPACES):
             key = component_config_key(component, 'DEPLOYMENT_NAMESPACE')
             namespaces[key] = self.config.component_namespace(component)
-            os.environ[key] = namespaces[key]
         return namespaces
 
 def _components_named_by_selector(helmfile_label_filter: str):
@@ -900,13 +929,13 @@ def export_configuration_coordinates(config, environment: str) -> dict:
     a run that names no team gets no `KUBEMENTAT_TEAM`, because a manifest that read one would be
     applying a team nobody chose.
 
-    They go into the process environment and not into an argument, for the reason
-    `_export_component_namespaces` gives for the namespaces: helmfile evaluates its templates with
+    They go into the apply's environment and not into an argument, for the reason
+    `_export_component_namespaces` gives for the namespaces: helmfile evaluates its templates in
     the environment it is handed, and an argument that only reaches the child's `argv` never reaches
     the template. They are also not the operator's own `$KUBEMENTAT_PLATFORM_CONFIG_DIR`: that
     variable is the *input* to the root's one resolution (`paths.resolve_platform_config_dir`) and
-    writing the resolved answer back into it would make the process environment a second place that
-    claims to know which root this run was given.
+    writing the resolved answer back into it would make the environment a second place that claims
+    to know which root this run was given.
 
     Args:
         config: The `Config` this apply is reading -- supplies the root and, when the command was
@@ -925,8 +954,6 @@ def export_configuration_coordinates(config, environment: str) -> dict:
     team = getattr(config, "team", None)
     if team:
         exported["KUBEMENTAT_TEAM"] = str(team)
-    for name, value in exported.items():
-        os.environ[name] = value
     return exported
 
 def export_component_release_knobs(config, index) -> dict:
@@ -952,12 +979,14 @@ def export_component_release_knobs(config, index) -> dict:
     manifest gets its knobs the way it gets installability, for free and with no second list to
     agree with.
 
-    Only what was declared goes into the environment. A key that answers `None` is not exported,
+    Only what was declared is handed over. A key that answers `None` is not exported,
     because helmfile's own `default` in the manifest is what a tree that declares nothing should
     read, and writing an empty or invented value would take that answer away from the manifest and
-    hand it to a function. Like the namespaces and the coordinates, these land in the process
-    environment and not in `argv`: helmfile evaluates its templates in the environment it is handed,
-    and an argument that reaches only the child's arguments never reaches the template.
+    hand it to a function. Like the namespaces and the coordinates, these land in the environment of
+    the child this apply spawns and not in `argv`: helmfile evaluates its templates in the
+    environment it is handed, and an argument that reaches only the child's arguments never reaches
+    the template. And because they are handed to *this* child and not written down somewhere the
+    next child will also read, a knob one apply declares is not a knob the next one inherits.
 
     Args:
         config: The `Config` this apply is reading — supplies every layer the knobs are answered from.
@@ -981,7 +1010,6 @@ def export_component_release_knobs(config, index) -> dict:
             if answer is None:
                 continue
             exported[key] = answer
-            os.environ[key] = answer
     return exported
 
 # The component whose class the routing release names is `constants.COMPONENT` — spelled once for the
@@ -1005,9 +1033,9 @@ def export_ingress_class(config) -> dict:
 
     The exported value is the configuration's own answer and nothing else:
     `Config.component_ingress_class` is the read, which walks `L2 > L1 > L0` over the component layers
-    the way every other component key does. The destination is `os.environ` for the reason the two
-    neighbours give: helmfile evaluates its templates in the environment it is handed, and an answer
-    that reaches only the child's argv never reaches the template.
+    the way every other component key does. The destination is the apply's environment for the reason
+    the two neighbours give: helmfile evaluates its templates in the environment it is handed, and an
+    answer that reaches only the child's argv never reaches the template.
 
     **The neighbours' skip is deliberately not copied here, and that is the finding.**
     `export_component_release_knobs` writes nothing when a key answers `None`, correctly, because an
@@ -1029,9 +1057,7 @@ def export_ingress_class(config) -> dict:
     '''
     key = component_config_key(constants.COMPONENT, "INGRESS_CLASS")
     answer = config.component_ingress_class(constants.COMPONENT)
-    exported = {key: str(answer)}
-    os.environ[key] = str(answer)
-    return exported
+    return {key: str(answer)}
 
 def _one_supported_fix(conflicts: list) -> str:
     r'''

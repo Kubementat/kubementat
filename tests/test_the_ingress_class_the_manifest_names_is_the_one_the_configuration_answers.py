@@ -237,10 +237,9 @@ def test_the_layer_the_answer_came_from_does_not_change_what_helmfile_builds(tmp
 def test_helmfile_apply_hands_the_class_over_before_it_runs_helmfile(tmp_path, monkeypatch):
     """An export that exists but is never called by `helmfile_apply` is an export that never happens.
 
-    The environment variable is read out of `os.environ` *inside* the recorded `shell.run`, which is
-    the moment helmfile starts evaluating: what the child is handed and nothing else is what a template
-    sees. So this says two things at once -- the answer lands in the environment, and it lands before
-    argv does.
+    The variable is read out of the environment handed to the recorded `shell.run`, which is the
+    mapping the child actually evaluates its templates in. So this says two things at once -- the
+    answer is in the handover, and it is there before argv is assembled.
     """
     main_dir = tmp_path / "checkout"
     main_dir.mkdir(parents=True)
@@ -273,7 +272,7 @@ def test_helmfile_apply_hands_the_class_over_before_it_runs_helmfile(tmp_path, m
         def run(self, argv, **kwargs):
             self.calls.append(list(argv))
             if argv and argv[0] == "helmfile":
-                seen[KEY] = os.environ.get(KEY)
+                seen[KEY] = (kwargs.get("env") or {}).get(KEY)
                 return _Completed(argv, "")
             return _Completed(argv, "[]")
 
