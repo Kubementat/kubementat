@@ -52,7 +52,16 @@ def uninstall(ctx, environment, yes):
     # it was: the sweep covers every team the environment's layer configures, so passing one team
     # along would be a claim about the install that is not true, and the `Context` the decorator
     # resolved is all this command hands the uninstall slice.
-    uninstall_slice.uninstall_kubementat(ctx, consent=uninstall_consent(environment, yes))
+    result = uninstall_slice.uninstall_kubementat(ctx, consent=uninstall_consent(environment, yes))
+    # The answer is printed on the clean path, exactly as `kmt install` prints its own. The residue
+    # path is neither printed nor silently accepted: it takes `raise_if_incomplete`, which raises
+    # `UninstallIncompleteError` with the message the value builds, so the operator reads the same
+    # sentence they always read and the command still exits 1. What changed is that a run which
+    # deleted ten namespaces and left one release running is now a run with a *partial result* --
+    # readable as one, and not only as a joined message.
+    if not result.clean:
+        result.raise_if_incomplete()
+    click.echo(result.summary())
 
 
 # --------------------------------------------

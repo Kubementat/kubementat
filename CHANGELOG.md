@@ -1,4 +1,46 @@
 # Unreleased
+- **A partially-succeeded uninstall reports a result now, not a sentence. `uninstall_kubementat`
+  returns `SweepResult`, the residue is a field, and the message the run fails with is assembled
+  from it — same words, same exit code, one more place that can be read.**
+
+  The last lines of `automations/uninstall/kubementat.py` used to be: `if residue: raise
+  UninstallIncompleteError("uninstall left kubementat residue behind…\n  " + "\n  ".join(residue))`.
+  Ten namespaces deleted and one release still running is a *partial* result, and a `None` return
+  plus a joined message is the one shape that cannot express that: the operator read a sentence and
+  exited 1 — both correct — and everybody else got the information folded into an exception
+  message. There was no way to ask how many namespaces went, which directories were read as teams,
+  or whether a run was clean before deciding to catch something.
+
+  * **The sentence did not move, and it had to stay put.** `SweepResult.failure_message()` builds
+    exactly the string that joined literal produced — same lead, same two-space indent, same items
+    in the same order — and `SweepResult.raise_if_incomplete` raises the same
+    `UninstallIncompleteError` the CLI already renders as `Error: …` with exit 1. A test asserts the
+    message against a literal, not against a function's output, because a reword here would be a
+    behaviour change wearing a refactoring.
+  * **What stdout gets is new, and nothing that was there moved.** `kmt uninstall` printed no stdout
+    at all before this — every word it said went to the log. A clean sweep now prints its answer
+    (`15 namespaces deleted, 2 were already absent` / `nothing kubementat owned is left on the
+    cluster`); a sweep that left residue prints nothing and takes the raise. `print_uninstall_result`
+    still writes the namespace diff, the team-directory caveat and `DONE` only when the list is
+    empty, so the log is still evidence and the value is still the summary of it.
+  * **The partial case is readable now.** The residue strings themselves survive verbatim — the
+    cluster's own sentences about which namespace is still draining, the server's refusal about a
+    claim that would not move — because what an operator has to act on is the name of the thing that
+    was not deleted, not a count of them.
+  * **Proven with a capture and not with a claim.** The same five cases were run against a detached
+    worktree of the parent commit and against this one (`~/.cache/kmt-b9a/captures/{before,after}/`,
+    driver on disk beside them). Inside the capture the `before` half prints
+    `install_def_promises_none_in_words = 1`, `sweep_result_name_occurrences = 0` and **4** `-> None`
+    return lines in `part-b.txt` against **0** in the `after` half, and its `uninstall/kubementat.py`
+    carries the joined-string raise this commit removes. Every exit code matched (`0/0/0/0/1`), every
+    stderr was byte-identical after timestamp normalising, and the only stdout change is the answer
+    the values render. A negative control ran too: editing the joined residue sentence **in the
+    before worktree** moves both the capture's `part-b` and the residue case's stderr, and editing an
+    install `logging.info` sentence moves the install cases' stderr, so a clean diff here is evidence
+    and not a silent harness failure (§R-2's form, which item 4 found and item 7 named).
+  * **What is left of §9.** `kmt install` answers with its own value now (9a, the previous entry),
+    and this closes 9b. The automation helpers for secrets, registry, pipelines and triggers still
+    return `None` (9c) and the tunnel helpers' return codes are still discarded by the CLI (9d).
 - **`kmt install` answers with a value. What happened on the cluster is now a returned
   `InstallResult` that the command prints, and not a stream of library log lines and a `None`.**
 

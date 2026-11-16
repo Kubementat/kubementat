@@ -767,6 +767,11 @@ class UninstallIncompleteError(KubementatError):
     still running, and the residue assert had to be written against the cluster because nobody
     in the tooling could be believed. Named in the message is what is still there, so the
     operator has something to act on instead of a claim that the exit code was 0.
+
+    The message is not assembled inside the sweep any more. `SweepResult` carries the residue as
+    a field and builds this sentence from it, so the CLI, a caller and a test all read one list --
+    which is what lets a partially-succeeded uninstall be reported as a result and not only as an
+    exception. Same class, same words, same exit code; the string just has one owner now.
     """
 
 

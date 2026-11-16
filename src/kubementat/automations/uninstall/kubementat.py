@@ -10,9 +10,19 @@ The deletes themselves are in `residue`, `linkerd` and `nginx_ingress`; the name
 `sweep`; the team directory is read by `core.config.teams`. This module owns only the order, the
 plan the operator is shown before being asked, and the summary that says which directories were
 read as teams and which were not.
+
+What that summary used to add up to was a `None` and a raise. A partially-succeeded uninstall
+-- ten namespaces gone, one release still running -- reported itself by joining its residue list
+into an exception message, which is the same information arriving as prose and only one way: the
+operator read a sentence, a caller got nothing until it caught something, and nothing in the tree
+could ask "how much of this was actually deleted". It answers `SweepResult` now, the shape
+`RoutingInstallResult` and `InstallResult` already return, and the residue is what makes the
+verdict: the message an incomplete run raises with is *built from that value*, so the sentence is
+unchanged while the reporting is not.
 """
 
 import logging
+from dataclasses import dataclass
 
 from kubementat import errors
 from kubementat.core.config.teams import TEAM_NAMESPACE_KEYS
@@ -62,7 +72,86 @@ HELM_DEPLOYER_CLUSTER_ROLE = tekton_install.HELM_DEPLOYER_CLUSTER_ROLE_NAME
 #   and every cluster mutation the generated client can express goes through
 #   `KubernetesUtils`.
 
-def uninstall_kubementat(ctx, consent: Consent = None) -> None:
+# ---------------------------------------------------------------------------------------
+# the answer
+# ---------------------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class SweepResult:
+    """What this run deleted, what it could not, and which directories it read as teams.
+
+    The reason it is a value is the reason `RoutingInstallResult` gives, and here the reason is
+    concrete: a sweep that deleted ten namespaces and left one release running is a run with a
+    *partial* result, and partial results are the one thing a `None` cannot express. Carrying the
+    residue as a field rather than as a joined message is what lets the CLI print what survived,
+    a caller decide what to do about it, and a test ask which namespace was the one that stuck.
+
+    `residue` is the verdict. Everything else in here is context for reading it: `"11 namespaces
+    deleted"` is not the same fact with 1 item left behind as with 0, and an uninstall that reports
+    only the count is a sweep that cannot tell the operator whether to trust the cluster. The
+    residue strings themselves are the cluster's and the step's own sentences -- they are not
+    summarised, because what an operator has to act on is the name of the thing that survived.
+    """
+
+    environment: str
+    context: str
+    namespaces_deleted: tuple = ()
+    namespaces_absent: tuple = ()
+    teams_swept: tuple = ()
+    teams_not_swept: tuple = ()
+    residue: tuple = ()
+
+    @property
+    def clean(self) -> bool:
+        """True when the cluster holds nothing kubementat owned. `DONE` is this, and not the log."""
+        return not self.residue
+
+    def failure_message(self) -> str:
+        """The sentence `kmt uninstall` fails with, assembled from the residue it found.
+
+        Byte-identical to the message the joined string used to build at the end of the sweep: the
+        same lead, the same two-space indent, the same items in the same order. The item that moved
+        is where the string comes from -- the value owns it now, so the CLI, a caller and a test all
+        read one list and none of them has to rejoin it.
+        """
+        return ("uninstall left kubementat residue behind, so the cluster is not clean:\n  "
+                + "\n  ".join(self.residue))
+
+    def raise_if_incomplete(self) -> None:
+        """Raise the named refusal when residue is not empty, and do nothing when it is.
+
+        This is the caller's half, not the sweep's: a run that deleted something and left something
+        behind is not a run that deleted nothing, and the decision about whether that is an error is
+        the command's to make. `kmt uninstall` makes it -- it prints the answer on the clean path
+        and takes this call on the other one, which is what keeps the exit code at 1 and the
+        message exactly where the operator already reads it.
+        """
+        if not self.clean:
+            raise errors.UninstallIncompleteError(self.failure_message())
+
+    def summary(self) -> str:
+        """A handful of lines for whoever ran the command. The detail is in the log.
+
+        Deliberately short of what the plan and the team summary already say, both of which stay in
+        the log: what belongs on stdout is the verdict a scripted run can read -- which environment
+        was swept, how many namespaces went, and whether anything kubementat owned survived.
+        """
+        lines = [f"kubementat uninstalled from {self.environment} ({self.context}): "
+                 f"{len(self.namespaces_deleted)} namespaces deleted, "
+                 f"{len(self.namespaces_absent)} were already absent."]
+        if self.teams_swept:
+            lines.append("team directories swept: " + ", ".join(self.teams_swept) + ".")
+        if self.teams_not_swept:
+            lines.append("team directories read as not-a-team, so nothing under them was deleted: "
+                         + ", ".join(self.teams_not_swept) + ".")
+        if self.clean:
+            lines.append("nothing kubementat owned is left on the cluster.")
+        else:
+            lines.append(f"{len(self.residue)} things kubementat owned are still on the cluster.")
+        return "\n".join(lines)
+
+
+def uninstall_kubementat(ctx, consent: Consent = None) -> SweepResult:
     '''
     Delete every kubementat component, team namespace, release and claim from the cluster.
 
@@ -108,15 +197,29 @@ def uninstall_kubementat(ctx, consent: Consent = None) -> None:
       hands down the way to ask. A caller that hands down neither is refused before the first
       delete.
 
+    Returns:
+
+    - SweepResult - What was deleted, what was already absent, which directories were read as
+      teams, and `residue`: every one of them something kubementat owned that the cluster still
+      carries. An empty `residue` is the whole of what "the uninstall worked" means; a non-empty one
+      is the same fact named, so a run that deleted ten namespaces and left one release running can
+      be read as a partial run instead of being reported as prose.
+
     Raises:
 
     - kubementat.errors.ConfirmationDeclinedError: On "no" at the confirmation, so a
       cancellation is one line rather than a traceback of the CLI's own argument parsing.
     - kubementat.errors.ConfirmationUnavailableError: When nothing decided it and nothing can ask.
       `kmt uninstall` cannot reach this one: its own no-terminal guard fires before this line is.
-    - kubementat.errors.UninstallIncompleteError: When the cluster still carries something
-      kubementat owned, named in the message. An uninstall that says DONE while releases survive
-      is the failure this command exists to stop.
+    - kubementat.errors.EnvironmentConfigurationFileMissingError: When the environment has no
+      `static.json`, so there is no namespace list to delete.
+
+    A surviving object is not raised here. It used to be, by joining the residue list into the
+    message inside this def, and that is what made a partial teardown a sentence instead of a
+    result: whoever called this had to catch an exception to learn what had been deleted. The value
+    carries it and `SweepResult.raise_if_incomplete` is how a caller turns it back into the refusal
+    `kmt uninstall` still exits 1 with -- the message is the same because it is assembled from the
+    same list.
     '''
 
     environment = ctx.environment
@@ -186,11 +289,23 @@ def uninstall_kubementat(ctx, consent: Consent = None) -> None:
     residue += delete_crds_kubementat_owns(ctx)
 
     print_uninstall_result(ctx, plan, residue)
-    if residue:
-        raise errors.UninstallIncompleteError(
-            "uninstall left kubementat residue behind, so the cluster is not clean:\n  "
-            + "\n  ".join(residue)
-        )
+
+    # The verdict is returned and not raised. `print_uninstall_result` above still writes the log --
+    # the namespace diff, the team-directory caveat, `DONE` only when the residue list is empty --
+    # because the log is evidence and this value is the summary of it, and neither is a substitute
+    # for the other. What the caller decides to do about a non-empty residue is its own business:
+    # the CLI takes `raise_if_incomplete`, which is what keeps exit 1 and the operator's sentence
+    # exactly where they were.
+    teams = plan.get("teams") or {}
+    return SweepResult(
+        environment=environment,
+        context=plan["context"],
+        namespaces_deleted=tuple(plan["namespaces"]),
+        namespaces_absent=tuple(plan["absent"]),
+        teams_swept=tuple(sorted(team for team, entry in teams.items() if entry["deletable"])),
+        teams_not_swept=tuple(sorted(team for team, entry in teams.items() if not entry["deletable"])),
+        residue=tuple(residue),
+    )
 
 def read_uninstall_plan(ctx) -> dict:
     '''

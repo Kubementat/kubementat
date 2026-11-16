@@ -449,6 +449,35 @@ be asked about afterwards.
   says the same words; the answer on stdout is the fact of what was written and not a replacement
   of what the log says to do next.
 
+### What `kmt uninstall` answers with
+
+`kmt uninstall` prints its plan before it asks, deletes in the order the cluster needs, and then
+answers — the answer being `SweepResult`, the value that carries the same facts the log writes.
+On a clean sweep the terminal gets:
+
+```
+kubementat uninstalled from dev (k3s-local): 15 namespaces deleted, 2 were already absent.
+team directories swept: dev1.
+nothing kubementat owned is left on the cluster.
+```
+
+The line about surviving objects is the verdict, and it is the whole meaning of the command: `DONE`
+in the log is earned by an empty `residue` and printed for nothing otherwise.
+
+* **A partial teardown is still exit 1, with the sentence you already know.** If the cluster still
+  carries something kubementat owned, nothing is printed above and the run fails with
+  `Error: uninstall left kubementat residue behind, so the cluster is not clean:` followed by one
+  indented line per surviving object. That message did not change — it is assembled from the same
+  list, in the same order, by the value now instead of by the code that joined it.
+* **The residue is a field, not only a message.** `residue` names each surviving object in the
+  step's own words, so a caller can ask *how much* went before deciding whether to raise. The CLI
+  takes the raise (`SweepResult.raise_if_incomplete`), which is what keeps exit 1 and the operator's
+  sentence exactly where they were.
+* **Unchanged, and deliberate.** `kmt uninstall` still takes an environment and no team — the sweep
+  covers every team the environment's layer configures, so naming one would be a claim the command
+  cannot support — and `--yes` is still what answers the deletion. Without it and without a terminal
+  to ask in, the command fails closed naming the flag, before anything is read.
+
 ## Kubernetes Dashboard
 
 The Kubernetes dashboard component is **currently not part of a kubementat installation**.

@@ -907,8 +907,12 @@ def test_a_claim_refused_for_a_real_reason_is_residue_and_its_words_reach_the_er
                         reason='PersistentVolumeClaim "prometheus-server" is invalid: '
                                "spec.volumeName: field is immutable"))
 
+    # The def hands back the residue now and the raise belongs to the value, so this asserts both
+    # halves in order: the list the run returned, then the sentence the CLI renders from it.
+    result = uninstall_kubementat(uninstaller, consent=Consent.assumed())
+    assert any("prometheus-server" in item for item in result.residue), result.residue
     with pytest.raises(UninstallIncompleteError) as raised:
-        uninstall_kubementat(uninstaller, consent=Consent.assumed())
+        result.raise_if_incomplete()
 
     message = str(raised.value)
     assert "prometheus-server" in message, "the residue did not name the claim that survived"
@@ -1527,10 +1531,13 @@ def test_something_kubementat_owned_that_survives_is_an_error_and_not_a_DONE(
     """
     fake_binaries.respond("helm", "Command exited with code 1", subcommand="uninstall", exit_code=1)
 
+    # `residue` is the value's own field now; see the note on
+    # `test_the_residue_is_a_field_and_not_only_an_exception_sentence`.
+    result = uninstall_kubementat(uninstaller, consent=Consent.assumed())
+    assert result.residue and any("cert-manager" in item for item in result.residue), result.residue
+    assert not result.clean
     with caplog.at_level(logging.INFO), pytest.raises(UninstallIncompleteError) as raised:
-        uninstall_kubementat(uninstaller, consent=Consent.assumed())
-
-    assert "cert-manager" in str(raised.value)
+        result.raise_if_incomplete()
     assert "DONE" not in caplog.text, "it said DONE over releases it did not delete"
 
 
@@ -1568,10 +1575,12 @@ def test_a_namespace_the_cluster_has_not_finished_deleting_is_residue_and_not_a_
     # The real ceiling is three minutes of polling; a unit test asserts the decision, not the clock.
     monkeypatch.setattr("kubementat.infrastructure.kubernetes.namespaces.NAMESPACE_GONE_WAIT_S", 0)
 
+    # The one case here that is about *which* namespace stuck, so the residue is read as a list and
+    # not only as the exception's text.
+    result = uninstall_kubementat(uninstaller, consent=Consent.assumed())
+    assert any("grafana" in item and "Terminating" in item for item in result.residue), result.residue
     with caplog.at_level(logging.INFO), pytest.raises(UninstallIncompleteError) as raised:
-        uninstall_kubementat(uninstaller, consent=Consent.assumed())
-
-    assert "grafana" in str(raised.value), str(raised.value)
+        result.raise_if_incomplete()
     assert "Terminating" in str(raised.value), \
         "the residue says the namespace exists but not that the cluster is mid-deletion: %s" % raised.value
     assert "DONE" not in caplog.text, "it said DONE over a deletion the cluster had not finished"
