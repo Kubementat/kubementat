@@ -53,7 +53,12 @@ root down once could install against that tree and could not configure it, which
 ways of saying which one and only one route that worked. `config init` had a stated reason for refusing
 the variable -- there is no root to point at, because this is the verb that makes one -- and that
 reason held only while the alternative was locating a root by proximity. Naming a root that does not
-exist yet is the same act as reading one, and the same two spellings name it. What these verbs do not
+exist yet is the same act as reading one, and the same two spellings name it. Below both of those sits
+the third thing that names a root: the tree this user's `config init` prepared, recorded under their
+home when the verb laid it down, so a machine that has configured itself once configures itself twice
+without typing the flag again. That layer is init's own output and nothing else's -- a verb that reads
+a tree does not get to promote it -- and it is what the refusal still answers when it cannot pick one.
+What these verbs do not
 carry is `--context` or `--kubeconfig`: they address no cluster, and a dial that changes nothing is a
 dial that promises something.
 """
@@ -67,7 +72,8 @@ from cli.context import config_dir_option
 from kubementat.config import (answers as config_answers, bootstrap as config_bootstrap,
                                init as config_init, keys as config_keys, validate as config_validate)
 from cli.context import RenderingGroup
-from kubementat.core.config.paths import resolve_platform_config_dir
+from kubementat.core.config.paths import (configured_roots_record_path, record_configuration_root,
+                                          resolve_platform_config_dir)
 
 
 @click.group(name='config', cls=RenderingGroup,
@@ -176,10 +182,24 @@ def init_command(config_dir, environment, team, set_answers, encrypted_answers, 
     encrypted = tuple(config_init.parse_answer_argument(item, flag='--encrypted-set')
                       for item in encrypted_answers)
 
+    # And so is the dial that says where the record of prepared trees lives: asking for it here is what
+    # makes a dial set to nothing refuse before `git init` decides anything, instead of four steps and
+    # one half-prepared tree later.
+    configured_roots_record_path()
+
     steps = config_bootstrap.prepare_configuration_directory(
         root, environment, team=team, answers=answers, encrypted_answers=encrypted,
         gpg_key=Path(gpg_key) if gpg_key is not None else None, gpg_email=gpg_email,
         commit=not no_commit, force=force)
+
+    # The one place the configuration root gets *remembered* instead of named. This verb prepares a
+    # tree nothing else prepares, so it is the only verb allowed to say afterwards which tree it made,
+    # and what it says is recorded under the user's home rather than inferred from wherever the next
+    # command happens to be run from. Nothing above the record changes precedence: the flag and the
+    # variable still outrank it, so this is a default for the 39 commands that resolve a cluster and
+    # not a change to any of them. A record that cannot be written is simply not claimed, which is why
+    # the summary below keeps `--config-dir` in the command it prints when this run remembered nothing.
+    remembered = record_configuration_root(root)
 
     for step in steps:
         click.echo(_step_line(step))
@@ -189,11 +209,11 @@ def init_command(config_dir, environment, team, set_answers, encrypted_answers, 
         config_init.warn_cluster_not_addressed(environment, static_json)
 
     for line in _summary_lines(root, environment=environment, team=team, git_url=git_url,
-                               steps=steps):
+                               steps=steps, remembered=remembered):
         click.echo(line, err=True)
 
 
-def _summary_lines(root, *, environment, team, git_url, steps) -> list[str]:
+def _summary_lines(root, *, environment, team, git_url, steps, remembered=False) -> list[str]:
     """What happens next, in the order it has to happen, and only what happens next.
 
     The step lines on stdout already are the file list, so nothing here repeats them. The four
@@ -205,6 +225,12 @@ def _summary_lines(root, *, environment, team, git_url, steps) -> list[str]:
     to read every credential in the cluster, so saying so is the whole point of exporting it and a
     run that skipped the export would be repeating advice about a file it did not create -- which is
     how a warning stops being read. **Nothing here prints key material**; paths only, always.
+
+    **The remembered root is printed once and only when this run left one behind.** The sentence is the
+    reason the flag moves out of the rest of the path, so it is printed only when that is actually true
+    of the machine this run finished on: a second live tree, or a home that cannot be written, prints
+    the old command with its flag instead. That is the whole claim -- print the shorter command when it
+    runs, and never print a sentence about remembering that did not happen.
     """
     lines: list[str] = []
 
@@ -231,16 +257,24 @@ def _summary_lines(root, *, environment, team, git_url, steps) -> list[str]:
 
     # Two things make this an instruction and not advice: the team is install's second positional and
     # not a flag (`commands/kubementat.py:41`), and install reads a root it is told and does not locate
-    # one, so the directory just prepared has to appear in the command. A run that created no team layer
-    # prints an install command the operator cannot finish, which is why it says so and names the verb
-    # that writes the layer.
+    # one, so the directory just prepared has to appear in the command unless this run just said which
+    # directory it was. A run that remembered the tree prints the command that runs; a run that could
+    # not remember it prints the command that still runs, which is the honest difference between the two
+    # and not a style choice. A run that created no team layer prints an install command the operator
+    # cannot finish, which is why it says so and names the verb that writes the layer.
+    root_is_named = "" if remembered else f" --config-dir {root}"
+    if remembered:
+        lines.append("this directory is recorded as kubementat's configuration root for this user, so "
+                     "the commands below need no --config-dir. A command can still be pointed at a "
+                     "different tree with the flag, and a second recorded tree makes every one of them "
+                     "ask which.")
     if team:
-        lines.append(f"then kmt install {environment} {team} --config-dir {root}, which is the whole of "
+        lines.append(f"then kmt install {environment} {team}{root_is_named}, which is the whole of "
                      f"ready to use: nothing else has to write into this tree first.")
     else:
-        lines.append(f"then kmt install {environment} <team> --config-dir {root} installs it once a "
+        lines.append(f"then kmt install {environment} <team>{root_is_named} installs it once a "
                      f"team exists, and this run created none. kmt config add-team {environment} "
-                     f"<team> --config-dir {root} is the verb that writes that layer.")
+                     f"<team>{root_is_named} is the verb that writes that layer.")
     return lines
 
 

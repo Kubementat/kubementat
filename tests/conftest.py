@@ -577,6 +577,27 @@ def cluster_deletes(recorded_api, resource, refused=None):
 
 
 @pytest.fixture(autouse=True)
+def no_configuration_root_recorded_for_this_user(monkeypatch, tmp_path):
+    """The recorded configuration root is a fixture fact, never a fact about the machine.
+
+    `paths.default_platform_config_dir` falls back, below `--config-dir` and below
+    `KUBEMENTAT_PLATFORM_CONFIG_DIR`, to the tree `kmt config init` recorded under the user's home.
+    Left alone, that would make two kinds of test lie: one that asserts a command *refuses* would
+    resolve whoever's home directory pytest is running in, and one that runs `kmt config init` would
+    write into that home directory. So the dial that says where the record lives
+    (`KUBEMENTAT_CONFIGURED_ROOTS`) is pointed at a file inside `tmp_path` that nothing creates, which
+    makes "nothing is recorded" the default state of this suite and not an accident of the host.
+
+    A test that wants a record points the dial at its own file — see
+    `test_the_configuration_root_is_recorded_once_and_the_refusal_still_answers.py`, which does it in
+    the body and so lands after this fixture, the same ordering rule
+    `no_cluster_is_running_this_process` states.
+    """
+    monkeypatch.setenv("KUBEMENTAT_CONFIGURED_ROOTS",
+                       str(tmp_path / "configuration-roots-are-not-recorded-here.json"))
+
+
+@pytest.fixture(autouse=True)
 def no_cluster_is_contacted(monkeypatch):
     """Nothing a test runs may dial out, asserted rather than assumed."""
     for verb in ("call_api", "request", "GET", "POST"):

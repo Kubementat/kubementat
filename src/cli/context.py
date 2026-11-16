@@ -239,9 +239,12 @@ def config_dir_option(**kwargs):
 
     The help says what the flag *is*, and not what the verb it is bolted onto does, because the
     sentence has to stay true for a verb that writes a tree and a verb that lists one. The
-    precedence it states is `paths.resolve_platform_config_dir`'s — flag, then variable, then
-    refusal — and nothing here reimplements it: the option lands in a `config_dir` parameter and
-    the caller threads that one value into the function that owns the rule.
+    precedence it states is `paths.resolve_platform_config_dir`'s — flag, then variable, then the tree
+    `kmt config init` recorded for this user, then refusal — and nothing here reimplements it: the
+    option lands in a `config_dir` parameter and the caller threads that one value into the function
+    that owns the rule. That the rule gained a third layer is exactly why the flag can now be omitted
+    from a command that means the tree this user already prepared, and it is why omitting it is still a
+    refusal on a machine that has prepared none or has prepared two.
 
     `kwargs` overrides the defaults so a verb can shorten the help; it cannot override the
     parameter's name, because every caller reads `config_dir`.
@@ -251,8 +254,9 @@ def config_dir_option(**kwargs):
         "metavar": "PATH",
         "type": click.Path(exists=False, file_okay=False),
         "help": "The configuration directory this command reads or writes. Layer above "
-                "$KUBEMENTAT_PLATFORM_CONFIG_DIR; with neither, the run refuses, because a "
-                "configuration root is named and not located.",
+                "$KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in turn above the tree kmt config init "
+                "recorded for this user; with none of them, the run refuses, because a configuration "
+                "root is named and not located.",
     }
     option_kwargs.update(kwargs)
     return click.option(CONFIG_DIR_OPTION, CONFIG_DIR_PARAMETER, **option_kwargs)

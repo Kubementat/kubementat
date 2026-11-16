@@ -1,4 +1,50 @@
 # Unreleased
+- **The configuration root is named once, so the rest of the quickstart stops typing
+  `--config-dir`: 8 of the README's 11 happy-path commands carried the flag and now 1 does, and the
+  refusal that used to fire for both of the other cases still fires.**
+
+  The README's happy path was 11 distinct `kmt` commands, and 8 of them had to carry
+  `--config-dir` — not because they were ambiguous, but because nothing else in the product knew which
+  tree this operator had configured. `kmt config init` was the only verb that prepared a directory and
+  the only one allowed to say which one it had prepared, so it now records that directory under the
+  user's home and every later command reads that record below the two spellings that already outrank
+  it. This changes **what a newcomer types and nothing about what the tool does**: the resolution
+  order, the layered answers, the refusal text and the cluster resolution are what they were, and the
+  39 commands that resolve a cluster needed no plumbing for it, because a command that passes no flag
+  arrives at the one function that owns the rule with `None`.
+
+  * **The third layer, in one function.** `core/config/paths.py` resolves
+    `--config-dir` → `$KUBEMENTAT_PLATFORM_CONFIG_DIR` → the one recorded tree that still exists →
+    refusal. It writes from `kmt config init` and from nowhere else, and a verb that reads a tree does
+    not get to promote it. `~/.config/kubementat/configuration_roots.json` is the record — a JSON array
+    of absolute paths and nothing else — and `KUBEMENTAT_CONFIGURED_ROOTS` overrides where it lives,
+    with the empty case refused the way `KUBEMENTAT_HOME` and `KUBEMENTAT_PLATFORM_CONFIG_DIR` refuse
+    it.
+  * **The refusal is unchanged, in both of the senses that matter.** A machine that has named nothing
+    and recorded nothing answers with the same sentence, byte for byte, and a machine that has prepared
+    two trees is refused as well rather than being resolved by whichever entry was written first —
+    because choosing a configuration tree for somebody is the silent-wrong-tree failure this item would
+    otherwise create. A recorded tree that is gone says which path is missing, and a record the process
+    cannot read reads exactly like nothing recorded, so a corrupt memory can neither crash a run nor
+    read a stranger's tree.
+  * **What an operator sees.** `kmt config init` records the tree and its closing instruction drops
+    `--config-dir` from the `kmt install` line it tells you to type — but only when the remembering
+    happened. A second live tree on the same machine puts the flag back in that sentence and makes the
+    next command ask which one it means, which is the honest shape of a default and not a regression
+    in it.
+  * **The docs stop pointing once.** `README.md` now routes: 10 live documents in `docs/` are named
+    with what each answers, the other 37 are labelled as what they are (dated plans, research,
+    specifications, censuses, tickets) so a reader stops mistaking a record for an instruction, and the
+    count of Markdown links out of `README.md` goes from 1 to 11.
+
+  Tests: 11 new cases in
+  `tests/test_the_configuration_root_is_recorded_once_and_the_refusal_still_answers.py` — one tree
+  resolved, no tree, two plausible trees, both older dials outranking the record, a tree that is gone,
+  a record that is unreadable, an override set to nothing, the real `kmt config init` followed by a
+  real `kmt environments list` typed without the flag, and a run that cannot write the record printing
+  the command that still runs. `tests/conftest.py` points the record's dial at a path that does not
+  exist for the rest of the suite, so "nothing recorded" is a fixture fact and not a fact about the
+  machine running pytest. One existing assertion moved, because the printed instruction it checked had changed by this item's own rule.
 - **The 1.x residue is deleted rather than explained: 7 shipped templates, 25 sentences naming a
   directory that is not there, a `TODO` that came back as a manifest value, 4 `print(x,
   file=open(...))` key writes and 2 example scripts the README already denied.**

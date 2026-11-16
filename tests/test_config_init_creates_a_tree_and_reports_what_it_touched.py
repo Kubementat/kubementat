@@ -579,11 +579,19 @@ def test_the_closing_instruction_names_the_remote_it_was_handed_and_not_one_it_m
 
 
 def test_the_closing_instruction_ends_with_the_command_that_uses_the_tree(root, tools):
-    """The last sentence is `kmt install`, and a run that made a team says which team to install.
+    """The last sentence is `kmt install`, and it spells the root only when it has to.
 
     The deployer's public key is the thing between the tree and a clone that works — the git host has
     to be told to read it, and it lives in the directory the run just prepared. Both lines are
     assertions about paths, because that is all either of them is allowed to be.
+
+    What the instruction has to name changed with the recorded root, and the two runs in this test say
+    why. The first prepared the only tree on this machine, so the root is remembered and printing
+    `--config-dir` would be advice about a dial the operator does not have to type. The second prepared
+    a *second* tree, which is exactly the case the record refuses to choose between, so the instruction
+    goes back to spelling the directory — and the honest version of "the root has to appear in the
+    instruction" is therefore "the instruction is runnable", which one run satisfies by naming the root
+    and the other by having it remembered.
     """
     result = run_init(root, "--environment", ENVIRONMENT, *identity_arguments())
     assert result.exit_code == 0, reported(result)
@@ -591,10 +599,13 @@ def test_the_closing_instruction_ends_with_the_command_that_uses_the_tree(root, 
     assert config_keys.SSH_PUBLIC_NAME in result.stderr
     assert "git host" in result.stderr.lower(), "the operator is told to hand the key to somebody"
     assert (root / config_keys.SSH_PUBLIC_NAME).is_file(), "the path named is the path that exists"
-    assert f"kmt install dev <team> --config-dir {root}" in result.stderr, \
-        "install reads a root it is told and locates none, so the directory just prepared has to " \
-        f"appear in the instruction, and a tree with no team says so rather than naming a command " \
-        f"that exits 2: {result.stderr}"
+    assert f"kmt install dev <team>" in result.stderr, \
+        f"install reads a root it is told and locates none, so a run that remembered the root it " \
+        f"prepared prints the command without the flag, and a tree with no team says so rather than " \
+        f"naming a command that exits 2: {result.stderr}"
+    assert f"--config-dir {root}" not in result.stderr, \
+        "this run recorded the tree, so telling the operator to type the flag is an instruction about " \
+        f"something they do not have to do: {result.stderr}"
     assert "<team>" in result.stderr and "kmt config add-team" in result.stderr, \
         "a run that made no team prints an install command the operator cannot run, so the sentence " \
         f"says so and names the verb that writes the layer: {result.stderr}"

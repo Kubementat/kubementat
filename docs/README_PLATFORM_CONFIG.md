@@ -4,7 +4,8 @@
 that names the tree (`KUBEMENTAT_PLATFORM_CONFIG_DIR`), not a directory. There is no
 `platform_config/` to find: 1.x carried one beside the checkout and read it when nothing else was
 configured, that fallback is deleted, and every verb now insists the root is **named, never located** —
-by `--config-dir`, or by the variable a container already sets. A plan or a CHANGELOG entry that says
+by `--config-dir`, by the variable a container already sets, or by the one tree `kmt config init`
+prepared for this user and recorded. A plan or a CHANGELOG entry that says
 "the `platform_config` directory" means this root and the flag that names it.
 
 This directory contains configuration for the according environments. **An environment is exactly one
@@ -32,10 +33,35 @@ cluster, and nothing defaults: no default environment, no `DEFAULT_TEAM`, no amb
 that was not told what it means says so before it touches anything.
 
 The same rule covers the root. Every verb that reads or writes a tree — the seven under `kmt config` and
-every command that reaches a cluster — names it with `--config-dir`, or with
-`$KUBEMENTAT_PLATFORM_CONFIG_DIR`, and the flag sits above the variable. With neither, the command
+every command that reaches a cluster — names it with `--config-dir`, with
+`$KUBEMENTAT_PLATFORM_CONFIG_DIR`, or leaves it to the tree this user's `kmt config init` recorded, and
+the precedence runs in that order. With none of the three, the command
 says so and stops: kubementat reads no configuration out of the directory it was installed from, and
 it has no default root to fall back to.
+
+### The recorded root, and what it must not do
+
+`kmt config init` records the directory it prepares in `~/.config/kubementat/configuration_roots.json`
+— a JSON array of absolute paths, nothing else — and `KUBEMENTAT_CONFIGURED_ROOTS` says where that file
+is when the home directory is not the right place (a container, a scratch tree, the unit suite). The
+point is one command instead of seven: the verb that *made* the tree is the one run that can say which
+tree it made, so every later command can ask and get one answer instead of typing the flag again. A
+verb that merely reads a tree never records one, so nothing a command touches can promote itself into a
+default.
+
+Two halves of that sentence are the safety argument, and both are tested rather than asserted:
+
+* **It is recorded, not located.** Nothing walks up a directory tree looking for a `platform_config`,
+  and nothing reads the checkout the wheel came from; the answer is a fact somebody stated once, in a
+  file, under the user's home. `--config-dir` and `$KUBEMENTAT_PLATFORM_CONFIG_DIR` keep outranking it,
+  so a run that names a root today behaves exactly as it did before the record existed — which is what
+  makes this safe to land on CI, in containers, and in both shipped Tasks at once.
+* **Ambiguity is still refused.** More than one recorded tree that still exists means no default, and
+  the command refuses with the sentence it has always refused with, naming both paths, because picking
+  whichever entry was written first is the silent-wrong-tree bug this rule exists to keep out. A
+  recorded tree that is gone is refused too, and says which path is missing rather than claiming that
+  nothing was ever configured. And a record the process cannot read reads as nothing recorded: it
+  cannot crash a run, and it cannot read a tree it was never told about.
 
 ## How a configuration tree is created now
 
@@ -49,8 +75,9 @@ key into those two files, with the value taken as JSON when it parses, so `--set
 a boolean and `--set BASE_DOMAIN=example.test` stores a string. Running it twice is a no-op: a path that is
 byte-identical prints `skipped`, a path that already differs from what init would write is refused and named,
 and `--force` accepts a tree holding material kubementat did not write while touching none of it. The
-root is `--config-dir`, or the `$KUBEMENTAT_PLATFORM_CONFIG_DIR` a container already sets, and with
-neither the verb refuses before `git init` decides anything. It used to be the other way round for
+root is `--config-dir`, or the `$KUBEMENTAT_PLATFORM_CONFIG_DIR` a container already sets, or the tree
+this verb records as it runs, and with none of those the verb refuses before `git init` decides
+anything. It used to be the other way round for
 these seven verbs: the directory was a positional and neither spelling of a root was read, so a machine
 that had configured its root once could install against that tree and could not configure it. What a
 fresh tree

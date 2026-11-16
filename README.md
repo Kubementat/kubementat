@@ -75,6 +75,36 @@ else; it is deleted, not emptied. Every chart that installs anything lives under
 (a worked example of how to ship your own) or inside the configuration directory you prepared, and no code
 path under `src/` resolves a chart path against this checkout.
 
+## Which document answers which question
+
+`docs/` holds 47 Markdown files, and this file links to exactly one of them. That is the whole reason for
+the table: a reader who finishes the quick start above still has to know where to go next, and most of
+those 47 files are dated records of work that is already finished. So — ten documents are **live**, and
+the rest are **records**, read for why a decision was made and never as an instruction:
+
+| What you want to know | Read |
+|---|---|
+| what a configuration directory is, which key belongs in which layer, and in what order a root is named | [docs/README_PLATFORM_CONFIG.md](docs/README_PLATFORM_CONFIG.md) |
+| how git-crypt is laid out inside that directory, and which of its commands a failure is about | [docs/README_GIT_CRYPT.md](docs/README_GIT_CRYPT.md) |
+| Tekton: the Tasks and Pipelines that ship, triggers, cleanup jobs, where generated pipeline runs go | [docs/README_TEKTON.md](docs/README_TEKTON.md) |
+| where the monitoring stack is, and what it answers | [docs/README_MONITORING_AND_LOGGING.md](docs/README_MONITORING_AND_LOGGING.md) |
+| what other tools kubementat ships and what they are for | [docs/README_ADDITIONAL_TOOLS.md](docs/README_ADDITIONAL_TOOLS.md) |
+| how work in this repository is done (branches, commits, the lanes) | [docs/README_DEVELOPMENT_FLOW.md](docs/README_DEVELOPMENT_FLOW.md) |
+| how to run an E2E lane, what an artifact directory holds, how a red lane is judged | [docs/README_E2E_TESTS.md](docs/README_E2E_TESTS.md) |
+| what is where in the code, and what is known to be broken | [docs/index-overview.md](docs/index-overview.md) |
+| how the deployer GPG keypair is made, and what `--gpg-key` will accept | [docs/gpg_key_generation.md](docs/gpg_key_generation.md) |
+| the class diagram and the generator that renders it | [docs/diagram-generator/README.md](docs/diagram-generator/README.md) |
+
+The other 37 files are records, and their directories say what kind: `docs/plans/` (10) is the execution
+documents, `docs/research/` (10) is the evidence behind them, `docs/specifications/` (2) is one design
+per document, `docs/finished-tickets/` (5) is the small hygiene tickets, `docs/lessons-learned/` (2) is
+what a failure taught, `docs/implementation-summaries/` (2) is the account of a finished change,
+`docs/census-*.md` (3) is a split that happened, and the three files at `docs/` root that are not
+`README_*` (`next-action-steps.md`, `plan-kubernetes-split.md`, `plan-tekton-split.md`) are the same kind
+of thing with a shorter name. A file that carries a date in its name is a record. None of them is
+current instructions, and reading one as if it were is how someone ends up running a verb that was
+deleted two months ago.
+
 ## Git-Crypt
 
 **This repository holds no encrypted files, so there is nothing to unlock here.** The root
@@ -193,16 +223,25 @@ git repository in its own right, prepared by `kmt config init`. It is not a subd
 nothing is copied into it, and no command reads its configuration out of the tree kubementat was installed
 from.
 
-It is **named, never located**, by two spellings and no third: `--config-dir PATH`, which outranks
-`$KUBEMENTAT_PLATFORM_CONFIG_DIR`, the spelling a container or a scheduled run already carries. With
-neither, the command says so and stops. That is not pedantry — a root found by proximity is a wheel
-installing into whichever tree it happened to land in.
+It is **named, never located**, by three things and no fourth: `--config-dir PATH`, which outranks
+`$KUBEMENTAT_PLATFORM_CONFIG_DIR`, the spelling a container or a scheduled run already carries; and
+below both, the one tree `kmt config init` prepared for this user, which that verb records when it
+lays the tree down. With none of the three, the command says so and stops. That is not pedantry — a
+root found by proximity is a wheel installing into whichever tree it happened to land in. The
+recorded root is what lets the flag be typed once: the run that *made* the tree said which tree it
+was, so every command after it can ask the same question and get one answer. Two prepared trees on
+one machine is the case that still refuses, because choosing between them by whichever was written
+first is the silent-wrong-tree bug this rule exists to keep out. The record is a plain JSON array at
+`~/.config/kubementat/configuration_roots.json`, it holds paths and nothing else, and
+`KUBEMENTAT_CONFIGURED_ROOTS` says where it is when the home directory is not the right place — the
+dial is for a container or a scratch tree, and setting it to nothing is a refusal and not a fallback.
 
 ```
 uv run kmt config init --environment dev --team dev1 --gpg-email you@example.com --config-dir ~/kmt-config
 ```
 
-leaves a tree like this:
+This is the only command on the whole path below that carries the flag, because it is where a tree that
+does not yet exist is named for the first time. It leaves a tree like this:
 
 ```
 ~/kmt-config/
@@ -253,9 +292,8 @@ git remote the pipelines pull from. The specification of all of it is `docs/READ
     - `AUTOMATION_GIT_SERVER_HOST` - e.g. 'github.com'
     - `AUTOMATION_GIT_SERVER_PORT` - e.g. '22'
     - `AUTOMATION_GIT_SERVER_SSH_USER` - e.g. 'git'
-  Answer them with `kmt config set <environment> KEY=VALUE --config-dir <configuration-root>`, and
-  check what the tree answers with
-  `kmt config show <environment> --config-dir <configuration-root>`. Your configuration and script
+  Answer them with `kmt config set <environment> KEY=VALUE`, and check what the tree answers with
+  `kmt config show <environment>`. Your configuration and script
   adjustments will then be pulled
   from this location for executing your CI tasks (search for "automation-git-url" within the pipeline
   yaml files to learn more about the specifics)
@@ -277,8 +315,9 @@ git remote the pipelines pull from. The specification of all of it is `docs/READ
 ### Generate initial configuration
 
 `kmt config init` is the only verb that lays down an environment. The spelling that names the root is the
-one above; this is what it writes, and it is idempotent — a second run writes no byte, commits nothing, and
-names the step it skipped:
+one above, and this is what it writes — it is idempotent, so a second run writes no byte, commits
+nothing, and names the step it skipped. It also records the directory it prepared, which is why no
+command after this one repeats the flag:
 
 ```
 uv run kmt config init --environment dev --team dev1 --gpg-email you@example.com --config-dir ~/kmt-config
@@ -302,13 +341,14 @@ genuinely needs with the verb that writes them:
 uv run kmt config init --environment dev \
     --set BASE_DOMAIN=example.com \
     --set DOCKER_REGISTRY_BASE_URL=registry.example.com \
-    --encrypted-set CLUSTER_MANAGER_EMAIL=you@example.com \
-    --config-dir ~/kmt-config
+    --encrypted-set CLUSTER_MANAGER_EMAIL=you@example.com
 ```
 
 `--set` writes the plain layer, `--encrypted-set` the git-crypt-protected one; the value is JSON if
 it parses, so `false` is a boolean and `example.test` is a string. A key you do not answer is not
-missing — it is answered by a shipped default, which `kmt config show` tags for you.
+missing — it is answered by a shipped default, which `kmt config show` tags for you. The flag appears
+in the command above and not here because `--config-dir` is needed only where the tree is new: this
+verb names the root the first time and records it for every command that comes after.
 
 The symmetric key that directory now holds cannot be regenerated and nothing can rotate it; losing
 it means losing every credential in that environment. `init` says so when it writes the file.
@@ -320,23 +360,23 @@ rather than filling it in. This is deliberate: copying the context `kubectl` hap
 into your configuration would be a claim the tool did not earn, so **install refuses until you name
 one**. Nothing is resolved from `kubectl`'s current-context.
 
-```
+```bash
 # What contexts does this machine's kubeconfig offer?
 kubectl config get-contexts
 
 # Name the one this environment means:
-uv run kmt config set dev CLUSTER_KUBE_CONTEXT=dev-cluster --config-dir ~/kmt-config
+uv run kmt config set dev CLUSTER_KUBE_CONTEXT=dev-cluster
 
 # Confirm what kubementat resolves, before installing anything:
-uv run kmt environments list --config-dir ~/kmt-config
+uv run kmt environments list
 ```
 
 Note the symmetry, because it used to be asymmetrical: every `kmt config` verb takes the directory the
-same way every command that acts on a cluster does, as `--config-dir` or as
-`$KUBEMENTAT_PLATFORM_CONFIG_DIR`, and none of them refuses to say which one it read. The verbs here
-once took the directory as a positional, which meant a machine that had configured its root once could
-install against it and could not configure it. Nothing is located by proximity either: with neither the
-flag nor the variable, a command says so and stops.
+same way every command that acts on a cluster does — `--config-dir`, or
+`$KUBEMENTAT_PLATFORM_CONFIG_DIR`, or the tree `config init` recorded — and none of them refuses to say
+which one it read. The verbs here once took the directory as a positional, which meant a machine that
+had configured its root once could install against it and could not configure it. Nothing is located by
+proximity either: with nothing named and nothing recorded, a command says so and stops.
 
 You can write that key into `~/kmt-config/dev/static.json` by hand and get the same answer, but the
 verb is the safer half: it keeps every other key in the file where it is, and it refuses rather than
@@ -368,7 +408,7 @@ kubectl config view --minify --context=dev-cluster --flatten > /tmp/dev.kubeconf
 cp /tmp/dev.kubeconfig ~/kmt-config/dev/kubeconfig.encrypted.yaml
 
 # It is encrypted, so check that it reads as a document and not as ciphertext.
-uv run kmt environments list --config-dir ~/kmt-config
+uv run kmt environments list
 ```
 
 The name is not a style choice. A prepared tree declares `*.encrypted.*` for git-crypt, so a kubeconfig
@@ -390,21 +430,21 @@ directory has its own. Nothing is registered by email address any more.
 Per-team keys that pipelines use to clone go in the team's encrypted layer:
 
 ```
-uv run kmt config set dev --team dev1 --encrypted --from-file ./ssh-deploy-keys.json --config-dir ~/kmt-config
+uv run kmt config set dev --team dev1 --encrypted --from-file ./ssh-deploy-keys.json
 ```
 
 `--from-file` is how a private key gets answered without ever appearing in a command line.
 
 ### Install kubementat tooling to the cluster
-```
+```bash
 # Install the kubementat tooling on your cluster
-uv run kmt install dev dev1 --config-dir ~/kmt-config
+uv run kmt install dev dev1
 
 # If you are using a private docker registry ensure to run
-uv run kmt setup-docker-registry-access dev dev1 --config-dir ~/kmt-config
+uv run kmt setup-docker-registry-access dev dev1
 
 # If the team's encrypted layer declares SSH_DEPLOY_KEYS, write the Secrets they name
-uv run kmt setup-secrets dev dev1 --config-dir ~/kmt-config
+uv run kmt setup-secrets dev dev1
 
 
 # Optional (but recommmended)
