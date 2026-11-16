@@ -52,7 +52,7 @@ BINARY_VERSION_ARGV = {
 # `kubectl get nodes -o=json` through it, and that file shipped. The row deleted the file, and
 # the argument that kept the tool dies exactly when the file that carried it does: there is now
 # no shipped script for kubementat to run whose external requirement this check would have to
-# stop verifying, and a name kept for a thing that no longer exists is the same mistake `yq`
+# stop verifying, and a name kept for a tool that does not exist is the same mistake `yq`
 # was. What answers the surface is Python, and it needs no parser on the way out: the node
 # addresses are `KubernetesUtils.get_nodes()`, whose `status.addresses` arrive as
 # `V1NodeAddress` objects and never as JSON text, and the cluster's resource list is
@@ -136,6 +136,7 @@ def _record_binary_version(dependency):
                         "continues without claiming which version it is on.")
 
 def check_dependencies_are_installed(dependencies):
+    """Stop when a dependency is missing from PATH; asking its version is a separate read."""
     try:
         for dep in dependencies:
             logging.info(f"Checking installation of: {dep} ...")

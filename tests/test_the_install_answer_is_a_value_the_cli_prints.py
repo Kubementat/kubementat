@@ -15,7 +15,7 @@ contract that copy created:
   other way;
 * **the operator's exit code and the log did not move.** The finish message, the two option lines
   `kmt install` has always printed before it calls anything, and the refusal sentences are all
-  still here, because plan §9 says logs may be demoted and never removed. A test that only checks
+  still here, because the rule is that logs may be demoted and never removed. A test that only checks
   the new lines is a test that would let the old ones be deleted.
 
 The stubs are the ones every install-order test in this tree uses: the steps are module functions
@@ -205,7 +205,7 @@ def test_the_skipped_half_is_printed_as_a_skip_by_the_command_too(monkeypatch,
 
 def test_the_log_still_carries_the_finish_message_and_the_next_steps(
         fixture_repo, monkeypatch, dry_run_env, caplog):
-    """The preserve half of §9's change-vs-preserve, stated as an assertion.
+    """The preserve half of the change-vs-preserve rule, stated as an assertion.
 
     Nothing was deleted to make room for the value: the install's finish message — which is where
     the next-steps sentences have lived since this was a bash script — is still written, still at

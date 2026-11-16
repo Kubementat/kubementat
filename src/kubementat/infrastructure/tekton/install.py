@@ -8,10 +8,9 @@ generates a manifest, which is `generation`'s. So this module has no outgoing ed
 package, and that is the property the DAG wants: the module that writes cluster objects does not
 need the module that answers cluster questions.
 
-Methods lost `self` the way the rest of the split did, and what they read off the instance is a
-parameter now: `kubernetes_utils` and `config`, plus `environment` for the log line the constructor
-used to print. The ClusterRole write and the webhook wait take the client they actually need and
-nothing else, because both of them asked one question of one object before.
+Every function takes what it reads: `kubernetes_utils` and `config`, plus `environment` for the log
+line it writes. The ClusterRole write and the webhook wait take the client they actually need and
+nothing else, because each of them asks one question of one object.
 
 Two bindings here are load-bearing and not style. `shell` is bound as a module, never `from
 …shell import run`: the test that says the role is written after the control plane it authorises
@@ -32,8 +31,8 @@ import time
 
 
 # Where upstream serves the release manifests kubementat installs, spelled once because the
-# base URL and the pins move together: the bucket this URL used to point at serves only what it
-# happened to keep (`v1.4.0` answers, anything from 1.15 on 404s), so a pin bumped without this
+# base URL and the pins move together: that bucket serves only what it happened to keep
+# (`v1.4.0` answers, anything from 1.15 on 404s), so a pin bumped without this
 # string moving is an install failure on the very first `kubectl apply`.
 TEKTON_RELEASE_BASE_URL = "https://infra.tekton.dev/tekton-releases"
 
@@ -157,7 +156,7 @@ WEBHOOK_READY_POLL_SECONDS = 2.0
 def install(kubernetes_utils, config, environment) -> None:
     """Install or upgrade the three Tekton releases kubementat runs on, plus its ClusterRole.
 
-    This is what the installer script used to do, and it is the same shape: one
+    The shape is one
     `kubectl apply` per release manifest, addressed at the namespace that release installs
     into, and a ClusterRole created on the way through. Nothing here branches on whether the
     cluster already has Tekton: `apply` is the branch — a fresh cluster creates the objects,

@@ -66,8 +66,8 @@ CLASSIFICATION_FOREIGN = "foreign"
 # calls, which is
 # why their half of the table is a method and not an argv. The method names are spelled here rather
 # than assembled from the object so the report line says, in words a reader can look up, which API
-# answered -- and so the guard that used to excuse this module's two `kubectl` reads has nothing
-# left to excuse.
+# answered -- and so no guard here has to excuse a `kubectl` read, because this module does not make
+# one.
 #
 # `HELM_LIST_RELEASES_ARGV` is deliberately not restated here. The release read is the product's one
 # read (`helm_list_releases_argv` in `infrastructure/helm.py`, which points it at the cluster it was
@@ -127,6 +127,7 @@ class HelmRelease:
     revision: str
 
     def label(self) -> str:
+        """The release on one line, chart and revision included."""
         return f"{self.name}, chart {self.chart}, status {self.status}, revision {self.revision}"
 
 
@@ -146,6 +147,7 @@ class IngressClass:
     service_name: Optional[str] = None
 
     def label(self) -> str:
+        """The IngressClass on one line, with the Service that localizes it if it has one."""
         service = ""
         if self.service_namespace:
             service = f", service {self.service_namespace}" + (
@@ -162,6 +164,7 @@ class TraefikPod:
     images: tuple
 
     def label(self) -> str:
+        """The pod on one line, namespace, name and images."""
         return f"{self.namespace}/{self.name} ({', '.join(self.images)})"
 
 
@@ -191,6 +194,7 @@ class ProbeOutcome:
     stdout: str = ""
 
     def line(self) -> str:
+        """This read as one report line: what was asked, and what came back."""
         if self.ok:
             answered = f"{self.objects} object(s) read, {self.matches} of them traefik"
         elif not self.returncode:
@@ -235,6 +239,7 @@ class TraefikFinding:
         return tuple(found)
 
     def lines(self) -> list:
+        """One line per object the reads found, releases, classes and pods."""
         rendered = []
         for release in self.releases:
             rendered.append(f"  release: {release.label()}")
@@ -293,9 +298,11 @@ class TraefikPresence:
         return any(probe.ok for probe in self.probes)
 
     def owned_findings(self) -> tuple:
+        """The findings kubementat's own routing install could fix."""
         return tuple(finding for finding in self.findings if finding.owned)
 
     def foreign_findings(self) -> tuple:
+        """The findings somebody else's object caused, reported and not acted on."""
         return tuple(finding for finding in self.findings if not finding.owned)
 
     def command(self, *flags) -> str:
@@ -482,7 +489,7 @@ def _helm_releases(cluster, reads=shell.run):
     The read is the product's one release read -- `helm_list_releases_argv` in
     `infrastructure/helm.py`, and not an
     argv written here -- for the reason spelled on both of them: `--all` is a flag helm 4
-    rejects, and the statuses the flag used to stand for are what a skip decision has to be able to
+    rejects, and the statuses it would have stood for are what a skip decision has to be able to
     see anyway. It is addressed to `cluster`, because that is what stops a controller that is running
     on one cluster from being counted as the answer to a question asked of another.
     """
@@ -520,10 +527,9 @@ def _ingress_classes(cluster):
     failure: it means the cluster has no class to name, and the other two reads still answer. The
     sentence has to survive the log level, because "HTTP 404" is not an answer anyone can act on.
 
-    This is the conversion to the client, and the reason the guard that used to count this module's two
-    `kubectl` reads has nothing left to say: the read is the same `kubectl get ingressclass -o
-    json` the client sends, and the cluster is no longer a flag on a command line but the object
-    the client is bound to.
+    This read is what the client sends -- `kubectl get ingressclass -o json` is the same request, and
+    the cluster is not a flag on a command line but the object the client is bound to. That is why no
+    guard counts this module's `kubectl` reads: there are none.
     """
     items, outcome = _api_read(PROBE_INGRESS_CLASS, READ_INGRESS_CLASS,
                                cluster.list_ingress_classes)

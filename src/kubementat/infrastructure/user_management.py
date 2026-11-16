@@ -34,7 +34,7 @@ from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 # The confirmation errors belong to `kubementat.consent` and to the CLI's ask now: this file settles
 # whether the flow has permission and then asks the cluster for its verbs. It reads no terminal, so it
-# no longer raises on its own behalf -- both names remain reachable through `kubementat.errors`.
+# does not raise on its own behalf -- both names remain reachable through `kubementat.errors`.
 from kubementat.errors import ClusterAccessDeniedError, ResolvedKubeconfigUnusableError
 
 # How long the token controller gets to fill in a Secret it was just told about. The Secret
@@ -279,8 +279,9 @@ def kubeconfig_for_service_account(ctx, service_account_name: str, namespace: st
     and not of how a shell interpolated whatever the token happened to contain.
 
     It takes the `Context` because the two names it derives -- the cluster and the context -- are
-    named after the environment and the team, and this used to be the last place in `src/` that
-    spelled those two strings into a pair and read a `Config` from them. The `require_team` here is
+    named after the environment and the team. Spelling those two strings into a pair and reading a
+    `Config` from them here would make this module the last place that answers the root question for
+    itself. The `require_team` here is
     the *name* reason and not the configuration reason: the team reaches exactly one line, the
     context name interpolated below, and this function opens no configuration file at all -- its
     caller has already resolved the team's configuration before it asks for a token. So the sentence

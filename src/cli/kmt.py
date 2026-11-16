@@ -23,6 +23,7 @@ from kubementat.core.version import get_version
 # itself (plan D10). Doing it in the library meant every consumer of `import kubementat`
 # got a root handler and INFO level whether it wanted them or not.
 def configure_logging():
+    """Give the CLI a root handler and INFO level; the library configures nothing on import."""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -30,8 +31,8 @@ def configure_logging():
     )
 
 
-# The group carries no context object any more. It used to carry a `Config` holding one field,
-# `kubementat_main_dir`, and 32 commands accepted it through `@click.pass_obj` without reading it:
+# The group carries no context object. A `Config` holding one field, `kubementat_main_dir`,
+# would be accepted by 32 commands through `@click.pass_obj` and read by none of them:
 # the project root is resolved where a path is actually derived, by
 # `kubementat.core.config.paths.default_kubementat_main_dir`, so a `kmt` installed into site-packages still
 # drives the checkout `KUBEMENTAT_HOME` names (D11) without a second copy of the rule in the CLI.
@@ -43,6 +44,7 @@ def configure_logging():
 # It is eager, so it is answered before any command is resolved, and it exits rather than
 # continuing into a command that would contact a cluster for no reason.
 def print_version(ctx, param, value):
+    """Answer `--version` from the distribution metadata, before any command is resolved."""
     if not value or ctx.resilient_parsing:
         return
     click.echo(f'kubementat {get_version()}')
@@ -75,6 +77,7 @@ def cli():
 
 
 def main():
+    """The `kmt` entry point: configure logging, then hand the group to Click."""
     configure_logging()
     cli.add_command(kubementat.install)
     cli.add_command(kubementat.uninstall)

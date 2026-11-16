@@ -90,6 +90,7 @@ class EnvironmentResolution:
 
     @property
     def resolved(self) -> bool:
+        """True when a cluster was found for this environment."""
         return self.target is not None
 
 
@@ -240,7 +241,7 @@ def _static_declaration(static_path: Path) -> Dict[str, Any]:
             f"{static_path} could not be read: {exc}", reason=f"{static_path} could not be read"
         ) from exc
     except LockedConfigFileError as exc:
-        # The seam's sentence, this module's type. It used to be a `UnicodeDecodeError`
+        # The seam's sentence, this module's type. A raw `UnicodeDecodeError` would
         # that walked past the two handlers below and printed a codec traceback about a file whose
         # only crime was being locked.
         raise ClusterFileUnreadableError(
@@ -321,8 +322,8 @@ def _environment_declaration(environment: str,
     The `Config` is built either way, and that is the whole of what a `Context` answers: `config`
     says *what to deploy* and `target` says *where*, and a command that sweeps namespaces has to be
     able to answer the first question even when it was never given a team. **With a team**,
-    this is the `Config` every service class used to build for itself. **Without one**, the
-    same two arguments reach `Config` with `team=None`, which is now a state that object supports
+    this is the one `Config` every service class is handed. **Without one**, the
+    same two arguments reach `Config` with `team=None`, which is a state that object supports
     rather than a lie it is told: the environment-level files resolve, the team-scoped paths are not
     built, and reading a team-scoped value raises `TeamNotSuppliedError` instead of interpolating
     `None` — or, from an empty team, reading the environment's own file and calling it the team's.

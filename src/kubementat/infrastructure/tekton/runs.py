@@ -7,18 +7,14 @@ before any of it touches a cluster, and `generation` is asked for the postfix an
 substitution the applied document is built out of; both edges point down, and nothing here imports
 a module that would have to import this one back.
 
-Methods lost `self` the way the rest of the split did, and what they read off the instance is a
-parameter now: `kubernetes_utils` and `config` first, then the fields the constructor resolved off a
-`Context` (`environment`) and the namespace it read out of `team_static` (`pipeline_namespace`)
-where the function needs one. Where the instance value was a *default* rather than a value a caller
-could hand over — the waiter's namespace — the read is written out at the point of use, because the
-value belongs to `Config` and not to the object that used to exist.
-Nothing else in any body changed.
+Every function takes what it needs and nothing from an instance: `kubernetes_utils` and `config`
+first, then the field a `Context` resolves (`environment`) and the namespace read out of
+`team_static` (`pipeline_namespace`) where the function needs one. The one exception is the waiter's
+namespace, which is read at the point of use because it belongs to `Config` — a caller handing it
+over would be a second owner of a namespace decision made in one place.
 
-The team refusal is this module's, in two of its functions, and it arrived here with `P4-6` because
-that is what deleting the class made necessary. `TektonUtils.__init__` used to refuse a run that
-named no team, before it had done anything at all, and when the class went the refusal had to land
-where the team is actually read: `run_pipeline` reads the namespace out of `team_static`, and
+The team refusal is this module's, in two of its functions, and it lands where the team is actually
+read: `run_pipeline` reads the namespace out of `team_static`, and
 `setup_cleanup_job` reads the registry credential out of `team_static_encrypted`. Both therefore
 take the `Context` first and ask it for the team as their first statement, so a library caller
 holding a team-less `Context` is refused before this module creates a namespace, writes a Secret,
@@ -31,11 +27,11 @@ loop reads `monotonic` through this module: with `from time import monotonic` he
 land on a name nobody calls and the bound would be measured against a wall clock, so the test that
 says "it stops at thirty minutes" would say nothing at all.
 
-One name is placed here by decision rather than by the plan's own buckets. `list_available_pipeline_runs`
+One name is placed here by symmetry rather than by size. `list_available_pipeline_runs`
 talks to no cluster at all — it globs the team's pipeline-run directory and the global one — and its
 one caller is the run command itself, which falls back to listing when it was given no identifier.
 That makes it the read-side twin of the `global/` rule `run_pipeline` resolves a bare name with, so
-it lives beside the code it mirrors rather than in a bucket that never placed it.
+it lives beside the code it mirrors rather than in a bucket of its own.
 """
 
 import logging
@@ -68,11 +64,8 @@ PIPELINE_RUN_TIMEOUT_SECONDS = 1800
 # `test_no_module_under_src_binds_a_namespace_to_a_literal`, and it cannot tell a component name
 # that happens to equal a namespace away from a namespace). What is read is
 # `CLUSTER_CRONJOBS_DEPLOYMENT_NAMESPACE` in the environment's `static.json` — the same key the
-# install deploys into and the uninstall sweeps. The bash hardcoded
-# `CRONJOB_NAMESPACE="cluster-cronjobs"`, and a renamed namespace moved the job out from under the
-# asserts that looked for it in the old place — which is why the namespace is read from the key and
-# not spelled here. The citation that used to sit in this sentence pointed at a checklist file; the
-# claim is a code fact, so it lives here now.
+# install deploys into and the uninstall sweeps. A literal here would be a second owner of the
+# namespace, and a renamed namespace would move the job out from under the asserts that look for it.
 
 # The four names the cleanup job is made of. These are cluster contract: the CronJob's pod
 # template names the ServiceAccount by hand, the ClusterRoleBinding names both, and the
@@ -176,7 +169,7 @@ def cleanup_job_image(env_static) -> str:
         kubementat.errors.CleanupJobImageNotConfiguredError: If any of the three keys is declared and answers nothing,
             or if the registry is not configured. The name and the tag are also answered
             by `constants.DEFAULT_STATIC_ANSWERS` for a tree that declares nothing, so an *absent*
-            key no longer reaches this — a mapping that is missing one is the same fact as an
+            key does not reach this — a mapping that is missing one is the same fact as an
             operator's file that declares it as `""`, and both are refused.
     """
     missing = []
@@ -301,18 +294,22 @@ def _first_status_condition(resource) -> dict:
 
 
 def list_pipelines(kubernetes_utils, config, pipeline_namespace):
+    """The Pipelines in this namespace, one line each."""
     return _list_tekton_resource(kubernetes_utils, config, pipeline_namespace, "pipelines")
 
 
 def list_tasks(kubernetes_utils, config, pipeline_namespace):
+    """The Tasks in this namespace, one line each."""
     return _list_tekton_resource(kubernetes_utils, config, pipeline_namespace, "tasks")
 
 
 def list_taskruns(kubernetes_utils, config, pipeline_namespace):
+    """The TaskRuns in this namespace, one line each."""
     return _list_tekton_resource(kubernetes_utils, config, pipeline_namespace, "taskruns")
 
 
 def list_pipeline_runs(kubernetes_utils, config, pipeline_namespace):
+    """The PipelineRuns in this namespace, one line each."""
     return _list_tekton_resource(kubernetes_utils, config, pipeline_namespace, "pipelineruns")
 
 
@@ -320,12 +317,10 @@ def list_all_tekton_resources(kubernetes_utils, config, pipeline_namespace=None)
     """The four kinds, in the order `kmt tekton list` has always printed them.
 
     The namespace is the team's `PIPELINE_NAMESPACE` when the caller does not name one. That
-    default is not a convenience: the class that used to sit in front of this call read the
-    namespace off `self` and handed it down, so with the class gone a command that lists has to
-    either read `team_static` in its own module — a namespace decision made in a second place,
-    which is the defect every namespace row of the census recites — or leave the read here, beside
-    the three functions that take it as an argument. It stays here, where `run_pipeline` already
-    reads it, and the refusal a team-less `Context` gets is `Config`'s own, ahead of the first
+    default is not a convenience: the read belongs here, beside the three functions that take it as
+    an argument, because a listing command that read `team_static` in its own module would be making
+    a namespace decision in a second place. It stays where `run_pipeline` already reads it, and the
+    refusal a team-less `Context` gets is `Config`'s own, ahead of the first
     listing.
     """
     if pipeline_namespace is None:
@@ -539,6 +534,7 @@ def cleanup_pipeline_runs(kubernetes_utils, config, pipeline_namespace=None, fil
 
 def cleanup_pipeline_run(kubernetes_utils, config, pipeline_namespace, run_name: str,
                          filter="all", run_object=None):
+    """Delete one PipelineRun when the filter and its own status say it is finished."""
     should_be_deleted=False
     if run_object is None:
         should_be_deleted = True
@@ -763,12 +759,10 @@ def wait_for_pipeline_run(kubernetes_utils, config, pipeline_run_name: str, name
                           sleep=None) -> int:
     """Block until the named PipelineRun finishes, or until the bound says it has not.
 
-    This is the half of `tekton_ci/tasks/run-tekton-pipeline.yml` that used to be a bash step:
-    a loop that asked the Tekton CLI for the run's status as JSON, slept, and asked again, with no
-    bound and no exit condition. It is the same question, asked through the API client instead of
-    a binary that had to be installed in the pod, and the one structural improvement is that it
-    stops: bash polled forever, and a wedged inner `PipelineRun` held a pod and a namespace
-    hostage indefinitely. `timeout_seconds` is the bound (thirty minutes, the owner's number) and
+    This is the loop half of `tekton_ci/tasks/run-tekton-pipeline.yml`, asked through the API client
+    instead of a binary that has to be installed in the pod. The bound is what makes it safe: a poll
+    that never stops holds a pod and a namespace hostage over a wedged inner `PipelineRun`, so
+    `timeout_seconds` is the bound (thirty minutes) and
     it exits non-zero when it runs out.
 
     It asks once per `poll_interval_seconds`, which is the Task's `polling-sleep-time` fed

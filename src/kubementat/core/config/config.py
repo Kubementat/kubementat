@@ -1,3 +1,4 @@
+"""The layered configuration read: one walk, one answer per key, one refusal per gap."""
 import json
 import logging
 import os
@@ -17,11 +18,10 @@ from kubementat.errors import (
     TeamNotSuppliedError,
 )
 
-# Importing this module configures logging and nothing else. The `logging.basicConfig`
-# call that used to sit here ran for every library consumer — importing `kubementat`
-# for a unit test or a script silently installed a root handler and raised the level to
-# INFO (plan D10). The CLI opts in to the same configuration in `cli.kmt:main`, which is
-# the only place that has a human reading stdout.
+# Importing this module configures logging and nothing else. A `logging.basicConfig` here would run
+# for every library consumer — importing `kubementat` for a unit test or a script would install a root
+# handler and raise the level to INFO. The CLI opts in to the same configuration in `cli.kmt:main`,
+# which is the only place that has a human reading stdout.
 
 # One API version for the whole `tekton.dev` group, with no override: kubementat writes
 # v1 and reads v1. `tekton.dev/v1beta1` was removed, so a tree that mixed the two would
@@ -38,19 +38,16 @@ TEKTON_API_GROUP = "tekton.dev"
 TRIGGERS_API_VERSION = "v1beta1"
 TRIGGERS_API_GROUP = "triggers.tekton.dev"
 
-# "Which directories are teams?" is one rule and not two, so the name table that used to sit here is
-# gone. The rule is the file: a directory is a team when it carries a `static.json` of its own,
-# because that file is what makes it addressable — no file, no namespaces to name, nothing to install
-# or uninstall. `kubementat_components/` is the directory this table used to name, and it is filtered
-# out of the listing by exactly that test: what 1.x wrote there was a helmfile manifest and its values
-# files (`docs/index-overview.md` records the contents, and so does the release-index reader that still
-# refuses a stale copy), never a `static.json`, so no tree that ever existed answers this question from
-# the name and every tree that does answer it from the file.
+# "Which directories are teams?" is one rule and not two: a directory is a team when it carries a
+# `static.json` of its own, because that file is what makes it addressable — no file, no namespaces to
+# name, nothing to install or uninstall. `kubementat_components/` is filtered out of the listing by that
+# same test: what 1.x wrote there was a helmfile manifest and its values files (`docs/index-overview.md`
+# records the contents, and the release-index reader still refuses a stale copy), never a `static.json`.
 #
-# One case would have made the table load-bearing: a stale `kubementat_components/` that somehow
-# carries a `static.json`. That is not a tree kubementat writes, and the honest sentence about it is
+# The one case a name table would have had to cover is a stale `kubementat_components/` that carries a
+# `static.json` of its own. That is not a tree kubementat writes, and the honest sentence about it is
 # this: a directory holding a team's file *is* a team, whatever it is called, so it belongs in the
-# answer. Deleting a rule that never fired is what item 10 is for; deleting one that might have is not.
+# answer. The file rule covers that case, which is why a second spelling of the name adds nothing.
 
 # The two categories that only exist inside a team's directory. They are spelled here so the
 # refusal is one rule and not one per reader, and so a new team-scoped category has to be added to
@@ -126,19 +123,18 @@ class Config:
         self.team = team
         
         # The root a caller handed is the answer, and the environment is consulted only when no
-        # caller handed one. The order matters more than it looks: this used to call
-        # `default_kubementat_main_dir()` first and override it second, so a `Config` that had
-        # *been told* which tree to use still asked the process's own `KUBEMENTAT_HOME` on the way
-        # through — and an empty-but-set `KUBEMENTAT_HOME` refused a command that had a root
-        # threaded into it, over a dial nobody had consulted. Reading a dial you
-        # were not asked about is also what makes the answer unstable: the same object means two
+        # caller handed one. The order is the rule, not a detail: consulting `default_kubementat_main_dir()`
+        # first and overriding it second means a `Config` that has *been told* which tree to use still
+        # asks the process's own `KUBEMENTAT_HOME` on the way through, and an empty-but-set
+        # `KUBEMENTAT_HOME` then refuses a command that had a root threaded into it. Reading a dial
+        # nobody was asked about is also what makes the answer unstable: the same object means two
         # different things in two different shells.
         #
         # Precedence is therefore argument > environment variable > checkout-relative default,
         # so a test or a one-off run can point one instance somewhere without setting the variable
         # for the whole machine. Nothing here softens the refusal rule: with neither the argument
         # nor the variable, `default_kubementat_main_dir()` answers with the checkout this module
-        # was installed from (D11's honest default for the *output* root), and the configuration
+        # was installed from (the honest default for the *output* root), and the configuration
         # root below is the one that has no default to fall back to.
         if kubementat_main_dir is not None:
             self.kubementat_main_dir = Path(kubementat_main_dir).resolve()
@@ -173,23 +169,18 @@ class Config:
         # so they ship inside the package and resolve from inside it, the way package data always
         # has. `pipeline-runs/` is output, and it is the line above that says so.
         #
-        # Reading them through `kubementat_main_dir` was the bug this ticket fixes: `setup_pipelines`
+        # Reading them through `kubementat_main_dir` is the hazard this addresses: `setup_pipelines`
         # applied `{root}/tekton_ci/{tasks,pipelines}`, so a `kmt` installed from a wheel applied a
         # directory that does not exist there, logged "Global Tasks applied successfully!", and
-        # installed nothing. `apply_resources` raises `FileNotFoundError` for a missing directory,
-        # so an asset root that is really there is the only thing this can be built from.
-        #
-        # `templates_dir` used to sit here and point at `asset_path("templates")`. Nothing opened the
-        # files behind it: the only reader was the log line below, and the only readers of the files
-        # themselves were tests, who can keep their witnesses beside themselves. The attribute is
-        # gone with the directory, and what is left of the asset-root rule is one sentence — product
-        # data resolves inside the package, through `asset_path`, and never off a checkout root.
+        # installed nothing. `apply_resources` raises `FileNotFoundError` for a missing directory, so
+        # an asset root that is really there is the only thing this can be built from. Product data
+        # resolves inside the package, through `asset_path`, and never off a checkout root.
 
         # The install's entry point and its shipped defaults, one attribute because the two are one
         # directory: helmfile resolves a release's relative `values:` path against the directory of
-        # the manifest it was handed, so the manifest and the ten values files it names travel
-        # together or a release installs with chart defaults. Nothing writes under it and nothing
-        # reads it out of a checkout: this is the manifest `helmfile_apply` applies, and
+        # the manifest it was handed, so the manifest and the values files it names travel together or
+        # a release installs with chart defaults. Nothing writes under it and nothing reads it out of a
+        # checkout: this is the manifest `helmfile_apply` applies, and
         # `release_index.helmfile_paths_for` is its only reader in `src/` -- reached from
         # `HelmUtils.helmfile_paths` and from the config report alike, which is the one reason a
         # read of this attribute cannot end up pointed at two files.
@@ -549,10 +540,9 @@ class Config:
     def _ensure_config_loaded(self):
         """Read the files once, before any answer is given.
 
-        The check used to be spelled inside `get()` against the requested category. It is a method
-        now because a component read no longer goes through `get()`, and a lazy `Config` must not
-        answer a namespace out of `constants.py` on the strength of a call that never loaded
-        anything: one gate for both readers, and it cannot be skipped by the reader that forgot.
+        The check is one method because it is one gate: a component read does not go through `get()`,
+        and a lazy `Config` must not answer a namespace out of `constants.py` on the strength of a call
+        that never loaded anything. Both readers pass through here, and neither may skip it.
         """
         if self.config_sources is None:
             self.config = self._load_config(True)
@@ -592,11 +582,8 @@ class Config:
 
         Reads `<COMPONENT>_DEPLOYMENT_NAMESPACE` from the environment-level `static.json` and
         falls back to `kubementat.core.constants.DEFAULT_NAMESPACES`, warning once per instance
-        when it does. Earlier the answer lived in the code (the install/uninstall module had four
-        `namespace = '...'` lines and `uninstall_kubementat.sh` had fifteen — the module is deleted
-        and both live in `core/constants.py` now), so renaming one
-        namespace meant finding every copy of it — which is exactly what the
-        `namespace-rename-tunnel-still-correct` lane assert used to catch.
+        when it does. One table for every verb is what makes renaming a namespace one edit, and
+        the `namespace-rename-tunnel-still-correct` lane asserts that it stays one edit.
 
         Parameters
         ----------
@@ -806,9 +793,8 @@ class Config:
 
         The read is spelled as an accessor for the same reason `component_namespace` is: a caller that
         assembles `component_config_key` and a fallback table by hand is a caller that drifts, and this
-        key's fallback table used to live in `automations/routing/routing.py` for exactly that reason.
-        Both readers that already existed keep their own call for now, and all three paths go through
-        this method's one table, so the answer is the same whichever door a caller came through.
+        method's table is the only one. Every reader that needs this answer calls it, so the answer is
+        the same whichever door a caller came through.
 
         Raises
         ------
@@ -942,8 +928,8 @@ class Config:
     
     def _load_json_file(self, file_path):
         # One read, one sentence. A file whose bytes will not decode is refused as
-        # git-crypt's and not as malformed JSON, and the sentence is the seam's, because four sites
-        # used to say this four different ways. `FileNotFoundError` still comes from here, since the
+        # git-crypt's and not as malformed JSON, so that every layer read says it the same way.
+        # `FileNotFoundError` still comes from here, since the
         # optional-team-file handling in `_load_config` below is what makes a missing layer degrade
         # and not explode.
         return json.loads(read_decrypted(file_path, "static layer file"))

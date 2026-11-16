@@ -1,3 +1,4 @@
+"""helm and helmfile, addressed at one cluster: apply, list, and take off again."""
 import json
 import logging
 import os
@@ -25,33 +26,14 @@ from kubementat.errors import (
 )
 from pathlib import Path
 
-# `helm list`'s read for "what releases live here", with the statuses named instead of left to a
-# default. The flag that used to carry that intention -- `--all` -- no longer exists: helm 4
-# deleted it, and on this product's helm (`helm v4.3.1` here) `helm list -A --all` exits 1 with
-# `Error: unknown flag: --all`, which is a read that answers nothing on every cluster.
-#
-# Dropping it is not enough, because what `--all` was for is true per major and not globally:
-#
-# * helm 4 defaults to every status. Its `pkg/action/list.go` (v4.3.1) builds the list with
-#   `StateMask: ListAll`, and `SetStateMask` falls back to `ListAll` when no filter was given, so
-#   on the version this product ships the flag was changing nothing at all.
-# * helm 3 starts from `ListDeployed | ListFailed` and narrows from there, so a flag-free
-#   `helm list` there answers "deployed or failed" and says nothing about `pending`, `superseded`,
-#   `uninstalled` or `uninstalling` releases -- and a component sitting mid-install would be
-#   reported as having no release while `helm uninstall <name>` would happily have deleted it. That
-#   is the silent wrong answer `--all` was here to prevent.
-#
-# Naming the six statuses is what makes the question have one answer on both majors: in helm 3 the
-# six OR together into precisely the mask `--all` set (`ListAll` in `pkg/action/list.go`), and in
-# helm 4 they are the mask the default already is, so the read is neither narrower nor wider than
-# what each major would give without being told. `--hidden` is deliberately not here: helm 4.3.1
-# rejects it (`unknown flag: --hidden`) and helm 3.0.0's and 3.14.0's own `list.go` never define it,
-# so a portable-looking argv that included it would fail exactly the way the flag it replaces does.
-#
-# The read's own guard is
-# `tests/test_the_release_listing_asks_for_the_statuses_helm_actually_has.py`, and it is deliberately
-# not written against a version detection: parsing `helm version` to answer a flag question is what
-# `helm_version_never_guesses_a_sort_it_cannot_do.py` already pushes back on.
+# `helm list`'s read for "what releases live here", naming every status instead of taking the
+# default. The default differs by major: helm 4 answers with every status, helm 3 with
+# `deployed|failed` only, so flag-free a component sitting mid-install reads as having no release
+# while `helm uninstall <name>` would still delete it.
+# `--all` is not a usable shorthand for this: helm 4.3.1 rejects it (`unknown flag: --all`), and
+# neither major accepts `--hidden`, so an argv that carries either flag fails instead of reading.
+# Guard: `tests/test_the_release_listing_asks_for_the_statuses_helm_actually_has.py`, deliberately
+# not written against `helm version` parsing -- a flag answer must not depend on guessing a sort.
 HELM_LIST_RELEASES_ARGV = ["helm", "list", "--all-namespaces",
                            "--deployed", "--failed", "--pending", "--superseded",
                            "--uninstalled", "--uninstalling", "--output", "json"]
@@ -97,21 +79,15 @@ class HelmUtils:
     def __init__(self, ctx):
         """The helm operations for one environment, from the `Context` that read them.
 
-        One argument and not two plus a `Config` this class builds for itself, because
-        the six service classes used to answer "which cluster" six times, and `routing.py` had to
-        apologise in a docstring for building a second instance beside `HelmUtils`'s. `Context`
-        answers once, before any of them exist, and hands the same `Config` to all of them.
+        One argument: `Context` answers "which cluster" once and hands the same `Config` to every
+        service class, so a class here never builds a second, diverging answer.
 
-        No `require_team`, because nothing here reads a team. Every value this class asks of
-        configuration is environment-level: `env_static_encrypted` for grafana's credentials,
-        `component_namespace` -- which is `env_static` -- for every release namespace, and
-        `Config.helmfile_asset_dir` -- the packaged manifest -- for the releases helmfile evaluates.
-        `grep -n team_static src/kubementat/infrastructure/helm.py` returns nothing, and that is the point.
-        The guard that used to be here claimed a `Config` without a team interpolates `None` into
-        the paths this class derives; `Config._team_scoped_path` moved that refusal to the read,
-        so an unguarded read of a team-scoped path is already answered there, and a constructor that
-        refused first was refusing work it has no business refusing: `kmt helm apply dev` would not
-        apply a single release for an environment whose files it goes on to read in full.
+        No `require_team`, because nothing here reads a team: `env_static_encrypted` for grafana's
+        credentials, `component_namespace` for every release namespace, and
+        `Config.helmfile_asset_dir` for the manifest helmfile evaluates are all environment-level.
+        A team-scoped path is refused at the read (`Config._team_scoped_path`), so a constructor that
+        refused first would be refusing work it has no business refusing: `kmt helm apply dev` applies
+        releases for an environment whose files it goes on to read in full.
         """
         self.environment = ctx.environment
         self.config = ctx.config
@@ -157,37 +133,30 @@ class HelmUtils:
         pool would race on all of that while the environment it would have raced on is fixed.
         Nothing in Phase B adds a thread, and nothing here invites one.
         '''
-        # Get default variables from the environment if not set
-        # Access encrypted static JSON from env_static_encrypted
-        # Grafana's admin credentials come from `<root>/{environment}/static.encrypted.json`
-        # and from nowhere else. The template used to document an `export` as the way to set them,
-        # which invited a second source for a value that already has one; what that export bought a
-        # lane was a grafana that answered to a name no configuration had chosen. So the config is
-        # read here and handed to the template, and what happened to be in the operator's shell is
-        # not consulted.
+        # Grafana's admin credentials come from `<root>/{environment}/static.encrypted.json` and
+        # from nowhere else. A value that has one source must not have a second: an `export` in a
+        # template would let a grafana answer to a name no configuration had chosen, so the config is
+        # read here and handed to the template, and the operator's shell is not consulted.
         grafana_admin_user, grafana_admin_password = self._grafana_admin_credentials()
         grafana_credentials = {
             'GRAFANA_ADMIN_USER': grafana_admin_user,
             'GRAFANA_ADMIN_PASSWORD': grafana_admin_password,
         }
 
-        # ...and for every namespace a release can be deployed into, for the same reason and by
-        # the same route: the template reads them, so they have to be in the environment the
-        # template is evaluated in.
+        # The namespaces, for the same reason and by the same route: the template reads them, so they
+        # have to be in the environment the template is evaluated in.
         namespaces = self._export_component_namespaces()
 
-        # ...and the one routing answer that is neither a namespace nor a release knob: the ingress
-        # class the traefik release names. Same destination and same reason -- helmfile reads its
-        # templates out of the environment it is handed -- and this one was missing for a while, so the
-        # manifest answered for itself and the cluster's release could disagree with every Ingress the
-        # Python side wrote.
+        # The ingress class the traefik release names -- the one routing answer that is neither a
+        # namespace nor a release knob. Same destination and same reason: helmfile reads its templates
+        # out of the environment it is handed, and if this value is absent the manifest answers for
+        # itself and the cluster's release disagrees with every Ingress the Python side wrote.
         ingress_class = export_ingress_class(self.config)
 
-        # ...and the three that let a manifest shipped inside a wheel say where the operator's own
-        # values live. The manifest used to sit next to the configuration, so a relative path was
-        # enough to reach it, and now it does not, so a path that has to cross out of the package is
-        # told where to cross to. The manifest names the root, the environment and the team, and
-        # nothing here guesses at a fourth variable the operator's shell might happen to be carrying.
+        # The three values that let a manifest shipped inside a wheel say where the operator's own
+        # values live. The manifest ships inside the wheel, so a path that has to cross out of the
+        # package is told where to cross to; it names the root, the environment and the team, and
+        # nothing here guesses at a fourth variable the operator's shell carries.
         exported_coordinates = export_configuration_coordinates(self.config, self.environment)
 
         # The helmfile working directory and the manifest inside it. One resolution of each, in
@@ -240,15 +209,13 @@ class HelmUtils:
         if interactive:
             argv.append("--interactive")
 
-        # The one environment this apply is worth. It is assembled here and nowhere else: this
-        # process's environment as it already stands, with the five groups of decided values laid on
-        # top of it. Inheriting what is already there is deliberate -- PATH, HOME, a KUBECONFIG the
-        # operator resolved, the proxy variables -- and the merge is what makes a value that the
-        # *configuration* answers outrank a value the operator's shell happened to be carrying, the
-        # same way `os.environ[...] = ...` used to make it outrank. What changes is only the lifetime:
-        # a value decided here is decided for this child and dies with it, so an apply that runs after
-        # this one, or between this one's first line and its spawn, is handed its own dictionary and
-        # not somebody else's leftovers.
+        # The one environment this apply is worth: this process's environment as it already stands,
+        # with the decided values laid on top of it. Inheriting what is there is deliberate -- PATH,
+        # HOME, a KUBECONFIG the operator resolved, the proxy variables -- and the merge is what makes
+        # a value the *configuration* answers outrank one the operator's shell happens to carry.
+        # The merge is per-child rather than into `os.environ` so that a value decided here dies with
+        # this child, and a later or concurrent apply is handed its own dictionary and not somebody
+        # else's leftovers.
         child_environment = {
             **os.environ,
             **grafana_credentials,
@@ -289,10 +256,11 @@ class HelmUtils:
            to a default, because a release that is `failed`, `pending`, `superseded` or being
            uninstalled is still a release, and because what a flag-free `helm list` answers depends
            on the major: helm 4 (the version this product ships, `v4.3.1`) answers every status by
-           default, helm 3 answers deployed or failed only. The `--all` that used to be here is gone
-           -- helm 4 deleted the flag, so the read died with `unknown flag: --all` before it could
-           name anything -- and the statuses spelled in its place are exactly what `--all` selected
-           on helm 3 and exactly what helm 4's default already selects.
+           default, helm 3 answers deployed or failed only. The six statuses spelled here are exactly
+           what helm 3's `--all` selects and exactly what helm 4's default already selects, which is
+           why no flag is needed and why spelling them is the portable way to ask.
+           The flag itself is not a portable fallback: helm 4 deleted it, and `helm list -A --all`
+           dies with `unknown flag: --all` before it can name anything.
         3. The claims that release made, deleted by its `app.kubernetes.io/instance` label.
            The script printed a paragraph of advice about them (`kubectl -n <ns> delete pvc
            <PVC_NAME>`) and deleted nothing, which is the part that recorded
@@ -362,9 +330,9 @@ class HelmUtils:
 
         The answer is `release_index.helmfile_paths_for`, which is where it lives: this class
         addresses a cluster, and which manifest the product ships is not a fact about a cluster.
-        The delegation is not a compatibility shim -- the method still does its own work, handing
-        those two paths to `helmfile_apply` below and to `component_release_index` -- and a caller
-        that only wants the paths no longer needs this class to exist.
+        The delegation is not a compatibility shim: the method still does its own work, handing those
+        two paths to `helmfile_apply` below and to `component_release_index`. A caller that only wants
+        the paths can ask the index directly and does not need this class, which only addresses clusters.
         """
         return config_reads_index.helmfile_paths_for(self.config)
 
@@ -791,22 +759,20 @@ class HelmUtils:
         `static.encrypted.json`.
 
         The user is required, and this is where that requirement is stated. The template renders
-        `adminUser` with `requiredEnv`, so an unset key aborts the whole helmfile file -- which is
-        helmfile's opinion about a missing credential, not kubementat's, and it arrives after a
-        dozen releases have already been touched. The alternative was worse: the value used to be
-        read and assigned to `os.environ` unguarded, so a config that did not name an admin reached
-        a child process as `None` and raised `TypeError` two frames away from the one thing the
-        operator can fix. So say what is missing, name the file, and stop before anything is applied.
+        `adminUser` with `requiredEnv`, so an unset key aborts the whole helmfile file -- helmfile's
+        opinion about a missing credential, arriving after a dozen releases have already been touched.
+        An unguarded read that assigned the value to `os.environ` is the other wrong shape: a config
+        that does not name an admin hands the child process `None` and raises `TypeError` two frames
+        away from the one thing the operator can fix. So say what is missing, name the file, and stop
+        before anything is applied.
 
         The password is rendered from the environment too -- `helmfile.yaml.gotmpl` asks for both halves
         with `requiredEnv` -- so an absent one aborts the file and nothing is applied. That is a fact
-        about the template and not a choice made here, and this method used to describe it wrongly as
-        "not rendered from the environment, so it is only warned about" -- the kind of sentence that
-        outlives the template it was written against and then reads as an argument for a behaviour that
-        no longer holds. So kubementat refuses, naming the file and the verb, which reaches the operator
-        before helmfile says something true but unhelpful: `requiredEnv` names a variable and a line
-        number, and neither of those points back to the `static.encrypted.json` that would have answered
-        it.
+        about the template, and any note here that says the password is merely warned about is reading
+        an older template: kubementat's behaviour is to refuse, naming the file and the verb, which
+        reaches the operator before helmfile says something true but unhelpful -- `requiredEnv` names a
+        variable and a line number, and neither points back to the `static.encrypted.json` that would
+        have answered it.
 
         `config init` generates this key when nothing answers it, so the trees that reach this refusal
         are the ones where someone took it away -- which is why the message says where to put it back
@@ -865,9 +831,8 @@ class HelmUtils:
         default when a variable is missing (`env ... | default`), so the two halves of the
         rule are both met: renaming a key moves the release, and a key that is not there does
         not fail the install. No release in `helmfile.yaml.gotmpl` keeps a literal namespace, so
-        every release kubementat installs gets a variable of its own; the three git-provider
-        releases that used to sit outside this rule were retired on 2026-10-29 and took their
-        repositories with them. A name that is not in the namespace table gets no key, which is a
+        every release kubementat installs gets a variable of its own. A name that is not in the
+        namespace table gets no key, which is a
         stated gap rather than a silently dead key in the environment layer's shape: the releases in that
         position are named by `components.releases_belonging_to_no_component`, and every one of them
         lands in a namespace another component owns -- so a key of their own would be a key helmfile
@@ -972,12 +937,12 @@ def export_component_release_knobs(config, index) -> dict:
 
     **The set is the manifest's `component_name` labels, i.e. *index*, and not the namespace
     table.** Those two sets do not line up, and both directions of the mismatch are correct rather
-    than a drift to be fixed. What changed is where the two answers live: one module composes them
+    than a drift to be fixed. One module composes both answers
     (`core.components.ComponentUniverse`), `releases_without_a_component` names the
     label-without-a-namespace side and `namespace_only` the namespace-without-a-release side, and a
     reader that wants either one asks the same object that decides what `kmt component install`
-    accepts. So this function exports off the index and cannot be caught agreeing with the wrong half
-    -- there is no longer a second list in this file for it to disagree with.
+    accepts. This function exports off the index, so it cannot agree with the wrong half: there is no
+    second list in this file to disagree with.
 
     The shape of the two sides, so the argument stays legible when the numbers move:
     `alloy`, `prometheus-blackbox-exporter` and `prometheus-helm-exporter` carry a label and no
@@ -1023,11 +988,9 @@ def export_component_release_knobs(config, index) -> dict:
             exported[key] = answer
     return exported
 
-# The component whose class the routing release names is `constants.COMPONENT` — spelled once for the
-# whole package since the routing modules started importing it from there. It used to be spelled again
-# here, because `routing.py` owned the name and this file could not import it without a cycle: routing
-# imports `HelmUtils`. That reason is gone, and a duplicate that is justified by a cycle which no
-# longer exists is a bug waiting to be believed.
+# The component whose class the routing release names is `constants.COMPONENT`, spelled once for the
+# whole package and imported from there by the routing modules. A duplicate here would be a name that
+# can drift from the constant it stands for, so this file imports it.
 
 def export_ingress_class(config) -> dict:
     r'''

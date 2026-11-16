@@ -282,10 +282,9 @@ class GrafanaUnauthorizedError(GrafanaError):
 # ---------------------------------------------------------------------------
 # What the Ingress generator refuses to write.
 #
-# All three belong to one command's argument list, and all three used to be `Exception` with no
-# parent. A caller that asks "did kubementat refuse me, or did Python break" cannot tell with that,
-# which is the whole content of this group's edit: the classes, their messages, and their reasons are
-# unchanged, and each now answers to `KubementatError`.
+# All three belong to one command's argument list, and a caller asking "did kubementat refuse me, or
+# did Python break" needs a parent that answers: these descend from `KubementatError`, where a bare
+# `Exception` can only answer "Python broke".
 #
 # `IngressTargetExistsError` is the overwrite rule, and the rule is `automations/ingress.py`'s:
 # kubementat does not replace what it has already handed the operator. The other two are the
@@ -333,15 +332,15 @@ class CiImageNotConfiguredError(KubementatError):
     '''
     The CI image cannot be named, which is now one of two different facts.
 
-    `TEKTON_CI_IMAGE_NAME` and `TEKTON_CI_IMAGE_TAG` carry an L0 now — the same two values the
-    1.x template carried, now in `constants.DEFAULT_STATIC_ANSWERS` — so a tree that declares nothing
+    `TEKTON_CI_IMAGE_NAME` and `TEKTON_CI_IMAGE_TAG` carry an L0 in
+    `constants.DEFAULT_STATIC_ANSWERS`, so a tree that declares nothing
     runs `ubuntu-ci-minimal:latest` and never reaches this exception. What still raises is:
 
-    * a key that was **declared and answers nothing** (`""`, `null`, a number). jq used to print the
-      four characters `null` into the image reference and `kubectl run` accepted it, so a value that
-      was written down and says nothing is refused rather than papered over with a default. That is
-      That is the override rule cutting both ways: the operator's file outranks `constants.py`, and
-      when it answers nothing it answers nothing.
+    * a key that was **declared and answers nothing** (`""`, `null`, a number). A layer that answers
+      `null` reaches an image reference as the four characters `null`, which `kubectl run` accepts, so
+      a value that was written down and says nothing is refused rather than papered over with a
+      default. That is the override rule cutting both ways: the operator's file outranks
+      `constants.py`, and when it answers nothing it answers nothing.
     * `DOCKER_REGISTRY_BASE_URL`, which has **no L0** and was left out of the shipped defaults. It
       is reported and left alone.
 
@@ -386,14 +385,12 @@ class MysqlNotConfiguredError(KubementatError):
 # ---------------------------------------------------------------------------
 # What the configuration tree itself refuses.
 #
-# These refused from inside the modules that read or prepare the tree, and they used to descend
-# from `click.ClickException` — the shape that says "a command printed this" rather than
-# "kubementat refused", and the gap `cli/context.py`'s doctrine cannot accept (the library stays
-# Click-free to raise; only the CLI decides how a refusal is printed). They all descend from
-# `KubementatError` now, and the CLI renders them: the same one `Error:` line and exit 1 they got
-# for free as `ClickException`s, produced where they are caught and re-raised rather than where
-# they are raised. The prose below still says what each refusal means, because that is the part no
-# raise site may rewrite locally.
+# These descend from `KubementatError` and not from `click.ClickException`, whose shape says "a
+# command printed this" rather than "kubementat refused" — the gap `cli/context.py`'s doctrine cannot
+# accept, because the library stays Click-free to raise and only the CLI decides how a refusal is
+# printed. The CLI renders them: one `Error:` line and exit 1, produced where they are caught and
+# re-raised rather than where they are raised. The prose below still says what each refusal means,
+# because that is the part no raise site may rewrite locally.
 #
 # The grouping is deliberate and it is not by file: `core/config/` raised fifteen of these, and
 # they are named here by *the question the operator has to answer*, not by which module was asked.
@@ -436,9 +433,9 @@ class DeployerKeyMissingError(KubementatError):
 
     This is a named refusal rather than whatever the next layer would raise, because every site
     that raises it is one an operator will be standing in front of: `setup_pipelines` reads these
-    files on its way to a Secret, and used to discover the absence three layers down inside the
-    Kubernetes client's serialization. The name of the class is the sentence the operator needs,
-    which is why the exception is what the guards propagate instead of a re-raise of something
+    files on its way to a Secret, where a missing file would otherwise surface three layers down
+    inside the Kubernetes client's serialization. The name of the class is the sentence the operator
+    needs, which is why the exception is what the guards propagate instead of a re-raise of something
     else.
     """
 
@@ -473,7 +470,7 @@ class RootDirectoryVariableIsEmptyError(KubementatError):
 
     Shared by both roots, because both roots read the same rule: `KUBEMENTAT_HOME` for the tree a
     run writes into, `KUBEMENTAT_PLATFORM_CONFIG_DIR` for the tree it reads. A variable set to the
-    empty string used to fall back to the built-in default, which read configuration out of
+    empty string must not fall back to the built-in default, because that reads configuration out of
     site-packages while saying nothing about it; the refusal is here so the empty case is decided
     once and not in each root's own words.
     """
@@ -580,11 +577,10 @@ class TeamNamespaceNotConfiguredError(KubementatError):
 # ---------------------------------------------------------------------------
 # What the Tekton install refuses to start with.
 #
-# Five answers from the Tekton install path -- raised now by whichever module of
-# `infrastructure/tekton/` is asked -- and they used to be five bare `Exception`
-# classes with no parent, which is the whole content of this group's edit: the classes, their
-# messages and their reasons are unchanged, and each now answers to `KubementatError`, so a caller
-# that asks "did kubementat refuse me, or did Python break" can tell.
+# Five answers from the Tekton install path -- raised by whichever module of
+# `infrastructure/tekton/` is asked. They descend from `KubementatError` rather than sitting as five
+# bare `Exception` classes, so a caller that asks "did kubementat refuse me, or did Python break"
+# can tell.
 #
 # Three of the five are the `jq -r` shape, and it is worth naming once instead of three times: bash
 # read a `static.json` key with `jq -r`, a key that was not there printed the four characters
@@ -666,12 +662,13 @@ class CleanupJobImageNotConfiguredError(KubementatError):
 #
 # The six classes the generators raise instead of writing a file — `generate_deploy_pipeline`,
 # `generate_trigger_configs`, `generate_pipeline_run` — and, like the Ingress group above, all six
-# used to be bare `Exception`s with no parent. The Ingress group is the same three questions about
+# descend from `KubementatError` rather than standing as bare `Exception`s. The Ingress group is the
+# same three questions about
 # one command's three arguments: the target already exists, an argument came in empty, a value is
 # unusable. This group is those three, plus what a template is, what it asked for, and what the
 # input file turned out to be, told about the directory a generated pipeline lives in.
 #
-# No `GenerationError` base was added here, and the reason is the census and not the taste. The
+# No `GenerationError` base belongs here, and the reason is measured rather than stylistic. The
 # name would cover the six exactly, and it reads well. But nothing in the tree catches this family
 # as a family: not one `except` in `src` or in `tests` names any of these eleven, and the CLI lets
 # them travel untouched to the one place that prints a domain error. A base nobody catches is a
@@ -778,12 +775,11 @@ class UninstallIncompleteError(KubementatError):
 # ---------------------------------------------------------------------------
 # What the configuration verbs refuse — the `config_init` / `config_validate` half.
 #
-# These forty-odd refusals used to be `click.ClickException`s, raised from inside the modules that
-# read or lay down a configuration tree. That shape said "a command printed this" and not
-# "kubementat refused", and it put a CLI type on every library consumer of those modules. They
-# descend from `KubementatError` now and the CLI renders them: the same one `Error:` line and exit
-# 1 they got for free before, produced by `cli/context.py`'s allowlist and `cli/kmt.py`'s group
-# class rather than by Click's own handler.
+# These forty-odd refusals descend from `KubementatError` and not from `click.ClickException`, whose
+# shape says "a command printed this" and not "kubementat refused", and which puts a CLI type on
+# every library consumer of those modules. The CLI renders them: one `Error:` line and exit 1,
+# produced by `cli/context.py`'s allowlist and `cli/kmt.py`'s group class rather than by Click's own
+# handler.
 #
 # As in the `core/config/` group above, the grouping is by the question the operator has to answer
 # and not by the module that was asked. `set_answer` and `unset_answer` ask the same question about

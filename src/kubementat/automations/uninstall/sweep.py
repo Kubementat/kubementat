@@ -57,7 +57,7 @@ def namespace_sweep(ctx) -> dict:
     The team half is where the failure policy lives, and it is deliberately not the strict
     one. Discovery is a directory listing and a directory listing is allowed to contain
     things that are not teams -- a migration or a hand-made probe can leave a directory
-    behind, and the retired `initialize` command used to write `kubementat_components` itself.
+    behind, and `initialize` wrote `kubementat_components` itself.
     Stopping the teardown
     on the first of those was the bug a real lane measured: one directory under a
     config-isolation probe aborted `kmt uninstall` twice and *nothing* was deleted, which is

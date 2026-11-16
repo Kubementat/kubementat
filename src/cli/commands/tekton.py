@@ -34,11 +34,11 @@ from cli.context import kmt_context
 from cli.helpers import team_option
 from kubementat.automations.install import pipelines as install_pipelines_slice
 from kubementat.automations.uninstall import pipelines as uninstall_pipelines_slice
-# What the class that used to sit between these commands and the Tekton modules carried — the
-# client, the configuration, the environment, the team and the namespace the objects are written
-# into — is read off the `Context` now, and where a function needs a piece of it the piece is
-# passed. The team refusal is not here: it moved into the functions that read a team-scoped
-# namespace, so a library caller is refused by the module and not by this file.
+# What these commands need from the Tekton modules -- the client, the configuration, the environment,
+# the team and the namespace the objects are written into -- is read off the `Context`, and where a
+# function needs a piece of it the piece is passed. The team refusal is not here: it is in the
+# functions that read a team-scoped namespace, so a library caller is refused by the module and not by
+# this file.
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 # The split's modules are reached as modules, never by name: the seam the suite patches is the
 # module the code actually runs, and a name imported past its home is a second binding.
@@ -89,8 +89,8 @@ def run_pipeline(ctx, environment, team, pipeline_run_identifier, parallel, wait
     if not pipeline_run_identifier:
         # No identifier is the listing, and the listing is the one thing on this command that
         # applies nothing. It still reads a team-scoped directory, so it still refuses a run that
-        # named no team; the guard that used to make that refusal happen before this line is the
-        # class that is gone.
+        # named no team, and the refusal lives in the function that reads that directory rather than
+        # in a guard above this line.
         runs.list_available_pipeline_runs(ctx.config, ctx.team)
         return 0
 
@@ -99,7 +99,7 @@ def run_pipeline(ctx, environment, team, pipeline_run_identifier, parallel, wait
     # The first command on this surface that propagates an exit code, and the reason it is worth
     # breaking the pattern for is on the other end of the line: `tekton_ci/tasks/run-tekton-pipeline.yml`
     # reads this command's status as its own. `runs.run_pipeline` has always had something to
-    # say about a run it refused to start -- a parallel-run refusal, an unreadable file, a cluster that
+    # say about a run it would not start -- a parallel-run refusal, an unreadable file, a cluster that
     # took the object back -- and Click throws away whatever a command function returns, so `return 1`
     # was a no-op and an outer pipeline reported success over a run that never existed. Nothing else on
     # the surface changes today; this one command was the one with a caller that needed the answer.
@@ -203,8 +203,8 @@ def setup_cleanup_job(ctx, environment, team):
 @kmt_context
 def generate_deploy_pipeline(ctx, environment, team, app_name, git_url, git_project_name,
                              git_server_host, git_server_port, git_server_ssh_user):
-    # The generation half moved out of the class (P4-1), and the object that used to be built here
-    # only ever reached `Config` -- which is the `Context`'s, so it is read off that now. Nothing
+    # The object built here only ever reached `Config` -- which is the `Context`'s, so it is read off
+    # that now. Nothing
     # else about the call changed, and nothing about the refusal changed either: a generated
     # manifest is one team's configuration, so the first thing a generator touches is a
     # team-scoped path (`Config.tekton_team_pipeline_dir`), and a `Config` built for no team

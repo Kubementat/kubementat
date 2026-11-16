@@ -2,9 +2,8 @@
 
 `<root>/{environment}/static.json` is the source of truth and code is the fallback. That only
 holds if the fallback says the same thing the tree says, so the defaults live in exactly one module
-instead of being duplicated by every caller (the four
-`# TODO: make this a config` comments in `automation.py` and the namespace list in
-`uninstall_kubementat.sh` were six copies of the same fact).
+instead of being duplicated by every caller. A default that six callers each write down is six
+answers, and the sixth one is the one a stale tree reads.
 
 Throughout this file `<root>` is the configuration root: the directory `--config-dir` names, or
 the one `$KUBEMENTAT_PLATFORM_CONFIG_DIR` already points at. There is no directory called
@@ -23,25 +22,20 @@ config key is derived from it, never spelled out per call site:
 lands in happens to be `tekton-pipelines`, and conflating the two is how a rename ends up
 being a code change.
 
-Linkerd is not a component here. The owner decided on 2026-10-28 that kubementat does not use
-the mesh, so it has no entry, no key and no flag, and adding one would put back what
-`kmt uninstall` sweeps out. What a cluster that used to have the mesh keeps is handled by
-`automations/uninstall/linkerd.py`, which needs no component to find it.
+Linkerd is not a component here: kubementat does not use the mesh, so linkerd has no entry, no key
+and no flag, and adding one would put back what `kmt uninstall` sweeps out. What a cluster that ever
+had the mesh keeps is found by `automations/uninstall/linkerd.py`, which needs no component entry.
 
-An ingress controller *is* a component here. The owner decided on 2026-10-28, the same day
-nginx-ingress came out, that Traefik takes the routing role, and the reason is the product's
-rather than the chart's: dropping nginx-ingress without naming a replacement left every ingress
-path in kubementat classless — the Ingress-manifest script, the tekton EventListener ingresses and
-every `Ingress` in the tree named a class nothing installed any more, which is a
-failure that stays silent until a certificate or a listener stops answering. (The first of those is
-`ingress.py`, which reads its class from configuration exactly as this component's key says it
-should be read.) So the ingress
-controller gets an entry, a key and a chart exactly as `cert-manager` does, named by
-`TRAEFIK_CHART` below. What it does not get is an alias or a compatibility shim for the
-`NGINX_INGRESS_*` names: the rule against aliases for a replaced name is stated where the rename
-landed (`cli/commands/component.py`) and in this file's own history, and the old controller is still
-swept by `uninstall_nginx_ingress` in `automations/uninstall/nginx_ingress.py`, which needs neither
-the entry nor the key.
+An ingress controller *is* a component here: Traefik takes the routing role, and the reason is the
+product's rather than the chart's. A dropped controller that is not named by a replacement leaves
+every ingress path in kubementat classless — the Ingress-manifest script, the tekton EventListener
+ingresses and every `Ingress` in the tree name a class the cluster has no controller for, a failure
+that stays silent until a certificate or a listener stops answering. So the ingress controller gets an
+entry, a key and a chart exactly as `cert-manager` does, named by `TRAEFIK_CHART` below; what it does
+not get is an alias or a compatibility shim for the `NGINX_INGRESS_*` names, because an alias for a
+replaced name is a second key nobody can fix. The old controller is swept by
+`automations/uninstall/nginx_ingress.py`, which needs neither the entry nor the key.
+
 The nginx sweep keeps its own controller string (`NGINX_INGRESS_CONTROLLER_PREFIX`, declared in that
 same file) for the same reason the two must never be conflated: pointing it at Traefik's
 controller would delete the class kubementat just installed, and the sweep's job is the residue
@@ -52,8 +46,7 @@ than this says — which is why that step reads the cluster instead of this tabl
 The entries cover more components than Python opens a tunnel to, and that is the deliberate half of
 the table: `namespaces_kubementat_owns` in `automations/uninstall/sweep.py` iterates
 `DEFAULT_NAMESPACES` to decide what `kmt uninstall` deletes, so a component nobody tunnels to is
-still swept. (The bash that used to read all thirteen of them from the config file by hand is
-deleted; the Python reads them through `Config` and falls back to this table the same way.)
+still swept. The list is read through `Config`, falling back to this table.
 
 **This table answers "in which namespace", not "does it exist."** The existence question is answered
 once, in `core/components.py`, which pairs these keys with the releases the shipped manifest labels
@@ -77,12 +70,12 @@ DEFAULT_NAMESPACES = {
     "goldilocks": "goldilocks",
     "grafana": "grafana",
     "loki": "loki",
-    # The secret manager that replaced Vault on 2026-10-31, for the licence reason written in the
-    # helmfile release block. The entry is load-bearing twice over, exactly as Traefik's is:
+    # The secret manager kubementat installs, for the licence reason written in the helmfile release
+    # block. The entry is load-bearing twice over, exactly as Traefik's is:
     # `HelmUtils._export_component_namespaces` iterates this set to export
     # `OPENBAO_DEPLOYMENT_NAMESPACE` before helmfile runs, and `kmt uninstall` deletes the namespaces
-    # in it. Keeping the `vault` key alongside it is the alias the owner refused to keep: one more
-    # config key pointing at a namespace nothing creates any more.
+    # in it. A `vault` key beside it is an alias: one more config key pointing at a namespace nothing
+    # creates.
     "openbao": "openbao",
     "polaris": "polaris",
     "prometheus": "prometheus",
@@ -201,49 +194,39 @@ def binary_majors_served_label(binary: str) -> str:
     return str(served[0]) if len(served) == 1 else f"{served[0]}-{served[-1]}"
 
 # ---------------------------------------------------------------------------------------------
-# The ten answers `initialize`'s templates used to leave behind, as L0.
+# The answers `initialize`'s templates write into a configuration root, held as L0.
 #
-# Census L measured that this set was answered only by the template copies `initialize` wrote into
-# the configuration root, and that nothing in `constants.py` carried any of it. That is not a gap that
-# opens when `initialize` is deleted — it is a gap that is *already open*: a `config init` tree
-# answers none of it today, and a reader that asks `static.json` gets `None` and carries on. So the
-# value lives here and a reader consults it, which is what "defaults resolved at read time" means here.
-# Not a template, not an environment variable, and not an inline default at the call site.
+# These keys are answered only by the template copies the `initialize` verb writes, so a tree built by
+# `config init` answers none of them: a reader that asks `static.json` gets `None` and carries on. The
+# value lives here and the reader consults it, which is what "defaults resolved at read time" means
+# here — not a template, not an environment variable, and not an inline default at the call site.
 #
 # The shape is `DEFAULT_NAMESPACES`' and `DEFAULT_SERVICE_SELECTORS`' — a table keyed by the key's
 # own name, each entry carrying the sentence that says what it is the default *of* — with one
 # difference worth naming: those two are keyed by *component* and have their key name built at the
-# read (`component_config_key(component, suffix)`), while these ten keys name no component, so the
-# key is spelled in the table and is the spelling a `static.json` uses. `core/config/config.py` consults the
-# table on the same walk the layers get, after every layer has failed to answer, so it is L0 and not
+# read (`component_config_key(component, suffix)`), while these keys name no component, so the
+# key is spelled in the table and is the spelling a `static.json` uses. `core/config/config.py` consults
+# the table on the same walk the layers get, after every layer has failed to answer, so it is L0 and not
 # a second layer: a value an operator wrote still outranks it, and `Config.declared()` never sees it
 # (the rule about what may be *deleted* is a file's, not a default's).
 #
-# Two exclusions are deliberate, and saying them here is cheaper than letting the next reader find
-# them out of a diff:
+# Two exclusions are deliberate:
 #
-# * `PIPELINE_NAMESPACE` and `APP_DEPLOYMENT_NAMESPACE` are **not** in this table. The templates do
-#   carry `dev1-pipelines` and `dev1` in that witness, but those strings were placeholders for the
-#   team substitution,
-#   and they are consequences of the team's name (`core/config/derived.py`). A `constants.py`
-#   default for them would install a second owner for a value that is computed, and a table entry is
-#   the kind of second owner that reads as documentation and answers as a lie.
+# * `PIPELINE_NAMESPACE` and `APP_DEPLOYMENT_NAMESPACE` are **not** in this table, because those
+#   strings are consequences of the team's name (`core/config/derived.py`). A `constants.py` default for
+#   them would install a second owner for a computed value, and a table entry is the kind of second
+#   owner that reads as documentation and answers as a lie.
 # * `MYSQL_HOST` / `REDIS_MASTER_HOST` are derived for the same reason, and `MYSQL_ROOT_PASSWORD` and
-#   the rest of the encrypted set are *generated* by `config set --generate` — two correct
-#   answers that differ is generation, not a default, so nothing here may invent one.
+#   the rest of the encrypted set are *generated* by `config set --generate` — generation is not a
+#   default, so nothing here may invent one.
 #
-# `TRAEFIK_INGRESS_CLASS` is in this table, and it is the only answer that table has. It used to have a
-# second owner in the manifest -- `helmfile.yaml.gotmpl` spelled
-# `env "TRAEFIK_INGRESS_CLASS" | default "traefik"` next to the variable it reads -- and both sides of
-# that pair saying `traefik` is precisely when drift starts, so the manifest half is gone: the
-# release's `ingressClass.name` line reads the variable and nothing else, and
-# `export_ingress_class` in `infrastructure/helm.py` puts this table's answer -- or the layer that
-# outranks it -- into
-# that variable on every apply. Leaving two owners standing on purpose is what that pair was until
-# 2026-11-03; what is true now is one owner and one read path, and a missing answer fails as helmfile's
-# own rather than as a default that happens to be right. The reason the export does not skip keys that
-# no layer declared is this table: L0 answers the key, so a tree that wrote nothing has an answer to be
-# handed over. See
+# `TRAEFIK_INGRESS_CLASS` is in this table and is the only answer for it. The manifest once spelled
+# `env "TRAEFIK_INGRESS_CLASS" | default "traefik"` beside it, and two owners that happen to agree is
+# precisely where drift starts, so the manifest half is gone: the release's `ingressClass.name` line
+# reads the variable and nothing else, and `export_ingress_class` in `infrastructure/helm.py` puts this
+# table's answer — or the layer that outranks it — into that variable on every apply. The export does
+# not skip keys no layer declared for the same reason: L0 answers the key, so a tree that wrote nothing
+# still has an answer to be handed over. See
 # `tests/test_the_ingress_class_the_manifest_names_is_the_one_the_configuration_answers.py`.
 # ---------------------------------------------------------------------------------------------
 DEFAULT_STATIC_ANSWERS = {
@@ -280,21 +263,18 @@ DEFAULT_STATIC_ANSWERS = {
     "TRAEFIK_INGRESS_CLASS": "traefik",
 }
 
-# The component the routing role belongs to, spelled once. It used to be spelled three times: here,
-# in `automations/routing/routing.py` and in `automations/routing/traefik_presence.py`, each pair of
-# hands saying it derived the config keys rather than wrote them out, which is three owners of one
-# component name and no single place a rename has to visit. The string is this file's own
-# convention — lower-case, hyphenated, equal to the helmfile release name — so it belongs beside the
-# tables that key on it and nowhere else, and `constants.py` still imports nothing for it.
+# The component the routing role belongs to, spelled once. The string is this file's own convention —
+# lower-case, hyphenated, equal to the helmfile release name — so it belongs beside the tables that key
+# on it and nowhere else, and `constants.py` imports nothing for it. Every routing module imports this
+# name instead of spelling it again: three spellings is three owners of one component name and no
+# single place a rename has to visit.
 COMPONENT = "traefik"
 
 # The fallback for the ingress-class read, as `DEFAULT_NAMESPACES` is the fallback for the namespace
-# read: one key per component, one place that says what the default is. The value is not written
-# again here, and that is the whole point — it is read out of `DEFAULT_STATIC_ANSWERS` under the key
-# this read takes, so the one place the word `traefik` stands as this key's default is that table.
-# It used to be written here as well as in `routing.py`, which is how the routing path acquired its
-# own private L0 while the read path had none, and the reason it is still spelled out in one place is
-# the sentence that comment carried.
+# read: one key per component, one place that says what the default is. The value is not written again
+# here — it is read out of `DEFAULT_STATIC_ANSWERS` under the key this read takes, so the one place the
+# word `traefik` stands as this key's default is that table. A spelling of its own in a routing module
+# would be a private L0 the read path never consults.
 #
 # The key is spelled as a literal rather than built. The rule that gives the key its *format* —
 # component name upper-cased and its hyphens turned into underscores — lives in
@@ -302,9 +282,9 @@ COMPONENT = "traefik"
 # this file, and
 # importing it back is the cycle. Spelling the key is `constants.py`'s own idiom rather than a
 # workaround, and every key in `DEFAULT_STATIC_ANSWERS` above is spelled exactly this way; this table
-# indexes one key and states which one. The invariant the routing comment was written to protect —
-# that one place states the value — holds just as well when the index is written here, and the
-# agreement between the two spellings is pinned by a test in
+# indexes one key and states which one. The invariant it protects — that one place states the value —
+# holds just as well when the index is written here, and the agreement between the two spellings is
+# pinned by a test in
 # `tests/test_the_defaults_initialize_seeded_have_a_single_owner.py` rather than left to whoever
 # remembers to edit both.
 #
@@ -317,17 +297,15 @@ DEFAULT_INGRESS_CLASSES = {COMPONENT: DEFAULT_STATIC_ANSWERS["TRAEFIK_INGRESS_CL
 #
 # `GRAFANA_ADMIN_USER` is a name and not a secret: grafana's `adminUser` is rendered with helmfile's
 # `requiredEnv`, so a tree that does not name one aborts the whole file (`_grafana_admin_credentials`
-# in `infrastructure/helm.py` says so before anything is applied). Before `kmt initialize` was deleted
-# the value arrived from `static.encrypted.json.template`, which was the only copy that verb made; a
-# tree built by `config init` got `{}`, so every fresh tree hit that refusal on its first `install`.
-# This table is that value with the copying verb gone.
+# in `infrastructure/helm.py` says so before anything is applied). A tree that got no answer for it
+# would hit that refusal on its first `install`, so the default is seeded here rather than left to a
+# template copy.
 #
-# The template's other five keys deliberately do NOT come here. Four carry a `REPLACEME_` sentinel, and
-# seeding one would write a value that looks chosen into a file that is read as a credential — a
-# placeholder is a lie in a place where an absence is honest. `GRAFANA_USERS` is a list of real people.
-# Both belong to a human who names them, which is the sense in which init writes keys and not product
-# shape. `GRAFANA_ADMIN_PASSWORD` is absent for the same reason and warns instead of refusing:
-# needed to be useful, not needed to exist.
+# The other five keys of the old template deliberately do NOT come here. Four carry a `REPLACEME_`
+# sentinel, and seeding one would write a value that looks chosen into a file that is read as a
+# credential — a placeholder is a lie in a place where an absence is honest. `GRAFANA_USERS` is a list
+# of real people. Both belong to a human who names them. `GRAFANA_ADMIN_PASSWORD` is absent for the same
+# reason and warns instead of refusing: needed to be useful, not needed to exist.
 DEFAULT_ENCRYPTED_ANSWERS = {
     "GRAFANA_ADMIN_USER": "grafadmin",
 }
@@ -363,11 +341,9 @@ def static_answer(key: str):
 
 # What a freshly initialized tree declares about the product it is configured for. Both keys land in
 # `<root>/kubementat.yaml`, which `config_init.init_configuration` writes and which
-# `check_configuration_stamp` in `core/config/stamp.py` now reads before any CLI verb resolves a
-# cluster — it had no reader
-# since it was first written, which is the sentence this comment used to carry. A constraint that
-# lived in a template literal would be a second source of truth the day the stamp reader started
-# asking, and this file is where `pyproject.toml`'s range is answered from.
+# `check_configuration_stamp` in `core/config/stamp.py` reads before any CLI verb resolves a
+# cluster. A constraint that lived in a template literal would be a second source of truth the day the
+# stamp reader started asking, and this file is where `pyproject.toml`'s range is answered from.
 #
 # `CONFIG_SCHEMA_VERSION` is stamped and never bumped by a library function — reading a tree from an
 # older schema is a migration decision, not a side effect of writing one file.

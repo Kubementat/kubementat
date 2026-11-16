@@ -124,7 +124,7 @@ def _releases_for_component(universe: components.ComponentUniverse, name: str) -
 
     The releases come off the caller's single read and not from a second `component_release_index`
     call: a command that asks the manifest for the accepted names and then asks it again for the
-    releases has bought itself the one thing this file used to be written to refuse.
+    releases has bought itself the disagreement a single read cannot have.
     """
     releases = universe.releases_for(name)
     if len(releases) > 1:
@@ -157,18 +157,13 @@ def _no_release_message(utils: HelmUtils, universe: components.ComponentUniverse
     to say: true of the namespace-only components, and for any other component a statement about the
     one file that decides what is installable.
 
-    This refusal had three branches, because two files were being read for it -- the environment's
-    copy, which `helmfile` applied, and kubementat's template, which it did not -- and the
-    disagreement between them is what a refusal that read two paths would have had to describe.
-    The packaged manifest took the second
-    file out of the question: the manifest ships inside the package and the configuration contributes
-    values, so there is nothing left to diverge from, and a refusal that weighed two paths would be
-    describing a state this product no longer constructs. The path is still named, because "what will
-    this apply" deserves an address.
+    One path is named and not two: the manifest ships inside the package and the configuration
+    contributes values, so there is nothing left to diverge from, and a refusal that weighed two paths
+    would be describing a state this product does not construct. The path is still named, because
+    "what will this apply" deserves an address.
 
     No branch points at `kmt config init`, and none may. It writes no helmfile, so it is not the fix
-    for a release block, and the two edits the old divergence message offered were edits to a copy
-    that nothing reads.
+    for a release block, and no message here may offer edits to a copy that nothing reads.
     '''
     return (
         f"'{name}' is a component whose namespace kubementat creates, not a helm release it"
@@ -218,7 +213,7 @@ def install(ctx, environment, component):
         # The manifest ships inside the package, so a run that cannot read it is not a tree that
         # needs preparing -- `kmt config init` writes no helmfile and would fix nothing here. What
         # is missing is the installed product's own data, and the message says so rather than
-        # sending the operator to a command that no longer touches this file. It is the same
+        # sending the operator to a command that does not touch this file. It is the same
         # sentence the release read below gives, because it is the same failure arriving one step
         # earlier now that the accepted-name answer reads the manifest too -- and it lands before
         # the `environment:` line on purpose, so a command that never learned what the manifest
@@ -268,11 +263,10 @@ def install(ctx, environment, component):
 @click.argument('component')
 @kmt_context
 def uninstall(ctx, environment, component):
-    # The command renamed onto this group in the same commit: the implementation it calls is
-    # unchanged (`HelmUtils.uninstall_release` reads the namespace from the configuration and the
-    # release names from the cluster), and so is the shape of the answers it gives. The namespace
-    # it deletes from is `env_static`'s, which is why the `--team` this command used to offer
-    # resolved nothing.
+    # The implementation this calls is unchanged (`HelmUtils.uninstall_release` reads the namespace
+    # from the configuration and the release names from the cluster), and so is the shape of the
+    # answers it gives. The namespace it deletes from is `env_static`'s, so a `--team` on this command
+    # would resolve nothing and must not come back.
     utils = HelmUtils(ctx)
     click.echo(f"environment: {environment}")
     try:

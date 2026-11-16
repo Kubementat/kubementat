@@ -113,22 +113,27 @@ class ConfigurationStamp:
 
     @property
     def oldest_accepted(self) -> int:
+        """The oldest schema version this build still reads."""
         return self.current - self.window
 
     @property
     def schema_is_too_old(self) -> bool:
+        """Below the window: reading it is a migration decision and not a read."""
         return self.schema < self.oldest_accepted
 
     @property
     def schema_is_behind_window(self) -> bool:
+        """Inside the window but older than this build, so it reads and is worth warning about."""
         return self.oldest_accepted <= self.schema < self.current
 
     @property
     def running_version(self) -> Optional[str]:
+        """The version this build runs at, when it can be determined."""
         return versions.product_version()
 
     @property
     def version_is_determinable(self) -> bool:
+        """False only when the running version cannot be answered at all."""
         return self.running_version is not None
 
     @property

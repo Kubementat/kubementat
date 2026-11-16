@@ -1,4 +1,4 @@
-"""The ingress controller this product no longer installs, swept without its own tooling.
+"""The ingress controller this product does not install, swept without its own tooling.
 
 nginx-ingress was dropped on the same decision that gave routing to Traefik. Nothing in this
 checkout names it any more, so the residue is found by reading the cluster: the IngressClasses
@@ -48,7 +48,7 @@ def uninstall_nginx_ingress(ctx, plan: dict) -> list:
     Take an ingress controller kubementat does not install off the cluster.
 
     nginx-ingress was dropped from the product on 2026-10-28. A cluster that got it while
-    kubementat still shipped it keeps three things this checkout no longer names: the
+    kubementat still shipped it keeps three things this checkout does not name: the
     IngressClasses bound to its controller, which are cluster-scoped and so survive any number
     of namespace deletes, the helm release, and the namespace its pods ran in. Nothing else in
     `uninstall_kubementat` reads any of them - the component sweep has no ingress controller to

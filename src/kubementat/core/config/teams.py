@@ -125,7 +125,7 @@ def warn_about_team_directory(entry: dict) -> None:
     # The rule over a team's name added a third shape a team directory can fail this sweep in. A
     # key can be set, unset
     # but answered by the rule over the team's name, or not answered at all, and the middle one is
-    # the one that used to be invisible: the namespace is real, it is where the team's pipelines
+    # the one that is easy to miss: the namespace is real, it is where the team's pipelines
     # live, and it is still not something kubementat may delete. Both halves are warned about here,
     # so a log line that says "swept" always means "a file named this".
     answered_but_not_named = [name for name in entry["namespaces"]

@@ -1,6 +1,6 @@
 """Consent, as a value the caller hands down instead of a question the library asks.
 
-Four library functions used to read stdin: `install/kubementat.py` asked before it touched a
+Four library functions once read stdin: `install/kubementat.py` asked before it touched a
 cluster, `uninstall/kubementat.py` asked after it had printed the deletion plan,
 `routing/routing.py` asked before it put a second Traefik beside a running one, and
 `infrastructure/user_management.py` asked before it edited a team's accounts. Each pair was a check

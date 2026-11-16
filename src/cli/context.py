@@ -335,6 +335,7 @@ class RenderingGroup(click.Group):
     """
 
     def invoke(self, ctx):
+        """Run the command, turning a domain refusal into the one `Error:` line the CLI prints."""
         try:
             return super().invoke(ctx)
         except RENDERED_REFUSALS as error:

@@ -116,22 +116,27 @@ class KubernetesClients:
     # getters for the api clients, in case we need to use them outside of this class
     @functools.cached_property
     def apps_api(self):
+        """The Apps API, cached on this client."""
         return self._api(client.AppsV1Api)
 
     @functools.cached_property
     def custom_objects_api(self):
+        """The CustomObjects API, for resources this build has no class for."""
         return self._api(client.CustomObjectsApi)
 
     @functools.cached_property
     def core_api(self):
+        """The Core API: pods, services, secrets, namespaces."""
         return self._api(client.CoreV1Api)
 
     @functools.cached_property
     def rbac_api(self):
+        """The RBAC API: roles and role bindings."""
         return self._api(client.RbacAuthorizationV1Api)
 
     @functools.cached_property
     def networking_api(self):
+        """The Networking API: ingresses and ingress classes."""
         return self._api(client.NetworkingV1Api)
 
     @functools.cached_property
@@ -147,6 +152,7 @@ class KubernetesClients:
 
     @functools.cached_property
     def apiextensions_api(self):
+        """The CRD-definition API, which is what says whether a group is known at all."""
         return self._api(client.ApiextensionsV1Api)
 
     @functools.cached_property
@@ -217,18 +223,23 @@ class KubernetesClients:
             return False
 
     def get_apps_api(self):
+        """The Apps API, for a caller holding this object rather than its properties."""
         return self.apps_api
 
     def get_core_api(self):
+        """The Core API, for a caller holding this object rather than its properties."""
         return self.core_api
 
     def get_rbac_api(self):
+        """The RBAC API, for a caller holding this object rather than its properties."""
         return self.rbac_api
 
     def get_custom_objects_api(self):
+        """The CustomObjects API, for a caller holding this object rather than its properties."""
         return self.custom_objects_api
 
     def get_kubernetes_client(self):
+        """The `kubernetes.client` module itself, for the handful of calls that need its classes."""
         return client
 
     def api_version_is_served(self, group: str, version: str) -> bool:

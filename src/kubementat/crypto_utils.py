@@ -1,3 +1,4 @@
+"""Key generation, written to files and never into the operator's own keyring."""
 import logging
 import os
 import shutil
@@ -13,11 +14,11 @@ import gnupg
 def _write_key_file(path, text: str, description: str) -> None:
     """Write one key half to `path`, and say so where the rest of the library says it.
 
-    Four sentences used to do this with `print(text, file=open(path, "w"))`, which is the same bytes
-    by accident and three reader costs by construction: the handle is never closed by name, the path is
+    A bare `print(text, file=open(path, "w"))` writes the same bytes by accident and costs three
+    things by construction: the handle is never closed by name, the path is
     built and thrown away inside the call so nothing says where the private key landed, and `print`
-    hides the fact that it appends a newline -- which is what a PEM needs, so changing the write here
-    without changing the bytes would have silently truncated every key this function writes.
+    hides the fact that it appends a newline -- which is what a PEM needs, so rewriting the write here
+    without also writing the newline would silently truncate every key this function writes.
 
     So the rule is stated once: one path, one `with`, and `text` plus the trailing newline. The mode
     stays whatever `open` gives a fresh file under the caller's umask, because the callers in
@@ -31,12 +32,14 @@ def _write_key_file(path, text: str, description: str) -> None:
         handle.write("\n")
 
 class CryptoUtils:
+    """The SSH key pair kubementat's deploy key is made of."""
     def __init__(self):
         """Initialize Crypto utilities class"""
         pass
     
     @staticmethod
     def generate_ssh_key_pair(key_size=2048, key_file_base_name=None, target_directory=None):
+        """Generate an RSA pair and write both halves into `target_directory`."""
         # generate private/public key pair
         key = rsa.generate_private_key(backend=default_backend(), public_exponent=65537, \
             key_size=key_size)
@@ -73,7 +76,7 @@ class CryptoUtils:
       `~/.gnupg` of the person who ran `config init`. Two trees under one identity then leave two keys
       with one identity in that ring, and everything downstream starts resolving the wrong one. The
       private key still ends up as the file `private_key_filepath` names, with mode `0600` set by the
-      caller; what this function no longer writes anywhere else is the point.
+      caller; writing it anywhere else is the leak this shape forbids.
 
       The `finally` deletes the directory rather than the keys in it, which is the stronger promise:
       a ring that is generated into and never deleted is a keyring the operator did not ask for and

@@ -37,7 +37,7 @@ def helmfile_paths_for(config) -> tuple:
     no copy a cluster can have
     outgrown: a stale `<root>/{environment}/kubementat_components/helmfile.yaml.gotmpl`
     somebody left by hand changes what is applied exactly as much as a note pinned to a door
-    does. That is plan row 13's bug, and this function is what makes it unconstructible.
+    does. That is the bug, and this function is what makes it unconstructible.
 
     What the configuration contributes is values and never a manifest. A manifest that wants to
     say where they live gets the root, the environment and the team from

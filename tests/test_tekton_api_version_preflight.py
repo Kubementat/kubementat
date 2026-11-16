@@ -253,7 +253,7 @@ def test_kubementat_speaks_exactly_one_tekton_api_version_and_it_is_v1(tmp_path,
     file, so this assertion never needed the checkout's config — but a bare `Config("dev", "dev1")`
     resolves to this checkout and opens `platform_config/dev/static.json`, which is `initialize` output
     and is not tracked in git. That made this test green on a machine that had once run `initialize`
-    and red on a clean checkout (plan row 14). The guard that keeps it that way is
+    and red on a clean checkout. The guard that keeps it that way is
     `tests/test_no_test_loads_config_from_the_checkout_root.py`; do not shorten this call back.
     """
     assert config_module.TEKTON_API_VERSION == "v1"

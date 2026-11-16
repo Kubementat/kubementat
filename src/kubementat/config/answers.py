@@ -35,7 +35,7 @@ inferred from a listing. It is the union of five sources:
    This is the split between the two owners spelled out: the index is the manifest half, `constants.py` is the namespace
    half, and a default that lives in a chart-version literal is not copied into a code table where
    two owners would have to agree.
-5. **`constants.DEFAULT_STATIC_ANSWERS`** — the ten answers `initialize`'s templates used to
+5. **`constants.DEFAULT_STATIC_ANSWERS`** — the answers `initialize`'s templates
    leave behind. They are keyed by the key's own name and they have no component to build a name
    from, so this is the family that has to be enumerated: a key nobody opens by hand is answered by
    the view and would otherwise be reported as "declared, with no default" when its L0 is sitting in
@@ -277,7 +277,7 @@ def _component_family(config, answers, key_of, defaults, answer_of) -> None:
         key = key_of(component)
         value, declared_in = config._resolved(key, layers)
         # The accessor warns once per `Config` when it falls back to `constants.py`. Here the line it
-        # is used to warn about is already on the page — `KEY = grafana   (default from
+        # is warned about is already on the page — `KEY = grafana   (default from
         # constants.py)` is that sentence, with the key and the file — so the key is marked as
         # already reported and a `show` that reads thirteen namespaces prints thirteen lines instead
         # of twenty-six lines and a log stream. Nothing is hidden that the line does not say.

@@ -60,7 +60,7 @@ def environments_list(config_dir=None):
     # the second answer this command exists not to have. `None` is "the operator named no root",
     # and the rule for that case is `paths.resolve_platform_config_dir`'s — the same function a
     # `Config` answers with, so the listing and the 1:1 check cannot spell the precedence two
-    # ways. It used to be spelled here: same rule, same outcome, but a second owner of it
+    # ways. Spelling it here too would be a second owner of it: same rule, same outcome, but
     # in `src/`, and agreement is not the same thing as one rule.
     registry = EnvironmentRegistry(resolve_platform_config_dir(config_dir))
     resolutions = registry.all()

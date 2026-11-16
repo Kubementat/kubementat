@@ -5,7 +5,7 @@ applied its manifests — is it served *now*. Nothing here applies anything; the
 read of the cluster's own discovery answers, which is why it is the leaf the run path and the
 install path both point at rather than a helper one of them owns.
 
-The one non-mechanical part is where the "already asked" answer lives. It used to be a class
+The one non-mechanical part is where the "already asked" answer lives. A class
 attribute that the first successful check shadowed onto the instance, so it was per object and the
 two clusters a process can address at once each got their own answer. A module-level flag would
 have thrown that property away: it says "some cluster was verified", not "this one was", and the

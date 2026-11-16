@@ -180,8 +180,8 @@ def _read_kubeconfig(files: Tuple[Path, ...]) -> Dict[str, Dict[str, Any]]:
         except (OSError, LockedConfigFileError) as exc:
             # The seam's sentence goes inside this module's own error type and is not rewritten
             # there: the file the operator has to look at is named by the read that failed,
-            # which used to describe a locked file as a codec failure and by an assumption in the
-            # comment that used to sit here.
+            # which would describe a locked file as a codec failure, which is not the
+            # reason the file was not read.
             raise ClusterFileUnreadableError(
                 f"{entry} could not be read: {exc}", reason=f"{entry} could not be read"
             ) from exc
@@ -307,8 +307,8 @@ def _library_config_file(kubeconfig_path: Optional[Path]) -> str:
 
 # The document a connection target is loaded from. It sits here, beside the field its material
 # is stashed under, rather than beside `ClusterTarget`: the two names and the key they are read
-# under are one decision, and splitting them across the two files puts an edge in each direction
-# (census §6). `ClusterTarget.client()` reaches this across that edge.
+# under are one decision, and splitting them across the two files puts an edge in each direction.
+# `ClusterTarget.client()` reaches this across that edge.
 def _connection_document(address: str, material: Dict[str, Any]) -> Dict[str, Any]:
     """The kubeconfig document `client()` hands the library for a connection target.
 

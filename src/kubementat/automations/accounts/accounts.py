@@ -143,7 +143,7 @@ def delete_team_account(ctx, service_account_name: str, consent: Consent = None)
 
     Both Roles are unbound whether or not this account was created by the admin or the
     read-only command: the flow does not record which one it used, and guessing would
-    leave a live binding behind for a person who is no longer a person.
+    leave a live binding behind behind for a person who has left the team.
 
     Parameters:
 

@@ -92,11 +92,12 @@ class GrafanaAccount(NamedTuple):
 
     @property
     def user_id(self) -> int:
+        """The user id grafana gave this account."""
         return self.user.user_id
 
 
 class GrafanaClient:
-    """The grafana admin API, with the four ways it used to lose an operation removed.
+    """The grafana admin API: every operation says whether it happened.
 
     Parameters
     ----------
@@ -153,21 +154,15 @@ class GrafanaClient:
         ('env_static_encrypted')`, the environment file and never a team file, because the pair is
         per environment and a team's file declares neither key.
 
-        `config` is required. This used to fall back to `Config(environment, team,
-        preload_configs=False)` when a caller handed none, which is a `Config` built from a pair
-        and nothing else: the last construction in `src/` that answered the root question for
-        itself instead of taking the one its caller had. It was reached **zero** times by the
-        suite (census D, instrumented), because the one `src/` caller --
-        `_client_for` in `infrastructure/grafana/accounts.py` -- always hands its `Context`'s
-        `Config` down, so the
-        fallback was dead code with a live hazard: the day someone called it from a command that
-        had been told which tree to read, that command would have read whichever tree its own
-        environment named. The branch is deleted rather than guarded, so an omitted `config`
+        `config` is required. A `Config(environment, team, preload_configs=False)` built here from a
+        pair and nothing else would be a second answer to the root question: it reads whichever tree
+        its own environment names, so a command that had been told which tree to read would read a
+        different one. The branch is deleted rather than guarded, so an omitted `config`
         is a `TypeError` at the call site and not a root this function goes and looks for.
 
         `team` stays only because the callers that resolve a `Context` hand it: `Config` is
-        already the tree and the pair, so nothing here turns the name into a path. It is a
-        formality and it is a stated one, not a placeholder for a read that no longer happens.
+        already the tree and the pair, so nothing here turns the name into a path. It is a stated
+        formality and nothing more.
 
         Raises
         ------
@@ -267,14 +262,12 @@ class GrafanaClient:
         the generated one back on the returned account, so it can be stored. `secrets` rather than
         gpg for the same reason: the generator has no reason to need a keyring. The same stdlib call
         and the same 32 bytes are what `config set --generate` answers with
-        (`config_init.GENERATED_ANSWER_BYTES`); what is not here any more is the
-        `Automation.generate_password` method this sentence used to name, which went with the class.
+        (`config_init.GENERATED_ANSWER_BYTES`).
 
-        `org_role` is what makes the "read only" name true, and only that: the bash script called
-        `create_grafana_read_only_account.sh` never set a role, so it created a user who got the
-        org's default. A client whose method is named after a privilege has to grant it, or say
-        otherwise; `create_read_only_account` passes `"Viewer"`, and a caller that wants bash's
-        actual behaviour passes `org_role=None` and gets bash's actual behaviour.
+        `org_role` is what makes the "read only" name true, and only that: a script that sets no role
+        creates a user who gets the org's default. A client whose method is named after a privilege
+        has to grant it, or say otherwise; `create_read_only_account` passes `"Viewer"`, and a caller
+        that wants no role passed passes `org_role=None`.
 
         A 412 whose body says the account is already there is not a failure, it is the answer: the
         user is read back and reported `created=False`. A 412 that says anything else is grafana

@@ -838,12 +838,13 @@ def _substitute_generation_placeholders(config, documents, supplied_values, supp
 
 
 def generate_random_postfix(length: int = 6) -> str:
+    """A lowercase alphanumeric postfix, to keep two generated names apart."""
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length)).lower()
 
 
 # helper method for run_pipeline and both generators: substitute a placeholder set, in place.
 def _replace_placeholders_in_dict(config, data, extra_values=None) -> None:
-    # What this function is, stated instead of the TODO that used to sit here promising to "refactor
+    # What this function is, stated rather than left as a TODO promising to "refactor
     # this massively": one table, walked longest-key-first, substituted in place, and anything left
     # over is reported by name. It is long because walking a tree is a loop with four cases in it, not
     # because it is unfinished, and it is shared by three callers, so a rewrite that changed the

@@ -1,4 +1,19 @@
 # Unreleased
+- **Comments now describe the code and not the code's biography, and no behaviour moved.** A comment
+  is worth its reader's time only if it is still true without another document, so the historical
+  tellings (`used to`, `no longer`, `previously`) and the specification labels (`plan row 13`, `§6`,
+  `census Q2`, `P4-6`, `item 7`) are gone from `src/` and `tests/`; where a sentence carried a warning,
+  the warning is stated as a constraint instead of as a story.
+
+  Proof that this is a prose change: the AST of every `src/` file, with docstrings stripped, is
+  identical to the parent commit — **0 files differ beyond comments**. `src/` went 25 829 → 25 744
+  lines (−85) across 76 files, historical-telling hits **165 → 4** (the four are message text in
+  `logging.info`/`raise` sites, where the wording is the observable behaviour), specification-label
+  hits **17 → 0** across `src` and `tests`, and modules / classes / public functions carrying a
+  comment went **838 → 903 of 951** objects — every module, class and public function now carries one.
+  Nothing else moved: `uv run pytest -q` reports 1724 passed / 1 skipped on both sides.
+
+
 - **The configuration root is named once, so the rest of the quickstart stops typing
   `--config-dir`: 8 of the README's 11 happy-path commands carried the flag and now 1 does, and the
   refusal that used to fire for both of the other cases still fires.**

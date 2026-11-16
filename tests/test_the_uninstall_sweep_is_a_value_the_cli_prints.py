@@ -282,7 +282,7 @@ def test_a_surviving_release_is_still_exit_one_with_the_same_sentence(
 
 def test_the_log_still_says_the_verdict_the_value_carries(
         fixture_repo, dry_run_env, fake_binaries, recorded_api, caplog):
-    """The preserve half of §9's change-vs-preserve, for the teardown path.
+    """The preserve half of the change-vs-preserve rule, for the teardown path.
 
     The value did not replace the log: `print_uninstall_result` still writes the namespace diff, the
     team-directory caveat, and `DONE` only when nothing survived. That line is what the sweep tests

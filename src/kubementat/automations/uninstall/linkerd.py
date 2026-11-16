@@ -1,6 +1,6 @@
-"""The service mesh this product no longer installs, swept without its own tooling.
+"""The service mesh this product does not install, swept without its own tooling.
 
-Linkerd was dropped on the owner's decision of 2026-10-28. What remains is the residue a cluster
+Linkerd is not part of the product. What remains is the residue a cluster
 keeps after the thing that put it there is gone: the `linkerd.io` definitions, which are
 cluster-scoped and outlive any number of namespace deletes, and the two namespaces the control
 plane and the observability stack lived in. Handing that to `linkerd uninstall` was the old
@@ -16,11 +16,11 @@ from kubementat.infrastructure.kubernetes import KubernetesUtils
 from kubementat.automations.uninstall.residue import delete_crds_in_groups
 
 
-# Linkerd, left behind rather than installed. kubementat stopped installing the mesh on the
-# owner's decision of 2026-10-28, so nothing here configures it: no component in
+# Linkerd, left behind rather than installed. kubementat does not install the mesh, so nothing here
+# configures it: no component in
 # `constants`, no `static.json` key, no flag on `kmt install`. What is left is the residue a
 # cluster keeps after the product that put it there is gone, and it is swept by its own step
-# rather than by Linkerd's own tooling, which kubementat no longer ships and may not have on
+# rather than by Linkerd's own tooling, which this product does not ship and may not have on
 # the PATH.
 #
 # These are the names Linkerd itself uses, which is what a cluster that once had the mesh
@@ -39,8 +39,8 @@ def uninstall_linkerd(ctx, plan: dict) -> list:
     '''
     Take a service mesh kubementat does not install off the cluster.
 
-    Linkerd was dropped from the product on 2026-10-28. A cluster that got the mesh while it
-    was still there keeps two things this checkout no longer names: the
+    A cluster that ever had the mesh
+    keeps two things this checkout does not name: the
     CustomResourceDefinitions under `linkerd.io`, which are cluster-scoped and so survive any
     number of namespace deletes, and the two namespaces the control plane and the observability
     stack live in. Nothing else in `uninstall_kubementat` reads either one - the component

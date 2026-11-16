@@ -29,14 +29,13 @@ is a private key that opens without a passphrase. Inside a configuration directo
 gitignored and is about to be git-crypt-protected, which is the whole point of phase 5 — an
 unencrypted private key *file* is what makes automation possible without holding a passphrase in a
 process. It is not a missing `passphrase=`; a reader who looks for one is reading the right code. The
-corollary is also true and is worth saying once: because `CryptoUtils` now generates into a ring it
+corollary is also true and is worth saying once: because `CryptoUtils` generates into a ring it
 creates and deletes around the `gen_key` call, nothing this module generates reaches the keyring of
-whoever ran the command. The private key that used to land there alongside the file is the leak, and
+whoever ran the command. A private key that lands in that keyring alongside the file is the leak, and
 the file is all that was ever meant to hold it.
 
-**No environment reads, and no defaults that come from outside these arguments.** `initialize`
-derived the deployer's identity from `BASE_DOMAIN` — a `Config` read inside the class that used to
-own it, which is exactly the
+**No environment reads, and no defaults that come from outside these arguments.** A `Config` read
+inside the class that composes a key is exactly the
 answer that belongs to a caller and not to a library. So this module reads no `os.environ`
 anywhere, and a generation that is not given an email is refused rather than guessed at — refusing
 with the command and flag that would supply the answer is the house rule, and inventing
@@ -49,8 +48,8 @@ module and `config_bootstrap`'s step 7 ask gpg about a key file — whose user I
 is a secret key file's public half, and what fingerprint is in this file — is asked against a keyring
 created for the call and thrown away in the same `finally`, so a configuration directory never
 becomes somebody's `GNUPGHOME` and no key is added to the operator's own keyring. Generating is not
-exempt from that promise, because there is no longer an exemption to grant: `CryptoUtils` builds its
-own ring around `gen_key` for the same reason the questions are asked there.
+exempt from that promise either: `CryptoUtils` builds its own ring around `gen_key` for the same
+reason the questions are asked there.
 """
 
 from __future__ import annotations
@@ -302,6 +301,7 @@ def _import_gpg_key(source: Path, private_path: Path, public_path: Path) -> None
     material = source.read_bytes()
 
     def import_and_export(gpg: gnupg.GPG) -> str:
+        """Import one key into a throwaway keyring and write both halves out by fingerprint."""
         imported = gpg.import_keys(material)
         fingerprints = list(imported.fingerprints)
         if not imported or not fingerprints:
@@ -461,6 +461,7 @@ def _deployer_email(public_path: Path, private_path: Path) -> str | None:
 def _user_id_emails(path: Path) -> list[str]:
     """Every email among the key file's user IDs, in the order gpg lists them."""
     def read(gpg: gnupg.GPG) -> list[str]:
+        """Ask gpg about the file's user IDs against a keyring discarded with the call."""
         imported = gpg.import_keys(path.read_bytes())
         if not imported:
             return []

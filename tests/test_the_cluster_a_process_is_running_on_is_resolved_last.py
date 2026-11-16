@@ -135,7 +135,8 @@ def test_the_environment_configuration_beats_the_cluster_the_process_is_standing
 
     `dev` declares a context, the mount is complete, and the two disagree about which cluster. If
     the mount ever won from here, an environment that says `dev` would install into whatever pod
-    ran the command — which is §RC-1's failure class wearing a valid-looking credential. The
+    ran the command — which is the failure class of a valid-looking credential that answers for the
+    wrong machine. The
     address and the `source` both say the declaration did, and the mount never entered the answer.
     """
     root, kubeconfig = pod_root(tmp_path, monkeypatch)

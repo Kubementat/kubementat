@@ -49,6 +49,7 @@ class KubernetesServiceAccounts(KubernetesClients):
         )
 
     def create_service_account(self, namespace, sa_name, secrets):
+      """Create the ServiceAccount that carries the listed Secrets."""
 
       try:
         # Create a ServiceAccount object

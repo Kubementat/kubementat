@@ -151,6 +151,7 @@ class KubernetesRbac(KubernetesClients):
                 raise
 
     def create_or_replace_role_binding(self,namespace, name, body):
+      """Create the role binding, or replace it where it already exists."""
       try:
         self.rbac_api.create_namespaced_role_binding(
             namespace=namespace,

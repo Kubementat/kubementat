@@ -45,11 +45,11 @@ def open_tunnel(function, *args):
 
     * "the component is not installed" becomes a readable CLI error (exit 1) instead of a
       traceback -- that is what `PodNotFoundError` is for.
-    * a non-zero return code becomes a non-zero exit. These commands used to `return` the code,
-      and Click ignores return values, so a `kubectl port-forward` that refused a port someone
-      else already had printed its complaint and exited 0. The operator saw "tunnel open" in the
-      log line above it and connected to the wrong database. A tunnel that is not a tunnel has to
-      fail, whatever it prints. (Same rule `CiUtils` in `automations/ci.py` carries: an interactive
+    * a non-zero return code becomes a non-zero exit, because Click ignores return values: a
+      command that `return`s a failure prints its complaint and exits 0, so a
+      `kubectl port-forward` that refused a port someone else already had let the operator read
+      "tunnel open" in the line above and connect to the wrong database. A tunnel that is not a
+      tunnel has to fail, whatever it prints. (Same rule `CiUtils` in `automations/ci.py` carries: an interactive
       command is judged
       by the code it exits with, not by the fact that it ran.)
     """
@@ -68,8 +68,8 @@ def open_tunnel(function, *args):
 # These three reach a component by namespace and label, and every key that decides which namespace
 # that is (`*_DEPLOYMENT_NAMESPACE`, `*_SERVICE_SELECTOR`) is read from the *environment's* own
 # `static.json`. None of them reads one thing from the team layer, which is
-# why they used to carry a `--team` they never used and echo `TEAM: None` at an operator who had
-# named one. A command which cannot act on a team does not accept one, so the
+# why a `--team` here would be a flag they cannot use, and an echo of `TEAM: None` at an operator who
+# did name one. A command which cannot act on a team does not accept one, so the
 # option is deleted rather than silenced: a flag that resolves to nothing is how the tunnels came to
 # read `dev1`, and an option that does nothing is still a thing an operator can be wrong
 # about. The `TEAM:` echo goes with it — printing a value the command was not given, or was given and

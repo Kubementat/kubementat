@@ -12,12 +12,11 @@ comes from `Context`, the Tekton and Helm services are built from that same `Con
 are needed rather than remembered here, and a build of `HelmUtils` is not kept as an attribute
 because `kmt uninstall` is a command that has no team to satisfy its guard.
 
-What the run leaves behind used to be a stream of log lines and a `None`, which is the same thing
-as saying nothing: the operator's terminal saw the stream, and whoever called the function saw
-nothing. It returns `InstallResult` now -- the same shape `automations/routing/routing.py`
-returns for the same reason -- so the decision, the writes and the two reads that had to pass are
-carried out of the function together, the CLI prints them, and a caller that wants to branch does
-not have to read prose. What the log says is unchanged, because something still has to read it.
+What the run leaves behind is a value and not a stream. It returns `InstallResult` -- the shape
+`automations/routing/routing.py` returns for the same reason -- so the decision, the writes and the
+two reads that had to pass are carried out of the function together, the CLI prints them, and a
+caller that wants to branch does not have to read prose. The log still says the same things,
+because something still has to read it.
 """
 
 
@@ -222,17 +221,14 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
     logging.info("######################################################")
 
     # Tekton installation: the three pinned releases and the ClusterRole that authorises
-    # helm to deploy. It used to be the last bash script on this path, which is why `kmt
-    # install` still needed a checkout of `scripts/` to touch a cluster. It is a function of
-    # `infrastructure/tekton/install.py` now (P4-4), called through the module rather than bound
-    # here, and it is handed exactly what the class used to read off `self`.
+    # helm to deploy, run as a function of `infrastructure/tekton/install.py`. It is called through
+    # the module rather than bound as an attribute, and it is handed exactly what its caller has.
     #
     # The team guard is asked here, two lines ahead of this call, and it is asked here because
-    # this is where the install's first write happens. `P4-4` stopped building `TektonUtils` on
-    # this path, which left a library caller holding a `Context` with no team three releases deep
-    # before the refusal reached it -- the releases apply into cluster-wide namespaces and read no
-    # team, so nothing below them said anything. `TektonUtils.__init__` used to be what did say
-    # something, and it is gone, so the question is asked where the branch below needs the answer:
+    # this is where the install's first write happens. The three releases apply into cluster-wide
+    # namespaces and read no team, so nothing below them would say anything: a library caller
+    # holding a `Context` with no team would be refused three releases deep. The question is
+    # therefore asked where the branch below needs the answer:
     # `configure_tekton_pipelines` is the half of the install that writes one team's namespaces,
     # directories and Secrets, so a run that named no team is refused before a manifest is
     # applied, and a run that asked for none of that half is not refused at all.
@@ -265,11 +261,10 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
     if configure_tekton_pipelines:
         setup_pipelines(ctx)
 
-        # The RBAC, Secrets and generated manifests a team's webhooks need. This call site was
-        # the last bash script on the default install path. It also used to retry: `apply`
-        # failures were treated as transient, which is how a script hid an object that was
-        # already there in a shape `kubectl` disliked. Every operation setup_triggers does is
-        # now create-or-replace, so a repeat run is the retry, and the retry is gone.
+        # The RBAC, Secrets and generated manifests a team's webhooks need.
+        # Every operation `setup_triggers` does is create-or-replace, so a repeat run *is* the retry:
+        # treating an `apply` failure as transient is how a script hides an object that is already
+        # there in a shape `kubectl` disliked, and there is no retry loop here to inherit that claim.
         #
         # The `Context` goes to the function as well as the client this function built from it,
         # because the last half of the flow builds its own `KubernetesUtils` before it hands a
@@ -357,9 +352,8 @@ def check_cluster_permissions(ctx) -> bool:
 
     All six probes go through the client: `kubectl auth can-i <verb> <resource>` is a
     `SelfSubjectAccessReview` asked of the server, which is the same request kubectl sends and
-    the same answer it parses. The six verbs were checked through `input="yes"` because
-    kubectl's own stdin prompt made the check runnable from a lane; a review needs no stdin,
-    which is why the escape hatch is no longer needed here.
+    the same answer it parses. A review answers without stdin, so no `input="yes"` escape hatch is
+    threaded through it -- a prompt kubectl would print is not in this path at all.
 
     Returns:
 

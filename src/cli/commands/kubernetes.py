@@ -180,6 +180,7 @@ def _print_pvc_table(rows, human):
               for index, header in enumerate(PVC_TABLE_HEADERS)]
 
     def render(cells):
+        """One row rendered: the first column padded, the rest right-aligned inside the column."""
         line = cells[0].ljust(widths[0])
         for cell, width in zip(cells[1:], widths[1:]):
             line += "  " + cell.rjust(width)
@@ -433,7 +434,7 @@ def create_secret_from_json(ctx, environment, namespace, secret_name, json_file_
 
 # No `--team` on `create-ingress`: the class the manifest names is `TRAEFIK_INGRESS_CLASS`, which
 # is read out of the environment's own `static.json`, and nothing else on that path touches
-# configuration. The comment that used to sit beside the flat command said the option belonged
+# configuration. The comment beside the flat command said the option belonged
 # because a `Config` needs a team to be pointed at -- true of the paths `Config` derives, but
 # `Config._team_scoped_path` refuses those at the read now, and this command reads none of them.
 @kubernetes.command(name='create-ingress',
@@ -458,7 +459,7 @@ def create_ingress(ctx, environment, domain, service_name, service_port, output_
     # shipped script is left for the CLI to run.
     #
     # The environment is first and required: the class this manifest names is read from that
-    # environment's `static.json`, so an empty one used to be a default the command had dropped
+    # environment's `static.json`, so an empty one must not become a default the command drops
     # rather than a decision it made. `@kmt_context` refuses that state now, and the generator's own
     # "no environment" branch survives only for library callers.
     generator = IngressGenerator(ctx)

@@ -79,6 +79,7 @@ class GrafanaAccountRow:
 
     @classmethod
     def from_payload(cls, payload: Any, environment: str, location: str) -> "GrafanaAccountRow":
+        """One declared row, refused by name when the payload is not an object with an email."""
         if not isinstance(payload, dict):
             raise GrafanaConfigurationError(
                 f"{GRAFANA_USERS_KEY} in {location} contains {type(payload).__name__} "
@@ -177,17 +178,17 @@ def create_grafana_accounts(ctx, grafana_url: Optional[str] = None,
                            client: Optional[GrafanaClient] = None) -> list:
     """Every account the environment declares, in the order the config lists them.
 
-    `create_grafana_accounts.sh`, minus the four lost steps. Each row goes through
+    Each row goes through
     `ensure_account`, which reads the directory first and lets the create be the authority, so a
-    rerun reports what it confirmed rather than what it thinks it made. `org_role=None` is the
-    script's behaviour, deliberately; see the module docstring for the question that leaves open.
+    rerun reports what it confirmed rather than what it thinks it made. `org_role=None` is
+    deliberate; see the module docstring for the question that leaves open.
 
-    One `Context` and no `(environment, team)` pair: the pair used to arrive as two strings
-    and a `Config` built down here when neither was handed, which was the last place in `src/` that
-    resolved a configuration for itself. Nothing here needs a team to resolve it: the rows are read
+    One `Context` and no `(environment, team)` pair: a `Config` built here from two strings would be
+    a second answer to the root question, in a module that has no root to consult. Nothing here needs
+    a team to resolve it: the rows are read
     out of the environment's own `static.encrypted.json`, and so is the credential the client
-    authenticates with, which is why the `require_team` that used to stand in front of the first
-    request is gone -- it refused a run that was about to read a file no team's directory holds.
+    authenticates with -- so no `require_team` guards the first request, because that refusal would
+    block a read of a file no team's directory holds.
 
     Returns
     -------
@@ -260,16 +261,14 @@ def _client_for(ctx, grafana_url: Optional[str],
     where its requests go. Otherwise the address is resolved first and only then constructed, so
     "no address" is a config error and never a request to a socket that is not there.
 
-    The `Config` handed to `from_environment` is the one the `Context` carries. It used to be built
-    down here when the caller handed none, which is the last `Config(environment, team)` in `src/`
-    that answered a configuration question for itself. A consolidation deleted that branch rather
-    than guarding it: `from_environment` now takes a `Config` or it takes a `TypeError`, so there is no
-    route left by which this module could locate a root for a command that had been told one. The
+    The `Config` handed to `from_environment` is the one the `Context` carries, and it is always
+    supplied: `from_environment` takes a `Config` or it takes a `TypeError`, so this module never
+    locates a root for a command that had been told one. The
     `team` that argument position takes is therefore a formality
     -- this call always supplies the `Config`, so `from_environment` never builds one and never asks
     the team anything -- and it is handed `ctx.team`, which may be `None` for a command that runs
     without one. That is the honest value and not a placeholder: nothing on this path turns it into
-    a path, and a `require_team` that refused here was refusing a read the code never performs.
+    a path, and a `require_team` refusing here would be refusing a read the code never performs.
     """
     if client is not None:
         return client

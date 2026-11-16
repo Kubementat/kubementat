@@ -1,3 +1,4 @@
+"""The utility verbs, which call the automation layer rather than a cluster primitive."""
 import click
 
 from kubementat.automations.ci import CiUtils
@@ -14,7 +15,7 @@ from cli.context import kmt_context
 @click.argument('team',envvar='TEAM')
 @kmt_context
 def run_ci_container(ctx, environment, team):
-    # Nothing here needs the checkout resolved through a context object, because there is no longer
+    # Nothing here needs the checkout resolved through a context object, because nothing here uses a
     # one: `cli.kmt.Config` carried a single `kubementat_main_dir` and 32 commands accepted it and
     # none read it. What reads the root now is `kubementat.core.config.paths.default_kubementat_main_dir`,
     # called at the one place a path is derived, and this command does not derive one — the image

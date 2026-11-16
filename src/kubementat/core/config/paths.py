@@ -6,8 +6,9 @@ the location of this file otherwise. `default_platform_config_dir` is the **conf
 it is named or it is refused — the `--config-dir` flag a command carries, or the variable a container
 already sets, or the one tree `kmt config init` prepared for this user, and with none of them, one
 sentence and no run. `resolve_platform_config_dir` is the precedence between the argument and the
-variable, spelled once here because `kmt environments list` used to spell it a second time beside its
-own `EnvironmentRegistry`; agreement between two owners is not one rule, and it rots the day either
+variable, spelled once here because spelling it a second time beside the
+same `EnvironmentRegistry` that reads it is two owners, and agreement between two
+# owners is not one rule: it rots the day either
 spelling is edited.
 
 The third layer is what lets the flag be typed once instead of eleven times, and it is the reason this
@@ -115,9 +116,9 @@ def default_platform_config_dir() -> Path:
 
     A configuration root is **named, never located**. Three things name it — the `--config-dir` flag a
     command carries, the variable a container already sets, and the tree `kmt config init` prepared for
-    this user — and when none of them is present this function refuses. It used to answer with a
-    `platform_config` directory located under `default_kubementat_main_dir()`, which meant a command
-    that had been told nothing still answered, from wherever the wheel happened to be installed. That
+    this user — and when none of them is present this function refuses. Locating a
+    `platform_config` under `default_kubementat_main_dir()` instead would mean a command
+    that had been told nothing still answering, from wherever the wheel happened to be installed. That
     answer is the D11 bug in its last remaining form, and v2 is a rewrite rather than a migration, so
     there is no compatibility branch behind it: the operator gets one line naming the spellings, and
     the run stops before it reaches a cluster.

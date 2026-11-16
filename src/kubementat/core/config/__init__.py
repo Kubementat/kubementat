@@ -19,7 +19,7 @@ the flat `src/kubementat/config_*.py` spellings they had carried since 1.x, so t
 from one place. The split the names describe is unchanged: they orchestrate, this package answers,
 the writers import the readers and never the other way round, and nothing above the line needs to
 know the readers exist. What moved is where the writers' names live, not what they do — and the
-import block that used to prove it (`config_validate.py:62-64`, which reached a flat sibling writer
+import block that proved it (`config_validate.py:62-64`, which reached a flat sibling writer
 beside this package's readers in one block) now reaches both halves as `kubementat.config.*` and
 `kubementat.core.config.*`, with no flat spelling left in it.
 """

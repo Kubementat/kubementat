@@ -251,7 +251,7 @@ def test_a_tree_that_declares_no_operator_values_applies_the_shipped_defaults(tm
 
 @helmfile_only
 def test_a_run_that_named_no_configuration_root_reads_the_shipped_defaults_only():
-    """§rule 3 from the other side: the exports are the only path, so their absence is survivable.
+    """The third rule from the other side: the exports are the only path, so their absence is survivable.
 
     A hand-run helmfile in the packaged directory exports none of them. It must apply exactly the
     shipped defaults rather than fail, guess, or reach for a checkout it was never told about.
@@ -440,7 +440,7 @@ def test_no_release_block_carries_a_per_release_missing_file_handler():
 
 
 def test_the_operator_layers_are_addressed_by_the_three_exports_and_by_nothing_else():
-    """§rule 3, asserted as text. No path in the manifest names the checkout, and nothing is derived
+    """The third rule, asserted as text. No path in the manifest names the checkout, and nothing is derived
     from `kubementat_main_dir`."""
     body = MANIFEST.read_text(encoding="utf-8")
     live = "\n".join(line for line in body.splitlines() if not line.lstrip().startswith("#"))

@@ -811,8 +811,8 @@ def _read_document(path: Path) -> dict:
 
     Both verbs operate on the operator's own working copy, so a file that is not JSON, not an object,
     or not readable is a refusal and not a reason to start from `{}`. Silently treating an unreadable
-    file as empty is how a read-modify-write verb becomes a delete verb: the document it "did not
-    exist" is the document that no longer has the operator's keys in it.
+    file as empty is how a read-modify-write verb becomes a delete verb: the document it believed
+    "did not exist" is the document that ends up without the operator's keys in it.
     """
     try:
         # The read is the seam's, so a file holding ciphertext is refused by name and asked
@@ -1016,11 +1016,8 @@ def unset_answer(root, environment, key, team=None) -> tuple[InitStep, ...]:
 
 # `--generate`'s length, spelled once. `secrets.token_urlsafe(nbytes)` is the generator and `nbytes`
 # is the only number that decides what comes out, so a test that hard-coded the resulting string
-# length would be a test that disagrees with its own generator. (The object this comment used to
-# point at — `generate_password`, the one method `automation.py` kept for it — is gone with the
-# class and the file; nothing in `src/` imports that name any more, and the two call sites of
-# `secrets.token_urlsafe` are all that is left of the pair. Two call sites of one stdlib function is
-# not two owners.)
+# length would be a test that disagrees with its own generator. Two call sites of one stdlib function
+# is not two owners.
 GENERATED_ANSWER_BYTES = 32
 
 def _layer_phrase(step_name: str, environment: str, team) -> str:
@@ -1108,10 +1105,10 @@ def cluster_is_unaddressed(static_json_path) -> bool:
     the same thing here: nobody has named a cluster yet.
 
     Absent is the only file that answers `True` without reading anything. A file that is **present
-    and cannot be read** used to answer `True` too, and that was the one false sentence in `src/`:
-    the predicate reported that the environment addresses no cluster about a file it had never
-    decoded, which `config validate` and `config init` would then print as a confident fact.
-    It now goes through the same seam as every other read and raises.
+    and cannot be read** must not answer `True` too: that is the one false sentence this module must
+    not write -- the predicate reporting that the environment addresses no cluster about a file it had
+    never decoded, which `config validate` and `config init` would then print as a confident fact.
+    It goes through the same seam as every other read and raises.
     """
     path = Path(static_json_path)
     if not path.is_file():

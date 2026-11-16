@@ -47,10 +47,10 @@ refusal that comes attached to it is what keeps a layer-creating verb from gener
 
 **The root is spelled one way, here and everywhere else.** All seven verbs name the directory they
 work on with `--config-dir`, or with `KUBEMENTAT_PLATFORM_CONFIG_DIR`, and the flag sits above the
-variable the way `resolve_platform_config_dir` spells it. They used to take it as a positional, which
-made them the only verbs in kubementat that honoured neither spelling: a machine that had written its
-root down once could install against that tree and could not configure it, which is one tree with two
-ways of saying which one and only one route that worked. `config init` had a stated reason for refusing
+variable the way `resolve_platform_config_dir` spells it. A verb that takes the root as a positional
+honours neither spelling, and that is the only way one tree can end up with two answers: a machine
+that had written its root down once could install against that tree and could not configure it.
+`config init` has a stated reason for refusing
 the variable -- there is no root to point at, because this is the verb that makes one -- and that
 reason held only while the alternative was locating a root by proximity. Naming a root that does not
 exist yet is the same act as reading one, and the same two spellings name it. Below both of those sits

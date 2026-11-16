@@ -62,8 +62,8 @@ def latest_version(ctx, environment, chart_path):
 # No `--team` here either: everything `helmfile_apply` asks of configuration is environment-level
 # -- `env_static_encrypted` for grafana's admin pair, `component_namespace` for every release
 # namespace, and the packaged manifest `helmfile_paths` names for the releases themselves. `grep -n team_static src/kubementat/infrastructure/helm.py` returns nothing, so the option had
-# no code behind it, and a `require_team` that used to stand in `HelmUtils.__init__` made
-# `kmt helm apply dev` refuse a release it was about to apply from one file. What the operator is
+# no code behind it, and a `require_team` standing in `HelmUtils.__init__` would make
+# `kmt helm apply dev` refuse a release it is about to apply from one file. What the operator is
 # told instead is the environment and the filter, both of which are what this command decides.
 @helm.command(name='apply', help='Apply helmfile.yaml.gotmpl for the environment with helmfile.')
 @click.argument('environment',envvar='ENVIRONMENT')
@@ -77,7 +77,7 @@ def helmfile_apply(ctx, environment, helmfile_label_filter, yes, helmfile_workin
     # helmfile prints the diff and then asks before it applies it. Asking is only a courtesy
     # when somebody is there to answer: on a pipe or under `< /dev/null` helmfile reads the
     # end of input as a refusal and exits 1, which is why every scripted use of this command
-    # used to fail. So the decision is made here, where the terminal is visible, and never in
+    # fails without this decision. So it is made here, where the terminal is visible, and never in
     # HelmUtils - which appends `--interactive` only when it is told to.
     interactive = sys.stdin.isatty() and not yes
     utils = HelmUtils(ctx)

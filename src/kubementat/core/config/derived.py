@@ -1,11 +1,10 @@
 """The five answers a team's name already gives.
 
-Some answers are not preferences. Owner ruling, 2026-11-03: `APP_DEPLOYMENT_NAMESPACE` is the team's
+Some answers are not preferences: `APP_DEPLOYMENT_NAMESPACE` is the team's
 name, `PIPELINE_NAMESPACE` is `<team>-pipelines`, `MYSQL_HOST` is `mysql-<team>`, `REDIS_MASTER_HOST`
-is `redis-<team>`, and the deploy key's `TARGET_NAMESPACE` is the team's name again. They used to be
-produced by a substitution that took the team's name into a `REPLACEME_TEAM` placeholder inside a
-template, and what that left behind is an answer the operator cannot see and a tree that only works
-because something copied it out. This module is the
+is `redis-<team>`, and the deploy key's `TARGET_NAMESPACE` is the team's name again. A substitution
+that fills a `REPLACEME_TEAM` placeholder inside a template leaves an answer the operator cannot see
+and a tree that only works because something copied it out. This module is the
 rule instead of the copy: the same answer, computed when it is read.
 
 **Derived is not generated, and the line is this module's reason for existing.** Both end in
@@ -149,8 +148,7 @@ def ssh_deploy_key_entries(entries, team):
     The list shape and every field an entry carries survive untouched, because the operator wrote
     them and this rule's one job is the field the team's name determines. Only the entries that said
     nothing about their namespace are answered: `TARGET_NAMESPACE` absent, `null`, or empty is a half
-    sentence, and a half sentence about a namespace is what `jq -r` used to answer with the string
-    `null`.
+    sentence, and a half sentence about a namespace is what an answer of the string `null` is.
 
     A declared namespace is never replaced, which is the override half of the resolution rule and the
     reason this function asks about the field's *presence* rather than its correctness: a team that put its keys

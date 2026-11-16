@@ -1,3 +1,4 @@
+"""The whole-tree verbs: `kmt install` and `kmt uninstall`."""
 import click
 
 from cli.consent import install_consent, uninstall_consent
@@ -18,11 +19,11 @@ from kubementat.automations.uninstall import kubementat as uninstall_slice
 def install(ctx, environment, team, configure_tekton_pipelines, helmfile_installation_group, yes):
     click.echo(f"Helmfile installation group: {helmfile_installation_group}")
     click.echo(f"Configure tekton pipelines: {configure_tekton_pipelines}")
-    # The question is asked here, after the two lines this command has always printed before it
-    # called anything, and before it touches a cluster. `kmt install` used to find out it had no
-    # terminal to ask in only after the dependency probes had run; the message is the same three
-    # lines either way, so the only thing the earlier guard changes is how much work a doomed run
-    # does before saying so. The library still decides *where* the answer is needed -- after the
+    # The question is asked here, after the two lines this command prints before it
+    # calls anything, and before it touches a cluster. Finding out about a missing terminal after the
+    # dependency probes have run costs the same three lines either way, so the position of this guard
+    # is about how much work a doomed run does before saying so. The library still decides *where*
+    # the answer is needed -- after the
     # cluster has been read -- so the order of the operator's lines does not move.
     consent = install_consent(environment, team, yes)
     result = install_slice.install_kubementat(
@@ -43,12 +44,12 @@ def install(ctx, environment, team, configure_tekton_pipelines, helmfile_install
 @click.option('--yes', '-y', is_flag=True, help="Do not ask for user input. For scripting purposes.")
 @kmt_context
 def uninstall(ctx, environment, yes):
-    # The confirmation contract belongs to the CLI and it did not change when the bash did:
-    # without `--yes` a run that has no terminal to ask in fails closed, naming the flag. The
-    # deleted `uninstall_kubementat.sh` used to read stdin itself, which is why `kmt uninstall`
-    # could hold a lane open - and why answering "no" meant running a script at all. What moved
-    # in item 7 is the *question*, which the library used to ask after printing the deletion plan:
-    # it is in `cli/consent.py` now, and what travels down is the answer. Environment-scoped, as
+    # The confirmation contract belongs to the CLI:
+    # without `--yes` a run that has no terminal to ask in fails closed, naming the flag. A verb
+    # that reads stdin itself can hold a lane open, and answering "no" there still meant running
+    # something. The *question* is asked in `cli/consent.py` and the answer travels down, so the
+    # library never asks on the operator's behalf after printing the deletion plan.
+    # Environment-scoped, as
     # it was: the sweep covers every team the environment's layer configures, so passing one team
     # along would be a claim about the install that is not true, and the `Context` the decorator
     # resolved is all this command hands the uninstall slice.

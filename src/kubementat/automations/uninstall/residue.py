@@ -65,8 +65,7 @@ def crd_groups_kubementat_owns(config=None, helmfile_path=None) -> tuple:
     r'''
     The API groups the unconditional CRD sweep deletes, derived from the shipped release index.
 
-    The set used to be spelled out: `("tekton.dev",) + CERT_MANAGER_CRD_GROUPS`, a concatenation of
-    two module literals that said nothing about whether either of them still ships anything. Now each
+    The set is derived and not spelled: each
     row is taken when the manifest kubementat applies labels a release after that component, which is
     the same answer `kmt component install` gives (`core.components`) and the same answer
     `export_component_release_knobs` exports knobs for -- so a component added to the manifest is
@@ -450,10 +449,9 @@ def list_claims_in(ctx, namespace: str):
     namespace that is empty: a teardown that reads the first as the second reports success on a
     cluster it never actually looked at.
 
-    Said plainly: this is the read `_delete_release_claims` in `infrastructure/helm.py` used to
-    ask with `kubectl get persistentvolumeclaims`, while this method asked it through the
-    client. Same question, two answers, one uninstall. There is now one answer, in
-    `KubernetesUtils.list_persistent_volume_claims`.
+    Said plainly: one read answers it, in
+    `KubernetesUtils.list_persistent_volume_claims`. The same question asked of `kubectl` in one place
+    and of the client in another is two answers inside one uninstall.
     '''
 
     kubernetes_utils = KubernetesUtils(ctx)
@@ -484,7 +482,7 @@ def delete_claims_in(ctx, namespaces: list) -> list:
     wanted, not what it should report as residue.
 
     Not-found is therefore *not* residue, but it is still said out loud: silence is how this
-    function previously hid the real refusal behind a bare `exit 1`, and the lane had to be read
+    function would hide the real refusal behind a bare `exit 1`, with the lane having to be read
     backwards to find which namespace was involved. Anything the cluster refuses for any other
     reason is residue, is logged with the status it answered with rather than only a verdict,
     and is named in the error the command raises.

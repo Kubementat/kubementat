@@ -106,11 +106,11 @@ class IngressGenerator:
         # `environment` is what selects the `static.json` that answers the class, and it is the only
         # half of the `Context` this generator asks anything of. The team-level files `Config` says
         # are missing when no team is named are not the half that answers an ingress-class question,
-        # and the guard that used to sit here said otherwise: it claimed a `Config` built without a
-        # team interpolates `None` into the paths it derives, which stopped being true when
+        # and a guard here would have to say otherwise: it would claim a `Config` built without a
+        # team interpolates `None` into the paths it derives, which is not true since
         # `Config._team_scoped_path` moved that refusal to the read. Nothing on this path performs a
-        # team-scoped read, so the refusal arrived one step before a failure that could never have
-        # happened, and `kmt kubernetes create-ingress` refused a team it has no key for. An empty
+        # team-scoped read, so such a guard arrives one step before a failure that could never have
+        # happened, and `kmt kubernetes create-ingress` would refuse a team it has no key for. An empty
         # `environment` is not a default that got dropped, it is "no environment was given", and it
         # is answered in `_read_ingress_class`.
         self.environment = ctx.environment

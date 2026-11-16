@@ -11,14 +11,12 @@ The deletes themselves are in `residue`, `linkerd` and `nginx_ingress`; the name
 plan the operator is shown before being asked, and the summary that says which directories were
 read as teams and which were not.
 
-What that summary used to add up to was a `None` and a raise. A partially-succeeded uninstall
--- ten namespaces gone, one release still running -- reported itself by joining its residue list
-into an exception message, which is the same information arriving as prose and only one way: the
-operator read a sentence, a caller got nothing until it caught something, and nothing in the tree
-could ask "how much of this was actually deleted". It answers `SweepResult` now, the shape
-`RoutingInstallResult` and `InstallResult` already return, and the residue is what makes the
-verdict: the message an incomplete run raises with is *built from that value*, so the sentence is
-unchanged while the reporting is not.
+What that summary adds up to must be a value and not a sentence. A partially-succeeded uninstall
+-- ten namespaces gone, one release still running -- reports through `SweepResult`, the shape
+`RoutingInstallResult` and `InstallResult` already return: the operator gets the sentence, a caller
+gets the list without catching anything, and the tree can ask "how much of this was actually
+deleted". The residue is what makes the verdict, and the message an incomplete run raises with is
+built from that value — which is why the sentence can stay the same while the reporting changes.
 """
 
 import logging
@@ -109,10 +107,9 @@ class SweepResult:
     def failure_message(self) -> str:
         """The sentence `kmt uninstall` fails with, assembled from the residue it found.
 
-        Byte-identical to the message the joined string used to build at the end of the sweep: the
-        same lead, the same two-space indent, the same items in the same order. The item that moved
-        is where the string comes from -- the value owns it now, so the CLI, a caller and a test all
-        read one list and none of them has to rejoin it.
+        The lead, the two-space indent and the order of the items are the message's: keep them, because
+        the operator's terminal and the tests both read this exact sentence. The value owns the list,
+        so the CLI, a caller and a test all read one list and none of them has to rejoin it.
         """
         return ("uninstall left kubementat residue behind, so the cluster is not clean:\n  "
                 + "\n  ".join(self.residue))
@@ -214,10 +211,8 @@ def uninstall_kubementat(ctx, consent: Consent = None) -> SweepResult:
     - kubementat.errors.EnvironmentConfigurationFileMissingError: When the environment has no
       `static.json`, so there is no namespace list to delete.
 
-    A surviving object is not raised here. It used to be, by joining the residue list into the
-    message inside this def, and that is what made a partial teardown a sentence instead of a
-    result: whoever called this had to catch an exception to learn what had been deleted. The value
-    carries it and `SweepResult.raise_if_incomplete` is how a caller turns it back into the refusal
+    A surviving object is not raised here: the value carries it and
+    `SweepResult.raise_if_incomplete` is how a caller turns it back into the refusal
     `kmt uninstall` still exits 1 with -- the message is the same because it is assembled from the
     same list.
     '''
@@ -271,9 +266,9 @@ def uninstall_kubementat(ctx, consent: Consent = None) -> SweepResult:
     for namespace in plan["namespaces"]:
         kubernetes_utils.delete_namespace(namespace)
 
-    # Namespace deletion is asynchronous and was measured at 42 s to drain on a 4 vCPU guest,
-    # while this command used to report its own result about 4 s after firing the deletes. That
-    # read as "the cluster still has what I just deleted" and, worse, let a run claim a clean
+    # Namespace deletion is asynchronous and was measured at 42 s to drain on a 4 vCPU guest, while
+    # this command reports its own result about 4 s after firing the deletes. That
+    # reads as "the cluster still has what I just deleted" and, worse, lets a run claim a clean
     # sweep over namespaces the cluster had not finished removing. Wait for it, bounded, and put
     # any survivor in the residue list with the phase the cluster reports.
     survivors = kubernetes_utils.wait_namespaces_gone(plan["namespaces"])
@@ -339,7 +334,7 @@ def read_uninstall_plan(ctx) -> dict:
     # Linkerd and the ingress controller are not components this product installs, so their
     # namespaces are not part of the declared sweep. They are read off the cluster and carried
     # in the plan anyway, so the operator is told before the first delete that a mesh or a
-    # controller this checkout no longer ships is coming off, and so each removal step works
+    # controller this checkout does not ship is coming off, and so each removal step works
     # from one read of the cluster instead of two.
     linkerd = [namespace for namespace in LINKERD_NAMESPACES if namespace in present]
     nginx_ingress = [namespace for namespace in NGINX_INGRESS_NAMESPACES
@@ -359,6 +354,7 @@ def read_uninstall_plan(ctx) -> dict:
     }
 
 def print_uninstall_plan(ctx, plan: dict) -> None:
+    """Print what is about to be deleted, before anything is deleted."""
 
     environment = ctx.environment
 

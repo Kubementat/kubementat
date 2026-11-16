@@ -22,6 +22,7 @@ class KubernetesTunnel(KubernetesClients):
     """
     # ATTENTION: This will stall the current process until the tunnel is closed
     def open_tunnel(self, namespace, pod_name, local_port, remote_port, host='0.0.0.0'):
+        """Open a port-forward and stay in it until the tunnel is closed."""
         argv = [
             "kubectl",
             *self.kubectl_args,
@@ -39,7 +40,7 @@ class KubernetesTunnel(KubernetesClients):
             logging.info(f"Local address: http://localhost:{local_port}")
             logging.info("###########################")
             logging.info("The tunnel will be closed when you press Ctrl+C")
-            # capture=False: port-forward is interactive. Capturing its output is what used to
+            # capture=False: port-forward is interactive. Capturing its output is what would
             # make the tunnel look frozen — nothing reaches the terminal until it exits.
             shell.run(argv, capture=False, check=True)
             return 0

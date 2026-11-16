@@ -83,10 +83,9 @@ class Context:
     """The environment, the team, the configuration, and the cluster — one object, one read.
 
     This exists rather than an extra argument on six constructors for a reason that is not obvious
-    from the shape of the code: every
-    service class used to resolve "which cluster" for itself, so the identity check ran as many
-    times as there were services in a command, and one of those resolutions was apologising for
-    being a second read in a docstring.
+    from the shape of the code: one object answers "which cluster" once per command. A service class
+    that resolves it for itself runs the identity check once per service in the command, and one of
+    those resolutions is a second read of the same tree, apologising for itself in a docstring.
 
     `team` is nullable and `config` is not: a command with no team semantics resolves its
     cluster from the environment layer and carries the environment's configuration without a
@@ -310,9 +309,9 @@ class Context:
         # and a root the environment variable says are the same one object here — which is the whole
         # point of threading it through the `Config` instead of around it.
         registry = _registry.EnvironmentRegistry(config.platform_config_dir)
-        # The one 1:1 check, asked of the one primitive that owns it. What used to be here is the
-        # filter this method wrote beside the method — same file, same rule, computed twice — and
-        # the half it computed twice was the half the report line read, which is how a
+        # The one 1:1 check, asked of the one primitive that owns it. A filter written beside this
+        # method would compute the same rule twice, and the half it computed twice was the half the
+        # report line read, which is how a
         # docstring could promise agreement and the code deliver two answers.
         comparison = registry.collision_check(target)
         if comparison.collisions:
@@ -421,7 +420,7 @@ class Context:
 
         The ordering is untouched here, and that is the point of putting a comparison in
         front of it instead of editing it. Layer 1 still beats layer 2, layer 2 still beats layer 3,
-        and a stated `--kubeconfig` is still the file that gets opened; what is no longer allowed is
+        and a stated `--kubeconfig` is still the file that gets opened; what is not allowed is
         for a stated *name* to disagree with a declared one, or for a stated *file* to not contain
         the declared context. The two claims answer different questions, so neither of them gets to
         be discarded by precedence — kubementat's own precedence would silently install `dev`'s

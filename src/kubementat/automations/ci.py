@@ -98,7 +98,7 @@ class CiUtils:
                 is reported, not swallowed.
         '''
         image = self.ci_image()
-        # Which cluster this is used to be a `kubectl config current-context` read, which answered
+        # Which cluster this is is a read of the running configuration, which answers
         # from whatever the local kubeconfig said and not from what this command decided. The
         # answer is a property of the Context, so there is no read left to do and nothing that can
         # fail between the print and the pod.

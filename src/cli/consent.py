@@ -8,7 +8,7 @@ are deliberate rather than convenient:
 * **The words do not change.** The sentences below are the ones the library printed. Moving a
   question is not rewriting one: the accepted answers in particular (`yes`/`y`, `no`/`n`, and the
   repeated "Please answer yes or no." in between) are part of what the operator agreed to years
-  ago, and an answer that used to be accepted and now is not would be a silent behaviour change
+  ago, and an answer that was accepted and is not any more would be a silent behaviour change
   wearing a refactoring's face.
 * **The refusal belongs to the command, not to the library.** `kmt install`, `kmt uninstall` and
   `kmt users create-team-account` each look at stdin *at their own door*, so a run that cannot be
@@ -60,6 +60,7 @@ def ask(prompt: str, decline, *, strip: bool = True) -> None:
 def declined(text: str):
     """A refusal that is a decision and not a bug: one line, and nothing was written."""
     def decline():
+        """The decline half of an answer: raise the sentence that says what was not done."""
         raise errors.ConfirmationDeclinedError(text)
     return decline
 
@@ -122,6 +123,7 @@ def routing_consent(environment: str, yes: bool) -> Consent:
         return Consent.assumed()
 
     def ask_the_operator(_action: str) -> None:
+        """Ask whether a second controller goes in; refuse when stdin is not a terminal."""
         if not sys.stdin.isatty():
             raise errors.ConfirmationUnavailableError(
                 f"Installing a second Traefik next to the one already running needs confirmation,"
@@ -141,14 +143,14 @@ def team_account_consent(yes: bool) -> Consent:
     """The consent for the three team-account commands, which differ only in the sentence.
 
     The action is a parameter and not text fixed here, because three commands call one gate and the
-    sentence is the one thing that must say which of the three it is. The bash copy this replaced
-    could not say, and that is why the same vague question used to be asked of three different
-    writes.
+    sentence is the one thing that must say which of the three it is. A gate whose question is
+    fixed text asks the same vague question of three different writes.
     """
     if yes:
         return Consent.assumed()
 
     def ask_the_operator(action: str) -> None:
+        """Ask the operator to confirm this action by name; refuse when stdin is not a terminal."""
         if not sys.stdin.isatty():
             raise errors.ConfirmationUnavailableError(
                 f"Confirmation required, but stdin is not a terminal. Re-run with --yes for: {action}"

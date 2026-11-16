@@ -279,12 +279,12 @@ def _configuration(ctx) -> tuple:
     The team is carried and never consulted. The `Config` the `Context` carries was built from the
     `(environment, team)` pair that command resolved, and it supports `team=None` for the commands
     that run without one; both keys this function reads live in the environment's own
-    `static.json`, so that `None` changes nothing it returns. The `require_team` that used to sit
-    upstream of this line claimed it changed something, and refused `kmt routing install dev` over a
-    read that never happens.
+    `static.json`, so that `None` changes nothing it returns. A `require_team` upstream of this line
+    would claim it changed something, and refuse `kmt routing install dev` over a read that never
+    happens.
 
-    One `Config`, and it is the one the `Context` carries. This function used to build a second one
-    from `ctx.environment` and `ctx.team`, which is the shape that was refused here: the pair
+    One `Config`, and it is the one the `Context` carries. Building a second one here from
+    `ctx.environment` and `ctx.team` is the shape this rule refuses: the pair
     re-derived a
     root from the process's own environment, so a command told which root to read answered with a
     namespace from whichever tree `Config`'s default rule found. `HelmUtils` already stopped doing

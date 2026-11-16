@@ -1,14 +1,14 @@
 """Which components exist, answered once, from the manifest kubementat applies.
 
-Two questions used to be answered in two places. "Is there a component called `grafana`, and does it
-have a release?" was answered one way by `constants.DEFAULT_NAMESPACES` (the CLI's accepted-name list,
+Two questions about one name, answered in two places, is the bug this module closes. "Is there a
+component called `grafana`, and does it
+have a release?" is answered one way by `constants.DEFAULT_NAMESPACES` (the CLI's accepted-name list,
 `cli/commands/component.py:_known_component_or_raise`) and another way by
 `release_index.read_release_index` (the labels the shipped helmfile carries, which is what
-`helmfile apply -l`, the knob export and `config_answers.effective_answers` read). Both answers were
-internally correct, and they disagreed: a name could be refused as "not a kubementat component" while
-the very manifest kubementat applies named a release after it. That is the shape of bug this module
-exists to make unconstructible, and it is why the answer here is a *kind* computed from both reads
-rather than a name list one caller owns.
+`helmfile apply -l`, the knob export and `config_answers.effective_answers` read). Both answers are
+internally correct, and they can disagree: a name can be refused as "not a kubementat component"
+while the very manifest kubementat applies names a release after it. So the answer here is a *kind*
+computed from both reads rather than a name list one caller owns.
 
 The rule, stated once:
 

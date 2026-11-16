@@ -62,8 +62,8 @@ decide it, none of them a `git-crypt` invocation and none of them a parse of its
   a write, so this step is decided by the file and never by a step count.
 
 **The deployer's fingerprint is read out of the tree, not out of a keyring.** `git-crypt` resolves
-what it is told against the keyring of whoever ran the command, so resolving it there is what the
-code used to do and that is the bug: `_keyring_fingerprints(identity)` returned a *list* for an
+what it is told against the keyring of whoever ran the command, so resolving the fingerprint there
+is the bug: `_keyring_fingerprints(identity)` returns a *list* for an
 email, and when two configuration trees share an identity that list contains the other tree's key.
 Registering `fingerprints[0]` then **succeeds** — git-crypt happily encrypts the symmetric key to a
 key that cannot decrypt this directory's files — so the failure is not an error on screen, it is a
@@ -102,13 +102,11 @@ is worth one owner, and a second implementation of it is how `force` ends up mea
 in two files.
 
 **A run that can be refused is refused before the first byte.** `config_keys` promises that every one
-of its refusals is decided before a single file is written, and a bare
-`config init --environment E` with no `--gpg-key` and no `--gpg-email` used to break that promise
-from the outside:
-the check
-landed at step 5, four steps after `git init` had made a repository and two more after the two git
-files had been written, so the refusal left a half-prepared tree behind and the next run read that tree
-as one that had already been initialized. So the identity question is decided ahead of step 1: neither
+of its refusals is decided before a single file is written, and a check that
+lands at step 5 breaks that promise from the outside: `git init` has made a repository by then and the
+two git files have been written, so a refusal there leaves a half-prepared tree behind and the next
+run reads that tree as one that had already been initialized. So the identity question is decided
+ahead of step 1: neither
 flag was given, and neither GPG file is in the directory, means refuse before `git init`, because a
 refusal that leaves a tree the operator then has to delete is not a refusal. This is *only* the case
 where a pair would have to be generated and no identity was given. A directory holding one half of a
@@ -574,6 +572,7 @@ def _directory_fingerprint(root: Path) -> str:
             f" keypair in the directory, which is what this step reads its collaborator's name from.")
 
     def read(gpg: gnupg.GPG) -> str:
+        """Ask gpg for the fingerprint with `show-only`, so no key is imported anywhere."""
         # `--import --import-options show-only` is `--show-keys`: gpg reads the file and answers
         # without importing it, so no key lands anywhere and the answer cannot come from a listing.
         answer = gpg.import_keys(public_path.read_bytes(),

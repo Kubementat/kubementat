@@ -20,7 +20,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import prose_only_sweep
 
-TREE = '''"""The module docstring, which cites R-7.1 for a rule it does not need.
+TREE = '''"""The module docstring, which cites the specification for a rule it does not need.
 
 A paragraph that names the specification instead of stating it.
 """
@@ -28,10 +28,10 @@ CONST = 1
 
 
 def function(x):
-    """Docstring that cites §4.2's layer 3."""
+    """Docstring that cites the specification's layer 3."""
     # a comment naming TD-1
     if x:
-        print("layer 3 of §4.2 is where an operator edits it")
+        print("layer 3 of the specification is where an operator edits it")
         return CONST
     return 0
 
@@ -65,9 +65,9 @@ def test_the_untouched_tree_is_clean():
 @pytest.mark.parametrize("text", [
     # A citation that becomes a sentence is the entire point of the ticket, so it must be invisible.
     edit("# a comment naming TD-1", "# one directory is exactly one cluster"),
-    edit('"""Docstring that cites §4.2\'s layer 3."""', '"""The environment\'s static.json, which is'
+    edit('"""Docstring that cites the specification\'s layer 3."""', '"""The environment\'s static.json, which is'
                                                         '\n     what an operator edits."""'),
-    edit("R-7.1 for a rule it does not need", "the rule, stated without the citation"),
+    edit("the specification for a rule it does not need", "the rule, stated without the citation"),
     # The same string, reflowed: a rewrapped paragraph is not a change of meaning to the verifier.
     edit("A paragraph that names the specification instead of stating it.",
          "A paragraph that names the specification\ninstead of stating it."),
@@ -113,13 +113,13 @@ def test_a_string_value_differing_is_reported_as_a_thing_to_read_and_not_as_a_pa
     reworded = edit("return CONST", 'return CONST  # cites nothing')
     assert moved_to(reworded) == []
 
-    edited_message = edit('"""Docstring that cites \u00a74.2\'s layer 3."""',
+    edited_message = edit('"""Docstring that cites the specification\'s layer 3."""',
                           '"""The layer an operator edits."""')
     assert moved_to(edited_message) == []
     assert strings_differ(edited_message) is None, (
         "a docstring is prose and must not land in the list to read")
 
-    changed_string = edit('print("layer 3 of \u00a74.2 is where an operator edits it")',
+    changed_string = edit('print("layer 3 of the specification is where an operator edits it")',
                           'print("the environment file an operator edits")')
     assert moved_to(changed_string) == [], (
         "a reworded message is not logic, and filing it as logic is what would turn every sweep into"

@@ -22,7 +22,7 @@ class DeleteOutcome(tuple):
     """Whether an object is gone, and the server's own sentence when it is not.
 
     A tuple rather than a bool because the residue list names the reason and not just the verdict
-    — the same fact `kubectl` used to put on stderr, now arriving where the code can actually read
+    — the same fact `kubectl` puts on stderr, arriving here where the code can actually read
     it. It is truthy exactly when the object is gone, so `if utils.delete_...(...)` reads the way
     it did before and `outcome.reason` reads the way the error deserves.
     """
@@ -32,10 +32,12 @@ class DeleteOutcome(tuple):
 
     @property
     def deleted(self) -> bool:
+        """Whether the object is gone."""
         return self[0]
 
     @property
     def reason(self) -> str:
+        """Why it is gone, or why it is not."""
         return self[1]
 
     def __bool__(self) -> bool:
@@ -299,6 +301,7 @@ class KubernetesCustomResources(KubernetesClients):
             raise
 
     def delete_custom_resource(self, group, version, namespace, resource_name, plural_identifier):
+        """Delete one custom resource, keeping the cluster's answer instead of raising away the 404."""
         try:
                 # First try to create the resource
             self.custom_objects_api.delete_namespaced_custom_object(

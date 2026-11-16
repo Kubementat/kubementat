@@ -33,12 +33,10 @@ on those checks say so rather than implying a decision made elsewhere.
   here can say it. `config show` prints the key and the file that declares it, which is as far as any
   command reaches; a second opinion about the same key is how two answers get written and one read.
 
-And one check that was deliberately left out and is not any more: the version window. `config
-validate` used to say that `schema_version` and the `kubementat:` constraint belong to a migration
-that had already landed, and the tree it was handed passed with a stamp three steps stale — which is
-what this verb exists to refuse. The strict home for version drift is this verb alone, since the verb
-that used to share it was deleted on 2026-11-05: `validate` reads the same `ConfigurationStamp` that
-every cluster command reads — its one owner — and reports the two facts it is strict about. What is
+The version window is checked here and nowhere else: `validate` reads the same `ConfigurationStamp`
+that every cluster command reads — its one owner — and reports the two facts it is strict about,
+`schema_version` and the `kubementat:` constraint. A tree whose stamp is three steps stale must not
+pass, which is what this verb exists to refuse. What is
 still not checked is git-crypt's lock state, which is `read_decrypted`'s seam and never a verdict here.
 
 Read-only is a claim this module has to keep: it opens the tree's files for reading, enumerates
@@ -63,9 +61,9 @@ from kubementat.core.constants import (CLUSTER_KUBECONFIG_PATH_KEY, CLUSTER_KUBE
                                      CONFIG_KUBEMENTAT_CONSTRAINT)
 from kubementat.core.config.config import Config
 # Both reads below name their object by import rather than through a module alias, and that is the
-# point: a `from kubementat import cluster as _cluster` outlives the module it named, and the
-# attribute read that used to work through it fails as an `AttributeError` at the call instead of
-# raising at the import — an outcome that never reaches the finding the rule owns. `Context` is
+# point: a `from kubementat import cluster as _cluster` outlives the module it named, and an attribute
+# read that goes through such an alias fails as an `AttributeError` at the call instead of raising at
+# the import — an outcome that never reaches the finding the rule owns. `Context` is
 # imported by name because this file is its reader and not its owner, and `EnvironmentRegistry` is
 # bound as the module because the class it owns is what the alias below asks.
 from kubementat.core.identity import registry as _registry
@@ -90,16 +88,13 @@ WARNING = "warning"
 
 # The manifest keys, spelled here rather than remembered. `config_init._manifest_bytes` writes
 # these two and nothing else; no other reader exists to ask, which is the whole reason this module
-# checks them at all (census Q2: zero readers of `kubementat.yaml` in `src/`).
+# checks them at all (zero readers of `kubementat.yaml` in `src/`).
 _MANIFEST_KEYS = ("schema_version", "kubementat")
 
-# What a copied-and-never-answered layer leaves behind. The spec's table spells the family `SETME`;
-# what 1.x's `initialize` wrote into a tree spelled it `REPLACEME_`, and the one reader in `src/` that
-# recognises one still spells it that way (`_cluster_manager_email`,
-# `automations/routing/routing.py:551`, refuses one). The templates the sentinel used to ship inside are
-# deleted — no verb opened them — so what this reports is a tree that still holds one, which is the case
-# the check was always for. The substitution that used to rewrite a placeholder inside a copied file went
-# with `automation.py` and the `kmt initialize` verb that ran it.
+# What a copied-and-never-answered layer leaves behind: a value that still starts with this sentinel
+# is a placeholder nobody typed. The one reader in `src/` that recognises one spells it this way
+# (`_cluster_manager_email`, `automations/routing/routing.py:551`, refuses one), so the check spells it
+# the same. What this reports is a tree that still holds one.
 _PLACEHOLDER_PREFIX = "REPLACEME"
 
 # How far from the root a layer file may sit: depth 1 is an environment, depth 2 under one is a
@@ -148,10 +143,12 @@ class ValidationReport:
 
     @property
     def errors(self) -> tuple[Finding, ...]:
+        """The findings that stop a verb."""
         return tuple(f for f in self.findings if f.kind == ERROR)
 
     @property
     def warnings(self) -> tuple[Finding, ...]:
+        """The findings that only ask to be read."""
         return tuple(f for f in self.findings if f.kind == WARNING)
 
 def _sorted(findings: list[Finding]) -> tuple[Finding, ...]:
@@ -483,7 +480,7 @@ def _layer_findings(root: Path, environment: str, team: Optional[str],
         except (EnvironmentConfigurationFileMissingError, TeamConfigurationFileMissingError) as exc:
             # A layer that is not there is a finding here and not a refusal: this verb reports every
             # fault in a tree and writes nothing. The two classes are what `_require_answerable_layer`
-            # raises now that the library no longer raises Click; the sentence it carries is the
+            # raises — the library raises its own errors and not Click's; the sentence it carries is the
             # finding's text verbatim, which is why this catcher is the one thing in the file that
             # must not be edited into a re-wording.
             findings.append(Finding(ERROR, "missing-layer-file",

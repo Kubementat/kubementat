@@ -9,19 +9,19 @@ which API it serves — the first is `install`'s, the second `runs`' and `genera
 the one call to `Config.refuse_obsolete_team_trigger_dir`, which is the single owner of the
 obsolete-directory rule and is reached through the `Context` this module already takes.
 
-**Why this module takes a `Context` and the other four did not.** `_apply_team_trigger_resources`
-builds `KubernetesUtils(ctx)` itself on its way into `apply.apply_resources` — it has always done
-that, from a `Context` and not from the client the constructor handed out, because the primitive
+**Why this module takes a `Context` and the others do not.** `_apply_team_trigger_resources`
+builds `KubernetesUtils(ctx)` itself on its way into `apply.apply_resources` — from a `Context` and
+not from the client a constructor handed out, because the primitive
 wants a client and the directory walk owns nothing else. So the entry point carries `ctx` as well
-as the state the constructor used to read (`kubernetes_utils`, `config`, `environment`).
-Handing over the raw `Context` is what keeps that construction the same object it was: a client
+as the state it needs (`kubernetes_utils`, `config`, `environment`).
+Handing over the raw `Context` is what keeps that construction the same object it is: a client
 built from the caller's own `Context` addresses the caller's own cluster. A `kubernetes_utils`-
 only signature would have had to build the second client out of something else — the one that was
 already handed in, or a `ClusterTarget` reconstructed for the purpose — and that changes which
 cluster the trigger manifests land in, which is exactly the kind of seam a move must not move.
-The `team` that used to travel beside the `Context` is gone: `P4-6` deleted the constructor that
-produced it, and a value that arrives from `ctx.require_team` cannot also be an argument, because
-then a caller could hand in a team the `Context` says the run was not given.
+There is no `team` argument beside the `Context`, and there must not be one: the value arrives from
+`ctx.require_team`, so a caller that could also hand in a team could name a team the `Context` says
+the run was not given.
 
 Two bindings carry weight. `generation` and `apply` are reached module-qualified, never by name:
 the suite patches by module object, and the `:1417` guard call is the one cross-module edge here,
@@ -158,10 +158,10 @@ def trigger_controller_role(team: str):
 def trigger_webhook_job_role(team: str):
     """What the create-webhook job writes: its Secret, its EventListener, its Ingress.
 
-    The apiGroup the ingress rule names is `extensions`, which a modern API server no longer
-    serves. It is kept because that is what the script sent, and because a rule that grants
-    nothing is not the same kind of bug as a rule that grants the wrong thing: the job that
-    needed it would have to be migrated separately, and this ticket is a port.
+    The apiGroup the ingress rule names is `extensions`, which a modern API server does not
+    serve. It is kept because that is what the rule in this file says, and because a rule that
+    grants nothing is not the same kind of bug as a rule that grants the wrong thing: the job that
+    would need it has to be migrated separately, and this file grants nothing to it.
     """
     return client.V1Role(
         api_version="rbac.authorization.k8s.io/v1",
@@ -183,27 +183,23 @@ def trigger_webhook_job_role(team: str):
 def setup_triggers(ctx, kubernetes_utils, config, environment) -> None:
     """Give one team's webhook triggers their RBAC, their webhook Secrets, and their resources.
 
-    Three parts, in the order the deleted script ran them, because the order is what makes the
-    last part able to run: an EventListener applied before `tekton-triggers-sa` exists is
-    accepted by the API and then never starts a pod. Everything lands in one namespace, the
-    team's `PIPELINE_NAMESPACE`, except the two cluster-scoped objects, which are shared by
-    every team and named so that a second team's setup cannot overwrite the first one's.
+    Three parts, in the order that makes the last part able to run: an EventListener applied before
+    `tekton-triggers-sa` exists is accepted by the API and then never starts a pod. Everything lands
+    in one namespace, the team's `PIPELINE_NAMESPACE`, except the two cluster-scoped objects, which
+    are shared by every team and named so that a second team's setup cannot overwrite the first one's.
 
-    The three shapes this method exists to replace, all of them from the script:
+    What each part guarantees:
 
-    * `kubectl apply -f -` of a heredoc, nine times. The client writes those objects instead,
-      so "it was already there" is a replacement and not a line of `kubectl` output — which
-      is what makes a second, fifth and twentieth run of this command do the same thing.
-    * `jq -r` of two keys from `static.encrypted.json`. A key that is not configured skips its
-      Secret. bash sent the string `null` instead, base64-encoded, and created a Secret whose
-      token was four characters long; that is the one place this is deliberately not the same.
-    * `kubectl apply -n <ns> -f <dir>` of the team's generated trigger files, where the
-      directory is `Config.tekton_team_trigger_dir` —
-      `<root>/{env}/{team}/tekton/triggers/` — and no longer
-      `tekton_ci/triggers/{TEAM}/`. That is decision 2 of the migration: the
-      generated files are team configuration, and configuration lives in the configuration root.
-      The generator *templates* they are generated from are product data and resolve through
-      `Config.tekton_trigger_template_dir`.
+    * The objects are written through the client, so "it was already there" is a replacement and not
+      a line of `kubectl` output — which is what makes a second, fifth and twentieth run of this
+      command do the same thing.
+    * A key that is not configured skips its Secret, and the Secret that is written carries a real
+      token: an answer that is only the characters `null` would be base64-encoded into a token four
+      characters long, which no webhook can authenticate with.
+    * The generated trigger files are applied from `Config.tekton_team_trigger_dir` —
+      `<root>/{env}/{team}/tekton/triggers/`: generated files are team configuration, and
+      configuration lives in the configuration root. The generator *templates* they are built from
+      are product data and resolve through `Config.tekton_trigger_template_dir`.
 
     Raises:
         kubementat.errors.TeamNotSuppliedError: If this `Context` was given no team.
@@ -213,10 +209,9 @@ def setup_triggers(ctx, kubernetes_utils, config, environment) -> None:
             `kubectl`, which is what the RBAC primitives made unnecessary.
         kubernetes.client.exceptions.ApiException: If the cluster refuses an object.
     """
-    # The team, asked of the `Context` and not handed in. `P4-5` moved this flow with a `team`
-    # parameter beside the `Context` because the refusal that produced the value lived in
-    # `TektonUtils.__init__` and the function had no business duplicating it; `P4-6` deleted the
-    # class, so the sentence and the read belong here, as this function's first statement. The
+    # The team, asked of the `Context` and not handed in as a second parameter: a `team` argument
+    # beside the `Context` would be a second owner of a value the `Context` already answers with, and
+    # the two could disagree about which team the run was given. The
     # `team_static` read below is the line that earns the guard: without a team there is no
     # `PIPELINE_NAMESPACE`, no ServiceAccount name to bind, and no directory to apply.
     team = ctx.require_team("the namespace the Tekton objects live in")

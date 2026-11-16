@@ -442,7 +442,7 @@ EXEMPT = {
         "read is here and not in the module the class left",
     ("kubementat/config/init.py", "_apply_layer_plan"):
         "the bytes-compare before a whole-document write; it reads a file it is about to write, not "
-        "a file it is about to answer, and it never decodes (census R7)",
+        "a file it is about to answer, and it never decodes",
     ("kubementat/infrastructure/tekton/runs.py", "run_pipeline"):
         "a pipeline-run manifest kubementat generated itself, in `tekton_ci/pipeline-runs/`; the read "
         "is here and not in the module the run path left, so the key moved with it (P4-3)",

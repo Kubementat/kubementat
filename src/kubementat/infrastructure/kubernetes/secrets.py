@@ -54,6 +54,7 @@ class KubernetesSecrets(KubernetesClients):
             raise ValueError("Only one of raw_data or string_data can be provided")
 
         def a_secret():
+            """The Secret object, assembled once from the data this caller chose."""
             return client.V1Secret(
                 metadata=client.V1ObjectMeta(name=secret_name, labels=labels),
                 type=key_type,

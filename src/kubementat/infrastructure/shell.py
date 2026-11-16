@@ -40,6 +40,7 @@ class CommandResult:
 
     @property
     def ok(self):
+        """True when the command exited 0."""
         return self.returncode == 0
 
     @property

@@ -183,11 +183,11 @@ def setup_pipelines(ctx):
 
     # Apply the product's own Tasks and Pipelines. They are package data, not project state, so
     # they come from the asset accessors and not from `kubementat_main_dir`: a `kmt` installed
-    # from a wheel has no `{root}/tekton_ci/tasks` to find, and the two inline path builds here
-    # used to aim `apply_resources` at it. The cost of the old spelling was measured, not
-    # assumed — with no root pointed at a checkout it raised `FileNotFoundError` naming the
-    # venv, and with `KUBEMENTAT_HOME` at one it applied that checkout's manifests, so the same
-    # install answered from two different trees depending on a variable that has nothing to do
+    # from a wheel has no `{root}/tekton_ci/tasks` to find, and an inline path build aims
+    # `apply_resources` at something that is not there. The cost of that spelling is measured:
+    # with no root pointed at a checkout it raises `FileNotFoundError` naming the
+    # venv, and with `KUBEMENTAT_HOME` at one it applies that checkout's manifests, so the same
+    # install answers from two different trees depending on a variable that has nothing to do
     # with the cluster. Asking the accessor is the only answer that is true for both.
     # Three apply layers, in this order, last one wins: product, environment, team. The order
     # *is* the collision rule — a Task that two layers both name is answered by the layer that

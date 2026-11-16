@@ -21,7 +21,7 @@ Two shapes are load-bearing and do not follow from the rest of the file:
   itself would refuse kubementat's own install. That refusal is the only reason the probe exists.
 * **the equality is spelled once, deliberately.** `_addresses_the_running_cluster` is the test the
   refusing check and the report line share, and the line may not say *verified* about a comparison
-  that held itself back. One caller used to write the filter beside the check and probe the running
+  that held itself back. A caller that writes the filter beside the check and probes the running
   cluster again for its own sentence — two spellings of one rule, which is how a refusal and the
   sentence about it start to disagree.
 
