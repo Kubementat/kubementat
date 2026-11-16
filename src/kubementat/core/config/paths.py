@@ -80,7 +80,7 @@ def default_platform_config_dir() -> Path:
 
     A configuration root is **named, never located**. Two spellings name it — the `--config-dir`
     flag a command carries and the variable a container already sets — and when neither is
-    present this function refuses. It used to answer with `platform_config` under
+    present this function refuses. It used to answer with a `platform_config` directory located under
     `default_kubementat_main_dir()`, which meant a command that had been told nothing still
     answered, from wherever the wheel happened to be installed. That answer is the D11 bug in its
     last remaining form, and v2 is a rewrite rather than a migration, so there is no

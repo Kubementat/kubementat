@@ -53,7 +53,7 @@ class CiUtils:
         # every service class. This is a `require_team` for the *namespace* reason and not the
         # configuration reason: the team is the value handed to `kubectl run -n` below, and `-n
         # None` is a pod in the wrong namespace rather than an error. Nothing on this path opens
-        # `platform_config/{environment}/<team>/` -- `ci_image` reads `env_static` for the image
+        # `<root>/{environment}/<team>/` -- `ci_image` reads `env_static` for the image
         # reference -- so the reason says the namespace and not a file. The `Config` itself is the
         # lazy construction `core/identity/registry.py` builds it with, `preload_configs=False`: not
         # reading a file until it is asked for, and every read going through `Config.get`, which

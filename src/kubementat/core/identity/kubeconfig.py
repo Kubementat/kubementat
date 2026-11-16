@@ -104,7 +104,7 @@ def in_tree_kubeconfig(platform_config_dir: Path,
                        environment: str) -> Optional[Path]:
     """The environment's own kubeconfig, when the tree has one.
 
-    `platform_config/<environment>/kubeconfig.encrypted.yaml`, and only when the file is there. It
+    `<root>/<environment>/kubeconfig.encrypted.yaml`, and only when the file is there. It
     answers ahead of `$KUBECONFIG` for one reason: a shell variable is something the machine happens
     to have, and a command run against a named environment should read that environment. A stray
     `export KUBECONFIG` in an operator's session silently re-pointing a deployment that named a

@@ -43,7 +43,7 @@ def declared_team_namespaces(ctx, team: str) -> dict:
 
     The `Config` for one team is built from the root this object was given rather than from the
     pair alone. A sweep is one command, and its root was decided once, upstream: re-deriving it
-    per team is how a sweep over `platform_config/` in one tree reads a `static.json` out of
+    per team is how a sweep over one configuration root reads a `static.json` out of
     another and calls both `namespaces`.
     '''
 

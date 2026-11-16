@@ -11,8 +11,10 @@ The conversion out of `TektonUtils` is the same one the `Automation` slices used
 read from the instance is a parameter, here one `config`, because every read of the old class that
 these functions kept was `Config`. Bodies are otherwise what they were. Two of the names below are
 shared with work the other tickets own (`_replace_placeholders_in_dict`, which `run_pipeline` also
-substitutes through, and `_refuse_obsolete_team_trigger_dir`, which `triggers` calls too); they are
-here because the DAG homes both here, and they are called through this module, never re-imported.
+substitutes through); the obsolete-trigger refusal is not one of them any more, because it is a rule
+about the tree and not about generation: `Config.refuse_obsolete_team_trigger_dir` is its single
+owner and this module calls it through the `config` it was handed, which keeps this file's import
+surface exactly what it was — `errors` and the standard library.
 """
 
 import logging
@@ -24,28 +26,6 @@ from pathlib import Path
 import yaml
 
 from kubementat import errors
-
-
-def _refuse_obsolete_team_trigger_dir(config) -> None:
-    """Refuse a tree that still has `<team>/triggers/`, naming both directories.
-
-    A no-op when the old directory is absent — which is every tree this HEAD's `config init`
-    laid down, because init creates the layer where the property says it lives. Called by the
-    reader (`_apply_team_trigger_resources`) and by the writer (`generate_trigger_configs`), the
-    two places a stale directory would otherwise be silently ignored. Nothing is moved or
-    deleted here: kubementat records no rename table and rewrites no operator tree, so the gap is
-    closed by hand and this refusal is what says so.
-    """
-    obsolete = Path(config.tekton_team_trigger_dir).parent.parent / "triggers"
-    if obsolete.is_dir():
-        raise errors.ObsoleteTriggerDirectoryError(
-            f"{obsolete} is the trigger directory a pre-move kubementat wrote, and nothing reads "
-            f"it any more: the team's trigger configuration lives under "
-            f"{config.tekton_team_trigger_dir}, the only path generated triggers are applied "
-            f"from. Leaving both in place would apply the new directory and silently drop what "
-            f"the old one holds, so this run stops instead. Move the manifests you are keeping "
-            f"into the new directory by hand and remove the old one. Nothing will do this for you: "
-            f"kubementat records no rename table and rewrites no operator tree.")
 
 
 # The parameters of a generated pipeline run that kubementat can name, and the placeholder each
@@ -61,7 +41,7 @@ def _refuse_obsolete_team_trigger_dir(config) -> None:
 # rather than derived from the token's own spelling. Deriving it (`automation-git-url` screaming it
 # into `AUTOMATION_GIT_URL`) is what would silently start filling a parameter that only looks
 # platform-wide - `builder-image` screaming into `BUILDER_IMAGE` is not a thing any `static.json`
-# holds - so what is unmapped stays `TODO`, which is the honest answer for a value that belongs to
+# holds - so what is unmapped stays the `REPLACEME` marker below, which is the honest answer for a value that belongs to
 # the app rather than to the platform.
 PIPELINE_RUN_PARAMETER_PLACEHOLDERS = {
     "environment": "ENVIRONMENT",
@@ -78,9 +58,16 @@ PIPELINE_RUN_PARAMETER_PLACEHOLDERS = {
 }
 
 # The parameter value written when no configuration key answers for it. bash wrote the bare word
-# `TODO` and left it there; a generated run is reviewed before it is ever applied, so the honest
-# marker is a value that cannot be mistaken for a real one.
-PIPELINE_RUN_UNFILLED_PARAMETER = "TODO"
+# `TODO` and left it there, which is the wrong shape of wrong: `TODO` reads as a note somebody left
+# *about* the file, so it survives a review that never answers it and surfaces in a generated manifest
+# as though someone had written a task in YAML. The marker is the product's own placeholder family
+# instead — the `REPLACEME` prefix `config validate` reports and `automations/routing/routing.py`
+# refuses — so one vocabulary says "unanswered" everywhere, a grep for the sentinel finds the run
+# beside the layer files, and `kmt tekton run-pipeline` still fails loudly on it rather than applying
+# it. Nothing may resolve this token at write time: an unfilled parameter is the app's and not the
+# platform's, and inventing a value for `path-to-version-file` is how a run silently builds the wrong
+# thing.
+PIPELINE_RUN_UNFILLED_PARAMETER = "REPLACEME_UNFILLED_PARAMETER"
 
 # The three fields a generated pipeline run carries that no configuration key supplies. They are
 # written here as named constants rather than inline so that a later ticket that finds (or adds)
@@ -328,7 +315,7 @@ def generate_deploy_pipeline(config, app_name: str, git_url: str = None,
       exists. bash substituted what it had and echoed what was left.
 
     The output is one team's configuration, so it lands in `Config.tekton_team_pipeline_dir` —
-    `platform_config/{environment}/{team}/tekton/pipelines/` — and the template stays where
+    `<root>/{environment}/{team}/tekton/pipelines/` — and the template stays where
     `apply_resources` deliberately never looks. Writing into the team directory is also what
     makes the next command work: `setup-pipelines` applies that directory, so a generated
     pipeline that is reviewed and committed is a pipeline the team's cluster picks up.
@@ -440,7 +427,7 @@ def generate_trigger_configs(config, app_name: str, pipeline_name: str,
     Returns:
         list: the files that were written, in template order.
     """
-    _refuse_obsolete_team_trigger_dir(config)
+    config.refuse_obsolete_team_trigger_dir()
     app_name = _safe_name_component(app_name, "The app name")
     if not _is_supplied(pipeline_name):
         raise errors.GenerationArgumentNotSuppliedError(
@@ -534,7 +521,7 @@ def generate_pipeline_run(config, pipeline_file: str) -> Path:
       one place and a stale copy cannot survive a version bump;
     * the document is built as data and dumped by `yaml.safe_dump`, so a value that needs
       quoting is quoted by the library that parses it and reruns write the same bytes;
-    * a parameter that has no configured source is written as the marker `TODO` rather than as
+    * a parameter that has no configured source is written as the `REPLACEME` marker rather than as
       an empty string, so the review the command asks for is the review the file needs.
 
     Where it writes is the part that is not a port. bash wrote `tekton_ci/pipeline-runs/<TEAM>/`,
@@ -543,7 +530,7 @@ def generate_pipeline_run(config, pipeline_file: str) -> Path:
     through a `global/` prefix, so the script's own output was invisible to the command that
     applies it and reachable only by typing its whole path. Generated output is one team's
     configuration, so it goes to `Config.tekton_team_pipeline_run_dir` -
-    `platform_config/{environment}/{team}/tekton/pipeline-runs/` - which is where
+    `<root>/{environment}/{team}/tekton/pipeline-runs/` - which is where
     `run_pipeline` reads a team's run files from and where `list_available_pipeline_runs` looks
     first. That is the decision the deploy-pipeline generator's move settled, and the
     reason `.gitignore` ignores everything under `tekton_ci/` that is not a template.
@@ -702,10 +689,10 @@ def _pipeline_run_parameter_value(name: str) -> str:
     value is `static.json`'s and `Config`'s, and writing the token is what makes the substitution
     refuse rather than silently write `None` when the key stops being configured.
 
-    What has no key is written as `TODO`, which is the marker bash left and the reason the command
-    asks for a review: those parameters belong to the app rather than to the platform, and a
-    generated run that invented a value for `path-to-version-file` would be a run that silently
-    builds the wrong thing.
+    What has no key is written as `PIPELINE_RUN_UNFILLED_PARAMETER`, the product's own placeholder
+    marker, and that is the reason the command asks for a review: those parameters belong to the app
+    rather than to the platform, and a generated run that invented a value for
+    `path-to-version-file` would be a run that silently builds the wrong thing.
     """
     placeholder = PIPELINE_RUN_PARAMETER_PLACEHOLDERS.get(name)
     return f"{placeholder}_PLACEHOLDER" if placeholder else PIPELINE_RUN_UNFILLED_PARAMETER
@@ -856,7 +843,11 @@ def generate_random_postfix(length: int = 6) -> str:
 
 # helper method for run_pipeline and both generators: substitute a placeholder set, in place.
 def _replace_placeholders_in_dict(config, data, extra_values=None) -> None:
-    # TODO: #REFACTOR: refactor this massively :D
+    # What this function is, stated instead of the TODO that used to sit here promising to "refactor
+    # this massively": one table, walked longest-key-first, substituted in place, and anything left
+    # over is reported by name. It is long because walking a tree is a loop with four cases in it, not
+    # because it is unfinished, and it is shared by three callers, so a rewrite that changed the
+    # substitution order would be a change to what every generated manifest says.
     # The table is one dict read from `CONFIG_PLACEHOLDER_SOURCES`, which is the same table the
     # generators substitute through. What is not in the table is not substituted, and a
     # placeholder left behind is reported by name rather than written out.

@@ -53,7 +53,11 @@ def test_the_migrated_assets_resolve_from_the_package_and_no_second_copy_ships_i
     checkout_root = Path(__file__).resolve().parents[1]
 
     assert ASSET_ROOT.is_dir(), "the package resolves no asset root at all"
-    for name in ("templates", "values", "tekton_ci"):
+    # `templates` is not in this list and the absence is the point: 1.x's seed copies shipped inside
+    # that root and no verb opened them, so they are deleted rather than resolved. What remains of the
+    # rule is asserted below — the checkout must not grow the directory back, and the two roots that do
+    # ship have to be non-empty.
+    for name in ("values", "tekton_ci"):
         root = asset_path(name)
         assert root.is_dir(), f"`{name}` resolves to {root}, which is not a directory"
         assert any(root.rglob("*")), f"`{name}` resolves inside the package and ships nothing"

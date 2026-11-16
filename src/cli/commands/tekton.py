@@ -231,8 +231,8 @@ def generate_deploy_pipeline(ctx, environment, team, app_name, git_url, git_proj
 @kmt_context
 def generate_trigger_configs(ctx, environment, team, app_name, pipeline_name, trigger_type):
     # Read the note on `generate_deploy_pipeline` — same reason, same shape, and the same
-    # first read: `generate_trigger_configs` opens with `_refuse_obsolete_team_trigger_dir`, which
-    # asks `Config` for the team's trigger directory and is refused first.
+    # first read: `generate_trigger_configs` opens with `Config.refuse_obsolete_team_trigger_dir`,
+    # the one owner of that rule, and it is refused before a template is opened.
     generation.generate_trigger_configs(ctx.config,
                                         app_name, pipeline_name=pipeline_name,
                                         trigger_type=trigger_type)
@@ -243,7 +243,7 @@ def generate_trigger_configs(ctx, environment, team, app_name, pipeline_name, tr
                 help='Generate a pipeline run for a pipeline the checkout has, into the team\'s own '
                      'pipeline-run directory that `kmt tekton run-pipeline` then reads. Review it: the '
                      'parameters that belong to the app rather than to the platform are written as '
-                     'TODO, because kubementat cannot know them.')
+                     '`REPLACEME_UNFILLED_PARAMETER`, because kubementat cannot know them.')
 @click.argument('environment', envvar='ENVIRONMENT')
 @click.argument('team', envvar='TEAM')
 @click.argument('pipeline_file')

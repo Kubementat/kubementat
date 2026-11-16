@@ -343,8 +343,10 @@ def test_an_environment_named_after_a_reserved_root_name_is_refused(tmp_path, na
 def test_a_team_named_after_a_layer_directory_is_refused(tmp_path, name):
     """A team that shares a name with a layer is a directory two rules both claim.
 
-    `kubementat_components` is in the list because the team listing already filters it as stale, so
-    the row that matters is the one that says *taken* and not *not a name*.
+    `kubementat_components` is in the list because it is one of kubementat's own layer directories,
+    so the row that matters is the one that says *taken* and not *not a name*. It used to be in the
+    list for a second reason — the team listing filtered it by name — and that filter is deleted with
+    the table it lived in, leaving this one rule in place.
     """
     root = unbuilt_root(tmp_path)
 

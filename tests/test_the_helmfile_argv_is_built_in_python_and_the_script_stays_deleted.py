@@ -152,7 +152,11 @@ def test_the_sentence_about_where_the_manifest_comes_from_names_the_package():
         "it off a root that is not there: " + doc
     assert "Nothing writes the manifest" in doc, \
         "the reader has to be told no command writes a manifest into the configuration: " + doc
-    assert "platform_config/{environment}/kubementat_components" in doc, \
+    # The literal used to be spelled `platform_config/{environment}/kubementat_components`, because
+    # that is the directory the 1.x layout put between a tree and a layer. The sentence's job is to
+    # name the stale copy, not to name the 1.x level, so the guard reads the same sentence under the
+    # spelling the root has now: drop the sentence and this assertion still fails.
+    assert "{environment}/kubementat_components" in doc, \
         "the stale copy is the reason this function is the only answer; naming it is what keeps a " \
         "later reader from re-adding the fallback: " + doc
     assert "templates/environment/" not in doc, \

@@ -1,10 +1,28 @@
-"""The ingress release and the image mirror have to agree, because each is the other's guarantee.
+"""The ingress release is pinned, the pin is reviewed, and the values file agrees with it.
 
-`src/kubementat/core/assets/values/helmfile.yaml.gotmpl` decides which chart the routing group installs,
-and `templates/environment/mirrored_docker_images.json.template` decides which images reach the
-registry the cluster pulls from. Left unconnected, the two drift the way everything unlinked
-drifts: the chart is bumped, the mirrored tag is not, and the platform's answer to "does this work
-air-gapped?" is answered by an ImagePullBackOff nobody can see coming from a diff.
+`src/kubementat/core/assets/values/helmfile.yaml.gotmpl` decides which chart the routing group installs.
+An unpinned release is a chart nobody validated, and the shape of that failure is silence: chart 42's root
+`values.schema.json` sets `additionalProperties: false`, so a chart that renamed a key does not install
+with different defaults, it refuses (`helmfile apply -l group=routing` stops with
+`additional properties ... not allowed`). Two checks say the pin is real, and a third says the values file
+that ships alongside it agrees with it.
+
+**What this file used to prove, and no longer can.** It also asserted that the image the pinned chart
+renders is an image the platform *mirrors*, read from
+`templates/environment/mirrored_docker_images.json.template`. That template is deleted: no verb ever
+wrote it into a tree, and nothing in `src/` opened it. Its two checks went with the file rather than
+being kept alive against an empty glob — deleting an artefact and keeping a vacuous assertion over it
+would be the worse trade. Two facts survive the deletion as sentences, because they are owed to the next
+reader and no test can say them:
+
+* The mirroring the template described is **not** a property kubementat maintains.
+  `tekton_ci/tasks/skopeo-sync-images.yml` defaults its input to
+  `$(workspaces.workspace.path)/kubementat/platform_config/dev/mirrored_docker_images.json` — a path
+  inside a checkout, in a layout 1.x wrote — and no verb creates it. So an air-gapped cluster was always
+  served by a file somebody made by hand, and the template was that somebody's starting point.
+* If mirroring is ever made real, the tag it copies is the chart's `appVersion`
+  (`v3.7.16` for chart `42.1.3`), so a pin that moves must move the mirror with it. That is the rule the
+  deleted test was holding, and it is why `CHART_VERSION_TO_IMAGE_TAG` stays below.
 
 Two facts are held here, both from the same evidence the templates cite:
 
@@ -21,15 +39,13 @@ Two facts are held here, both from the same evidence the templates cite:
   assertion and the command that produced it is named beside it.
 """
 
-import json
 import re
 
-from asset_paths import template_path, values_path
+from asset_paths import values_path
 
 # The manifest helmfile applies, read from the package: it is product data and no longer
 # a template `initialize` hands to the configuration.
 HELMFILE_MANIFEST = values_path("helmfile.yaml.gotmpl")
-MIRROR_TEMPLATE = template_path("environment", "mirrored_docker_images.json.template")
 
 # The chart the release pins, read from the template rather than written here (see
 # `pinned_chart_version`); this is the mapping a changed pin has to be re-derived against. Both rows
@@ -57,12 +73,8 @@ CHART = "traefik/traefik"
 # What the mirroring mechanism speaks: `skopeo-sync-images.yml` reads `name`/`description`/
 # `source`/`destination`, prefixes `docker://` onto `source` and `destination` when neither is
 # already a transport URL, and copies one row at a time. A row missing a key is a row that copies
-# `docker://None`.
-MIRROR_ROW_KEYS = ("name", "description", "source", "destination")
-
-# `initialize` copies this template to platform_config verbatim
-# (`automations/routing/traefik_presence.py`'s read of `helm.py`); the base url is the operator's fill-in.
-REGISTRY_PLACEHOLDER = "REPLACEME_DOCKER_REGISTRY_BASE_URL"
+# `docker://None`. The keys themselves went with the template that held them; what is left of the
+# sync task's contract is the note above.
 
 
 def release_block(name):
@@ -107,18 +119,6 @@ def pinned_chart_version():
     return None
 
 
-def mirror_rows():
-    """Every image row the platform mirrors, in template form."""
-    return json.loads(MIRROR_TEMPLATE.read_text(encoding="utf-8"))["images"]
-
-
-def traefik_mirror_row():
-    rows = [row for row in mirror_rows() if "traefik" in str(row.get("source", ""))]
-    assert len(rows) <= 1, \
-        f"{len(rows)} rows mirror a traefik image, so which one a cluster pulls is a race between rows"
-    return rows[0] if rows else None
-
-
 # --- the release is pinned, and the pin is one that was reviewed --------------------------
 
 
@@ -158,43 +158,3 @@ def test_the_pinned_chart_is_the_one_the_values_file_was_validated_against():
         f"{sorted(validated_against)}"
 
 
-# --- the image that chart renders is an image the platform mirrors ------------------------
-
-
-def test_the_image_the_pinned_ingress_chart_renders_is_mirrored():
-    """Mirroring is what makes the pin a guarantee, so the two are one question.
-
-    The tag is the chart's `appVersion` and therefore the chart's answer and not kubementat's: a
-    mirror list that drifts from the pin is a platform that installs the same release twice, once
-    from the registry and once from the image the registry does not have.
-    """
-    row = traefik_mirror_row()
-
-    assert row is not None, \
-        "the controller kubementat installs is not in the mirror list, so a cluster without docker.io " \
-        "pulls an image no one ever copied there"
-    expected_tag = CHART_VERSION_TO_IMAGE_TAG[pinned_chart_version()]
-    assert row["source"].endswith(f":{expected_tag}"), \
-        f"the mirror copies {row['source']} but the pinned chart renders the image tagged " \
-        f"{expected_tag}: the release will ask for a tag this row does not copy"
-
-
-def test_every_mirrored_image_row_is_a_row_the_sync_task_can_copy():
-    """The rows are read by a task, not a human, and that task indexes four keys.
-
-    `tekton_ci/tasks/skopeo-sync-images.yml` pulls `name`/`description`/`source`/`destination` out of
-    each row and prefixes `docker://` onto the two URLs it copies, so a row is only as good as all
-    four of its keys and a destination that never left the template is a copy into
-    `docker://REPLACEME_DOCKER_REGISTRY_BASE_URL/...`, which fails as an authentication error.
-    """
-    rows = mirror_rows()
-
-    assert rows, "the template mirrors nothing, so the pipeline it is the input for copies nothing"
-    for row in rows:
-        missing = [key for key in MIRROR_ROW_KEYS if not str(row.get(key, "")).strip()]
-        assert not missing, f"row {row.get('name')!r} is missing {missing}, and the task copies None"
-        assert row["destination"].startswith(f"{REGISTRY_PLACEHOLDER}/"), \
-            f"row {row['name']!r} writes its destination somewhere else, so initialize's copy is not " \
-            "the operator's knob"
-        assert ":" in row["source"].rsplit("/", 1)[-1], \
-            f"row {row['name']!r} mirrors an untagged source, which is a pull of :latest by accident"

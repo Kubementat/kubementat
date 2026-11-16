@@ -33,7 +33,9 @@ from pathlib import Path
 import pytest
 
 import kubementat
+from kubementat.automations.routing import routing
 from kubementat.config import answers as config_answers
+from kubementat.config import validate
 from kubementat.core.config import derived as config_derived
 from kubementat.core.config.config import Config
 from kubementat.errors import TeamNotSuppliedError
@@ -373,13 +375,26 @@ def test_the_templates_still_carry_the_placeholder_and_no_reader_depends_on_it()
     assert all("automation.py" in writer for writer in writers), readers
 
 
-def test_the_placeholder_still_reaches_a_tree_from_the_templates():
-    """It is still there, so the assertion above is about a reader and not about a name that vanished.
+def test_the_placeholder_is_still_a_placeholder_and_not_a_value_anywhere_in_the_package():
+    """Nothing ships `REPLACEME_TEAM` as data, so the reader above cannot be answering a dead sentinel.
 
-    If `REPLACEME_TEAM` ever leaves the templates, this test is the one that says so — and the reader
-    assertion would then pass for no reason anyone should trust.
+    The guard used to read the shipped templates and say "the placeholder is still in there, so the
+    refusal has something to refuse". The templates are deleted, so the shape of the risk moved: the
+    sentinel is now spelled only by the code that recognises it, and what a reader can still do is make
+    it unconditional — `config validate`'s prefix and the routing reader that refuses one — and lose the
+    one place a stale `REPLACEME_TEAM` could have been reported from. So this asserts the sentinel exists
+    in exactly those two owners, that no shipped data carries it, and that a tree which *does* carry one
+    (laid down before the templates went, which is what the family is for) is still named.
     """
-    templates = sorted(Path(kubementat.__file__).resolve().parent.glob(f"core/assets/templates/**/*"))
-    with_placeholder = [t for t in templates if t.is_file() and PLACEHOLDER in t.read_text()]
-    assert with_placeholder, "the templates this rule replaces carry no placeholder any more"
-    assert any(t.name.endswith("static.encrypted.json.template") for t in with_placeholder)
+    prefix = str(validate._PLACEHOLDER_PREFIX)
+    assert PLACEHOLDER.startswith(prefix), \
+        f"the reader refuses a value starting with {prefix!r} and this test is about {PLACEHOLDER!r}"
+    assert not (Path(kubementat.__file__).resolve().parent / "core/assets").joinpath("templates").exists(), \
+        "the placeholder shipped as data inside the package, so a refusal is not the whole answer"
+    shipped = [p for p in Path(kubementat.__file__).resolve().parent.glob("core/assets/**/*")
+               if p.is_file() and prefix in p.read_text(errors="ignore")
+               if p.suffix in (".json", ".yaml", ".yml", ".gotmpl", ".template")]
+    assert shipped == [], f"a placeholder ships as product data again: {shipped}"
+    assert 'startswith("' + prefix + '")' in Path(routing.__file__).read_text(encoding="utf-8"), \
+        "the one reader that refuses a placeholder has to keep spelling the prefix it matches, or the " \
+        "refusal goes unconditional and a tree that answered nothing is refused for answering it"

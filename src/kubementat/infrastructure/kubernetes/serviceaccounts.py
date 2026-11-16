@@ -89,7 +89,7 @@ class KubernetesServiceAccounts(KubernetesClients):
 
         The deprecated field itself is not fixed here - `create_service_account` still has
         it, and it still has its own caller - because that belongs to the deferred
-        platform_config work, not to this flow.
+        configuration-externalization work, not to this flow.
 
         Args:
             namespace (str): Namespace to create the ServiceAccount in.

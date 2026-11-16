@@ -184,7 +184,7 @@ def install(kubernetes_utils, config, environment) -> None:
     env_static = config.get('env_static')
     namespace = config.component_namespace("tekton")
     logging.info("#########################")
-    logging.info("Installing Tekton from platform_config ...")
+    logging.info("Installing Tekton from the configuration root ...")
     logging.info(f"ENVIRONMENT: {environment}")
     logging.info(f"TEKTON_NAMESPACE: {namespace}")
     for key in ("TEKTON_VERSION_PIPELINE", "TEKTON_VERSION_TRIGGERS",

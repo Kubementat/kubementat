@@ -59,7 +59,8 @@ from typing import Any, Optional
 import yaml
 
 from kubementat.config import init as config_init
-from kubementat.core.constants import CLUSTER_KUBECONFIG_PATH_KEY, CLUSTER_KUBE_CONTEXT_KEY
+from kubementat.core.constants import (CLUSTER_KUBECONFIG_PATH_KEY, CLUSTER_KUBE_CONTEXT_KEY,
+                                     CONFIG_KUBEMENTAT_CONSTRAINT)
 from kubementat.core.config.config import Config
 # Both reads below name their object by import rather than through a module alias, and that is the
 # point: a `from kubementat import cluster as _cluster` outlives the module it named, and the
@@ -92,13 +93,13 @@ WARNING = "warning"
 # checks them at all (census Q2: zero readers of `kubementat.yaml` in `src/`).
 _MANIFEST_KEYS = ("schema_version", "kubementat")
 
-# What a shipped template leaves behind when nobody answered the key. The spec's table spells the
-# family `SETME`; every template under `src/kubementat/core/assets/templates/` and the one reader that
-# recognises one spells it `REPLACEME_` (`_cluster_manager_email`,
-# `automations/routing/routing.py:551`, refuses one). The substitution that used to rewrite a
-# placeholder inside a copied file went with `automation.py` and the `kmt initialize` verb that ran
-# it, and an honest
-# check matches the spelling that actually ships.
+# What a copied-and-never-answered layer leaves behind. The spec's table spells the family `SETME`;
+# what 1.x's `initialize` wrote into a tree spelled it `REPLACEME_`, and the one reader in `src/` that
+# recognises one still spells it that way (`_cluster_manager_email`,
+# `automations/routing/routing.py:551`, refuses one). The templates the sentinel used to ship inside are
+# deleted — no verb opened them — so what this reports is a tree that still holds one, which is the case
+# the check was always for. The substitution that used to rewrite a placeholder inside a copied file went
+# with `automation.py` and the `kmt initialize` verb that ran it.
 _PLACEHOLDER_PREFIX = "REPLACEME"
 
 # How far from the root a layer file may sit: depth 1 is an environment, depth 2 under one is a
@@ -269,8 +270,9 @@ def _manifest_findings(root: Path, findings: list[Finding]) -> None:
         findings.append(Finding(
             ERROR, "manifest-key-type",
             f"{_MANIFEST_KEYS[1]} in {path} is a "
-            f"{type(document['kubementat']).__name__} and not a version-constraint string like "
-            f"'>=2,<3', so there is nothing here to compare a release against.", path))
+            f"{type(document['kubementat']).__name__} and not a version-constraint string shaped "
+            f"like the one this build stamps ({CONFIG_KUBEMENTAT_CONSTRAINT!r}), so there is nothing "
+            f"here to compare a release against.", path))
 
 def _stamp_findings(root: Path, findings: list[Finding]) -> None:
     """The version window, which is this verb's job and not every cluster command's.
@@ -282,13 +284,13 @@ def _stamp_findings(root: Path, findings: list[Finding]) -> None:
     cluster. This verb's whole product is the verdict, so both facts are findings here and an
     unchanged stamp is no finding at all.
 
-    * **The schema window** is a refusal: two steps behind and every answer this tree does not
-      name for itself comes out of a built-in default, which configures the cluster by kubementat's
-      assumptions instead of the operator's. The remedy sentence is the one this refusal owes.
-    * **The version constraint** is a warning, said as a refusal. The gap is closed by one line
-      in the manifest — the `kubementat:` constraint the tree was stamped with, which is a release's
-      bump PR and not a key an operator sets. Nothing reports what the gap would cost; the
-      verdict is the whole of what this verb can say.
+    Both sentences the findings carry come from `ConfigurationStamp` — `schema_gap_sentence` and
+    `version_gap_remediation` — because the fact and its remedy have one owner and this verb is not it.
+    The severities are this verb's own: the schema window is a refusal (two steps behind and every
+    answer this tree does not name for itself comes out of a built-in default, which configures the
+    cluster by kubementat's assumptions instead of the operator's), and the version constraint is a
+    warning about version drift said as a refusal, because this verb's product is the verdict. Nothing
+    this verb reports says what a version gap would cost, and that is the honest limit of the finding.
 
     A tree that cannot be stamped at all is the manifest check's business and is reported there, in
     sentences that name the file and the verb that writes it; this function reads nothing a manifest
@@ -308,15 +310,12 @@ def _stamp_findings(root: Path, findings: list[Finding]) -> None:
         return
 
     if stamp.schema_is_too_old:
+        # The sentence is `ConfigurationStamp`'s, which is also what raised this same fact out of a
+        # cluster verb before item 10 collapsed the restatement: one owner for the fact and its
+        # remediation, so a strict verb and a reporting verb cannot disagree about what to tell someone.
         findings.append(Finding(
             ERROR, "schema-version-too-old",
-            f"{root} declares schema_version {stamp.schema} and this kubementat is at "
-            f"{stamp.current}, which is more than {stamp.window} step(s) behind. Answers this tree "
-            "does not name for itself would come from built-in defaults, which configures the cluster "
-            "by kubementat's assumptions and not by yours. Raise schema_version in "
-            f"{root / 'kubementat.yaml'} to close the gap; that bump is a decision, and no command "
-            "will make it for you.",
-            path))
+            stamp.schema_gap_sentence, path))
     elif stamp.schema_is_behind_window:
         findings.append(Finding(
             WARNING, "schema-version-behind-window",
@@ -332,9 +331,7 @@ def _stamp_findings(root: Path, findings: list[Finding]) -> None:
             f"{root} declares it was validated against {stamp.constraint!r} and this kubementat is "
             f"{stamp.running_version}. A cluster verb warns about this and continues; this "
             f"verb refuses, because this verb is the strict home for version drift. Nothing here says "
-            f"what the gap would cost, and the line that closes it is the kubementat: constraint this "
-            "tree was stamped with — a release's bump PR, "
-            "not a key to set.",
+            f"what the gap would cost. {stamp.version_gap_remediation}",
             path))
     elif not stamp.version_is_determinable:
         findings.append(Finding(
@@ -543,10 +540,11 @@ def _read_object_file(path: Path, label: str, findings: list[Finding]) -> Option
 def _placeholder_findings(path: Path, document: dict, findings: list[Finding]) -> None:
     """Answers the templates left blank.
 
-    Shipped templates spell these `REPLACEME_…` and the one reader in `src/` that recognises them
-    says so (`_cluster_manager_email`, `automations/routing/routing.py:551`, refuses one). What is
-    really being reported is "the template was copied and not answered", so the spelling that
-    ships is the spelling that matches.
+    These are keys a 1.x tree carries unanswered: `initialize` copied the template, the operator
+    answered some of it, and the sentinel stayed. The templates are deleted now — nothing opened them —
+    so what is being reported here is a layer that predates the deletion, and the prefix is the one the
+    reader that refuses one actually spells (`_cluster_manager_email`,
+    `automations/routing/routing.py:551`). What is really being reported is "the copy was not answered".
     """
     for key, value in _placeholder_values(document):
         findings.append(Finding(

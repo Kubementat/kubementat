@@ -1,15 +1,14 @@
 """The package's own data: the files `kmt` ships and opens, resolved from inside the package.
 
-The outcome of moving the data is a sentence about installation, not about directories. `templates/`
-used to
+The outcome of moving the data is a sentence about installation, not about directories. The data used to
 sit at the repository root, and every reader reached it by walking *up* out of
 `src/kubementat/core/config/config.py` to a root that only exists in a checkout. A wheel has no root to walk
 up to, so the same code answered `KUBEMENTAT_HOME` or failed. Resolving from inside the package
 answers all three installs with one line:
 
-* a **wheel** — the data unpacks into `site-packages/kubementat/core/assets/templates/`, and
+* a **wheel** — the data unpacks into `site-packages/kubementat/core/assets/`, and
   `importlib.resources.files()` names it;
-* a **checkout** — `src/kubementat/core/assets/templates/` is a real directory there too, so the
+* a **checkout** — `src/kubementat/core/assets/` is a real directory there too, so the
   bytes are the ones the developer is editing;
 * a **read-only install** — nothing is ever written under the asset root, so a directory the
   interpreter cannot write to is still readable.
@@ -53,8 +52,10 @@ def assets_root() -> Path:
 def asset_path(*parts: str) -> Path:
     """`<asset root>/<parts>` — the one accessor for anything the package ships.
 
-    `asset_path("templates")` is the templates root;
-    `asset_path("templates", "environment", "static.json.template")` is one file under it.
+    `asset_path("values", "helmfile.yaml.gotmpl")` is the manifest `helmfile_apply` applies;
+    `asset_path("tekton_ci", "tasks")` is one of the roots `setup_pipelines` applies. `templates` is
+    not a possible argument: the seed copies that lived under it were deleted when nothing opened
+    one, so an accessor that still named it would resolve into a directory that is not there.
     Nothing here walks the tree to find the repository: that walk is the bug this ticket
     deletes, and a resolver that quietly fell back to it would make the wheel look broken only
     on a machine that also has a checkout lying around.

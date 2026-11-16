@@ -45,8 +45,10 @@ it is what the product's own code addresses.
 - __src/kubementat__: the Python library — automation, configuration, cluster resolution, everything the
   CLI delegates to. It is imported and never exec'd, and it raises its refusals without knowing how they
   will be printed.
-- __src/kubementat/core/assets__: the **shipped data**: `templates/environment/`, `values/` (the helmfile
-  manifest and the default values files it names) and `tekton_ci/` without `pipeline-runs/`. It is read
+- __src/kubementat/core/assets__: the **shipped data**: `values/` (the helmfile
+  manifest and the default values files it names) and `tekton_ci/` without `pipeline-runs/`. There is no
+  `templates/` here any more: 1.x's seed copies shipped under it, no verb ever opened one, and the two that
+  had a reader are test fixtures now (`tests/fixtures/configuration_shape/`). It is read
   from inside the package, so an installed `kmt` needs no checkout to find it. Editing one of these files
   changes what the product does; no command ever writes here.
 - __docs__: the documentation, the specifications under `docs/specifications`, the plans and censuses

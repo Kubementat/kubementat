@@ -92,7 +92,12 @@ def setup_docker_registry_access(ctx):
     if has_credentials:
         # Patch the service accounts with image pull secrets
         kubernetes_utils.patch_service_account_with_pull_secrets(pipeline_namespace, helm_deployer_service_account_name, image_pull_secrets)
-        # TODO: REFACTOR: Make the app deployment namespace service account name configurable via platform_config
+        # Two service accounts, one configured name and one that is not. The pipeline namespace's
+        # account answers through `HELM_DEPLOYER_SERVICE_ACCOUNT_NAME`, a key of the team layer; the
+        # application namespace's is `default`, because that is what a namespace arrives with and no
+        # operator has ever been asked to name it. Giving it a key would be a `static.json` format
+        # decision, which is out of this branch's scope, so the sentence says what is true instead of
+        # leaving a TODO that pointed at a directory no verb writes.
         kubernetes_utils.patch_service_account_with_pull_secrets(app_deployment_namespace, 'default', image_pull_secrets)
     else:
         logging.info("No service account was patched: there were no registry credentials to name.")

@@ -42,11 +42,11 @@ key, and a stub entry would reach `automations/install/secrets.py:66-69` as a `K
 secret creation that
 has already started.
 
-The names here are the rules, not the files. The shipped templates still carry `REPLACEME_TEAM`
-because the substitution that used to rewrite it died with the command that copied them, so the
-placeholder is now a shape nothing reads. This module's own rule is what keeps the difference
-honest: the derivation answers, a declared value outranks it, and no destructive path may obtain a
-namespace from the rule.
+The names here are the rules, not the files. The 1.x templates carried `REPLACEME_TEAM` because the
+substitution that rewrote it died with the command that copied them, and those templates are now
+deleted — the placeholder is a shape only a tree that predates the deletion can still hold. This
+module's own rule is what keeps the difference honest: the derivation answers, a declared value
+outranks it, and no destructive path may obtain a namespace from the rule.
 """
 
 from kubementat.errors import TeamNotSuppliedError

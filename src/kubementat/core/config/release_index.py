@@ -35,7 +35,7 @@ def helmfile_paths_for(config) -> tuple:
     or its values templates into a configuration tree -- `kmt initialize` carried that copy
     once, it came out of the command, and the command itself is gone now -- so there is
     no copy a cluster can have
-    outgrown: a stale `platform_config/{environment}/kubementat_components/helmfile.yaml.gotmpl`
+    outgrown: a stale `<root>/{environment}/kubementat_components/helmfile.yaml.gotmpl`
     somebody left by hand changes what is applied exactly as much as a note pinned to a door
     does. That is plan row 13's bug, and this function is what makes it unconstructible.
 

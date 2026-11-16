@@ -1,4 +1,73 @@
 # Unreleased
+- **The 1.x residue is deleted rather than explained: 7 shipped templates, 25 sentences naming a
+  directory that is not there, a `TODO` that came back as a manifest value, 4 `print(x,
+  file=open(...))` key writes and 2 example scripts the README already denied.**
+
+  Nothing in this change adds a behaviour, and the reason it is one commit and not a sweep is that every
+  deletion had to be checked against the thing it protected. The reader paid for all of it: seven files
+  in the wheel that no verb opened, twenty-five `src/` sentences pointing at a `platform_config/`
+  directory 1.x left behind, a live `TODO` naming that directory, `TODO` arriving in a generated
+  Tekton run as a *value*, four key-material writes done with `print`, and two `examples/` shell
+  demos no file in the tree referenced.
+
+  * **Deleted, with the protection kept.** `core/assets/templates/` is gone (7 files → 0 shipped). Two
+    of the seven — the environment layer's and the team's `static.json` shape — were read only by
+    tests, so they moved to `tests/fixtures/configuration_shape/` and their guards read the same bytes
+    from a fixture instead of from package data; a data file whose only reader is a test is a fixture.
+    The other five had no reader at all. `Config.templates_dir` went with the directory, and so did the
+    `Kubementat Templates Directory:` log line that was its only reader. The two example scripts go,
+    and `docs/index-overview.md`'s shell-script census goes from seven to five with the `find` that
+    says so. **What did not go:** the obsolete-trigger refusal, which had two owners and two raise
+    sites and now has one (`Config.refuse_obsolete_team_trigger_dir`, one
+    `errors.ObsoleteTriggerDirectoryError`, four call sites), because it still protects a tree laid
+    down before `<team>/triggers/` moved under `tekton/` — the five tests that exercise it are
+    unchanged and green, so the collapse is measured and not asserted. The `config init` naming rule
+    (`LAYER_DIRECTORY_NAMES`) keeps `kubementat_components`; the dead name table
+    `NON_TEAM_ENVIRONMENT_DIRECTORIES` goes, because the `static.json` test in `Config.teams` was
+    already the whole answer and no tree kubementat writes has ever carried that file there.
+  * **`TODO` came back as a value, so the generator changed and not just the comment.**
+    `PIPELINE_RUN_UNFILLED_PARAMETER` was the string `"TODO"`, which `kmt tekton generate-pipeline-run`
+    wrote into an unfilled parameter and `kmt tekton run-pipeline` printed. That is a data bug: a
+    parameter that belongs to the app is *unanswered*, not *untracked*, and a bare `TODO` in a manifest
+    reads like a note somebody left about the file — which is how it survived a review that answered
+    nothing. It is now `REPLACEME_UNFILLED_PARAMETER`, the product's own placeholder prefix (the one
+    `config validate` reports and the routing reader refuses), so one vocabulary says "unanswered"
+    everywhere and the failure stays loud. `kmt tekton generate-pipeline-run --help` says the new word.
+    The two `TODO` comments that pointed at no code went too, and one of them is replaced by the
+    sentence that explains why that function is shaped the way it is.
+  * **One answer per rule.** The configuration root is `<root>` — the directory `--config-dir` names,
+    or the one `$KUBEMENTAT_PLATFORM_CONFIG_DIR` points at — in 25 `src/` sentences and the live docs
+    (`src/` path-shaped mentions 25 → 0, docs 125 → 99 with the rest living in dated plans and research,
+    and the *live* docs 30 → 4 with all four surviving mentions being statements that no such directory
+    exists). "Why not `traefik-crds`?" is answered in `constants.TRAEFIK_CHART` and pointed at from
+    three places instead of restated by six. The version constraint keeps its literal and loses its
+    second and third restatements: `ConfigurationStamp.schema_gap_sentence` and
+    `version_gap_remediation` are what both the refusal and the finding quote, and `>=2,<3` no longer
+    appears inside a message that was writing the wrong value. Four `print(x, file=open(path,'w'))`
+    key-material writes are now one `_write_key_file` with a closed handle and a log line naming the
+    path — and the bytes and the mode are proven identical rather than claimed: the same input text
+    produces the same sha in both trees, the trailing blank line survives, the mode stays `0o664`
+    under the caller's `0o600`, and the 4-byte difference in one private-key size between the two runs
+    is RSA DER padding, which is why it moves by itself inside one tree (`1680, 1676, 1676`).
+  * **Two coverage rows went with the artefacts they were written against, and that is stated instead
+    of smoothed.** The two image-mirror checks in
+    `tests/test_the_ingress_release_pin_and_the_image_mirror_agree.py` read
+    `mirrored_docker_images.json.template`, and keeping them alive against a deleted glob would have
+    been a green test that asserts nothing, so they are gone and the rule they held is written in that
+    file's header where the next reader will find it. The pin checks in the same file are untouched.
+    This is the only place Phase B's "never delete coverage" rule bends, and it bends exactly where the
+    thing under test stopped existing. **A gap this deletion exposed and did not fix:**
+    `tekton_ci/tasks/skopeo-sync-images.yml` defaults its input to
+    `$(workspaces.workspace.path)/kubementat/platform_config/dev/mirrored_docker_images.json` — a
+    checkout-relative path in a layout 1.x wrote — and no verb creates that file. Air-gapped image
+    mirroring was always a file somebody made by hand; the template was its seed and nothing else.
+  * **Proven with a capture, per §R-2.** A detached worktree of the parent `0af6d4f` is the before half,
+    and the counts above are printed *inside* the capture: `~/.cache/kmt-b10/capture.sh` ran identical
+    commands against both trees (`~/.cache/kmt-b10/captures/{before,after}/counts.txt`), and every
+    before-side number that names deleted residue is non-zero — 7 templates, 25 path sentences, 1
+    TODO-naming-the-directory, 2 raise sites, 4 `file=open(` writes, 1 `TODO` value, 2 example scripts.
+    A before that had resolved the working checkout would have printed zeros; that is the whole tell.
+
 - **A partially-succeeded uninstall reports a result now, not a sentence. `uninstall_kubementat`
   returns `SweepResult`, the residue is a field, and the message the run fails with is assembled
   from it — same words, same exit code, one more place that can be read.**

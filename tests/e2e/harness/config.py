@@ -828,7 +828,7 @@ CAPABILITIES = {
     # What the deleted pair offered is retired rather than migrated, and the consequence is stated
     # in its present tense: there is no longer any way for kubementat to create databases and users
     # from configuration. The key that row configured went first - `MYSQL_DATABASE_CONFIGURATION` was
-    # removed from `templates/environment/team/static.encrypted.json.template`
+    # removed from the team layer's encrypted template, which the package no longer ships
     # and from `automation.py` (8d9c318) - and the script that read it goes with this pair, so the two
     # sides of the capability are both absent: no key declares it, nothing reads it, and no command or
     # Task replaced the reading. What survives is narrower

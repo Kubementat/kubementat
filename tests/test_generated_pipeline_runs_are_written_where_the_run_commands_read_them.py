@@ -26,7 +26,7 @@ defect in the bash half rather than a preference:
   parameter, in the pipeline's own order, and no others.
 * bash's parameter loop skipped nine of the eleven names but not `tekton-ci-image-name` or
   `tekton-ci-image-tag`, so generating a run of the pipeline that *has* those parameters wrote the same
-  parameter twice, once with a value and once with `TODO`.
+  parameter twice, once with a value and once with the unfilled marker.
 * bash always bound one workspace called `pipeline-workspace`, whatever the pipeline declared. Six of
   the nine pipelines in `tekton_ci/pipelines/` declare exactly that one; the three that declare none
   got a binding they never asked for. Python binds what the source declares, so a run of a Task-only
@@ -67,6 +67,10 @@ from conftest import REPO_ROOT, run_bash, run_kmt
 from cluster_fixture import configuration_only_context
 from asset_paths import tekton_ci_path
 from kubementat.infrastructure.tekton import generation
+
+# What an unfilled parameter is written as. Read from the module rather than typed here, so
+# the guard cannot disagree with the generator the way the bare `TODO` it replaced could.
+UNFILLED = generation.PIPELINE_RUN_UNFILLED_PARAMETER
 
 # The record is the commit that still holds the script. Pinning it rather than asking for `HEAD` is
 # what lets this file keep its claim after the deletion lands: `git show HEAD:<script>` starts
@@ -346,7 +350,7 @@ def test_values_configuration_knows_arrive_and_values_it_cannot_are_marked(check
             assert str(values[name]) != "null", name
     for name, value in values.items():
         if name not in SCRIPT_PARAMETERS:
-            assert value == "TODO", f"{name} is not a parameter kubementat can name: {value!r}"
+            assert value == UNFILLED, f"{name} is not a parameter kubementat can name: {value!r}"
 
 
 def test_a_run_generated_twice_writes_the_same_bytes_into_a_fresh_target(checkout):
@@ -565,9 +569,10 @@ def test_every_parameter_the_script_named_is_filled_the_same_way(checkout):
 
     # The names the record wrote *once* are the names this test may compare, and that is not a way of
     # hiding the rest: the record wrote `tekton-ci-image-name` and `tekton-ci-image-tag` twice, once as
-    # a value and once as `TODO`, so its own answer for those two is a contradiction rather than a
+    # a value and once as the unfilled marker, so its own answer for those two is a contradiction
+    # rather than a
     # value. They are asserted as a difference in the list below, not smoothed over here — and a dict
-    # that keeps the last entry would have said `TODO` and turned a real difference into a failing
+    # that keeps the last entry would have said the marker and turned a real difference into a failing
     # string comparison, which is the sort of thing that gets a test "fixed" by deleting the claim.
     written_once = [name for name, count in Counter(entry["name"] for entry in entries).items()
                     if count == 1]
@@ -631,12 +636,15 @@ def _difference_a_parameter_is_passed_once(checkout):
     assert twice == ["tekton-ci-image-name", "tekton-ci-image-tag"]
     for name in twice:
         filled, todo = [entry for entry in entries if entry["name"] == name]
+        # The two entries here are bash's, read out of the recorded script run: bash wrote the bare
+        # word `TODO` for the parameter it could not fill, which is exactly the value the Python
+        # generator replaced. The Python side of this difference is asserted below against UNFILLED.
         assert filled["value"].endswith("_PLACEHOLDER") and todo["value"] == "TODO", name
     python_entries = raw_parameters_of(generated_pipeline_run(checkout, PIPELINE))
     python_values = {entry["name"]: entry["value"] for entry in python_entries}
     assert [entry["name"] for entry in python_entries].count("tekton-ci-image-name") == 1
-    assert python_values["tekton-ci-image-name"] != "TODO"
-    assert python_values["tekton-ci-image-tag"] != "TODO"
+    assert python_values["tekton-ci-image-name"] != UNFILLED
+    assert python_values["tekton-ci-image-tag"] != UNFILLED
 
 
 def _difference_the_workspaces_are_the_pipelines(checkout):
@@ -722,7 +730,7 @@ INTENDED_DIFFERENCES = [
     {"difference": "a parameter is passed once, with one value",
      "why": "bash's loop skipped nine of its own eleven names and not `tekton-ci-image-name` or "
             "`tekton-ci-image-tag`, so a pipeline that declared them got them twice, once filled and "
-            "once as `TODO`.",
+            "once as the unfilled marker.",
      "proven_by": _difference_a_parameter_is_passed_once},
     {"difference": "the workspaces are the pipeline's, not one name written for every pipeline",
      "why": "bash bound `pipeline-workspace` whatever the source declared, so the three pipelines in "

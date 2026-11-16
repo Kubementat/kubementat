@@ -8,7 +8,7 @@ Before, `environment` was a directory of configuration and the cluster was decid
 `config.load_kube_config()` with no argument, every API object constructed bare against the process-wide
 default, and helm/helmfile addressed by whatever `kubectl` had last been pointed at. After, an environment
 **is** exactly one cluster, resolved once per command by `@kmt_context` through a four-layer order
-(`--context`/`--kubeconfig` → process variables → `platform_config/<env>/static.json` → the mounted
+(`--context`/`--kubeconfig` → process variables → `<root>/<env>/static.json` → the mounted
 service-account identity), verified against every other environment in the root before the command writes,
 and carried to both channels — the Python client via a bound `ApiClient`, kubectl and helm via argv flags.
 `Context` replaced the `(environment, team)` pair plus a `Config` each class built for itself; the ambient

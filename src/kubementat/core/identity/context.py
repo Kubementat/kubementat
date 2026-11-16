@@ -65,7 +65,7 @@ from kubementat.core.identity import target as _target
 # rather than from this module's neighbourhood: the same refusal is raised by `require_team` and by
 # `Config`'s team-scoped reads, and defining a second one here would make the guard raise one type
 # and the services catch another. Not a resolution failure: the cluster resolved and `Context`
-# carries it. What is missing is the other half of the pair — `platform_config/{environment}/<team>/`
+# carries it. What is missing is the other half of the pair — `<root>/{environment}/<team>/`
 # — and kmt does not guess what a command means, so the object says so rather than letting a service
 # read a path built out of a name nobody gave it.
 from kubementat.errors import (
@@ -127,7 +127,7 @@ class Context:
 
         The sentence says what a team is *for*, in both of the two ways this tree uses one, and does
         not claim that the caller is about to open a file: some sites call this because they are
-        about to read `platform_config/{environment}/<team>/`, and two call it because the team is
+        about to read `<root>/{environment}/<team>/`, and two call it because the team is
         an argv namespace (`kubectl run -n`) or a substring of a kubeconfig's context name. A
         message that only described the first kind told an operator running `kmt run-ci-container`
         that a file was missing when the code that refused it opens no file at all.
@@ -205,7 +205,7 @@ class Context:
         It reaches the `Config` this Context carries, and with it every directory and file
         the configuration half of a `Config` carries. Without it and without the variable there is
         no root to
-        scaffold, and `Config` refuses rather than inventing a `platform_config` beside wherever
+        scaffold, and `Config` refuses rather than inventing a root beside wherever
         the wheel was installed.
         """
         return cls(

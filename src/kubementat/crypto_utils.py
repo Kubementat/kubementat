@@ -2,11 +2,33 @@ import logging
 import os
 import shutil
 import tempfile
+from pathlib import Path
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 import gnupg
+
+
+def _write_key_file(path, text: str, description: str) -> None:
+    """Write one key half to `path`, and say so where the rest of the library says it.
+
+    Four sentences used to do this with `print(text, file=open(path, "w"))`, which is the same bytes
+    by accident and three reader costs by construction: the handle is never closed by name, the path is
+    built and thrown away inside the call so nothing says where the private key landed, and `print`
+    hides the fact that it appends a newline -- which is what a PEM needs, so changing the write here
+    without changing the bytes would have silently truncated every key this function writes.
+
+    So the rule is stated once: one path, one `with`, and `text` plus the trailing newline. The mode
+    stays whatever `open` gives a fresh file under the caller's umask, because the callers in
+    `config/keys.py` set `0600` on the private half themselves and doing it here instead would put a
+    second owner on a permission that already has one.
+    """
+    target = Path(path)
+    logging.info(f"Writing the deployer's {description} to: {target}")
+    with open(target, "w", encoding="utf-8") as handle:
+        handle.write(text)
+        handle.write("\n")
 
 class CryptoUtils:
     def __init__(self):
@@ -36,8 +58,8 @@ class CryptoUtils:
           # write keys to files
           public_key_path = os.path.join(target_directory, key_file_base_name + ".pub")
           private_key_path = os.path.join(target_directory, key_file_base_name)
-          print(public_key_str,  file=open(public_key_path, 'w'))
-          print(private_key_str,  file=open(private_key_path, 'w'))
+          _write_key_file(public_key_path, public_key_str, "public key")
+          _write_key_file(private_key_path, private_key_str, "private key")
               
         return private_key_str, public_key_str
     
@@ -83,11 +105,9 @@ class CryptoUtils:
         )
 
         if public_key_filepath is not None:
-          logging.info(f"Storing the deployer's public key to: {public_key_filepath}")
-          print(ascii_armored_public_keys,  file=open(public_key_filepath, 'w'))
+          _write_key_file(public_key_filepath, ascii_armored_public_keys, "public key")
         if private_key_filepath is not None:
-          logging.info(f"Storing the deployer's private key to: {private_key_filepath}")
-          print(ascii_armored_private_keys,  file=open(private_key_filepath, 'w'))
+          _write_key_file(private_key_filepath, ascii_armored_private_keys, "private key")
 
         return {
           'public_keys': ascii_armored_public_keys,

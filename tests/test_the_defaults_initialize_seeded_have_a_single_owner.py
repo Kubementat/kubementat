@@ -50,10 +50,12 @@ TEAM = "cartographers"
 # The ten keys, exactly as `constants.DEFAULT_STATIC_ANSWERS` spells them, with the shipped template's
 # line for each. The template is cited here rather than trusted: these files live apart and a value
 # that stopped matching the template is a different product, not a rounding error.
+# The two witnesses, read from `tests/fixtures/configuration_shape/` — see `tests/asset_paths.py`.
+# They are not package data: nothing in a run opens them, and what they witness is this table.
 TEMPLATE = (Path(__file__).resolve().parents[1]
-            / "src/kubementat/core/assets/templates/environment/static.json.template")
+            / "tests/fixtures/configuration_shape/environment/static.json.template")
 TEAM_TEMPLATE = (Path(__file__).resolve().parents[1]
-                 / "src/kubementat/core/assets/templates/environment/team/static.json.template")
+                 / "tests/fixtures/configuration_shape/environment/team/static.json.template")
 
 TEN_KEYS = ("TEKTON_VERSION_PIPELINE", "TEKTON_VERSION_DASHBOARD", "TEKTON_VERSION_TRIGGERS",
             "TEKTON_CI_IMAGE_NAME", "TEKTON_CI_IMAGE_TAG", "TEKTON_KUBERNETES_STORAGE_CLASS",

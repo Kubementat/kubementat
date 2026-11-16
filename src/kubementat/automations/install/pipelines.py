@@ -288,7 +288,7 @@ def _apply_manifest_layer(ctx, layer, resource_dir, target_namespace, kind, grou
     * `apply_resources` raises `FileNotFoundError` for a directory that is not there, because a
       path built out of a configuration value that points nowhere is kubementat's bug and must
       not be whispered about. That is correct for a root that is *supposed* to exist.
-    * A layer that is not there is not that. `platform_config/{env}/tekton/` can be absent on a
+    * A layer that is not there is not that. `<root>/{env}/tekton/` can be absent on a
       tree `kmt config init` just prepared -- it creates the directory, but a tree handed over
       from before that verb existed may not have it -- and a team that has generated nothing
       yet is a normal state and not a traceback waiting to interrupt an install. So the layer

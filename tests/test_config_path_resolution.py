@@ -110,9 +110,11 @@ def test_kubementat_home_names_the_checkout_and_no_longer_the_configuration(tmp_
     monkeypatch.setenv(PLATFORM_CONFIG_VAR, str(tmp_path / "named-configuration"))
     config = Config(ENVIRONMENT, TEAM, preload_configs=False)
 
-    assert config.templates_dir == asset_path("templates"), \
-        "templates are package data now, and a root that moves them is the bug this rule closes"
-    assert config.templates_dir.is_dir(), "the shipped templates have to be really there"
+    assert not hasattr(config, "templates_dir"), \
+        "no shipped templates, no attribute pointing at them: the reader that printed this path was " \
+        "the only thing that ever consulted it"
+    assert not asset_path("templates").exists(), \
+        "the package ships no templates directory, so an accessor that named one would resolve nowhere"
     assert config.platform_config_dir == (tmp_path / "named-configuration").resolve()
     assert (tmp_path / "platform_config") not in {config.platform_config_dir}, \
         "the checkout-relative configuration root is back"

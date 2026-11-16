@@ -123,7 +123,7 @@ class ClusterComparison:
 
 
 class EnvironmentRegistry:
-    """Every environment under one `platform_config` root, and the cluster each one declares.
+    """Every environment under one configuration root, and the cluster each one declares.
 
     Enumeration is directories at depth 1 of the root that contain a `static.json`, and nothing
     more: that falls out of the existing shape — a team's `static.json` is depth 2, and

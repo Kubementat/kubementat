@@ -54,12 +54,11 @@ from kubementat.core.config import derived as config_derived
 # from `constants.py` is not thereby derivable, and a team-shaped key is not thereby a default: the
 # difference is whether one answer is correct.
 #
-# The packaged `defaults/static.json` is *not* consulted here and does not exist in
-# this tree: the environment template it would come from is 40 keys of which 8 are `REPLACEME_*`, so
-# promoting it to a default source would ship placeholders as answers and give the namespaces a second
-# owner beside `constants.py`. That template is phase 3's problem, the phase where the template-copy
-# habit dies. It is written down here as well as at the fallback, so nobody "completes" this table
-# from the spec.
+# What L0 does *not* consult is a packaged `defaults/static.json`: none exists, and the seed template
+# 1.x shipped for the environment layer is deleted — 40 keys of which 8 were `REPLACEME_*`, which is why
+# promoting it to a default source would have shipped placeholders as answers and given the namespaces a
+# second owner beside `constants.py`. So the table below is closed: an answer is either a layer the
+# operator wrote or `constants.py`, and there is no third place a key can come from.
 # ---------------------------------------------------------------------------------------------
 LAYER_TEAM = "L2"
 LAYER_ENVIRONMENT = "L1"

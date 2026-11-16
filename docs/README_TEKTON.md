@@ -102,14 +102,14 @@ Three shapes that look like migration targets and are **not**:
 
 1. Confirm the controller: `kubectl api-versions | grep tekton.dev` must show `tekton.dev/v1`. If it
    does not, upgrade first (`uv run kmt install <ENVIRONMENT> <TEAM>`, or raise
-   `TEKTON_VERSION_PIPELINE` in `platform_config/<environment>/static.json` — 1.0 is the oldest version
+   `TEKTON_VERSION_PIPELINE` in `<root>/<environment>/static.json` — 1.0 is the oldest version
    that serves v1, and `kmt install` asserts this for you instead of letting the apply pass silently).
 2. Re-apply everything: `uv run kmt tekton setup-pipelines <ENVIRONMENT> <TEAM>`. This is also the
    command that fails closed on a too-old controller — it asks the API server once, before applying
    anything, and raises `TektonControllerWithoutConfiguredApiError` instead of reporting a 404 per
    Task and Pipeline.
 3. Convert anything that lives outside the repo the same way: team manifests under
-   `platform_config/{env}/{team}/tekton/…`, generated pipeline runs, and manifests you keep in other
+   `<root>/{env}/{team}/tekton/…`, generated pipeline runs, and manifests you keep in other
    repositories. There is no automatic path, and the shapes above are ignored rather than rejected.
 
 Rolling back is a git revert followed by `uv run kmt tekton setup-pipelines` again — there is no knob
@@ -125,7 +125,7 @@ from when configuration lived inside the product's own tree, and they were also 
 So a working tree is a directory you point kubementat at, created by
 `kmt config init --environment <env> --team <team> --config-dir <configuration-root>`. Everything
 that used to live under
-`platform_config/dev/` is written there instead, and an environment that already exists is copied from
+`<root>/dev/` is written there instead, and an environment that already exists is copied from
 whichever configuration repository owns it — not from this checkout, which has nothing to copy.
 
 ## SSH Deployer Key
@@ -184,7 +184,7 @@ Tekton triggers are a feature of tekton that can be used to spin up endpoints fo
 The command creates the service accounts, roles and role-bindings the trigger controller needs,
 writes the `gitlab-trigger-webhook-secret` / `github-trigger-webhook-secret` Secrets from the team's
 `static.encrypted.json` (only for the providers that have a token configured) and applies the
-trigger resources found under `platform_config/<ENVIRONMENT>/<TEAM>/tekton/triggers/`.
+trigger resources found under `<root>/<ENVIRONMENT>/<TEAM>/tekton/triggers/`.
 
 Run it via:
 ```
@@ -196,7 +196,7 @@ uv run kmt tekton setup-triggers dev dev1
 
 It runs as part of `kmt install`, so it is rarely needed by hand.
 
-> **Where generated triggers live:** `platform_config/<ENVIRONMENT>/<TEAM>/tekton/triggers/` (moved
+> **Where generated triggers live:** `<root>/<ENVIRONMENT>/<TEAM>/tekton/triggers/` (moved
 > under `tekton/` in T-60; a tree that still has the old `<TEAM>/triggers/` directory is refused by
 > name, at generation and at setup, rather than silently applied nowhere). The
 > generator templates they are built from are product data and ship inside the package
@@ -204,7 +204,7 @@ It runs as part of `kmt install`, so it is rarely needed by hand.
 > belongs beside the team's other config, while its templates belong to nobody's checkout.
 
 ## Adding new tekton triggers
-This will setup a skeleton trigger template and other needed resources as a starting point for further customization. The generated files land in `platform_config/<ENVIRONMENT>/<TEAM>/tekton/triggers/<APP_NAME>/` (the command prints every file it wrote, and the exact directory it used), where `kmt tekton setup-triggers` reads them from. This was `scripts/automation/tekton/generate_trigger_config_from_templates.sh` until 2026-10-28; the script is deleted and the command is the only way to run it.
+This will setup a skeleton trigger template and other needed resources as a starting point for further customization. The generated files land in `<root>/<ENVIRONMENT>/<TEAM>/tekton/triggers/<APP_NAME>/` (the command prints every file it wrote, and the exact directory it used), where `kmt tekton setup-triggers` reads them from. This was `scripts/automation/tekton/generate_trigger_config_from_templates.sh` until 2026-10-28; the script is deleted and the command is the only way to run it.
 
 ```
 uv run kmt tekton generate-triggers dev dev1 nginx-example \
@@ -214,7 +214,7 @@ uv run kmt tekton generate-triggers dev dev1 nginx-example \
 `--trigger-type` chooses which templates are read (`github` or `gitlab`), and everything else it needs is read from `platform_config`: `BASE_DOMAIN` from the environment's `static.json`, `HELM_DEPLOYER_SERVICE_ACCOUNT_NAME` from the team's. **A key it cannot read is an error, not a manifest** — the command names the key and the file to fix it in, and writes nothing. The four generated files are the Ingress, the EventListener, the TriggerBinding and the TriggerTemplate; the command prints the webhook URL the generated Ingress answers for, and the `static.encrypted.json` key the secret has to come from.
 
 ## Generating a deploy pipeline for a new app
-`kmt tekton generate-deploy-pipeline <ENVIRONMENT> <TEAM> <APP_NAME>` generates a helm-deploy pipeline from the deploy-pipeline template this kmt ships (`Config.tekton_pipeline_template_dir`) into `platform_config/<ENVIRONMENT>/<TEAM>/tekton/pipelines/deploy-pipeline-<APP_NAME>.yml`, which is the directory `kmt tekton setup-pipelines` applies. This was `scripts/automation/tekton/generate_deploy_pipeline_from_template.sh` until 2026-10-28 — deleted, and note that the **output moved**: it used to be written beside the template in `tekton_ci/pipelines/`.
+`kmt tekton generate-deploy-pipeline <ENVIRONMENT> <TEAM> <APP_NAME>` generates a helm-deploy pipeline from the deploy-pipeline template this kmt ships (`Config.tekton_pipeline_template_dir`) into `<root>/<ENVIRONMENT>/<TEAM>/tekton/pipelines/deploy-pipeline-<APP_NAME>.yml`, which is the directory `kmt tekton setup-pipelines` applies. This was `scripts/automation/tekton/generate_deploy_pipeline_from_template.sh` until 2026-10-28 — deleted, and note that the **output moved**: it used to be written beside the template in `tekton_ci/pipelines/`.
 
 ```
 uv run kmt tekton generate-deploy-pipeline dev dev1 nginx-example \
@@ -282,11 +282,11 @@ uv run kmt tekton cleanup-pipeline-runs dev dev1 --filter all
 ## Directory structure
 This section describes the general directory structure for the tekton related resources.
 - pipeline-runs: global pipeline-run configurations
-  - team specific pipeline-runs are located in ´platform_config/{ENVIRONMENT}/{TEAM}/tekton/pipeline-runs`
+  - team specific pipeline-runs are located in ´<root>/{ENVIRONMENT}/{TEAM}/tekton/pipeline-runs`
 - pipelines: contains the tekton pipeline definition yaml files chaining tasks together to a pipeline
-  - team specific pipelines are located in ´platform_config/{ENVIRONMENT}/{TEAM}/tekton/pipelines`
+  - team specific pipelines are located in ´<root>/{ENVIRONMENT}/{TEAM}/tekton/pipelines`
 - tasks: contains global tekton task definition yaml files
-  - team specific tasks are located in ´platform_config/{ENVIRONMENT}/{TEAM}/tekton/tasks`
+  - team specific tasks are located in ´<root>/{ENVIRONMENT}/{TEAM}/tekton/tasks`
 
 ### Which manifest wins: the three apply layers
 
@@ -295,10 +295,10 @@ applied is the one the cluster keeps:
 
 1. **product** — what this `kmt` ships, from inside the package: `assets/tekton_ci/tasks/` and
    `assets/tekton_ci/pipelines/` (`Config.tekton_task_asset_dir`, `Config.tekton_pipeline_asset_dir`).
-2. **environment** — `platform_config/{ENVIRONMENT}/tekton/{tasks,pipelines}/`
+2. **environment** — `<root>/{ENVIRONMENT}/tekton/{tasks,pipelines}/`
    (`Config.tekton_env_task_dir`, `Config.tekton_env_pipeline_dir`). This is where one environment
    tunes a shipped Task without every team under it carrying its own copy.
-3. **team** — `platform_config/{ENVIRONMENT}/{TEAM}/tekton/{tasks,pipelines}/`, generated output.
+3. **team** — `<root>/{ENVIRONMENT}/{TEAM}/tekton/{tasks,pipelines}/`, generated output.
 
 Two layers that declare the same `metadata.name` are not a collision: the same namespace, kind and
 name is written twice, and the second write patches the first. That is the whole rule, so there is
@@ -497,9 +497,12 @@ instructions would have hit. **Where it writes moved:** bash wrote
 `tekton_ci/pipeline-runs/<TEAM>/`, which `kmt tekton run-pipeline` only reads through a `global/`
 prefix and `kmt tekton list` scans non-recursively — so the script's own output was invisible to the
 command that applies it. The command writes to `Config.tekton_team_pipeline_run_dir`, which is
-`platform_config/<ENVIRONMENT>/<TEAM>/tekton/pipeline-runs/`, and that is the directory
-`run-pipeline` reads a team's runs from. And **an unnamed parameter is written `TODO` and not empty**,
-so the review the command asks for is the review the file needs. Review it either way: the
+`<root>/<ENVIRONMENT>/<TEAM>/tekton/pipeline-runs/`, and that is the directory
+`run-pipeline` reads a team's runs from. And **an unnamed parameter is written
+`REPLACEME_UNFILLED_PARAMETER` and not empty** — the product's own placeholder prefix, the one
+`kmt config validate` reports and the routing reader refuses, so it cannot be mistaken for a note somebody
+left about the file, which is how a bare `TODO` used to survive a review that answered nothing. It is what
+the review the command asks for is for. Review it either way: the
 parameters that belong to the app rather than to the platform are the ones the generator cannot know.
 
 `generate_pipeline_run` is pure file and configuration work — it opens no cluster, writes no namespace
@@ -538,8 +541,8 @@ BASE_URL=https://infra.tekton.dev/tekton-releases
 ENVIRONMENT=dev   # the environment whose pins these URLs carry
 # the same keys `install()` reads, from the environment's own static.json; the shipped defaults they
 # start from are the template inside the installed kmt
-PIPELINE_VERSION=$(jq -r .TEKTON_VERSION_PIPELINE "platform_config/$ENVIRONMENT/static.json")
-DASHBOARD_VERSION=$(jq -r .TEKTON_VERSION_DASHBOARD "platform_config/$ENVIRONMENT/static.json")
+PIPELINE_VERSION=$(jq -r .TEKTON_VERSION_PIPELINE "$KUBEMENTAT_PLATFORM_CONFIG_DIR/$ENVIRONMENT/static.json")
+DASHBOARD_VERSION=$(jq -r .TEKTON_VERSION_DASHBOARD "$KUBEMENTAT_PLATFORM_CONFIG_DIR/$ENVIRONMENT/static.json")
 kubectl delete -n tekton-pipelines -f "${BASE_URL}/dashboard/previous/v${DASHBOARD_VERSION}/release-full.yaml"
 
 # uninstall tekton crds
@@ -556,8 +559,8 @@ reading the commands it actually issues. Same base URL, same pins:
 ```
 BASE_URL=https://infra.tekton.dev/tekton-releases
 ENVIRONMENT=dev   # the environment whose pins these URLs carry
-PIPELINE_VERSION=$(jq -r .TEKTON_VERSION_PIPELINE "platform_config/$ENVIRONMENT/static.json")
-DASHBOARD_VERSION=$(jq -r .TEKTON_VERSION_DASHBOARD "platform_config/$ENVIRONMENT/static.json")
+PIPELINE_VERSION=$(jq -r .TEKTON_VERSION_PIPELINE "$KUBEMENTAT_PLATFORM_CONFIG_DIR/$ENVIRONMENT/static.json")
+DASHBOARD_VERSION=$(jq -r .TEKTON_VERSION_DASHBOARD "$KUBEMENTAT_PLATFORM_CONFIG_DIR/$ENVIRONMENT/static.json")
 
 # install crds to k8s
 kubectl apply -f "${BASE_URL}/pipeline/previous/v${PIPELINE_VERSION}/release.yaml"

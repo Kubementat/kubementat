@@ -11,6 +11,7 @@ from kubementat.core.assets import asset_path
 from kubementat.core.config.reads import read_decrypted
 from kubementat.errors import (
     EnvironmentConfigurationDirectoryMissingError,
+    ObsoleteTriggerDirectoryError,
     ReleaseKnobNotABooleanOrStringError,
     TeamConfigurationFileMissingError,
     TeamNotSuppliedError,
@@ -37,19 +38,19 @@ TEKTON_API_GROUP = "tekton.dev"
 TRIGGERS_API_VERSION = "v1beta1"
 TRIGGERS_API_GROUP = "triggers.tekton.dev"
 
-# Directories under `platform_config/{environment}/` that are not a team. A team is a directory
-# that carries a `static.json` of its own, because that file is what makes it addressable: no
-# file, no namespaces to name, nothing to install or uninstall. So "every subdirectory" is not the
-# same question as "every team", and the directory this rule names is the one kubementat used to
-# write itself.
+# "Which directories are teams?" is one rule and not two, so the name table that used to sit here is
+# gone. The rule is the file: a directory is a team when it carries a `static.json` of its own,
+# because that file is what makes it addressable — no file, no namespaces to name, nothing to install
+# or uninstall. `kubementat_components/` is the directory this table used to name, and it is filtered
+# out of the listing by exactly that test: what 1.x wrote there was a helmfile manifest and its values
+# files (`docs/index-overview.md` records the contents, and so does the release-index reader that still
+# refuses a stale copy), never a `static.json`, so no tree that ever existed answers this question from
+# the name and every tree that does answer it from the file.
 #
-# That directory is product data inside the package, and no verb writes anything by that
-# name into a configuration tree, which is why this constant is now a belt and not a brace: the
-# `static.json` test in `Config.teams` already refuses a `kubementat_components/` an older tree left
-# behind, because it
-# never carried one. The one case where removing it would change an answer is a stale directory
-# that somehow does carry a `static.json`, and it is not worth deleting a rule for.
-NON_TEAM_ENVIRONMENT_DIRECTORIES = frozenset({"kubementat_components"})
+# One case would have made the table load-bearing: a stale `kubementat_components/` that somehow
+# carries a `static.json`. That is not a tree kubementat writes, and the honest sentence about it is
+# this: a directory holding a team's file *is* a team, whatever it is called, so it belongs in the
+# answer. Deleting a rule that never fired is what item 10 is for; deleting one that might have is not.
 
 # The two categories that only exist inside a team's directory. They are spelled here so the
 # refusal is one rule and not one per reader, and so a new team-scoped category has to be added to
@@ -169,15 +170,20 @@ class Config:
         # The four `tekton_ci/**` directories split two ways, and the split is what these accessors
         # are for. `tasks/`, `pipelines/` (with their `templates/`) and `triggers/templates/` are
         # product assets: tracked files that belong to everybody and to no checkout in particular,
-        # so they ship inside the package and resolve from inside it, exactly the way `templates/`
-        # has always been package data. `pipeline-runs/` is output, and it is the line above that says so.
+        # so they ship inside the package and resolve from inside it, the way package data always
+        # has. `pipeline-runs/` is output, and it is the line above that says so.
         #
         # Reading them through `kubementat_main_dir` was the bug this ticket fixes: `setup_pipelines`
         # applied `{root}/tekton_ci/{tasks,pipelines}`, so a `kmt` installed from a wheel applied a
         # directory that does not exist there, logged "Global Tasks applied successfully!", and
         # installed nothing. `apply_resources` raises `FileNotFoundError` for a missing directory,
         # so an asset root that is really there is the only thing this can be built from.
-        self.templates_dir = asset_path("templates")
+        #
+        # `templates_dir` used to sit here and point at `asset_path("templates")`. Nothing opened the
+        # files behind it: the only reader was the log line below, and the only readers of the files
+        # themselves were tests, who can keep their witnesses beside themselves. The attribute is
+        # gone with the directory, and what is left of the asset-root rule is one sentence — product
+        # data resolves inside the package, through `asset_path`, and never off a checkout root.
 
         # The install's entry point and its shipped defaults, one attribute because the two are one
         # directory: helmfile resolves a release's relative `values:` path against the directory of
@@ -316,6 +322,39 @@ class Config:
         """
         return self._team_scoped_path("tekton/triggers", "The team's trigger configurations")
 
+    def refuse_obsolete_team_trigger_dir(self) -> None:
+        """Refuse a tree that still has the old `<team>/triggers/` directory. One owner, one type.
+
+        The rule, said once: the team's generated trigger configuration moved from `<team>/triggers/`
+        to `<team>/tekton/triggers/`, a tree laid down before the move can hold both, only the new
+        path is ever read, and a directory that is read by nothing is worse than one that is missing —
+        the manifests it holds are applied nowhere, silently. So both the verb that scaffolds the
+        layer (`kubementat/config/init.py`) and the two that read or write generated triggers
+        (`infrastructure/tekton/triggers.py`, `infrastructure/tekton/generation.py`) reach this one
+        sentence through this one method, and it raises one named exception
+        (`errors.ObsoleteTriggerDirectoryError`). Collapsing the rule is not weakening it: four call
+        sites still refuse, and they refuse before a byte is written.
+
+        It is not migrated and not deleted, on purpose: the content is the operator's to review, and
+        deleting a directory is a decision rather than a side effect of adding one. kubementat records
+        no rename table and rewrites no operator tree, so the gap is closed by hand and this refusal
+        is what says so. A tree with no team named has no team directory to refuse, which is why
+        `team is None` returns instead of resolving a path that would have to be invented.
+        """
+        if self.team is None:
+            return
+        obsolete = self.team_static_config_path.parent / "triggers"
+        if not obsolete.is_dir():
+            return
+        raise ObsoleteTriggerDirectoryError(
+            f"{obsolete} is the trigger directory a pre-move kubementat wrote, and the team's trigger "
+            f"configuration now lives under {self.tekton_team_trigger_dir}. Only the new path is ever "
+            f"read, so leaving both standing would apply the new directory and silently drop what the "
+            f"old one holds — which is why this run stops. Move the manifests you are keeping into "
+            f"{self.tekton_team_trigger_dir} by hand and remove the old one, then run the same command "
+            f"again. Nothing does this for you: kubementat records no rename table and rewrites no "
+            f"operator tree.")
+
     def _load_config(self, preload_configs=True):
         '''
         Loads configuration values from JSON files into a dictionary.
@@ -383,7 +422,6 @@ class Config:
             logging.info(f"Loaded configuration for environment: {self.environment} and team: {self.team}")
             logging.info(f"Kubementat Main Directory: {self.kubementat_main_dir}")
             logging.info(f"Platform Config Directory: {self.platform_config_dir}")
-            logging.info(f"Kubementat Templates Directory: {self.templates_dir}")
             logging.info(f"Tekton Global Pipeline Run Directory: {self.tekton_global_pipeline_run_dir}")
             # The environment layer of the apply order, printed here for the same reason the team's
             # dirs are: it is the directory a reader of this log is trying to find, and it exists as
@@ -716,7 +754,7 @@ class Config:
         The answer is a directory listing, not a list written in code. `uninstall_kubementat.sh`
         named `dev1` and `smoke` because those were the teams whoever wrote it had, and a third
         team's namespaces therefore survived `kmt uninstall` while its own documentation claimed
-        otherwise. Enumerating `platform_config/{environment}/*/static.json` says what is true
+        otherwise. Enumerating `<root>/{environment}/*/static.json` says what is true
         about this installation instead.
 
         Returns
@@ -742,7 +780,6 @@ class Config:
             entry.name
             for entry in environment_directory.iterdir()
             if entry.is_dir()
-            and entry.name not in NON_TEAM_ENVIRONMENT_DIRECTORIES
             and (entry / "static.json").is_file()
         )
 

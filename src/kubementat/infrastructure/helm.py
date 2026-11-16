@@ -159,7 +159,7 @@ class HelmUtils:
         '''
         # Get default variables from the environment if not set
         # Access encrypted static JSON from env_static_encrypted
-        # Grafana's admin credentials come from `platform_config/{environment}/static.encrypted.json`
+        # Grafana's admin credentials come from `<root>/{environment}/static.encrypted.json`
         # and from nowhere else. The template used to document an `export` as the way to set them,
         # which invited a second source for a value that already has one; what that export bought a
         # lane was a grafana that answered to a name no configuration had chosen. So the config is
@@ -854,7 +854,7 @@ class HelmUtils:
         tunnel's lookup, the RBAC, the uninstall sweep and the lane asserts, and left the
         release exactly where it was. A correct tunnel then finds nothing. This is the
         writing half of the same fact, so there is one answer and it lives in
-        `platform_config/{environment}/static.json`.
+        `<root>/{environment}/static.json`.
 
         The set is `constants.DEFAULT_NAMESPACES`, not a list of keys spelled out here: a
         component that is added there is exported without a second edit anywhere, and a
@@ -868,7 +868,7 @@ class HelmUtils:
         every release kubementat installs gets a variable of its own; the three git-provider
         releases that used to sit outside this rule were retired on 2026-10-29 and took their
         repositories with them. A name that is not in the namespace table gets no key, which is a
-        stated gap rather than a silently dead key in `static.json.template`: the releases in that
+        stated gap rather than a silently dead key in the environment layer's shape: the releases in that
         position are named by `components.releases_belonging_to_no_component`, and every one of them
         lands in a namespace another component owns -- so a key of their own would be a key helmfile
         never asks for and a namespace `kmt uninstall` would delete twice.
@@ -928,7 +928,7 @@ def export_configuration_coordinates(config, environment: str) -> dict:
     order to name the operator's tree: the root, the environment, and -- when one is named -- the
     team. The manifest is the side that reads them (`{{ env "KUBEMENTAT_CONFIG_ROOT" }}` and its
     two neighbours), and the only reason they exist is that a packaged manifest resolves every
-    relative path it spells inside the wheel, so a path that has to reach `platform_config/` has to
+    relative path it spells inside the wheel, so a path that has to reach the configuration root has to
     be given the distance. Nothing here exports a value the configuration did not already declare:
     a run that names no team gets no `KUBEMENTAT_TEAM`, because a manifest that read one would be
     applying a team nobody chose.

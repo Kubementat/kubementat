@@ -146,6 +146,37 @@ class ConfigurationStamp:
         return not versions.satisfies_version_constraint(self.constraint, running)
 
     @property
+    def schema_gap_sentence(self) -> str:
+        """The schema half, spelled once: both numbers, the window, and the one line that closes it.
+
+        Both verbs that report this fact reach it through here — the cluster path's
+        `SchemaVersionTooOldError` and `config validate`'s `schema-version-too-old` finding — so the
+        remediation is one sentence and not two near-neighbours that drift apart the next time someone
+        edits "the other copy". It says what to edit and what no command will do for you; it does not
+        say "migrate", because no verb does.
+        """
+        return (f"{self.root} declares schema_version {self.schema} and this kubementat is at "
+                f"{self.current}, which is more than {self.window} step(s) behind. Answers this tree "
+                f"does not name for itself would come from built-in defaults, which configures the "
+                f"cluster by kubementat's assumptions and not by yours. Raise schema_version in "
+                f"{self.root / 'kubementat.yaml'} to close the gap; that bump is a decision, and no "
+                f"command will make it for you.")
+
+    @property
+    def version_gap_remediation(self) -> str:
+        """The one remediation answer for version drift, said once for every reader.
+
+        A stamp that names a constraint this build is not in is closed by one line in one file — the
+        `kubementat:` constraint in the tree's own manifest, bumped by whichever release decided the
+        line. It is not a key, there is no verb that sets it, and the constraint's *semantics* (which
+        line this build belongs to, and why a stale stamp is refused rather than forgiven) live beside
+        the literal in `core/constants.py`, not here.
+        """
+        return (f"The line that closes it is the `kubementat:` constraint in "
+                f"{self.root / 'kubementat.yaml'}, bumped by a release's bump PR — not a key an "
+                f"operator has a verb for.")
+
+    @property
     def version_gap_sentence(self) -> str:
         """The version half, spelled once: both versions, and the fact that it warns."""
         return (f"this kubementat is {self.running_version} and {self.root} declares it was validated "
@@ -175,13 +206,7 @@ def check_configuration_stamp(root: Path) -> list:
     constraint, schema = read_configuration_stamp(root)
     stamp = ConfigurationStamp(root=root, constraint=constraint, schema=schema)
     if stamp.schema_is_too_old:
-        raise SchemaVersionTooOldError(
-            f"{root} declares schema_version {schema} and this kubementat is at "
-            f"{stamp.current}, which is more than {stamp.window} step(s) "
-            "behind. Answers this tree does not name for itself would come from built-in defaults, "
-            "which configures the cluster by kubementat's assumptions and not by yours. "
-            f"Raise schema_version in {root / 'kubementat.yaml'} to close the gap; that bump is a "
-            "decision, and no command will make it for you.")
+        raise SchemaVersionTooOldError(stamp.schema_gap_sentence)
 
     warnings = []
     if not stamp.version_is_determinable:

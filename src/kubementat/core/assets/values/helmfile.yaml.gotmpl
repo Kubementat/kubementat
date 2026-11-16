@@ -101,8 +101,8 @@ repositories:
   url: https://shanestarcher.com/helm-charts/
 # Traefik, the ingress controller. The owner decided on 2026-10-28 that nginx-ingress goes out and
 # Traefik takes the routing role, so the repository the release block below reads is here. The
-# companion `traefik-crds` chart is not: it is deprecated since chart v38.0.2 and ships no proxy,
-# and `traefik/traefik` carries its own `crds/`.
+# companion `traefik-crds` chart is not, and `traefik/traefik` carries its own `crds/`; the one place
+# that answers why the companion is out is `constants.TRAEFIK_CHART`.
 - name: traefik
   url: https://traefik.github.io/charts
 - name: jetstack

@@ -195,7 +195,7 @@ def test_an_unknown_component_is_refused_rather_than_defaulted(tmp_path):
     assert "grafanana" in message
     # The template is package data, so the message names it as what this kmt ships and not
     # as a path under a checkout. That distinction is what this assert is for: the sentence used to
-    # read `templates/environment/static.json.template`, which is a direction a wheel-installed kmt
+    # read the environment layer's shape, which is a direction a wheel-installed kmt
     # cannot follow, and it is the same sentence class as the trigger generator's.
     assert "templates/environment/" not in message, \
         "the message sends a human to a directory the checkout no longer carries"

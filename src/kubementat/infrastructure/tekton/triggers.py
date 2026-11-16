@@ -6,7 +6,8 @@ team's EventListeners are granted through, the two webhook Secrets read from
 generator writes them to. Nothing here installs a release, runs a pipeline, or asks the cluster
 which API it serves — the first is `install`'s, the second `runs`' and `generation`'s, the third
 `preflight`'s, and the only edge this module follows into the package is the one call to
-`generation._refuse_obsolete_team_trigger_dir`, which is why `generation.py` imports nothing here.
+the one call to `Config.refuse_obsolete_team_trigger_dir`, which is the single owner of the
+obsolete-directory rule and is reached through the `Context` this module already takes.
 
 **Why this module takes a `Context` and the other four did not.** `_apply_team_trigger_resources`
 builds `KubernetesUtils(ctx)` itself on its way into `apply.apply_resources` — it has always done
@@ -198,9 +199,9 @@ def setup_triggers(ctx, kubernetes_utils, config, environment) -> None:
       token was four characters long; that is the one place this is deliberately not the same.
     * `kubectl apply -n <ns> -f <dir>` of the team's generated trigger files, where the
       directory is `Config.tekton_team_trigger_dir` —
-      `platform_config/{env}/{team}/tekton/triggers/` — and no longer
+      `<root>/{env}/{team}/tekton/triggers/` — and no longer
       `tekton_ci/triggers/{TEAM}/`. That is decision 2 of the migration: the
-      generated files are team configuration, and configuration lives in `platform_config`.
+      generated files are team configuration, and configuration lives in the configuration root.
       The generator *templates* they are generated from are product data and resolve through
       `Config.tekton_trigger_template_dir`.
 
@@ -231,7 +232,7 @@ def setup_triggers(ctx, kubernetes_utils, config, environment) -> None:
     namespace = namespace.strip()
 
     logging.info("#########################")
-    logging.info("Setting up tekton triggers from platform_config ...")
+    logging.info("Setting up tekton triggers from the configuration root ...")
     logging.info(f"ENVIRONMENT: {environment}")
     logging.info(f"TEAM: {team}")
     logging.info(f"PIPELINE_NAMESPACE: {namespace}")
@@ -370,7 +371,7 @@ def _apply_team_trigger_resources(ctx, config, namespace: str, team) -> None:
     this reads is an upgraded tree whose generated manifests would be silently applied
     nowhere, so it is refused by name before the new directory is even looked at.
     """
-    generation._refuse_obsolete_team_trigger_dir(config)
+    config.refuse_obsolete_team_trigger_dir()
     trigger_dir = Path(config.tekton_team_trigger_dir)
     if not trigger_dir.is_dir():
         logging.info(f"No trigger directory at {trigger_dir}, so no triggers are configured "

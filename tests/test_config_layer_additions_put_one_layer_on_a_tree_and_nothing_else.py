@@ -68,12 +68,16 @@ TEAM_LAYER = (TEAM_FILES | {Path(NEW_ENVIRONMENT) / TEAM,
                             Path(NEW_ENVIRONMENT) / TEAM / "tekton" / "pipeline-runs",
                             Path(NEW_ENVIRONMENT) / TEAM / "tekton" / "triggers"})
 
-# The names of everything the package ships under `templates/`, as the copy pass would name it: a
-# destination is its template's name minus the `.template` suffix (`kubementat/config/init.py`'s own walk). What
-# these verbs must not write is anything on this list *other than* the two static files, which they
-# do write, empty and by rule rather than by copying a shipped document into the tree.
-SHIPPED_TEMPLATE_DESTINATIONS = {path.name[: -len(".template")]
-                                 for path in asset_path("templates").rglob("*.template")}
+# What the deleted copy pass *would* have written, stated as a set the verbs must not touch. The
+# package ships no templates, so the walk that built this set is gone with it; what is left of the rule
+# is the list of destinations 1.x's `initialize` wrote by copy — the two static files (written here,
+# empty and by rule) plus `mirrored_docker_images.json` and the team's `values.encrypted.yaml`, which
+# no verb writes at all. Those two are named as literals because the guard's claim is "these verbs write
+# nothing but the two layers", and that claim needs a negative list, not a directory that no longer
+# exists to be enumerated.
+SHIPPED_TEMPLATE_DESTINATIONS = {"static.json", "static.encrypted.json",
+                                 "mirrored_docker_images.json", "values.encrypted.yaml",
+                                 "values.yaml"}
 LAYER_FILES = ("static.json", "static.encrypted.json")
 
 
@@ -385,7 +389,9 @@ def test_add_environment_refuses_a_reserved_root_name_the_way_init_does(tmp_path
 def test_add_team_refuses_a_team_wearing_a_layer_directory_name(tmp_path, name):
     """A team that shares a name with `tekton` or `values` is one directory two rules both claim.
 
-    `kubementat_components` is refused for the reason it is filtered out of the team listing already.
+    `kubementat_components` is refused here rather than filtered by the listing: the name table is
+    what says a layer cannot be worn as a team name, which is a rule about naming and not about what
+    a directory contains.
     Same table as `init`, same sentence, and a tree that stays as it was — a layer verb that let a
     reserved name through would be a way to make the tree the epic deleted.
     """

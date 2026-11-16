@@ -1,10 +1,17 @@
-# Platform configuration
+# The configuration root
+
+**What this file's name refers to.** `PLATFORM_CONFIG` in the filename is the environment variable
+that names the tree (`KUBEMENTAT_PLATFORM_CONFIG_DIR`), not a directory. There is no
+`platform_config/` to find: 1.x carried one beside the checkout and read it when nothing else was
+configured, that fallback is deleted, and every verb now insists the root is **named, never located** —
+by `--config-dir`, or by the variable a container already sets. A plan or a CHANGELOG entry that says
+"the `platform_config` directory" means this root and the flag that names it.
 
 This directory contains configuration for the according environments. **An environment is exactly one
 cluster, and kubementat enforces that instead of assuming it.** A sub-directory is an `ENVIRONMENT` (dev,
 prod, smoke) and the two `CLUSTER_*` keys are what make the 1:1 true: `CLUSTER_KUBE_CONTEXT` names the
 kubeconfig context that reaches this environment's cluster, and `CLUSTER_KUBECONFIG_PATH` names the file that
-context lives in. Both sit in `platform_config/<environment>/static.json`, beside `CLUSTER_MANAGER_EMAIL`.
+context lives in. Both sit in `<root>/<environment>/static.json`, beside `CLUSTER_MANAGER_EMAIL`.
 A missing or `null` `CLUSTER_KUBE_CONTEXT` is an error that names the environment and the file, because the
 `current-context` fallback is gone: kubementat installs into what the environment declares, not into whatever
 `kubectl` was last pointed at.
@@ -145,7 +152,7 @@ five layers, and the fifth is the one that arrived after the spec was written:
 ```
 1. --context / --kubeconfig                     the command's own flags
 2. CLUSTER_KUBE_CONTEXT / CLUSTER_KUBECONFIG_PATH   process environment variables
-3. env_static["CLUSTER_KUBE_CONTEXT"] / [..._PATH]  platform_config/<environment>/static.json
+3. env_static["CLUSTER_KUBE_CONTEXT"] / [..._PATH]  <root>/<environment>/static.json
 4. the material the kubelet mounts in this pod   ClusterTarget.from_service_account
 5. otherwise: a named error naming the environment, the file, the key and the value found
 ```
@@ -160,7 +167,7 @@ refuse, while every client path works. Sessions need a kubeconfig; a service acc
 Every `ClusterTarget` says where it came from, and there are five answers, not four: `"flag"`, `"env"`,
 `"static.json:<path>"`, `"connection"`, and `"service-account"`. The last is the one that appeared with
 in-cluster resolution, and it is what makes the answer verifiable — "resolved from the mounted token" and
-"resolved from `platform_config/prod/static.json`" are two different debugging sessions.
+"resolved from `<root>/prod/static.json`" are two different debugging sessions.
 
 ### Routing
 
@@ -218,7 +225,13 @@ independent because they share no environment, and that has been true all along.
 
 ## static.encrypted.json
 
-TODO:
+One rule owns this file's keys and it is not here, so this section is a pointer
+and not a restatement: `kubementat/config/keys.py` is the layer reader, `constants.DEFAULT_ENCRYPTED_ANSWERS`
+is what a freshly initialized tree seeds (exactly one key, and deliberately not the `REPLACEME_` sentinels
+the 1.x templates carried), `core/config/derived.py` answers the five keys a team's name already determines,
+and `kmt config validate` reports any key that still begins with `REPLACEME` instead of answering it. The
+keys that *must* be answered for a cluster to install at all are named by the refusal that fires when they
+are not, in `core/config/stamp.py` and `automations/install/pipelines.py`.
 
 # Routing: what gets applied, and by what
 

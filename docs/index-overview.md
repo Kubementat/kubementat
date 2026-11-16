@@ -80,25 +80,43 @@ The rest of this paragraph is a **record, dated**: the body of this section used
 7-module, ~2,000-line `lib/`, which is the tree before FIN-01, and the line above about a 2,504-line
 `automation.py` described the tree before Phase 3.
 
-### platform_config/ (2 environments, team-based hierarchy)
-JSON config files organized as `platform_config/{env}/{team}/`. Two levels: environment-level (`static.json`, `static.encrypted.json`) and team-level. Nothing in this tree is a copy of a shipped file: 11
+### The configuration root — `<root>` (2 environments, team-based hierarchy)
+
+`<root>` throughout this file and `docs/README_TEKTON.md` is the configuration root: the directory
+`--config-dir` names, or the one `$KUBEMENTAT_PLATFORM_CONFIG_DIR` already points at. There is no
+directory called `platform_config` to find — 1.x carried one beside the checkout and read it when
+nothing else was configured, and that fallback is deleted.
+JSON config files organized as `<root>/{env}/{team}/`. Two levels: environment-level (`static.json`, `static.encrypted.json`) and team-level. Nothing in this tree is a copy of a shipped file: 11
 values files and one helmfile manifest ship inside the installed `kmt` under
-`src/kubementat/core/assets/values/` and are applied from there. The 7 `.template` files under
-`src/kubementat/core/assets/templates/` are **not copied into this tree by any verb** — that copy went with
-`kmt initialize`, so a file that differs here is the operator's answer and not a stale copy. They are
-not all doing the same thing, and the difference is measured rather than assumed:
+`src/kubementat/core/assets/values/` and are applied from there. **There are no `.template` files under
+`src/kubementat/core/assets/templates/` any more, because that directory is gone** (`find
+src/kubementat/core/assets/templates -type f | wc -l` → the directory does not exist; before this item it
+answered **7**). 1.x's `initialize` copied them into the tree and nothing read them since that command was
+deleted, so they were shipped data no verb opened — the definition of inert, not of undocumented. What each
+of the seven was, and what replaced it:
 
-* **Two are witnesses.** `environment/static.json.template` and `environment/team/static.json.template`
-  are opened by `tests/test_the_defaults_initialize_seeded_have_a_single_owner.py`, which checks each of
-  the ten `constants.DEFAULT_STATIC_ANSWERS` against the template's own line for it. Nothing in `src/`
-  reads either file, so the test is the only thing that catches `constants.py` drifting from the shape
-  it is supposed to describe. That is the reason they stay.
-* **Five are unused.** `mirrored_docker_images.json.template` is never written at all (R-3.2 — the
-  product resolves image mirrors at read time), and the remaining three are shapes nothing opens. The
-  `REPLACEME_` markers they carry are no longer rewritten by anything; `config validate` still
-  recognises the prefix, which is what stops a placeholder reaching a manifest if one ever did.
+The two the package used to ship that a reader could still point at — `environment/static.json.template`
+and `environment/team/static.json.template` — are **test fixtures now**, at
+`tests/fixtures/configuration_shape/`. They were never opened by a command; they were opened by
+`tests/test_the_defaults_initialize_seeded_have_a_single_owner.py` and
+`tests/test_component_namespaces_come_from_configuration.py`, each of which checks `constants.py` against
+the layer's shape, and a data file whose only reader is a test belongs beside the test. The bytes did not
+change in the move, so those two guards did not lose anything.
 
-Deleting a template is a decision, not a side effect, so nothing here is deleted. `mirrored_docker_images.json` for image mirroring. git-crypt encrypted. Team configs include MySQL/Redis passwords, SSH deploy keys, webhook secrets, Docker registry credentials.
+The other five are deleted: `environment/static.encrypted.json.template`,
+`mirrored_docker_images.json.template`, `environment/team/static.encrypted.json.template` and the two
+`team/{nginx-example,nginx-reverse-proxy}/values.encrypted.yaml.template`. None of the five had a reader in
+`src/` or in a test. What they carried did not go missing: the encrypted answers live in
+`constants.DEFAULT_ENCRYPTED_ANSWERS` (seeded, deliberately, *without* the `REPLACEME_` sentinels — a value
+that reads as chosen in a credential file is worse than the absence it replaced), the layer shape lives in
+`core/config/keys.py`, and `config validate` still recognises the `REPLACEME` prefix so a tree that predates
+the deletion is reported by name.
+
+One honest consequence, said rather than smoothed: `mirrored_docker_images.json` no longer exists anywhere as
+a starting point, and it never did as a *live* file. The sync task that would have read it defaults its input
+to `$(workspaces.workspace.path)/kubementat/platform_config/dev/mirrored_docker_images.json` — a path inside a
+checkout, in a layout 1.x wrote — and no verb creates it. Air-gapped mirroring was always a hand-written file,
+and that is the gap, not this deletion.
 
 **No git server is in that surface any more** (2026-10-29): kubementat neither installs nor uninstalls one, and a team that wants one deploys it as a normal helm release, with its own values file and its own name. The `GITLAB_WEBHOOK_SECRET` a team config still carries belongs to the Tekton triggers and is not a component — see `docs/README_TEKTON.md`.
 
@@ -212,7 +230,8 @@ files of its own, which is where an inventory that counts both trees has to look
 The two counts that agree with `find` — 8 trigger templates and 4 pipeline runs — are left as they were.
 Complete Tekton CI/CD system. Tasks include git-clone (with SSH auth), Docker build/push, helmfile CLI, MySQL operations, skopeo image operations, terraform, and echo. Pipelines orchestrate Docker builds, Helm deployments, image sync, and a hello-world example. Trigger templates for GitHub and GitLab webhooks. Pipeline runs with placeholder replacement. (The MySQL/Redis setup pipelines went with the backing-service install automation, removed 2026-10-27; the two MySQL Tasks remain.)
 
-### `kubementat/core/assets/templates/` (7 template files, measured with `find src/kubementat/core/assets/templates -type f | wc -l`; 19 until T-18 moved the ten files under `values/` out, and 8 until `kubementat_components/` went)
+### `kubementat/core/assets/templates/` — deleted (`find src/kubementat/core/assets/templates -type f | wc -l` → *the directory is not there*; 19 until T-18 moved the ten files under `values/` out, 8 until `kubementat_components/` went, 7 until 2026-11-16, when item 10 deleted the seven and moved the two a test still reads into `tests/fixtures/configuration_shape/`)
+
 JSON/YAML templates for initialization, and **product data** since T-02a: they ship inside the installed `kmt`, so no checkout carries a directory of that name for a sentence to point at. `environment/static.json.template` and `static.encrypted.json.template` describe a layer's shape. `environment/team/` templates for team configs. `mirrored_docker_images.json.template`. What `kmt initialize` did with them was copy them into `platform_config/{environment}/` — the copy is the operator's working material, the template is what the package ships — **except** the helmfile manifest and its default values, which T-18 moved to `assets/values/` and took out of the copy altogether: they are applied and read from inside the package. The command is deleted and the copy with it, so no verb reads these files any more; deleting a template is a decision and not a side effect. `environment/kubementat_components/` is now absent, not empty: it held one file after T-18, `monitoring/grafana_node_service.yaml.template`, a `Service` that exposes Grafana's UI on a NodePort and was applied by hand with a `kubectl apply` comment. Nothing in `src/`, no manifest, no test and no pipeline ever read it, and
 `infrastructure/grafana/client.py` already names a NodePort of that shape — line 496 of it, in the
 address the create path refuses to guess — so it was deleted on 2026-11-03 rather than shipped as an
@@ -245,7 +264,7 @@ directory or out of the installed package.
 > fixed and would otherwise come back looking like someone had tried them and given up.
 
 1. **`automation.py` monolith** (2,504 lines, `wc -l`; this line said ~700) — handles initialization, installation, secrets, tunnels, uninstall, Docker registry. Should be split into focused classes (`Initializer`, `Installer`, `SecretManager`, `TunnelManager`, `Uninstaller`). **Still open, and it grew**: 1,800 lines of Tekton, routing and uninstall behaviour landed in it since the line was written.
-2. **Seven shell scripts left in the whole tree** — 401 LOC, measured with `find . -name '*.sh' -not -path './.git/*' -not -path './.venv/*' | wc -l` — and **none of them under `scripts/`** since 2026-10-30 (`504af9a`, FIN-09 / D12), which deleted `retrieve_node_addresses.sh` and `view_cluster_resource_versions.sh` and left `jq` out of `KUBEMENTAT_DEPENDENCIES` with them. They are the lane's provision stage (`tests/e2e/stages/01-provision.sh`), the parity recorder (`tests/shims/_recorder.sh`), three CI-image helpers under `docker_files/ci_images/`, and two `examples/kubernetes/` demos. This line used to say ~55, and before that nine.
+2. **Five shell scripts left in the whole tree** — measured with `find . -name '*.sh' -not -path './.git/*' -not -path './.venv/*' | wc -l` → **5** — and **none of them under `scripts/`** since 2026-10-30 (`504af9a`, FIN-09 / D12), which deleted `retrieve_node_addresses.sh` and `view_cluster_resource_versions.sh` and left `jq` out of `KUBEMENTAT_DEPENDENCIES` with them. They are the lane's provision stage (`tests/e2e/stages/01-provision.sh`), the parity recorder (`tests/shims/_recorder.sh`) and three CI-image helpers under `docker_files/ci_images/`. Two `examples/kubernetes/` demos went on 2026-11-16 with item 10: `run_shell_in_container_example.sh` and `schedule_pod_on_specific_node_example.sh` were 1.x Kubernetes shell demos, referenced by nothing in the tree, while this README's own description of `examples/` says helm charts, Kubernetes *manifests* and tekton resources. This line said ~55, then nine, then seven, and the two examples are the last deletion it records.
 3. **No unit tests** — entire codebase has zero pytest coverage. Only manual bash smoke tests exist.
    (Reversed, and kept so the reversal is visible: `find tests -name 'test_*.py' | wc -l` → 81 files,
    all of them run by `uv run pytest -q`, which reports the count this file cannot keep current.)
@@ -333,10 +352,10 @@ tree that generates them.
 ```
 User → kmt CLI → src/kubementat/ → Kubernetes Cluster
                         ↓
-              platform_config/{env}/{team}/
+              <root>/{env}/{team}/
               (JSON configs, git-crypt encrypted)
                         ↓
-              kubementat/core/assets/templates/ → the shape of a layer (product data, read by nothing)
+              (no templates/ — 1.x's seed copies are deleted; the layer's shape is `constants.py`)
                         ↓
               (no scripts/ — the last .sh files are deleted, everything is Python)
                         ↓
@@ -352,7 +371,7 @@ lays a tree down in the directory it was named, generates
    refuses about the cluster, applies helmfile's `group=standard` releases, and sets up Tekton through
    `automations/install/` — every one of those is a Python call, and no step starts a script.
 3. **Pipeline execution:** `kmt tekton run-pipeline` loads YAML from the team's own pipeline-run directory
-   (`Config.tekton_team_pipeline_run_dir`, under `platform_config/{env}/{team}/tekton/`), replaces
+   (`Config.tekton_team_pipeline_run_dir`, under `<root>/{env}/{team}/tekton/`), replaces
    placeholders from config through `infrastructure/tekton/generation.py`, and applies via the Kubernetes
    API.
 4. **Tunneling:** `kmt tunnel <component>` finds the pod through `Config.component_namespace` and

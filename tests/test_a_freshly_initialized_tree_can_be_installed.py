@@ -6,7 +6,7 @@ Before this test existed, no test in the suite could answer that question, and t
 `static.encrypted.json` and refuses to apply anything without it — deliberately so, and by its own
 comment for a good reason. What it did not expect was that after `kmt initialize` was deleted
 (`7888bdf`), nothing in the product wrote that key any more. The verb that used to copy
-`assets/templates/environment/static.encrypted.json.template` into the tree was that template's only
+the environment layer's encrypted shape into the tree was that template's only
 reader, so a tree built by `kmt config init` carried `{}` in its encrypted file and every install on a
 genuinely fresh tree died on a key nobody had had the chance to set.
 

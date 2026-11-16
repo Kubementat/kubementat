@@ -47,7 +47,7 @@ VALUES_FILE = VALUES_ROOT / "traefik" / "values.yaml"
 HELMFILE_MANIFEST = VALUES_ROOT / "helmfile.yaml.gotmpl"
 
 # The provisioner names kubementat's clusters actually use: k3s's default, and the value
-# `TEKTON_KUBERNETES_STORAGE_CLASS` ships in `static.json.template`. Written as concatenation
+# `TEKTON_KUBERNETES_STORAGE_CLASS` answers as in `constants.DEFAULT_STATIC_ANSWERS`. Written as concatenation
 # because the requirements' own grep is the one that names the first of them -- the pattern table
 # must not trip the pattern it states.
 STORAGE_CLASS_WORDS = re.compile(r"\b(" + "host" + r"path\b|local-path\b)")

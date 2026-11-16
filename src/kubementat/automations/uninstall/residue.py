@@ -164,11 +164,9 @@ TRAEFIK_CRD_GROUPS = ("traefik.io", "hub.traefik.io")
 #
 # It is deliberately the chart and not the release: what the definitions serve is the controller
 # and not the label somebody put on it, and a release that was renamed is exactly the case a name
-# list gets wrong. The deprecated companion is *not* matched, because its chart is named
-# `traefik-crds`, it ships no proxy, and kubementat never installed it
-# (`constants.TRAEFIK_CHART`) -- a cluster carrying only that one has no controller left for
-# these definitions to serve, so counting it would turn a clean teardown into a residue assert
-# that passes over definitions nobody owns.
+# list gets wrong. The companion chart is out of the match for the reason `constants.TRAEFIK_CHART`
+# states once — it is a cluster with no controller, and counting one would turn a clean teardown into
+# a residue assert that passes over definitions nobody owns.
 TRAEFIK_PROXY_CHART_NAME = "traefik"
 
 # The API group Alloy's `crds/` subchart installs and `helm uninstall` never takes back.
@@ -662,11 +660,12 @@ def _release_runs_traefik_proxy(row) -> bool:
     somebody renamed the release around it -- which is exactly the case a release-name list gets
     wrong, and the reason the field is read rather than a name compared.
 
-    Requiring the digit is also what keeps the deprecated `traefik-crds` companion out: its
-    chart is named `traefik-crds`, so its version slot begins with `crds` rather than with a
-    number, and it ships no proxy. A cluster carrying only that one has nothing left serving
-    these definitions, so counting it as a controller that stayed leaves them behind and lets a
-    residue assert call the teardown clean over fifteen objects nobody owns.
+    Requiring the digit is what keeps the companion out, on the shape of the match and not on the
+    name: its version slot begins with `crds` rather than with a number, so a chart that ships no proxy
+    never reads as a controller. Why the product excludes it is answered once, in
+    `constants.TRAEFIK_CHART`; what a cluster carrying only that chart has in common with the sweep is
+    nothing: no controller serving these definitions, fifteen objects left behind, and a residue assert
+    that calls the teardown clean over them.
     '''
     name, _, version = str(row.get("chart") or "").partition("-")
     return name == TRAEFIK_PROXY_CHART_NAME and version[:1].isdigit()

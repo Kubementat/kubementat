@@ -102,7 +102,6 @@ from kubementat.errors import (
     LayerNameAlreadyTakenError,
     LayerNameUnusableError,
     NullAnswerNotAcceptedError,
-    ObsoleteTriggerDirectoryError,
     StaticLayerFileInvalidError,
     StaticLayerFileUnreadableError,
     TeamConfigurationFileMissingError,
@@ -152,9 +151,9 @@ RESERVED_ROOT_NAMES = ("kubementat.yaml", "secrets", "deployer_ssh_key", "deploy
                        "gpg_private.key", "gpg_public_key.gpg", "git_crypt_symmetric.key")
 
 # kubementat's own *layer* directory names inside every environment, which a team must not be named.
-# `kubementat_components` belongs here for the reason it belongs in `NON_TEAM_ENVIRONMENT_DIRECTORIES`
-# (`core/config/config.py:49`): the team listing already filters it out as a stale directory, so a team wearing
-# that name would be a directory two rules both claim.
+# `kubementat_components` stays here even though the team listing stopped filtering it by name: the
+# rule this list enforces is about *naming*, not about listing. A layer is one directory, and a team
+# wearing one of these names is a directory two rules both claim, whatever the listing answers.
 LAYER_DIRECTORY_NAMES = ("values", "values.encrypted", "tekton", "triggers", "pipeline-runs",
                          "kubementat_components")
 
@@ -311,34 +310,7 @@ def _validate_layer_names(environment: str, team) -> None:
         raise LayerNameAlreadyTakenError(
             f"team name {team!r} is already taken. {', '.join(LAYER_DIRECTORY_NAMES)} are kubementat's "
             f"own layer directories inside every environment, and a team that shares one of them is a "
-            f"directory two rules both claim — kubementat_components is already filtered out of the "
-            f"team listing for the same reason. Pick a name that is not one of them.")
-
-def _refuse_obsolete_team_trigger_dir(config: Config) -> None:
-    """Refuse a tree that still has the old `<team>/triggers/` directory, naming both paths.
-
-    The team's generated trigger configuration moved under `tekton/`, and a tree laid down
-    before the move — or one an operator upgraded and re-runs `config init` on — can hold both
-    directories, of which only the new one is ever read. This function must not leave that tree
-    with both, so the old directory is refused rather than scaffolded beside: say what was found,
-    say where the path lives now, and stop. Not silently migrated (the content is the operator's
-    to review) and not deleted (deleting a directory is a decision, not a side effect of adding
-    one); kubementat rewrites no operator tree, so the refusal is the whole of the safety here. The
-    reader refuses the same directory, in `infrastructure/tekton/generation.py`, so the two
-    sentences name the same two paths.
-    """
-    if config.team is None:
-        return
-    obsolete = config.team_static_config_path.parent / "triggers"
-    if obsolete.is_dir():
-        raise ObsoleteTriggerDirectoryError(
-            f"{obsolete} is the trigger directory a pre-move kubementat wrote, and the team's trigger "
-            f"configuration now lives under {config.tekton_team_trigger_dir}. This verb will not "
-            f"leave a tree holding both, because only the new path is ever read and the old one "
-            f"would stand there silently applying nothing. Move the manifests you are keeping into "
-            f"the new directory by hand and remove the old one, then run the same command again. "
-            f"Nothing will do this for you: kubementat records no rename table and rewrites no "
-            f"operator tree.")
+            f"directory two rules both claim. Pick a name that is not one of them.")
 
 def init_configuration(root, environment, team=None, answers=(), encrypted_answers=(),
                        force=False, own_paths=()) -> tuple[InitStep, ...]:
@@ -438,7 +410,7 @@ def init_configuration(root, environment, team=None, answers=(), encrypted_answe
 
     # A tree that still has the old trigger directory is refused before the plan is built:
     # scaffolding the new one beside it would leave both, and only the new one is ever read.
-    _refuse_obsolete_team_trigger_dir(config)
+    config.refuse_obsolete_team_trigger_dir()
 
     # The plan, before any write: five targets, each with the exact bytes it wants on disk. Building
     # it whole is what makes the idempotence claim checkable — a per-path write-as-you-decide loop
@@ -748,7 +720,7 @@ def add_team(root, environment, team) -> tuple[InitStep, ...]:
             f"Run kmt config add-environment {environment} --config-dir <configuration-root> first, "
             f"then add the team.")
     # Same rule as init: the old trigger directory is refused, not scaffolded beside.
-    _refuse_obsolete_team_trigger_dir(config)
+    config.refuse_obsolete_team_trigger_dir()
 
     steps = _apply_layer_plan([
         (TEAM_STATIC_STEP, config.team_static_config_path, _json_bytes({})),

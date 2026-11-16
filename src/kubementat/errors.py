@@ -33,7 +33,7 @@ class TeamNotSuppliedError(KubementatError):
     This work needs a team's configuration, and the run did not name one.
 
     Not a resolution failure: the cluster resolved, and a `Context` built without a team still
-    carries it. What is missing is the other half of the pair — `platform_config/{environment}/<team>/`
+    carries it. What is missing is the other half of the pair — `<root>/{environment}/<team>/`
     — and the rule is that kmt does not guess it, so the object says so instead of letting a
     service read a path built out of a name nobody gave it. Two calls raise it, for the same
     reason: `Config` when a team-scoped value is read from a `Config` that has no team, and
@@ -334,7 +334,7 @@ class CiImageNotConfiguredError(KubementatError):
     The CI image cannot be named, which is now one of two different facts.
 
     `TEKTON_CI_IMAGE_NAME` and `TEKTON_CI_IMAGE_TAG` carry an L0 now — the same two values the
-    shipped template carried, in `constants.DEFAULT_STATIC_ANSWERS` — so a tree that declares nothing
+    1.x template carried, now in `constants.DEFAULT_STATIC_ANSWERS` — so a tree that declares nothing
     runs `ubuntu-ci-minimal:latest` and never reaches this exception. What still raises is:
 
     * a key that was **declared and answers nothing** (`""`, `null`, a number). jq used to print the
@@ -460,7 +460,7 @@ class ConfigurationRootNotNamedError(KubementatError):
     A configuration root is *named, never located*: the `--config-dir` flag or the variable a
     container already sets. This is that refusal, and it is the one place in the library that says
     it — `core/config/paths.default_platform_config_dir`, which is what every reader falls back to.
-    The deleted fallback (`platform_config` beside wherever the wheel was installed) answered every
+    The deleted fallback (the default that sat beside wherever the wheel was installed) answered every
     command that had been told nothing, from a tree nobody pointed at; that is the D11 bug in its
     last remaining form, which is why the answer is one line naming the two spellings and not a
     guess. The same sentence reaches `resolve_platform_config_dir`, so a `--config-dir` that was

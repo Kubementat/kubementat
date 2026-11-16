@@ -1,10 +1,14 @@
-"""The values kubementat uses when `platform_config` does not declare them.
+"""The values kubementat uses when the configuration root does not declare them.
 
-`platform_config/{environment}/static.json` is the source of truth and code is the fallback. That only
-holds if the fallback says the same thing the template says, so the
-defaults live in exactly one module instead of being duplicated by every caller (the four
+`<root>/{environment}/static.json` is the source of truth and code is the fallback. That only
+holds if the fallback says the same thing the tree says, so the defaults live in exactly one module
+instead of being duplicated by every caller (the four
 `# TODO: make this a config` comments in `automation.py` and the namespace list in
 `uninstall_kubementat.sh` were six copies of the same fact).
+
+Throughout this file `<root>` is the configuration root: the directory `--config-dir` names, or
+the one `$KUBEMENTAT_PLATFORM_CONFIG_DIR` already points at. There is no directory called
+`platform_config` to find, and kubementat looks beside no checkout for one.
 
 A component is named by its helmfile release/component name, lower-case with hyphens. The
 config key is derived from it, never spelled out per call site:
@@ -28,7 +32,7 @@ An ingress controller *is* a component here. The owner decided on 2026-10-28, th
 nginx-ingress came out, that Traefik takes the routing role, and the reason is the product's
 rather than the chart's: dropping nginx-ingress without naming a replacement left every ingress
 path in kubementat classless — the Ingress-manifest script, the tekton EventListener ingresses and
-every `Ingress` in `platform_config` all named a class nothing installed any more, which is a
+every `Ingress` in the tree named a class nothing installed any more, which is a
 failure that stays silent until a certificate or a listener stops answering. (The first of those is
 `ingress.py`, which reads its class from configuration exactly as this component's key says it
 should be read.) So the ingress
@@ -63,9 +67,10 @@ deletes, so a name cannot be accepted by one verb and refused by another while t
 with both.
 """
 
-# Namespace each component is deployed into. Equal to what `static.json.template` ships and
-# to what the code said before this was configurable — the point of making it configurable
-# was to be able to change it, not to change it here.
+# Namespace each component is deployed into. Equal to what the environment layer's witness spells
+# (`tests/fixtures/configuration_shape/environment/static.json.template`) and to what the code said
+# before this was configurable — the point of making it configurable was to be able to change it,
+# not to change it here.
 DEFAULT_NAMESPACES = {
     "cert-manager": "cert-manager",
     "cluster-cronjobs": "cluster-cronjobs",
@@ -116,10 +121,15 @@ DEFAULT_SERVICE_SELECTORS = {
     "openbao": "app.kubernetes.io/name=openbao,app.kubernetes.io/instance=openbao",
 }
 
-# The one chart that installs Traefik. `traefik-crds` is deliberately not named here: it has been
-# deprecated since chart v38.0.2 and ships no proxy, and the `traefik` chart carries its own
-# `crds/`. Naming the companion instead (or alongside) is how an install ends up with CRDs from one
-# chart and a proxy from another, which helm will not reconcile for you.
+# The one chart that installs Traefik, and the only place this product answers "why not
+# `traefik-crds`?" — the reader that matches a chart name, the CRD sweep and the values manifest all
+# point here for it rather than restating it. The answer, once: the companion chart was deprecated at
+# chart v38.0.2, ships no proxy, and the `traefik` chart carries its own `crds/`, so naming it instead
+# of (or beside) the proxy chart leaves a cluster with CRDs from one chart and a controller from
+# another, which helm does not reconcile for anyone. Two consequences follow from it and are owned by
+# the code that needs them: a `helm list` row whose chart is `traefik-crds` is *not* a running
+# controller, and a cluster that carries only that chart has no controller left for the
+# `TRAEFIK_CRD_GROUPS` definitions to serve.
 TRAEFIK_CHART = "traefik/traefik"
 
 # The controller string on the IngressClass this chart creates, read from the chart's own
@@ -194,7 +204,7 @@ def binary_majors_served_label(binary: str) -> str:
 # The ten answers `initialize`'s templates used to leave behind, as L0.
 #
 # Census L measured that this set was answered only by the template copies `initialize` wrote into
-# `platform_config/`, and that nothing in `constants.py` carried any of it. That is not a gap that
+# the configuration root, and that nothing in `constants.py` carried any of it. That is not a gap that
 # opens when `initialize` is deleted — it is a gap that is *already open*: a `config init` tree
 # answers none of it today, and a reader that asks `static.json` gets `None` and carries on. So the
 # value lives here and a reader consults it, which is what "defaults resolved at read time" means here.
@@ -213,7 +223,8 @@ def binary_majors_served_label(binary: str) -> str:
 # them out of a diff:
 #
 # * `PIPELINE_NAMESPACE` and `APP_DEPLOYMENT_NAMESPACE` are **not** in this table. The templates do
-#   carry `dev1-pipelines` and `dev1`, but those strings were placeholders for the team substitution,
+#   carry `dev1-pipelines` and `dev1` in that witness, but those strings were placeholders for the
+#   team substitution,
 #   and they are consequences of the team's name (`core/config/derived.py`). A `constants.py`
 #   default for them would install a second owner for a value that is computed, and a table entry is
 #   the kind of second owner that reads as documentation and answers as a lie.
@@ -361,12 +372,12 @@ def static_answer(key: str):
 # `CONFIG_SCHEMA_VERSION` is stamped and never bumped by a library function — reading a tree from an
 # older schema is a migration decision, not a side effect of writing one file.
 #
-# The constraint states which release line this build belongs to, and a major release narrows it to
-# that line rather than widening the ceiling to keep older trees quiet. The gap is the point: a tree
-# stamped against a line this build is not in is read as out of date, and the line that closes it is
-# one edit in that tree's `kubementat.yaml`, which is what a release's bump PR is for. Moving the
-# floor is how a stale stamp ends up being read as current, which is the mistake the check exists to
-# catch.
+# What the constraint *means* is stated once, and this is that one place: it names the release line
+# this build belongs to, and a major release narrows it to that line rather than widening the ceiling
+# to keep older trees quiet. The gap is the point — moving the floor is how a stale stamp ends up read
+# as current, which is the mistake the check exists to catch. What to *do* about a gap is stated once,
+# elsewhere: `ConfigurationStamp.version_gap_remediation` is the single remediation answer every verb
+# quotes, so this comment says no second sentence about bump PRs and no second `schema_version`.
 CONFIG_KUBEMENTAT_CONSTRAINT = ">=2,<3"
 CONFIG_SCHEMA_VERSION = 1
 

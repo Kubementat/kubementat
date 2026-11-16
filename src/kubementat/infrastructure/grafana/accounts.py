@@ -1,4 +1,4 @@
-"""The grafana accounts a platform_config environment declares, created over real HTTP.
+"""The grafana accounts an environment declares, created over real HTTP.
 
 This is `scripts/user_management/create_grafana_accounts.sh` (40 LOC) and
 `create_grafana_read_only_account.sh` (52), with `grafana_helpers.sh` (69) as the library they

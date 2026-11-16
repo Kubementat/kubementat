@@ -989,12 +989,11 @@ def fixture_repo(tmp_path):
     if (REPO_ROOT / "scripts").is_dir():
         shutil.copytree(REPO_ROOT / "scripts", root / "scripts", dirs_exist_ok=True)
     (root / "tekton_ci" / "pipeline-runs").mkdir(parents=True)
-    # The fixture gets a `templates/` directory for exactly one reason: one guard's subject is two
-    # files disagreeing, and it relocates the resolver into this root so the template half stays
-    # writable (`tests/test_one_component_is_installed_by_the_label_the_environment_names_it_under.py`).
-    # The product reads its templates out of the package now, so this is fixture scaffolding
-    # and not a copy of anything — nothing here is ever opened by a command that was told nothing.
-    (root / "templates" / "environment").mkdir(parents=True)
+    # No `templates/` here. The fixture used to scaffold one because a guard's subject was two
+    # disagreeing copies and the shipped half had to stay writable; the product ships no templates any
+    # more, so the directory was scaffolding for a file that no longer exists. What the relocating
+    # guard needs is the manifest's own root, which it writes itself
+    # (`tests/test_one_component_is_installed_by_the_label_the_environment_names_it_under.py`).
     (root / "platform_config" / FIXTURE_ENVIRONMENT / "kubementat_components").mkdir(parents=True)
     return FixtureRepo(root).all_static_files()
 

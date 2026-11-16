@@ -1,7 +1,7 @@
 """The deployer's keypair, as a property of a configuration directory.
 
 `kmt initialize` made these four files as a side effect of its first run, and it made them in the
-checkout — `platform_config/deployer_ssh_key` and its three companions. Census L measured what that
+checkout — `<root>/deployer_ssh_key` and its three companions. Census L measured what that
 leaves behind when the verb goes: the two cluster Secrets that `setup_pipelines` builds are made from
 values that only these files carry, so deleting `initialize` without a successor would delete the
 deployer along with it. This module is that successor: **the pair is made when the configuration
@@ -401,7 +401,8 @@ def _environment_words(directory: Path) -> str:
     `require_deployer_keypair` is handed a directory and no environment, so the environment is either
     the one the directory itself declares — a layer is a directory that answers `static.json` — or it
     is a placeholder. Naming it from `directory.name` would be a guess with a plausible look: a tree
-    called `platform_config` would be told it configures an environment called `platform_config`.
+    a root named after anything at all would be told it configures the environment it is named
+    after.
     """
     environment = _only_environment_inside(directory)
     return environment if environment else "<environment>"

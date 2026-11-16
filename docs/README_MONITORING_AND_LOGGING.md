@@ -9,8 +9,8 @@ You can view the grafana dashboard via the following kmf command:
 ENVIRONMENT="dev"
 uv run kmt tunnel grafana $ENVIRONMENT
 
-# Credentials are stored in the GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD configuration variables in platform_config/${ENVIRONMENT}/static.encrypted.json
-# e.g. cat platform_config/dev/static.encrypted.json | grep "GRAFANA_"
+# Credentials are stored in the GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD configuration variables in <root>/${ENVIRONMENT}/static.encrypted.json
+# e.g. cat <root>/dev/static.encrypted.json | grep "GRAFANA_"
 ```
 
 ## Monitoring (Prometheus)

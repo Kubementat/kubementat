@@ -96,9 +96,9 @@ PROBE_PODS = "pods"
 COMMAND_CHANNEL = "command"
 API_CHANNEL = "api"
 
-# `traefik` or `traefik-<version>`, and nothing else: `traefik-crds` is deprecated, ships no proxy,
-# and counting it would report a controller that cannot route anything. The version group has to
-# start with a digit for the same reason — otherwise `traefik-crds-1.18.0` reads as a match.
+# `traefik` or `traefik-<version>`, and nothing else. Why the companion is excluded is answered once,
+# in `constants.TRAEFIK_CHART`; what this regex owns is the shape of a match, and the digit on the
+# version group is what keeps `traefik-crds-1.18.0` out.
 _CHART = re.compile(r"^traefik(?:-(?P<version>\d.*))?$", re.IGNORECASE)
 
 # A traefik image is a container name somebody else chose, so the match is deliberately loose:
@@ -408,7 +408,7 @@ def discover(ctx, namespace: Optional[str] = None, reader=None,
     Parameters
     ----------
     ctx:
-        The `Context` the command resolved: whose `platform_config` the answer is read from, and
+        The `Context` the command resolved: which configuration root the answer is read from, and
         which cluster it is read against. `namespace` is the only thing taken from the
         configuration here, and only when the caller has not resolved one.
     namespace:
@@ -816,7 +816,7 @@ def _service(item) -> tuple:
 def _chart_is_traefik(chart: str) -> bool:
     """True for `traefik` or `traefik-<version>`, and for nothing else that contains the word.
 
-    `traefik-crds` answers False on purpose: it ships no proxy, so counting it as a controller
-    would report a Traefik that cannot route anything.
+    The companion chart answers False, for the reason `constants.TRAEFIK_CHART` gives. This function
+    adds nothing to that answer; it is the shape a match takes.
     """
     return bool(_CHART.match(chart))

@@ -69,8 +69,10 @@ PIPELINE_RUN_TIMEOUT_SECONDS = 1800
 # that happens to equal a namespace away from a namespace). What is read is
 # `CLUSTER_CRONJOBS_DEPLOYMENT_NAMESPACE` in the environment's `static.json` — the same key the
 # install deploys into and the uninstall sweeps. The bash hardcoded
-# `CRONJOB_NAMESPACE="cluster-cronjobs"`, which is the defect `TODOs.md` item 2 records: a renamed
-# namespace moved the job out from under the asserts that looked for it in the old place.
+# `CRONJOB_NAMESPACE="cluster-cronjobs"`, and a renamed namespace moved the job out from under the
+# asserts that looked for it in the old place — which is why the namespace is read from the key and
+# not spelled here. The citation that used to sit in this sentence pointed at a checklist file; the
+# claim is a code fact, so it lives here now.
 
 # The four names the cleanup job is made of. These are cluster contract: the CronJob's pod
 # template names the ServiceAccount by hand, the ClusterRoleBinding names both, and the
@@ -256,7 +258,7 @@ def _resolve_pipeline_run_file_path(identifier: str, config) -> Path:
     * a **`global/` prefix** resolves under `tekton_ci/pipeline-runs`, the long-standing way of
       pointing at a run that belongs to no team;
     * a **path** is used as it was given. That is what `tekton_ci/tasks/run-tekton-pipeline.yml`
-      hands over -- `$(workspaces.workspace.path)/<repo>/platform_config/<env>/<team>/tekton/
+      hands over -- `$(workspaces.workspace.path)/<repo>/<root>/<env>/<team>/tekton/
       pipeline-runs/foo-run.yml`, a string the deleted bash script `cat`ed without asking what it
       meant -- and an absolute path is a path anywhere in it, so no caller has to be rewritten to a
       convention it cannot read.
@@ -390,7 +392,7 @@ def setup_cleanup_job(ctx, kubernetes_utils, config, environment) -> None:
     image = cleanup_job_image(config.get('env_static'))
 
     logging.info("#########################")
-    logging.info("Setting up the pipelinerun cleanup job from platform_config ...")
+    logging.info("Setting up the pipelinerun cleanup job from the configuration root ...")
     logging.info(f"ENVIRONMENT: {environment}")
     logging.info(f"TEAM: {team}")
     logging.info(f"CRONJOB_NAMESPACE: {namespace}")
@@ -615,7 +617,7 @@ def run_pipeline(ctx, kubernetes_utils, config, environment, pipeline_run_file_i
             `PIPELINE_NAMESPACE`, and a run that named no team has no such namespace to run in. That
             is the refusal `TektonUtils.__init__` performed until `P4-6` dissolved the class, and it
             belongs ahead of the file read below rather than behind it.
-        pipeline_run_file_identifier: Either a path to the run YAML file (`platform_config/dev/dev1/
+        pipeline_run_file_identifier: Either a path to the run YAML file (`<root>/dev/dev1/
             tekton/pipeline-runs/foo-run.yml`) or an identifier for it: a bare name in the team's
             directory (`foo-run.yml`, or `smoke/foo-run.yml`), or `global/` plus a name in the
             global directory. See `_resolve_pipeline_run_file_path`.
@@ -643,7 +645,7 @@ def run_pipeline(ctx, kubernetes_utils, config, environment, pipeline_run_file_i
 
     # Print configuration information
     logging.info("#########################")
-    logging.info("Loading configuration from platform_config ...")
+    logging.info("Loading configuration from the configuration root ...")
     logging.info(f"ENVIRONMENT: {environment}")
     logging.info(f"TEAM: {team}")
     logging.info(f"PIPELINE_NAMESPACE: {pipeline_namespace}")

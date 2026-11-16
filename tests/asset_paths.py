@@ -1,22 +1,21 @@
 """The asset root, handed to a test by the same resolver the product uses.
 
-`templates/` is product data inside the package, so a test that wants a shipped template
-asks this module for it. That is a different sentence from `REPO_ROOT / "templates"`, and the
-difference is the bug being fixed: the old form asked *this checkout* for the file, which is a
-question a wheel cannot answer and which the product no longer asks at all. A guard that reads a
-template out of the checkout while the code reads it out of the package is a guard that passes by
-accident the moment the two trees disagree.
+What the product ships is what a guard should read, so there is one way in and it is the product's
+way: `kubementat.core.assets`, the module every reader calls. The asset root is whatever the installed
+`kubementat` package says it is — here, `src/kubementat/core/assets`, which is this checkout's own
+tree, so the bytes a guard reads are the bytes the writer opens.
 
-So there is one way in, and it is the product's way: `kubementat.core.assets`, the same module
-`Config.templates_dir` calls. The asset root is whatever the installed `kubementat` package says
-it is — here, `src/kubementat/core/assets`, which is this checkout's own tree, so the bytes a guard
-reads are the bytes the writer opens.
+`template_path(...)` is the exception, and the exception is the item that deleted the files. It used to
+resolve into the package, because `Config.templates_dir` resolved there and a guard and a writer had to
+land on one path. The shipped templates are gone — 1.x's seed copies, which no verb opened — and the two
+that survived did so as *witnesses* a test reads, so they live beside the test that reads them. A data
+file whose only reader is a test is a fixture, and this is where the sentence that was true about them
+lives now: `tests/fixtures/configuration_shape/`.
 
 The shape of what is exposed:
 
 * `asset_path(...)` — anything the package ships, rooted at the asset root;
-* `template_path(...)` — a shipped template, spelled the way `Config.templates_dir` spells it, so a
-  guard that parses a template and a writer that opens it resolve to one path by construction;
+* `template_path(...)` — one of the two witnesses, which is *not* package data any more;
 * `values_path(...)` — the packaged helmfile and the default values it names, which are
   data and not templates and therefore have no copy anywhere;
 * `tekton_ci_path(...)` — the product's Tekton manifests and generator templates, spelled the way
@@ -52,14 +51,15 @@ def asset_path(*parts: str) -> Path:
 
 
 def template_path(*parts: str) -> Path:
-    """A shipped template, spelled the way `Config.templates_dir` spells it.
+    """A configuration-layer witness, read from the fixtures and not from the package.
 
-    `template_path("environment", "static.json.template")` is what
-    `f"{self.config.templates_dir}/environment/static.json.template"` builds, so the guard that
-    reads this file and the writer that opens it are the same path by construction rather than by
-    two files agreeing.
+    `template_path("environment", "static.json.template")` is the environment layer's shape as
+    1.x's `initialize` handed it over: a table of keys whose answers `constants.py` owns now. The
+    package ships no templates, so nothing in a run opens this file; it exists so a guard can ask
+    `constants.py` whether it still says what the layer says, which is the only claim left that a
+    drift can be caught by.
     """
-    return _resolver("templates", *parts)
+    return Path(__file__).resolve().parent / "fixtures" / "configuration_shape" / Path(*parts)
 
 
 def values_path(*parts: str) -> Path:
@@ -93,7 +93,7 @@ def tekton_ci_path(*parts: str) -> Path:
 
 
 def relocate_asset_root(root, monkeypatch) -> Path:
-    """Make `Config.templates_dir` answer `<root>/templates` for the rest of this test.
+    """Make every shipped asset resolve under `<root>` for the rest of this test.
 
     This is the one thing here that looks like the fallback the product says no. It is not one:
     there is no discovery, no candidate search, and no second root the product would consult on

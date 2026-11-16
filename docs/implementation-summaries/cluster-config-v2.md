@@ -27,7 +27,7 @@ Everything else is the migration of what already existed onto those three.
 
 ## Configuration
 
-Two keys in `platform_config/<environment>/static.json`, beside `CLUSTER_MANAGER_EMAIL`:
+Two keys in `<root>/<environment>/static.json`, beside `CLUSTER_MANAGER_EMAIL`:
 
 ```
 "CLUSTER_KUBE_CONTEXT": null,      "CLUSTER_KUBECONFIG_PATH": null

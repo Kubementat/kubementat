@@ -15,7 +15,7 @@ consequences that follow, stated before the code rather than buried in a log lev
   platform's ClusterIssuer down with it.
 * **The decision comes off the cluster.** `traefik_presence.discover()` answers `none`/`ours`/
   `foreign` from three reads, and this module decides from that answer rather than from a name list
-  or from a value `platform_config` happens to carry. What `install` prints is the same answer
+  or from a value the tree happens to carry. What `install` prints is the same answer
   `kmt routing status` prints, because two callers reading two answers is two products.
 * **Nothing here is a second namespace answer.** The namespace is `Config.component_namespace`, the
   class is the class key, and both go through `core/config/config.py`'s one rule: a key that is not
@@ -103,7 +103,7 @@ LETSENCRYPT_ISSUERS = (
 )
 
 # Where the ACME account's contact address comes from -- the same key the deleted script read with
-# `jq -r` out of `platform_config/<environment>/static.json`.
+# `jq -r` out of `<root>/<environment>/static.json`.
 CLUSTER_MANAGER_EMAIL_KEY = "CLUSTER_MANAGER_EMAIL"
 
 # ---------------------------------------------------------------------------------------
@@ -180,7 +180,7 @@ def install_routing(ctx, update: bool = False,
     Parameters
     ----------
     ctx:
-        The `Context` the command resolved: whose `platform_config` this is, and which cluster
+        The `Context` the command resolved: which configuration root this is, and which cluster
         it is about to apply a controller into. `HelmUtils` takes this object and nothing else, so
         a routing install that carried the two halves as loose arguments would have to build a
         second `Config` and a second cluster read to reach it. Nothing here derives a team
@@ -519,7 +519,7 @@ def _cluster_issuer(issuer: dict, email: str, ingress_class: str) -> dict:
     }
 
 def _cluster_manager_email(config: Config) -> str:
-    """The ACME contact address, from `platform_config/<environment>/static.json`.
+    """The ACME contact address, from `<root>/<environment>/static.json`.
 
     There is no built-in default for an email address, so this is the one key the rule cannot answer
     for. Applying an issuer with a blank or placeholder contact is worse than not applying it --

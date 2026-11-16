@@ -94,7 +94,7 @@ DERIVED_DEFAULT_SOURCE = "a rule over the team's name (core/config/derived.py)"
 #
 # `_service_selector_key` spells `SERVICE_SELECTOR` and not `DEPLOYMENT_SERVICE`, which is the one place
 # this module deviates from the ticket that asked for it: `*_DEPLOYMENT_SERVICE` appears nowhere in
-# `src/` or in the shipped template, so a universe that named it would answer thirteen trees with a
+# `src/` or in the layer the 1.x templates seeded, so a universe that named it would answer thirteen trees with a
 # default for a key no accessor ever opens. Agreement with what a running command sees is the claim
 # that outranks the brief, and the deviation is stated here rather than hidden.
 
