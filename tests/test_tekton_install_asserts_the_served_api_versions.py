@@ -257,8 +257,8 @@ def test_an_install_asks_the_cluster_what_it_left_running_after_the_install_and_
                         lambda ctx: SimpleNamespace(
                             helmfile_apply=lambda **kwargs: journal.append("helmfile_apply")))
     monkeypatch.setattr(install_slice, "check_dependencies_are_installed", lambda dependencies: None)
-    monkeypatch.setattr(install_slice, "validate_cluster", lambda ctx, consent=None: None)
-    monkeypatch.setattr(install_slice, "check_cluster_permissions", lambda ctx: None)
+    monkeypatch.setattr(install_slice, "validate_cluster", lambda ctx, consent=None: True)
+    monkeypatch.setattr(install_slice, "check_cluster_permissions", lambda ctx: True)
     monkeypatch.setattr(install_slice, "_print_install_finish_message", lambda ctx: None)
 
     install_slice.install_kubementat(context, configure_tekton_pipelines=False)

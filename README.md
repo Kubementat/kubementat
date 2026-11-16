@@ -418,6 +418,37 @@ uv run kmt tekton run-pipeline dev dev1 ../../examples/tekton_ci/pipeline-runs/h
 uv run kmt tunnel tekton dev
 ```
 
+### What `kmt install` answers with
+
+The detail of a run goes to the log — dependencies, helmfile, the finish message with the next
+steps — and the terminal gets the answer, built from the `InstallResult` the install now returns
+instead of a stream of lines and a `None`:
+
+```
+Helmfile installation group: standard
+Configure tekton pipelines: True
+kubementat installed for dev (dev1): the three pinned Tekton releases and the ClusterRole that lets helm deploy, the platform's Helm releases through group=standard, the team's pipeline, task and pipeline-run manifests and the webhook triggers' RBAC, Secrets and generated resources.
+the cluster answered, and this service account may create namespaces, deployments, clusterroles, roles, daemonsets and replicasets.
+--yes answered the confirmation, so nothing was asked.
+```
+
+The first two lines are the ones this command printed before it had an answer to give, and they are
+still printed before anything is called. The rest is the run's own record of what it wrote and of
+the two reads that had to pass in front of the first apply — which is the half the cluster cannot
+be asked about afterwards.
+
+* **A skipped half is reported as skipped.** `kmt install dev dev1
+  --no-configure-tekton-pipelines` adds a `skipped:` line naming what did not run and the plain
+  `kmt install dev dev1` that runs it, so a run that wrote a quarter of the install does not print
+  the same sentence as a run that wrote all of it.
+* **The exit codes are the ones you already know.** A cluster that does not answer is still exit 1,
+  a service account that cannot create what the install needs is still exit 1, and a run that
+  reached this output wrote everything it was asked to. `--yes` changes only whether the
+  confirmation was asked, never what the answer says.
+* **The log did not shrink.** The finish message, with its next steps, is still written and still
+  says the same words; the answer on stdout is the fact of what was written and not a replacement
+  of what the log says to do next.
+
 ## Kubernetes Dashboard
 
 The Kubernetes dashboard component is **currently not part of a kubementat installation**.

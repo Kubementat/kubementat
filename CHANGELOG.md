@@ -1,4 +1,49 @@
 # Unreleased
+- **`kmt install` answers with a value. What happened on the cluster is now a returned
+  `InstallResult` that the command prints, and not a stream of library log lines and a `None`.**
+
+  `install_kubementat` reported through `logging` and returned nothing. That is the same failure
+  seen from two sides: whoever scrolled the terminal had a transcript and no verdict, and whoever
+  called the function had nothing to branch on, print, or hand to a test. It returns
+  `InstallResult` now — the shape `automations/routing/routing.py` already returns, for the reason
+  that file gives: *a decision that lives only in prose is a decision nobody can act on twice*.
+
+  * **What the terminal sees.** `kmt install dev dev1 --yes` prints, after the two option lines it
+    has always printed:
+
+    ```
+    kubementat installed for dev (dev1): the three pinned Tekton releases and the ClusterRole that
+    lets helm deploy, the platform's Helm releases through group=standard, the team's pipeline,
+    task and pipeline-run manifests and the webhook triggers' RBAC, Secrets and generated resources.
+    the cluster answered, and this service account may create namespaces, deployments, clusterroles,
+    roles, daemonsets and replicasets.
+    --yes answered the confirmation, so nothing was asked.
+    ```
+
+    and `--no-configure-tekton-pipelines` adds `skipped: the Tekton pipeline configuration …`, so a
+    run that wrote a quarter of the install no longer prints the same sentence as one that wrote all
+    of it. `README.md` carries the same transcript under *What `kmt install` answers with*.
+  * **This is a reporting change and not a behavioural one.** Exit codes are untouched — a cluster
+    that does not answer still exits 1, a service account that cannot create what the install needs
+    still exits 1, and the run that reaches the answer wrote everything it was asked to. The log
+    stream lost nothing: the library's `logging.` count is **458 before and 458 after**, and the
+    finish message with its next-step sentences is still written, still at INFO, still word for word
+    (`tests/test_the_install_answer_is_a_value_the_cli_prints.py` asserts that, because a suite that
+    only checks the new lines would happily let the old ones go).
+  * **The two gates answer with the fact now.** `validate_cluster` and `check_cluster_permissions`
+    return `True`, and the install reports what they proved — the two reads in front of the first
+    apply are the two facts an operator cannot re-derive from a cluster that has since been
+    installed onto. Each has exactly one way out that is not a value (`exit(1)` and a named refusal),
+    which is why a boolean is the whole of what they can say.
+  * **The shape is copied and not invented.** `InstallResult` is a frozen dataclass with `summary()`
+    and `command()`, sitting in the module that builds it, exactly where `RoutingInstallResult`
+    sits; the consent word it carries comes from `kubementat.consent`'s own vocabulary with
+    `routing`'s `"asked"` for the case the `Consent` object leaves implicit. No new protocol, no
+    registry, no base class.
+  * **Not done, and named so it is not mistaken for done.** This is 9a of §9. `uninstall_kubementat`
+    still reports a partially-succeeded teardown through a string-joined exception (9b), the
+    automation helpers for secrets, registry, pipelines and triggers still return `None` (9c), and
+    the tunnel helpers' return codes are still discarded by the CLI (9d).
 - **One namespace for configuration, not two. Where a writer lives is now grep-able from the same
   place a reader lives, and the module path you type is the module path the code reaches.**
 

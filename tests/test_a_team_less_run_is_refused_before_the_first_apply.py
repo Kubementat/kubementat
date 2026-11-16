@@ -210,8 +210,8 @@ def _install_with_the_writes_recorded(monkeypatch, journal):
                             helmfile_apply=lambda **kwargs: journal.append("helmfile_apply")))
     monkeypatch.setattr(install_slice, "check_dependencies_are_installed",
                         lambda dependencies: None)
-    monkeypatch.setattr(install_slice, "validate_cluster", lambda ctx, consent=None: None)
-    monkeypatch.setattr(install_slice, "check_cluster_permissions", lambda ctx: None)
+    monkeypatch.setattr(install_slice, "validate_cluster", lambda ctx, consent=None: True)
+    monkeypatch.setattr(install_slice, "check_cluster_permissions", lambda ctx: True)
     monkeypatch.setattr(install_slice, "_print_install_finish_message", lambda ctx: None)
 
 

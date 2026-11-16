@@ -25,12 +25,17 @@ def install(ctx, environment, team, configure_tekton_pipelines, helmfile_install
     # does before saying so. The library still decides *where* the answer is needed -- after the
     # cluster has been read -- so the order of the operator's lines does not move.
     consent = install_consent(environment, team, yes)
-    install_slice.install_kubementat(
+    result = install_slice.install_kubementat(
         ctx,
         configure_tekton_pipelines=configure_tekton_pipelines,
         helmfile_installation_group=helmfile_installation_group,
         consent=consent
     )
+    # One print of the value the install returned, for the same reason `kmt routing install` prints
+    # its result: the log says what happened and this says which of it was *this run's* doing.
+    # The library's own finish message still goes to the log, so this is not the next-steps block
+    # moving -- it is the fact of what was written, on stdout, where a script can read it.
+    click.echo(result.summary())
 
 # Uninstall kubementat
 @click.command(name='uninstall', help='Uninstall kubementat from a k8s cluster')

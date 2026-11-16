@@ -11,10 +11,19 @@ Everything past the checks is delegated, so nothing here holds state: the cluste
 comes from `Context`, the Tekton and Helm services are built from that same `Context` when they
 are needed rather than remembered here, and a build of `HelmUtils` is not kept as an attribute
 because `kmt uninstall` is a command that has no team to satisfy its guard.
+
+What the run leaves behind used to be a stream of log lines and a `None`, which is the same thing
+as saying nothing: the operator's terminal saw the stream, and whoever called the function saw
+nothing. It returns `InstallResult` now -- the same shape `automations/routing/routing.py`
+returns for the same reason -- so the decision, the writes and the two reads that had to pass are
+carried out of the function together, the CLI prints them, and a caller that wants to branch does
+not have to read prose. What the log says is unchanged, because something still has to read it.
 """
 
 
 import logging
+from dataclasses import dataclass
+from typing import Optional
 
 from kubementat import errors
 from kubementat.infrastructure import shell
@@ -31,7 +40,11 @@ from kubementat.automations.install.dependencies import (
     check_dependencies_are_installed,
 )
 from kubementat.automations.install.pipelines import setup_pipelines
-from kubementat.consent import Consent
+from kubementat.consent import (
+    CONSENT_ANSWERED,
+    CONSENT_ASSUMED,
+    Consent,
+)
 
 
 # What the install preflight proves this service account may do, spelled as the API spells it.
@@ -44,9 +57,122 @@ from kubementat.consent import Consent
 CLUSTER_PERMISSION_CHECK_RESOURCES = (
     "namespaces", "deployments", "clusterroles", "roles", "daemonsets", "replicasets")
 
+# The one state install's own consent can land in that the `Consent` object does not spell out.
+# `--yes` answers with `CONSENT_ASSUMED` and a library caller that already settled it answers with
+# `CONSENT_ANSWERED`; a terminal that was asked and said yes leaves `answer` at undecided and the
+# question settled behind the `ask` callback, so the run's own record says `asked` -- the word
+# `routing/routing.py` already uses for the same fact.
+CONSENT_ASKED = "asked"
+
+
+def _consent_of(consent: Consent) -> str:
+    """How this run's permission was settled, in words the rest of the tree already uses.
+
+    Read after `validate_cluster` has asked, never before: a consent that has not been settled is
+    the same object at both ends of the call and means two different things.
+    """
+    if consent.is_assumed():
+        return CONSENT_ASSUMED
+    if consent.answer == CONSENT_ANSWERED:
+        return CONSENT_ANSWERED
+    return CONSENT_ASKED
+
+
+def _and_then_the_last(items) -> str:
+    """`a`, `a and b`, `a, b and c` -- the list read as a sentence and not as a traceback."""
+    names = list(items)
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    return ", ".join(names[:-1]) + " and " + names[-1]
+
+
+# ---------------------------------------------------------------------------------------
+# the answer
+# ---------------------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class InstallResult:
+    """What this run installed, what it was told to leave alone, and what it proved first.
+
+    The reason it is a value and not a log stream is the reason `RoutingInstallResult` gives:
+    the CLI prints it, a later caller branches on it, and a report that lives only in prose is a
+    report nobody can act on twice. `cluster_answered` and `permissions_granted` are carried with
+    the writes on purpose -- the two gates *before* the first write are exactly the facts an
+    operator cannot recover from the cluster afterwards, and an install that says "it worked"
+    without them has said less than the run knew.
+
+    The booleans are true where the step ran and false where it was skipped or not asked for, so
+    a run that was told not to configure the pipeline half says so instead of printing the same
+    sentence as a run that did.
+    """
+
+    environment: str
+    team: Optional[str]
+    helmfile_installation_group: str
+    helmfile_label_filter: str
+    cluster_answered: bool = False
+    permissions_granted: bool = False
+    tekton_installed: bool = False
+    api_versions_preflighted: bool = False
+    releases_applied: bool = False
+    pipelines_configured: bool = False
+    triggers_configured: bool = False
+    consent: str = CONSENT_ASKED
+    skipped: tuple = ()
+
+    def command(self, *flags) -> str:
+        """The same install, spelled the way it would be typed to change the outcome."""
+        environment = self.environment or "<environment>"
+        team = self.team or "<team>"
+        return " ".join([f"kmt install {environment} {team}"] + list(flags))
+
+    def what_was_written(self) -> tuple:
+        """The writes in the order they happened, as sentences a reader can put on one line."""
+        written = []
+        if self.tekton_installed:
+            written.append("the three pinned Tekton releases and the ClusterRole that lets "
+                           "helm deploy")
+        if self.releases_applied:
+            written.append(f"the platform's Helm releases through {self.helmfile_label_filter}")
+        if self.pipelines_configured:
+            written.append("the team's pipeline, task and pipeline-run manifests")
+        if self.triggers_configured:
+            written.append("the webhook triggers' RBAC, Secrets and generated resources")
+        return tuple(written)
+
+    def summary(self) -> str:
+        """A handful of lines for whoever ran the command. The detail is in the log.
+
+        Deliberately not a restatement of the finish message below, which is where the next steps
+        live: what is worth printing is *which* writes landed and which the run was told to skip,
+        because that is what a scripted run has to be able to read out of the output and what an
+        operator has to be able to see without scrolling through a helmfile log.
+        """
+        team = self.team if self.team else "<no team>"
+        written = self.what_was_written()
+        if written:
+            lines = [f"kubementat installed for {self.environment} ({team}): "
+                     f"{_and_then_the_last(written)}."]
+        else:
+            lines = [f"kubementat installed for {self.environment} ({team}): nothing was written."]
+        if self.cluster_answered and self.permissions_granted:
+            lines.append("the cluster answered, and this service account may create "
+                         + _and_then_the_last(CLUSTER_PERMISSION_CHECK_RESOURCES) + ".")
+        elif self.cluster_answered:
+            lines.append("the cluster answered but refused at least one of the creates the "
+                         "install needs: "
+                         + _and_then_the_last(CLUSTER_PERMISSION_CHECK_RESOURCES) + ".")
+        for what in self.skipped:
+            lines.append(f"skipped: {what}. {self.command()} is the command that runs it.")
+        if self.consent == CONSENT_ASSUMED:
+            lines.append("--yes answered the confirmation, so nothing was asked.")
+        return "\n".join(lines)
+
 
 def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installation_group='standard',
-                       consent=None):
+                       consent=None) -> InstallResult:
     '''
     Main installation logic for Kubementat components including Tekton and pipeline setup.
 
@@ -60,7 +186,11 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
 
     Returns:
 
-    - None (performs side-effect operations)
+    - InstallResult - What this run wrote, what it was told to leave alone, and the two reads that
+      had to pass before the first apply. Reaching the return is the proof: every other outcome
+      leaves this function through a refusal or an exit, so nothing here reports a partial install
+      as a success. The side effects are still side effects -- this is a report about the run, not
+      a receipt for the cluster.
 
     Raises:
 
@@ -75,8 +205,17 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
 
     check_dependencies_are_installed(KUBEMENTAT_DEPENDENCIES)
 
-    validate_cluster(ctx, consent or Consent.undecided())
-    check_cluster_permissions(ctx)
+    # The consent is settled once, here, and read afterwards. `validate_cluster` is where it is
+    # asked if it needs asking, and the answer belongs in the result rather than in a local that
+    # went out of scope three lines later.
+    effective_consent = consent or Consent.undecided()
+
+    # Both lines below are gates, and each leaves this function by its own exit when it fails:
+    # the cluster read by `exit(1)`, the permission probe by a named refusal. They answer with a
+    # value for that reason -- what the caller wants to know is not *whether* the gate stopped the
+    # run (the run would not be here) but that it passed, which until now lived in a log line.
+    cluster_answered = validate_cluster(ctx, effective_consent)
+    permissions_granted = check_cluster_permissions(ctx)
 
     logging.info("######################################################")
     logging.info(f"CONFIGURING: Kubementat for environment {environment} and team {team}")
@@ -122,6 +261,7 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
     )
 
     # Setup pipelines and triggers
+    skipped = ()
     if configure_tekton_pipelines:
         setup_pipelines(ctx)
 
@@ -140,13 +280,37 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
         triggers.setup_triggers(ctx, kubernetes_utils, config, environment)
     else:
         logging.info("Skipping Tekton pipeline configuration.")
+        skipped = ("the Tekton pipeline configuration, which this run asked for with "
+                   "--no-configure-tekton-pipelines",)
 
     # No service mesh is installed, and no flag asks for one: kubementat dropped Linkerd on
     # the owner's decision of 2026-10-28. `kmt uninstall` still sweeps a mesh left behind.
 
     _print_install_finish_message(ctx)
 
-def validate_cluster(ctx, consent):
+    # The result is built at the end and not along the way, for the reason the gates above give:
+    # an install that got here wrote everything it was told to write, and a value assembled from
+    # flags alone would report `--no-configure-tekton-pipelines` as a decision rather than as what
+    # actually happened. `api_versions_preflighted` is set by the line that preflights and not by
+    # the flag, because that is the one write in this function whose success is *not* the same
+    # fact as having run -- it refuses when the controller serves the wrong thing.
+    return InstallResult(
+        environment=environment,
+        team=team,
+        helmfile_installation_group=helmfile_installation_group,
+        helmfile_label_filter=group_filter,
+        cluster_answered=bool(cluster_answered),
+        permissions_granted=bool(permissions_granted),
+        tekton_installed=True,
+        api_versions_preflighted=True,
+        releases_applied=True,
+        pipelines_configured=configure_tekton_pipelines,
+        triggers_configured=configure_tekton_pipelines,
+        consent=_consent_of(effective_consent),
+        skipped=skipped,
+    )
+
+def validate_cluster(ctx, consent) -> bool:
     """Validates cluster connectivity and carries the run's consent before proceeding.
 
     This method asks the API server for its version, which is the request that answers
@@ -161,6 +325,13 @@ def validate_cluster(ctx, consent):
     hands down the way to ask it, and a caller that hands down neither is refused before the first
     write instead of reading a line from a terminal it cannot see — which is the whole reason the
     prompt moved to the CLI and not just to a different function in this file.
+
+    Returns:
+
+    - True - the cluster answered. It answers with one value because every other outcome leaves
+      this function somewhere else: an unreachable cluster through `exit(1)`, a refused consent
+      through a named error. The caller wants the fact that the read happened, not a branch to
+      take, and "did the cluster answer" is the one fact an install cannot recover afterwards.
     """
 
     environment = ctx.environment
@@ -177,9 +348,10 @@ def validate_cluster(ctx, consent):
         exit(1)
 
     consent.decide(f"install kubementat on this cluster ({environment}/{team})")
+    return True
 
 
-def check_cluster_permissions(ctx):
+def check_cluster_permissions(ctx) -> bool:
     '''
     Verifies necessary Kubernetes permissions for cluster operations.
 
@@ -188,6 +360,12 @@ def check_cluster_permissions(ctx):
     the same answer it parses. The six verbs were checked through `input="yes"` because
     kubectl's own stdin prompt made the check runnable from a lane; a review needs no stdin,
     which is why the escape hatch is no longer needed here.
+
+    Returns:
+
+    - True - all six creates were granted. A denial is not a value and never was: it raises, so
+      the answer this function hands back only ever says "the install may write here", which is
+      the fact `InstallResult` reports and nothing the caller can re-derive from the cluster.
     '''
 
     kubernetes_utils = KubernetesUtils(ctx)
@@ -202,6 +380,7 @@ def check_cluster_permissions(ctx):
             shell.CommandResult(["kubectl", "auth", "can-i", "create", "<cluster scope>"], 1),
             "this service account cannot create: " + ", ".join(denied))
     logging.info("Cluster permission check passed.")
+    return True
 
 
 def _print_install_finish_message(ctx):
