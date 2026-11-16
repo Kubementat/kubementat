@@ -643,3 +643,14 @@ old one is documented in the CHANGELOG rather than left as a second route to the
   configuration contributes values, not a manifest, so editing the shipped file is editing what every
   environment applies — and a `helmfile.yaml.gotmpl` someone left under
   `platform_config/<environment>/kubementat_components/` is data nothing loads.
+
+## For Agents
+
+A coding agent driving kubementat does not have to rediscover the CLI from source: the repository
+ships a skill for it under [`skills/kmt/`](skills/kmt/SKILL.md). It carries the operating rules, the
+command map and the recipes above, and a reference of every `kmt <command> --help` regenerated from
+the live CLI and stamped with the commit it was read from. `skills/kmt/install.sh` installs it into
+any skill-reading agent (Claude Code, Codex, Cursor, Copilot, anything that reads
+`.agents/skills/`); inside a checkout the activation is `/kmt`. Live `--help` outranks the snapshot
+whenever the two disagree, and regenerating it after the surface moves is the skill's own rule —
+`python3 skills/kmt/scripts/kmt_reference.py` does it and stamps the new commit.

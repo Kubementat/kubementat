@@ -2,7 +2,7 @@
 
 Snapshot of `kmt --help` and every `kmt <command> --help`, regenerated from the live CLI.
 
-Generated 2026-11-15 by `scripts/kmt_reference.py` from kubementat ba0d478. The CLI is the source of truth: `uv run kmt <command> --help` outranks this file.
+Generated 2026-11-16 by `scripts/kmt_reference.py` from kubementat 14671d4. The CLI is the source of truth: `uv run kmt <command> --help` outranks this file.
 
 ## `kmt component`
 
@@ -55,9 +55,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -86,9 +87,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -132,9 +134,10 @@ Usage: kmt config add-environment [OPTIONS] ENVIRONMENT
 
 Options:
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -151,9 +154,10 @@ Usage: kmt config add-team [OPTIONS] ENVIRONMENT TEAM
 
 Options:
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -170,7 +174,10 @@ Usage: kmt config init [OPTIONS]
   idempotent: a second run writes no byte, commits nothing, and says which
   step it skipped. A fresh tree addresses no cluster until someone names one.
   The directory it prepares is the one --config-dir names, or the one
-  $KUBEMENTAT_PLATFORM_CONFIG_DIR names, and it refuses with neither.
+  $KUBEMENTAT_PLATFORM_CONFIG_DIR names; with neither it takes the single tree
+  already recorded for this user, and with nothing named and nothing recorded
+  it refuses. The tree it prepares is itself recorded, so no later command
+  repeats the flag.
 
 Options:
   --environment TEXT         The environment whose layer is laid down.
@@ -213,9 +220,10 @@ Options:
                              remedy.
   --config-dir PATH          The configuration directory this command reads or
                              writes. Layer above
-                             $KUBEMENTAT_PLATFORM_CONFIG_DIR; with neither,
-                             the run refuses, because a configuration root is
-                             named and not located.
+                             $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in turn
+                             above the tree kmt config init recorded for this
+                             user; with none of them, the run refuses, because
+                             a configuration root is named and not located.
   --help                     Show this message and exit.
 ```
 
@@ -248,9 +256,10 @@ Options:
                      not sit in a process table gets answered: only the path
                      travels, and the value is read where the operator put it.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -267,9 +276,10 @@ Usage: kmt config show [OPTIONS] ENVIRONMENT [TEAM]
 
 Options:
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -288,9 +298,10 @@ Options:
   --team TEXT        Clear the key from the team layer instead of the
                      environment layer.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -307,9 +318,10 @@ Usage: kmt config validate [OPTIONS] ENVIRONMENT [TEAM]
 
 Options:
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -340,9 +352,10 @@ Usage: kmt environments list [OPTIONS]
 
 Options:
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -400,9 +413,11 @@ Options:
                                   $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH               The configuration directory this command
                                   reads or writes. Layer above
-                                  $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                                  neither, the run refuses, because a
-                                  configuration root is named and not located.
+                                  $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                                  turn above the tree kmt config init recorded
+                                  for this user; with none of them, the run
+                                  refuses, because a configuration root is
+                                  named and not located.
   --help                          Show this message and exit.
 ```
 
@@ -430,9 +445,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -469,9 +485,11 @@ Options:
                                   $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH               The configuration directory this command
                                   reads or writes. Layer above
-                                  $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                                  neither, the run refuses, because a
-                                  configuration root is named and not located.
+                                  $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                                  turn above the tree kmt config init recorded
+                                  for this user; with none of them, the run
+                                  refuses, because a configuration root is
+                                  named and not located.
   --help                          Show this message and exit.
 ```
 
@@ -523,9 +541,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -554,9 +573,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -593,9 +613,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -624,9 +645,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -657,9 +679,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -688,9 +711,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -718,9 +742,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -754,9 +779,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -785,9 +811,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -847,9 +874,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -879,9 +907,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -910,9 +939,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -940,9 +970,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -971,9 +1002,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -1027,9 +1059,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -1073,9 +1106,11 @@ Options:
                               ~/.kube/config.
   --config-dir PATH           The configuration directory this command reads
                               or writes. Layer above
-                              $KUBEMENTAT_PLATFORM_CONFIG_DIR; with neither,
-                              the run refuses, because a configuration root is
-                              named and not located.
+                              $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                              turn above the tree kmt config init recorded for
+                              this user; with none of them, the run refuses,
+                              because a configuration root is named and not
+                              located.
   --help                      Show this message and exit.
 ```
 
@@ -1088,7 +1123,8 @@ Usage: kmt tekton generate-pipeline-run [OPTIONS] ENVIRONMENT TEAM
   Generate a pipeline run for a pipeline the checkout has, into the team's own
   pipeline-run directory that `kmt tekton run-pipeline` then reads. Review it:
   the parameters that belong to the app rather than to the platform are
-  written as TODO, because kubementat cannot know them.
+  written as `REPLACEME_UNFILLED_PARAMETER`, because kubementat cannot know
+  them.
 
 Options:
   --context NAME     Kubeconfig context to use instead of the one the
@@ -1107,9 +1143,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -1143,9 +1180,11 @@ Options:
                         Only when no such file is there does Kubernetes' own
                         rule apply: $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH     The configuration directory this command reads or
-                        writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR;
-                        with neither, the run refuses, because a configuration
-                        root is named and not located.
+                        writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR,
+                        which is in turn above the tree kmt config init
+                        recorded for this user; with none of them, the run
+                        refuses, because a configuration root is named and not
+                        located.
   --help                Show this message and exit.
 ```
 
@@ -1173,9 +1212,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -1224,9 +1264,10 @@ Options:
                            then ~/.kube/config.
   --config-dir PATH        The configuration directory this command reads or
                            writes. Layer above
-                           $KUBEMENTAT_PLATFORM_CONFIG_DIR; with neither, the
-                           run refuses, because a configuration root is named
-                           and not located.
+                           $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in turn
+                           above the tree kmt config init recorded for this
+                           user; with none of them, the run refuses, because a
+                           configuration root is named and not located.
   --help                   Show this message and exit.
 ```
 
@@ -1259,9 +1300,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -1289,9 +1331,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -1319,9 +1362,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -1350,9 +1394,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -1401,9 +1446,10 @@ Options:
                       such file is there does Kubernetes' own rule apply:
                       $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH   The configuration directory this command reads or
-                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR;
-                      with neither, the run refuses, because a configuration
-                      root is named and not located.
+                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR,
+                      which is in turn above the tree kmt config init recorded
+                      for this user; with none of them, the run refuses,
+                      because a configuration root is named and not located.
   --help              Show this message and exit.
 ```
 
@@ -1434,9 +1480,10 @@ Options:
                       such file is there does Kubernetes' own rule apply:
                       $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH   The configuration directory this command reads or
-                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR;
-                      with neither, the run refuses, because a configuration
-                      root is named and not located.
+                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR,
+                      which is in turn above the tree kmt config init recorded
+                      for this user; with none of them, the run refuses,
+                      because a configuration root is named and not located.
   --help              Show this message and exit.
 ```
 
@@ -1467,9 +1514,10 @@ Options:
                       such file is there does Kubernetes' own rule apply:
                       $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH   The configuration directory this command reads or
-                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR;
-                      with neither, the run refuses, because a configuration
-                      root is named and not located.
+                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR,
+                      which is in turn above the tree kmt config init recorded
+                      for this user; with none of them, the run refuses,
+                      because a configuration root is named and not located.
   --help              Show this message and exit.
 ```
 
@@ -1500,9 +1548,10 @@ Options:
                       such file is there does Kubernetes' own rule apply:
                       $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH   The configuration directory this command reads or
-                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR;
-                      with neither, the run refuses, because a configuration
-                      root is named and not located.
+                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR,
+                      which is in turn above the tree kmt config init recorded
+                      for this user; with none of them, the run refuses,
+                      because a configuration root is named and not located.
   --help              Show this message and exit.
 ```
 
@@ -1531,9 +1580,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -1588,9 +1638,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -1601,7 +1652,7 @@ Usage: kmt users create-grafana-read-only-account [OPTIONS] ENVIRONMENT EMAIL
                                                   [NAME]
 
   Create one grafana account, the way the read-only script did. Note that the
-  script set no role, so this does not grant one either; see the plan.
+  script set no role, so this does not grant one either.
 
 Options:
   --grafana-url URL  Address grafana answers on. Without it kubementat reads
@@ -1627,9 +1678,10 @@ Options:
                      such file is there does Kubernetes' own rule apply:
                      $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH  The configuration directory this command reads or writes.
-                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR; with
-                     neither, the run refuses, because a configuration root is
-                     named and not located.
+                     Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR, which is in
+                     turn above the tree kmt config init recorded for this
+                     user; with none of them, the run refuses, because a
+                     configuration root is named and not located.
   --help             Show this message and exit.
 ```
 
@@ -1665,9 +1717,10 @@ Options:
                       such file is there does Kubernetes' own rule apply:
                       $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH   The configuration directory this command reads or
-                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR;
-                      with neither, the run refuses, because a configuration
-                      root is named and not located.
+                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR,
+                      which is in turn above the tree kmt config init recorded
+                      for this user; with none of them, the run refuses,
+                      because a configuration root is named and not located.
   --help              Show this message and exit.
 ```
 
@@ -1702,9 +1755,10 @@ Options:
                       such file is there does Kubernetes' own rule apply:
                       $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH   The configuration directory this command reads or
-                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR;
-                      with neither, the run refuses, because a configuration
-                      root is named and not located.
+                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR,
+                      which is in turn above the tree kmt config init recorded
+                      for this user; with none of them, the run refuses,
+                      because a configuration root is named and not located.
   --help              Show this message and exit.
 ```
 
@@ -1739,9 +1793,10 @@ Options:
                       such file is there does Kubernetes' own rule apply:
                       $KUBECONFIG, then ~/.kube/config.
   --config-dir PATH   The configuration directory this command reads or
-                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR;
-                      with neither, the run refuses, because a configuration
-                      root is named and not located.
+                      writes. Layer above $KUBEMENTAT_PLATFORM_CONFIG_DIR,
+                      which is in turn above the tree kmt config init recorded
+                      for this user; with none of them, the run refuses,
+                      because a configuration root is named and not located.
   --help              Show this message and exit.
 ```
 

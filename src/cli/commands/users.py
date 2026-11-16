@@ -184,7 +184,7 @@ def create_grafana_accounts(ctx, environment, grafana_url, yes):
 
 @users.command(name='create-grafana-read-only-account',
                help='Create one grafana account, the way the read-only script did. Note that the '
-                    'script set no role, so this does not grant one either; see the plan.')
+                    'script set no role, so this does not grant one either.')
 @click.argument('environment', envvar='ENVIRONMENT')
 @click.argument('email')
 @click.argument('name', required=False, default='')

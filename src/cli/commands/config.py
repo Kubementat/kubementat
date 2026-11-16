@@ -96,7 +96,10 @@ def config():
                      'idempotent: a second run writes no byte, commits nothing, and says which step '
                      'it skipped. A fresh tree addresses no cluster until someone names one. The '
                      'directory it prepares is the one --config-dir names, or the one '
-                     '$KUBEMENTAT_PLATFORM_CONFIG_DIR names, and it refuses with neither.')
+                     '$KUBEMENTAT_PLATFORM_CONFIG_DIR names; with neither it takes the single tree '
+                     'already recorded for this user, and with nothing named and nothing recorded '
+                     'it refuses. The tree it prepares is itself recorded, so no later command '
+                     'repeats the flag.')
 # The root is a flag and not a positional here for the same reason it is one everywhere else in
 # kubementat: a configuration root is named and never located, and of the two spellings the second is
 # the one a container or a cron job already has. A positional forced every unattended run to spell a
