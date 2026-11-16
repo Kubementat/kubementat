@@ -38,7 +38,7 @@ from pathlib import Path
 import gnupg
 import pytest
 
-from kubementat import config_bootstrap
+from kubementat.config import bootstrap as config_bootstrap
 from kubementat.crypto_utils import CryptoUtils
 
 __all__ = ["EMAIL", "FINGERPRINT", "GPG_PRIVATE", "GPG_PUBLIC", "actions", "argv", "commit_count",

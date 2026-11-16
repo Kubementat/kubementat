@@ -169,7 +169,7 @@ When using `gen_key_input()`, the following parameters are commonly used:
 ## Integration with Kubementat
 
 In the Kubementat project, this functionality is used during initialization to generate deployer keys.
-**Where it lives now is `src/kubementat/config_keys.py`** (`_gpg_steps`, which calls
+**Where it lives now is `src/kubementat/config/keys.py`** (`_gpg_steps`, which calls
 `CryptoUtils.generate_gpg_key`). What is quoted below is how the same step read in the pre-slice tree,
 in `src/kubementat/automation.py` -- a file that no longer exists -- kept only because the `gen_key_input()`
 parameters the section above documents are what that call still passes:

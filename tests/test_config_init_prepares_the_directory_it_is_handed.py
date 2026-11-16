@@ -46,9 +46,9 @@ import pytest
 from bootstrap_tools import (EMAIL, FINGERPRINT, GPG_PRIVATE, GPG_PUBLIC, actions, argv,
                              commit_count, crypt_calls, crypt_calls_on, root, since_last_run, tools,
                              tree_bytes)
-from kubementat import config_bootstrap, config_keys
-from kubementat.config_bootstrap import GIT_CRYPT_SYMMETRIC_KEY_NAME, prepare_configuration_directory
-from kubementat.config_init import CREATED, SKIPPED
+from kubementat.config import bootstrap as config_bootstrap, keys as config_keys
+from kubementat.config.bootstrap import GIT_CRYPT_SYMMETRIC_KEY_NAME, prepare_configuration_directory
+from kubementat.config.init import CREATED, SKIPPED
 
 
 # ---------------------------------------------------------------------------------------------

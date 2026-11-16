@@ -24,7 +24,7 @@ from asset_paths import values_path
 from kubementat.infrastructure import helm as helm_utils
 from kubementat.core import constants
 from kubementat.core.config.keys import component_config_key
-from kubementat.config_init import init_configuration
+from kubementat.config.init import init_configuration
 from kubementat.infrastructure.helm import HelmUtils
 
 LABEL_FILTER = "group=standard"

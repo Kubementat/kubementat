@@ -37,25 +37,33 @@ the duplicate `kmt` entry point was deleted — `src/cli/kmt.py` is the only one
 ### docker_files/ (4 files, 1 CI image)
 Single Docker image `ubuntu-ci-minimal` — the universal CI worker for all Tekton pipeline tasks. Contains 15+ tools (kubectl, helm, helmfile, tkn, linkerd, yq, skopeo, git-crypt, mysql-client, python3). Multi-arch (amd64/arm64). Deeply integrated with Tekton CI pipelines. No multi-stage builds.
 
-### src/ (76 Python modules and 21,012 LOC under `src/kubementat/`; 92 modules and 23,822 LOC under `src/` including `src/cli/`)
+### src/ (79 Python modules and 21,965 LOC under `src/kubementat/`; 96 modules and 25,224 LOC under `src/` including `src/cli/`)
 
 **Every number below is one that was run in this tree.** The command for the whole inventory is
-`find src/kubementat -name '*.py' -not -path '*/__pycache__/*' | xargs wc -l | sort -n` → **21,012 total
-across 76 files**; adding `src/cli/` (16 files, 2,810 LOC) is what `find src -name '*.py' -not
--path '*egg-info*' -not -path '*__pycache__*' -exec wc -l {} +` answers: **23,822 across 92**.
+`find src/kubementat -name '*.py' -not -path '*/__pycache__/*' | xargs wc -l | sort -n` → **21,965 total
+across 79 files**; adding `src/cli/` (17 files, 3,259 LOC) is what `find src -name '*.py' -not
+-path '*egg-info*' -not -path '*__pycache__*' -exec wc -l {} +` answers: **25,224 across 96**.
+(Phase B item 8 moved the five configuration writers out of the flat row and into `config/`, which is
+one file — the package marker — and 20 lines; the writers themselves are the same 3,413 lines they were,
+in the same five modules. The flat and `config/` rows are measured on this commit. So is everything
+else, actually — `core/` reads 4,717, `infrastructure/` 7,606 and `automations/` 4,823 by the same
+command — because items 3 to 7 grew those directories and the row details below were written before
+them. The five rows sum to the `src/kubementat/` total; the module-by-module numbers inside the three
+older rows are where the stale reading lives.)
 
 | Where | Files | LOC | What lives there |
 |---|---:|---:|---|
 | `core/` | 21 | 4,528 | `config/config.py` 909 (`Config`, the layer precedence, the encrypted-JSON reads) and its eight siblings (`keys.py` 209, `teams.py` 196, `stamp.py` 192, `derived.py` 194, `paths.py` 154, `versions.py` 97, `release_index.py` 112, `reads.py` 73 — 2,155 together); `identity/` 1,798 (`context.py` 602, `registry.py` 364, `kubeconfig.py` 357, `target.py` 338, `comparison.py` 119); `constants.py` 389, `quantities.py` 69, `version.py` 43, `assets/` 65 |
 | `infrastructure/` | 24 | 7,567 | `helm.py` 1,127; `kubernetes/` 2,471 across 12 files (`workloads.py` 527, `customresources.py` 317, `clients.py` 289, `serviceaccounts.py` 229, `rbac.py` 207, `exec.py` 199, `apply.py` 199, `namespaces.py` 189, `secrets.py` 156, plus `constants.py`, `tunnel.py`, `__init__.py`); `tekton/` 2,598 across 6 files (`generation.py` 859, `runs.py` 859, `triggers.py` 387, `install.py` 281, `preflight.py` 203); `grafana/` 836 (`client.py` 558, `accounts.py` 278); `user_management.py` 342; `shell.py` 182 |
 | `automations/` | 23 | 4,777 | `routing/` 1,506 (`traefik_presence.py` 822, `routing.py` 675), `uninstall/` 1,490 (`residue.py` 623, `kubementat.py` 434), `install/` 1,035 (`pipelines.py` 383, `kubementat.py` 247), `accounts/accounts.py` 256, `ingress.py` 237, `ci.py` 122, `tunnels/tunnels.py` 105 |
-| flat in `src/kubementat/` | 8 | 4,140 | `config_init.py` 1,178 — the largest module in the package — `config_validate.py` 659, `errors.py` 638, `config_bootstrap.py` 624, `config_keys.py` 513, `config_answers.py` 431, `crypto_utils.py` 97, `__init__.py` 0 |
-| `src/kubementat/` | **76** | **21,012** | the four rows above sum to it |
-| `src/` | **92** | **23,822** | plus `src/cli/` — 16 files, 2,810 LOC |
+| `config/` | 6 | 3,433 | the configuration **writers**, moved here by item 8: `init.py` 1,187 — the largest module in the package — `validate.py` 656, `bootstrap.py` 627, `keys.py` 512, `answers.py` 431, `__init__.py` 20 (a marker, and it re-exports nothing) |
+| flat in `src/kubementat/` | 4 | 1,386 | `errors.py` 1,178, `consent.py` 111, `crypto_utils.py` 97, `__init__.py` 0 |
+| `src/kubementat/` | **79** | **21,965** | the rows above sum to it |
+| `src/` | **96** | **25,224** | plus `src/cli/` — 17 files, 3,259 LOC |
 
 The five largest files, which is what a line about the tree's centre of gravity is now told by
 (`find src/kubementat -name '*.py' -not -path '*/__pycache__/*' -exec wc -l {} + | sort -rn | head -6`):
-`config_init.py` 1,178, `infrastructure/helm.py` 1,127, `core/config/config.py` 909,
+`config/init.py` 1,187, `infrastructure/helm.py` 1,127, `core/config/config.py` 909,
 `infrastructure/tekton/runs.py` 859, `infrastructure/tekton/generation.py` 859. No module in this tree
 holds 1,500 lines, and none is where the old sections pointed.
 

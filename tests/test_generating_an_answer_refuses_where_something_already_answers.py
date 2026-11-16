@@ -40,9 +40,9 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from cli.commands import config as config_module
-from kubementat import config_init
+from kubementat.config import init as config_init
 from kubementat.core.config.config import Config
-from kubementat.config_init import GENERATED_ANSWER_BYTES, init_configuration
+from kubementat.config.init import GENERATED_ANSWER_BYTES, init_configuration
 
 ENVIRONMENT = "prod"
 TEAM = "alpha"

@@ -37,7 +37,7 @@ import re
 
 import yaml
 
-from kubementat.config_init import init_configuration
+from kubementat.config.init import init_configuration
 from asset_paths import template_path, values_path
 
 # The shipped values root, which is also the directory helmfile runs in and therefore the directory

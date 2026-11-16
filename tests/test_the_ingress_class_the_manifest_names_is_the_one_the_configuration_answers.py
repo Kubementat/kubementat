@@ -43,7 +43,7 @@ import yaml
 
 from asset_paths import values_path
 from cluster_fixture import DEV_SERVER, write_environment, write_kubeconfig
-from kubementat import config_answers
+from kubementat.config import answers as config_answers
 from kubementat.infrastructure import helm as helm_utils
 from kubementat.core import constants
 from kubementat.core.config.config import Config

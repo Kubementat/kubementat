@@ -7,7 +7,7 @@ through `kmt run-script --args .../generate_ssh_key.sh`, which is the shape no v
 product actually does with a deploy key is `kmt config init`.
 
 The implementation is `CryptoUtils.generate_ssh_key_pair` (`src/kubementat/crypto_utils.py:14`) and
-it is reached once, by `config_keys._ssh_steps` (`src/kubementat/config_keys.py`), which is the
+it is reached once, by `config_keys._ssh_steps` (`src/kubementat/config/keys.py`), which is the
 half of `kmt config init` that makes the pair. The script was
 shortest in the ledger and the pair most likely to be quietly wrong: `ssh-keygen -b 2048 -t rsa` and
 `cryptography`'s RSA generator both leave you a `KEYNAME` and a `KEYNAME.pub`, which is a claim
@@ -35,7 +35,7 @@ import base64
 from pathlib import Path
 
 from cluster_parity import operations_from_calls
-from kubementat import config_init, config_keys
+from kubementat.config import init as config_init, keys as config_keys
 from kubementat.automations.install import pipelines as pipelines_slice
 from kubementat.crypto_utils import CryptoUtils
 

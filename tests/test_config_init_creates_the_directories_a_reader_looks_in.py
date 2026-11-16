@@ -29,9 +29,9 @@ bytes.
 
 import pytest
 
-from kubementat import config_init
+from kubementat.config import init as config_init
 from kubementat.core.config.config import Config
-from kubementat.config_init import CREATED, SKIPPED, init_configuration
+from kubementat.config.init import CREATED, SKIPPED, init_configuration
 from kubementat.errors import (LayerNameAlreadyTakenError, LayerNameUnusableError, ObsoleteTriggerDirectoryError, TeamNotSuppliedError)
 
 ENVIRONMENT = "dev"

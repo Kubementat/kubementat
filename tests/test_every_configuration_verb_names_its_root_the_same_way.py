@@ -31,7 +31,7 @@ from click.testing import CliRunner
 
 from bootstrap_tools import EMAIL, tools  # noqa: F401  (the fixture is what makes `init` cheap)
 from cli.commands import config as config_module
-from kubementat import config_init
+from kubementat.config import init as config_init
 
 ENVIRONMENT = "rootverbenv"
 TEAM = "rootverbteam"

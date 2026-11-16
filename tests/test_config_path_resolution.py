@@ -35,7 +35,7 @@ from kubementat.errors import ConfigurationRootNotNamedError, RootDirectoryVaria
 
 from kubementat.core.config.config import Config
 from kubementat.core.config.paths import default_kubementat_main_dir
-from kubementat.config_init import init_configuration
+from kubementat.config.init import init_configuration
 from asset_paths import asset_path
 
 ENVIRONMENT = "testenv"

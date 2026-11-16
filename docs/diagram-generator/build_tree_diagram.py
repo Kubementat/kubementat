@@ -370,7 +370,7 @@ def draw(mods, pairs, fan_in, outside, errs):
     for label, note, w in (("kubernetes.client", "the API server, one ClusterTarget at a time", 430),
                            ("kubectl · helm · helmfile", "binaries, reached only through infrastructure/shell.py", 430),
                            ("Grafana admin API", "/api/users · /api/org · /api/teams over HTTP", 380),
-                           ("the platform_config tree", "read by core/config, committed by config_bootstrap.py", 430)):
+                           ("the platform_config tree", "read by core/config, committed by config/bootstrap.py", 430)):
         rect(ox, y + 46, w, 61, strokeColor="#64748b", backgroundColor="#f1f5f9")
         rect(ox, y + 46, w, 39, strokeColor="#64748b", backgroundColor="#ffffff")
         text(ox + 11, y + 50, label, 15, "#64748b")
@@ -385,7 +385,7 @@ def draw(mods, pairs, fan_in, outside, errs):
             arrow(x + bw / 2, byy + placed[bname][3], [(0, 0), (0, oy + oh - byy - placed[bname][3])],
                   strokeColor="#047857", strokeWidth=1, opacity=50)
         if label == "the platform_config tree":
-            text(ox + 11, oy + oh + 6, f"28 files touch a path; the tree is written by config_init.py and committed by config_bootstrap.py", 11, GREY)
+            text(ox + 11, oy + oh + 6, f"28 files touch a path; the tree is written by config/init.py and committed by config/bootstrap.py", 11, GREY)
     y = max(y + 176, max_y)
 
     # error taxonomy

@@ -33,7 +33,7 @@ from pathlib import Path
 
 import pytest
 
-from kubementat import config_answers
+from kubementat.config import answers as config_answers
 import kubementat.automations.ci as ci_utils
 from kubementat.core import constants
 from kubementat.automations.ci import CiUtils

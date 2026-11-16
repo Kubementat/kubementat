@@ -58,7 +58,7 @@ from typing import Any, Optional
 
 import yaml
 
-from kubementat import config_init
+from kubementat.config import init as config_init
 from kubementat.core.constants import CLUSTER_KUBECONFIG_PATH_KEY, CLUSTER_KUBE_CONTEXT_KEY
 from kubementat.core.config.config import Config
 # Both reads below name their object by import rather than through a module alias, and that is the
@@ -200,7 +200,7 @@ def _manifest_findings(root: Path, findings: list[Finding]) -> None:
     """What `kubementat.yaml` is allowed to say — decided here, for the first time.
 
     No owner exists in `src/`: there is no reader, no key lookup, and no shape check anywhere
-    (`core/config/config.py` exposes no property for it; `config_init.py:86-89` records the absence). So this
+    (`core/config/config.py` exposes no property for it; `kubementat/config/init.py:86-89` records the absence). So this
     function does not restate a rule, it sets one, and the rule is one sentence: the file says which
     product this tree is for and nothing else. Which environments and teams exist is a fact about
     the directories, not about this file, so `environments:` or `teams:` are reported as keys

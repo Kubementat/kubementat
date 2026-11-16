@@ -39,7 +39,7 @@ from click.testing import CliRunner
 from cli.commands import config as config_module
 import kubementat.automations.ci as ci_utils
 from kubementat import errors
-from kubementat import config_init, config_validate
+from kubementat.config import init as config_init, validate as config_validate
 from kubementat.automations.routing import routing
 from kubementat.core.config.config import Config
 

@@ -20,7 +20,7 @@ from pathlib import Path
 
 from kubernetes import client
 
-from kubementat import config_bootstrap, config_keys
+from kubementat.config import bootstrap as config_bootstrap, keys as config_keys
 from kubementat.infrastructure.kubernetes import KubernetesUtils, apply
 # The preflight moved out of `tekton_utils.py` (P4-2), so the call here reaches it through the
 # module: the seam is patched by module object, and a name imported past its home is a second

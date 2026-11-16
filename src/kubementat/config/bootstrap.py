@@ -131,7 +131,7 @@ from pathlib import Path
 
 import gnupg
 
-from kubementat import config_init, config_keys
+from kubementat.config import init as config_init, keys as config_keys
 from kubementat.infrastructure import shell
 
 from kubementat.errors import (
@@ -145,8 +145,8 @@ from kubementat.errors import (
 # thrown away in the same `finally`. Rule 1 adds a third question of exactly that shape -- what
 # fingerprint is in this file? -- and a second implementation of the ring would be a second owner
 # for one fact, which is what this repo's own docstrings keep warning about.
-from kubementat.config_keys import _in_disposable_keyring
-from kubementat.config_init import CREATED, SKIPPED, InitStep, _apply_layer_plan
+from kubementat.config.keys import _in_disposable_keyring
+from kubementat.config.init import CREATED, SKIPPED, InitStep, _apply_layer_plan
 
 # The names of the steps nobody else does. `config_init`'s and `config_keys`' step names are reused
 # for the work they do, so a printed line says which job was done and not which program was exec'd.

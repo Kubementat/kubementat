@@ -24,7 +24,7 @@ import subprocess
 
 import pytest
 
-from kubementat import config_bootstrap
+from kubementat.config import bootstrap as config_bootstrap
 
 # The name kubementat writes when a machine names nobody. Read from the product, because this file's
 # claim is the behaviour and not the spelling.

@@ -1,6 +1,6 @@
 """The deployer's keypair is a property of a configuration directory, so it is made where one is.
 
-`config_keys.py` is the successor to the key half of `initialize` (census L, Q2 items 6 and 7): the
+`kubementat/config/keys.py` is the successor to the key half of `initialize` (census L, Q2 items 6 and 7): the
 four files must land *inside* the directory `config init` prepares, because after phase 5 that is the
 only place git-crypt can protect them and the only place a reader can find them. What is asserted
 here is the module's own account of itself, not the wiring — the verb belongs to whoever calls it.
@@ -36,9 +36,9 @@ import gnupg
 import pytest
 from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 
-from kubementat import config_init, config_keys
-from kubementat.config_init import CREATED, EXISTED, SKIPPED
-from kubementat.config_keys import (GPG_PRIVATE_NAME, GPG_PUBLIC_NAME, KEYPAIR_FILE_NAMES,
+from kubementat.config import init as config_init, keys as config_keys
+from kubementat.config.init import CREATED, EXISTED, SKIPPED
+from kubementat.config.keys import (GPG_PRIVATE_NAME, GPG_PUBLIC_NAME, KEYPAIR_FILE_NAMES,
                                     SSH_PRIVATE_NAME, SSH_PUBLIC_NAME,
                                     DeployerKeypair, ensure_deployer_keypair,
                                     require_deployer_keypair)

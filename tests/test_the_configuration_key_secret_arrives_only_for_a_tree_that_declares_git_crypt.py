@@ -35,7 +35,7 @@ from types import SimpleNamespace
 
 from kubementat.automations.install import pipelines as pipelines_slice
 from kubementat.automations.install.pipelines import setup_pipelines
-from kubementat import config_bootstrap, config_keys
+from kubementat.config import bootstrap as config_bootstrap, keys as config_keys
 
 ENVIRONMENT = "dev"
 TEAM = "dev1"

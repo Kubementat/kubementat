@@ -1,4 +1,52 @@
 # Unreleased
+- **One namespace for configuration, not two. Where a writer lives is now grep-able from the same
+  place a reader lives, and the module path you type is the module path the code reaches.**
+
+  The concept had two spellings. The five writers sat flat under `src/kubementat/` as
+  `config_init.py`, `config_validate.py`, `config_bootstrap.py`, `config_keys.py` and
+  `config_answers.py` (3,411 lines), and the reader sat under `src/kubementat/core/config/` (2,155).
+  That was two answers to overlapping questions, and the seam was visible in one import block:
+  `config_validate.py:62-64` imported a sibling writer on one line and the reader's names on the next
+  two. A reader who grepped `kubementat.config_` found the writers and concluded the reader was
+  somewhere else; a reader who grepped `kubementat.core.config` found the reader and said the same
+  thing about the writers. The five writers moved under `kubementat/config/`, so the concept greps in
+  one place and the import block no longer straddles.
+
+  * **This is a move and not a redesign.** The five modules are the same 3,413 lines, with the import
+    lines re-pointed and nothing else: `git log --follow -- src/kubementat/config/init.py` walks back
+    through `src/kubementat/config_init.py`, and the similarity across the five renames is 99-100 %.
+    No behaviour, no message, no on-disk path, no answer changed.
+  * **What you type changed, so the twelve places that type it changed.** `kubementat.config_init` is
+    now `kubementat.config.init` — which reads as the sibling of `kubementat.core.config.config` rather
+    than as an unrelated name. The CLI verb file and the pipeline installer import the package's
+    modules directly (`from kubementat.config import init as config_init`), and 42 test import lines
+    in 29 files moved with them, including the `monkeypatch.setattr` strings, which have to name the
+    module the code actually reaches and not the one it used to be called.
+  * **The package marker re-exports nothing, on purpose.** `kubementat/config/__init__.py` is a
+    docstring and nothing else — for the reason `core/config/__init__.py` gives: a second way to reach
+    an object is a second way for a patch to land on the wrong copy. `import kubementat.config_init`
+    now raises `ModuleNotFoundError` rather than succeeding quietly through an alias, so the item
+    cannot be marked done by a shim that lets the flat spelling survive.
+  * **The straddle, named honestly.** `config_validate.py` still reads both halves — it is a validator,
+    it has to read the tree and the writer's layer rules — but it now reads its sibling as
+    `kubementat.config.init`, which is the *same package* and greps with it. What is gone is the
+    flat spelling in that block, and with it the property that made it grep-defeating.
+  * **Proven with a capture and not with a claim.** A driver built the same 2.x tree twice (two
+    environments, three teams, layer edits, plus a faulty copy carrying a second manifest, an
+    unanswered placeholder, an absolute kubeconfig path and a layer file that is a list) and ran it
+    through a detached worktree of the parent commit and through this one. Both halves printed the
+    files they resolved and a count of the construct being eliminated: 8 flat import lines in `src/`
+    and 44 in `tests/` in the before tree, 0 and 0 in the after one, with the same 8 and 44 arriving in
+    the nested spelling. Every captured byte matched — the tree on disk, key for key and byte for
+    byte, both fixtures; the effective-answers universe; the `Config` object's own loaded layers; the
+    validation report for both fixtures and both team variants; and `kmt config show` / `kmt config
+    validate` including exit codes. `uv run pytest -q` is 1700 passed / 1 skipped on both sides.
+  * **Not clean, and said plainly.** `docs/diagrams/src-class-diagram.png` still renders the tree
+    before items 3-7, because the generator that draws it has not been re-run since `952892d`; the
+    JSON next to it had its five writer labels repointed in place rather than being regenerated, so
+    that this commit did not carry the churn of five unrelated items' worth of diagram. Regenerating
+    both is owed to whoever runs the diagram generator next.
+
 - **Four library functions used to read stdin. None of them does now: the question moved to the
   command layer, a human at a terminal cannot tell the difference, and an automated run that cannot
   answer is refused sooner than it was.**

@@ -38,7 +38,7 @@ from pathlib import Path
 
 import pytest
 
-from kubementat import config_answers
+from kubementat.config import answers as config_answers
 from kubementat.core.config import derived as config_derived
 from kubementat.core import constants
 from kubementat.core.config.config import Config
@@ -84,7 +84,7 @@ GENERIC_VALUES = {constants.DEFAULT_STATIC_ANSWERS["TRAEFIK_INGRESS_CLASS"],
 # they are. `local-path` is this table's own answer for `TEKTON_KUBERNETES_STORAGE_CLASS` -- the key
 # that took over `KUBERNETES_DEFAULT_STORAGE_CLASS` when `initialize` was deleted (`7888bdf`) -- so a
 # file that cites it while talking about a cluster's volume classes is citing a fact and not writing
-# a second default. The one module that ever held this allowance, `config_init.py`, is
+# a second default. The one module that ever held this allowance, `kubementat/config/init.py`, is
 # gone: the split spread its body across `src/kubementat/automations/`, and none of those files
 # carries the literal (measured: the only `local-path` in `src/` is the owner's own entry in
 # `constants.py`). So the table is empty and the guard is exactly as strict as it was -- a
@@ -199,7 +199,7 @@ def test_a_tree_that_declared_nothing_still_answers_the_deployer_service_account
     """`HELM_DEPLOYER_SERVICE_ACCOUNT_NAME` is asked of the **team's** file, and answered anyway.
 
     This is the one key of the ten whose template sits under `team/`, so a reader that only consulted
-    the environment would have answered it from the wrong layer. `config_init.py` reads it through
+    the environment would have answered it from the wrong layer. `kubementat/config/init.py` reads it through
     `get('team_static')` twice over, which is what makes the category part of the claim.
     """
     config = seed(tmp_path)

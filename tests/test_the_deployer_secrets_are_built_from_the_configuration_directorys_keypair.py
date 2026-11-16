@@ -31,7 +31,7 @@ from pathlib import Path
 import gnupg
 import pytest
 
-from kubementat import config_keys
+from kubementat.config import keys as config_keys
 from types import SimpleNamespace
 
 from kubementat.automations.install import pipelines as pipelines_slice

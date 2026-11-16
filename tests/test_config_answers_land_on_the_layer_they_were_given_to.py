@@ -55,7 +55,7 @@ from cli.commands import config as config_module
 from kubementat.core.config import derived as config_derived
 from kubementat.core import constants
 from kubementat.core.config.config import Config
-from kubementat.config_init import (CREATED, ENVIRONMENT_ENCRYPTED_STEP, ENVIRONMENT_STATIC_STEP,
+from kubementat.config.init import (CREATED, ENVIRONMENT_ENCRYPTED_STEP, ENVIRONMENT_STATIC_STEP,
                                     SKIPPED, TEAM_ENCRYPTED_STEP, TEAM_STATIC_STEP,
                                     init_configuration, set_answer, unset_answer)
 

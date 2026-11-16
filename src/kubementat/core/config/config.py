@@ -835,7 +835,7 @@ class Config:
         One gate for both shapes of that fact — nothing declared it, which is how an L0 answer
         arrives, and something
         declared it unusably (`_defaulted_warning`'s original reason) — so the count stays what
-        `config_answers.py` silences it with and one read cannot print it twice.
+        `kubementat/config/answers.py` silences it with and one read cannot print it twice.
         """
         if key in self.defaulted_config_keys:
             return

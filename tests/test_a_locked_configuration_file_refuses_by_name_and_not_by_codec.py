@@ -56,14 +56,14 @@ from click.testing import CliRunner
 
 from cli.commands.config import config as config_group
 from cli.kmt import KmtGroup
-from kubementat import config_init, config_validate
+from kubementat.config import init as config_init, validate as config_validate
 from kubementat.core.identity.registry import _static_declaration
 from kubementat.core.identity.kubeconfig import _read_kubeconfig
 from kubementat.core.identity.target import ClusterTarget
 from kubementat.errors import ClusterFileUnreadableError, LockedConfigFileError
 from kubementat.core.config.config import Config
 from kubementat.core.config.reads import read_decrypted
-from kubementat.config_validate import validate_tree
+from kubementat.config.validate import validate_tree
 
 ENVIRONMENT = "dev"
 TEAM = "alpha"
@@ -430,17 +430,17 @@ SEAM_MODULE = "kubementat/core/config/reads.py"
 # client's own read and `kubectl config view` are on this list in prose rather than as a line: they
 # run outside Python, so no function here calls them.
 EXEMPT = {
-    ("kubementat/config_init.py", "set_answer"):
+    ("kubementat/config/init.py", "set_answer"):
         "the bytes-compare that decides whether the document changed; a write-side guard, not a read "
         "of answers, and it never decodes",
-    ("kubementat/config_validate.py", "_manifest_findings"):
+    ("kubementat/config/validate.py", "_manifest_findings"):
         "`kubementat.yaml`, which is not encrypted material — a seam wrapped around it would promise "
         "coverage it does not need",
     ("kubementat/core/identity/target.py", "from_service_account"):
         "the token the kubelet mounted for this pod, which is a credential the process is running "
         "with and not a configuration file it was handed — it moved with `ClusterTarget`, so the "
         "read is here and not in the module the class left",
-    ("kubementat/config_init.py", "_apply_layer_plan"):
+    ("kubementat/config/init.py", "_apply_layer_plan"):
         "the bytes-compare before a whole-document write; it reads a file it is about to write, not "
         "a file it is about to answer, and it never decodes (census R7)",
     ("kubementat/infrastructure/tekton/runs.py", "run_pipeline"):
@@ -453,10 +453,10 @@ EXEMPT = {
 # itself a fact and not a guess.
 DOCUMENTED_SEAM_SITES = [
     ("kubementat/core/config/config.py", "_load_json_file"),
-    ("kubementat/config_init.py", "_read_document"),
-    ("kubementat/config_init.py", "cluster_is_unaddressed"),
-    ("kubementat/config_validate.py", "_read_object_file"),
-    ("kubementat/config_validate.py", "_cluster_fact_finding"),
+    ("kubementat/config/init.py", "_read_document"),
+    ("kubementat/config/init.py", "cluster_is_unaddressed"),
+    ("kubementat/config/validate.py", "_read_object_file"),
+    ("kubementat/config/validate.py", "_cluster_fact_finding"),
     ("kubementat/core/identity/registry.py", "_static_declaration"),
     ("kubementat/core/identity/kubeconfig.py", "_read_kubeconfig"),
 ]

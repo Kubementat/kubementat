@@ -10,7 +10,7 @@ directory is prepared, and it lives inside that directory.** Nothing here is a c
 
 **The files, and nothing else.** Inside a configuration directory the names are exactly four:
 `deployer_ssh_key`, `deployer_ssh_key.pub`, `gpg_private.key`, `gpg_public_key.gpg`. They are already
-named in `config_init.RESERVED_ROOT_NAMES` (`config_init.py:117`), which is what makes them
+named in `config_init.RESERVED_ROOT_NAMES` (`kubementat/config/init.py:117`), which is what makes them
 known-good rather than merely convenient: that guard is what refuses an *environment* that would wear
 one of these names, so no layer can ever be written where the keypair lives. The fifth name that sits
 beside them in the same tuple — `git_crypt_symmetric.key` — is git-crypt's and is **not** this
@@ -18,7 +18,7 @@ module's to write, name as a constant, or imply anything about.
 
 **The step record is `config_init`'s, and so is its vocabulary.** Two "what did this step do" shapes
 in one epic is one too many, so every return is a tuple of `InitStep` and every action is `CREATED`,
-`SKIPPED`, or `EXISTED` (`config_init.py:101-105`): `CREATED` for a file that was not there and now
+`SKIPPED`, or `EXISTED` (`kubementat/config/init.py:101-105`): `CREATED` for a file that was not there and now
 is, `SKIPPED` for material this module was asked to ensure and that was already the kind of thing it
 would have written, `EXISTED` for material it was not told to make and must not touch. Nothing here
 overwrites, in any of the three states.
@@ -64,7 +64,7 @@ from pathlib import Path
 
 import gnupg
 
-from kubementat.config_init import CREATED, EXISTED, SKIPPED, InitStep
+from kubementat.config.init import CREATED, EXISTED, SKIPPED, InitStep
 from kubementat.errors import (
     ConfigurationRootNotUsableError,
     DeployerIdentityNotNamedError,

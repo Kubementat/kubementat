@@ -16,7 +16,7 @@ that key, and a default answers.
 
 **Read-only, absolutely.** No `mkdir`, no `write_bytes`, no `Config` built with
 `preload_configs=True` where `False` does the work, no import of any write path in
-`config_init.py`. The only thing that comes from that module is `_require_answerable_layer`, which
+`kubementat/config/init.py`. The only thing that comes from that module is `_require_answerable_layer`, which
 writes nothing and is reused for the opposite reason: a missing layer file is refused by
 *every* verb that reads or edits a tree, and the operator should hear one sentence about it rather
 than one per verb.
@@ -55,7 +55,7 @@ from pathlib import Path
 from typing import Any
 
 
-from kubementat import config_init
+from kubementat.config import init as config_init
 from kubementat.core.config import derived as config_derived, release_index as config_reads_index
 from kubementat.core import constants
 from kubementat.core.config.config import Config

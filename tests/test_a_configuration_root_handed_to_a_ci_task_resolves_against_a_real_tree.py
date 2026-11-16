@@ -34,7 +34,7 @@ segment, because a script that adds it can only work for one of the two shapes, 
 work.
 
 Nothing in `src/` is touched. The rule is enforced on shipped YAML, against a directory built in a temp
-tree, and `Config`/`config_init.py`/the read paths stay out of it — most trees in this suite are fixtures
+tree, and `Config`/`kubementat/config/init.py`/the read paths stay out of it — most trees in this suite are fixtures
 and not prepared directories, and a tree-shape rule phrased against `Config` is how 227 unrelated tests
 break.
 """

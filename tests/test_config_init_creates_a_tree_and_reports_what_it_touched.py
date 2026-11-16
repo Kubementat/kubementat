@@ -1,6 +1,6 @@
 """`kmt config init` — the verb that *prepares* a directory, and the account it gives of itself.
 
-The library half is already landed and already tested (`config_bootstrap.py`,
+The library half is already landed and already tested (`kubementat/config/bootstrap.py`,
 `test_config_init_prepares_the_directory_it_is_handed.py`). What lives here is the *verb*, and the
 verb's claims are not the library's:
 
@@ -51,7 +51,7 @@ from click.testing import CliRunner
 from bootstrap_tools import (EMAIL, FINGERPRINT, argv, commit_count, crypt_calls_on,
                              deployer_secret_key, root, since_last_run, tools, tree_bytes)
 from cli.commands import config as config_module
-from kubementat import config_bootstrap, config_keys
+from kubementat.config import bootstrap as config_bootstrap, keys as config_keys
 from kubementat.crypto_utils import CryptoUtils
 
 ENVIRONMENT = "dev"

@@ -64,7 +64,8 @@ from pathlib import Path
 import click
 
 from cli.context import config_dir_option
-from kubementat import config_answers, config_bootstrap, config_init, config_keys, config_validate
+from kubementat.config import (answers as config_answers, bootstrap as config_bootstrap,
+                               init as config_init, keys as config_keys, validate as config_validate)
 from cli.context import RenderingGroup
 from kubementat.core.config.paths import resolve_platform_config_dir
 

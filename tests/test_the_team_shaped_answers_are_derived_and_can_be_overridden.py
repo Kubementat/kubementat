@@ -33,7 +33,7 @@ from pathlib import Path
 import pytest
 
 import kubementat
-from kubementat import config_answers
+from kubementat.config import answers as config_answers
 from kubementat.core.config import derived as config_derived
 from kubementat.core.config.config import Config
 from kubementat.errors import TeamNotSuppliedError

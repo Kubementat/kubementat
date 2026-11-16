@@ -253,7 +253,7 @@ def test_the_secret_is_built_from_the_file_that_a_clone_cannot_carry():
     implementation that reads the key from somewhere inside a checkout would work on one machine and fail
     in every pod.
     """
-    bootstrap = Path("src/kubementat/config_bootstrap.py").read_text(encoding="utf-8")
+    bootstrap = Path("src/kubementat/config/bootstrap.py").read_text(encoding="utf-8")
     assert "def require_symmetric_key" in bootstrap, \
         "nothing reads git_crypt_symmetric.key back, so the Secret is built from a file nobody resolved"
 

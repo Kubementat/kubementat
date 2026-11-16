@@ -12,8 +12,14 @@ not. `kubementat.core.config.config`, `kubementat.core.config.derived`,
 `kubementat.core.config.reads` and `kubementat.core.config.release_index` are therefore reached
 through their own dotted paths, one way each, and every caller imports the name it actually calls.
 
-What is deliberately *not* here is the verb half — `config_answers`, `config_bootstrap`,
-`config_init`, `config_keys`, `config_validate` stay flat under `src/kubementat/`, because they
-orchestrate and this package answers. Nothing in this package imports them, and nothing above the
-line needs to know they exist.
+What sits *beside* this package, and not inside it, is the verb half: `kubementat.config.init`,
+`kubementat.config.bootstrap`, `kubementat.config.answers`, `kubementat.config.keys` and
+`kubementat.config.validate`. Item 8 moved those five writers under `src/kubementat/config/` out of
+the flat `src/kubementat/config_*.py` spellings they had carried since 1.x, so the concept now greps
+from one place. The split the names describe is unchanged: they orchestrate, this package answers,
+the writers import the readers and never the other way round, and nothing above the line needs to
+know the readers exist. What moved is where the writers' names live, not what they do — and the
+import block that used to prove it (`config_validate.py:62-64`, which reached a flat sibling writer
+beside this package's readers in one block) now reaches both halves as `kubementat.config.*` and
+`kubementat.core.config.*`, with no flat spelling left in it.
 """

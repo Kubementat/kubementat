@@ -185,7 +185,7 @@ def test_config_init_writes_the_root_it_was_given_and_not_the_checkout(tmp_path,
     monkeypatch.delenv(PLATFORM_CONFIG_VARIABLE, raising=False)
     destination = tmp_path / "the-root-i-named" / "platform_config"
     handed = []
-    monkeypatch.setattr("kubementat.config_bootstrap.prepare_configuration_directory",
+    monkeypatch.setattr("kubementat.config.bootstrap.prepare_configuration_directory",
                         lambda given, *args, **kwargs: handed.append(given) or ())
 
     result = CliRunner().invoke(config_command.init_command,

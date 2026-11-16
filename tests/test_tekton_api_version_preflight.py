@@ -18,7 +18,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from kubementat.core.config import config as config_module
-from kubementat import config_keys
+from kubementat.config import keys as config_keys
 from kubementat.infrastructure.kubernetes import apply
 from kubementat.automations.install import pipelines
 from kubementat.automations.install.pipelines import setup_pipelines

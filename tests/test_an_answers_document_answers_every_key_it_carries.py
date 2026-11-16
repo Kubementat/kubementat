@@ -45,7 +45,7 @@ from click.testing import CliRunner
 
 from cli.commands import config as config_module
 from kubementat.core.config.config import Config
-from kubementat.config_init import SKIPPED
+from kubementat.config.init import SKIPPED
 
 ENVIRONMENT = "prod"
 TEAM = "alpha"
@@ -59,7 +59,7 @@ SECOND_KEY = "AUTOMATION_GIT_URL"
 
 def initialized_root(tmp_path) -> Path:
     """A tree `kmt config init` laid down for one environment — the precondition `set` insists on."""
-    from kubementat.config_init import init_configuration
+    from kubementat.config.init import init_configuration
     root = tmp_path / "platform_config"
     root.mkdir(parents=True, exist_ok=True)
     init_configuration(root, ENVIRONMENT)
@@ -197,7 +197,7 @@ def test_the_document_lands_where_the_flags_said_and_cannot_choose_a_layer_of_it
     question in one place.
     """
     root = initialized_root(tmp_path)
-    from kubementat.config_init import add_team
+    from kubementat.config.init import add_team
     add_team(root, ENVIRONMENT, TEAM)
     answers = answers_file(tmp_path, {FIRST_KEY: "team-doc"})
 

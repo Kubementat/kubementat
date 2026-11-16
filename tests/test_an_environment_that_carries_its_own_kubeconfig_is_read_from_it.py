@@ -27,7 +27,7 @@ import yaml
 
 from kubementat.core.identity.context import Context
 from kubementat.core.identity import kubeconfig as kubeconfig_module
-from kubementat.config_init import init_configuration
+from kubementat.config.init import init_configuration
 from conftest import cluster_state
 
 CONTEXT = "in-tree-cluster"
@@ -149,7 +149,7 @@ def test_the_filename_is_the_one_the_trees_git_crypt_filter_encodes():
     to keep that from being a documentation-only bug.
     """
     assert kubeconfig_module.IN_TREE_KUBECONFIG_FILENAME == "kubeconfig.encrypted.yaml"
-    assert "*.encrypted.*" in (Path("src/kubementat/config_bootstrap.py").read_text())
+    assert "*.encrypted.*" in (Path("src/kubementat/config/bootstrap.py").read_text())
 
 
 def test_a_locked_in_tree_kubeconfig_says_it_is_ciphertext_and_not_broken(fixture_repo, monkeypatch):

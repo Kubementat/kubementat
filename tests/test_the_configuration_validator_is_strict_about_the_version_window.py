@@ -39,8 +39,8 @@ from cli.commands import config as config_command
 from kubementat.core.config import versions
 from kubementat.core import constants
 from kubementat.core.config.stamp import check_configuration_stamp
-from kubementat.config_init import init_configuration
-from kubementat.config_validate import validate_tree
+from kubementat.config.init import init_configuration
+from kubementat.config.validate import validate_tree
 
 ENVIRONMENT = "prod"
 

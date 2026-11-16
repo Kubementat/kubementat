@@ -35,10 +35,10 @@ from click.testing import CliRunner
 
 from asset_paths import asset_path
 from cli.commands import config as config_module
-from kubementat import config_init
+from kubementat.config import init as config_init
 from kubementat.core import constants
 from kubementat.core.config.config import Config
-from kubementat.config_init import (CREATED, SKIPPED, TEAM_STATIC_STEP, add_environment, add_team,
+from kubementat.config.init import (CREATED, SKIPPED, TEAM_STATIC_STEP, add_environment, add_team,
                                     init_configuration)
 
 ENVIRONMENT = "dev"
@@ -69,7 +69,7 @@ TEAM_LAYER = (TEAM_FILES | {Path(NEW_ENVIRONMENT) / TEAM,
                             Path(NEW_ENVIRONMENT) / TEAM / "tekton" / "triggers"})
 
 # The names of everything the package ships under `templates/`, as the copy pass would name it: a
-# destination is its template's name minus the `.template` suffix (`config_init.py`'s own walk). What
+# destination is its template's name minus the `.template` suffix (`kubementat/config/init.py`'s own walk). What
 # these verbs must not write is anything on this list *other than* the two static files, which they
 # do write, empty and by rule rather than by copying a shipped document into the tree.
 SHIPPED_TEMPLATE_DESTINATIONS = {path.name[: -len(".template")]

@@ -1584,8 +1584,8 @@
    "baseline": 0,
    "lineHeight": 1.25,
    "containerId": null,
-   "text": "src/kubementat/config_init.py",
-   "originalText": "src/kubementat/config_init.py"
+   "text": "src/kubementat/config/init.py",
+   "originalText": "src/kubementat/config/init.py"
   },
   {
    "type": "text",
@@ -1759,8 +1759,8 @@
    "baseline": 0,
    "lineHeight": 1.25,
    "containerId": null,
-   "text": "src/kubementat/config_bootstrap.py",
-   "originalText": "src/kubementat/config_bootstrap.py"
+   "text": "src/kubementat/config/bootstrap.py",
+   "originalText": "src/kubementat/config/bootstrap.py"
   },
   {
    "type": "text",
@@ -1934,8 +1934,8 @@
    "baseline": 0,
    "lineHeight": 1.25,
    "containerId": null,
-   "text": "src/kubementat/config_answers.py",
-   "originalText": "src/kubementat/config_answers.py"
+   "text": "src/kubementat/config/answers.py",
+   "originalText": "src/kubementat/config/answers.py"
   },
   {
    "type": "text",
@@ -2109,8 +2109,8 @@
    "baseline": 0,
    "lineHeight": 1.25,
    "containerId": null,
-   "text": "src/kubementat/config_keys.py",
-   "originalText": "src/kubementat/config_keys.py"
+   "text": "src/kubementat/config/keys.py",
+   "originalText": "src/kubementat/config/keys.py"
   },
   {
    "type": "text",
@@ -2284,8 +2284,8 @@
    "baseline": 0,
    "lineHeight": 1.25,
    "containerId": null,
-   "text": "src/kubementat/config_validate.py",
-   "originalText": "src/kubementat/config_validate.py"
+   "text": "src/kubementat/config/validate.py",
+   "originalText": "src/kubementat/config/validate.py"
   },
   {
    "type": "text",
@@ -8803,8 +8803,8 @@
    "baseline": 0,
    "lineHeight": 1.25,
    "containerId": null,
-   "text": "src/kubementat/config_init.py",
-   "originalText": "src/kubementat/config_init.py"
+   "text": "src/kubementat/config/init.py",
+   "originalText": "src/kubementat/config/init.py"
   },
   {
    "type": "text",
@@ -9030,8 +9030,8 @@
    "baseline": 0,
    "lineHeight": 1.25,
    "containerId": null,
-   "text": "src/kubementat/config_bootstrap.py",
-   "originalText": "src/kubementat/config_bootstrap.py"
+   "text": "src/kubementat/config/bootstrap.py",
+   "originalText": "src/kubementat/config/bootstrap.py"
   },
   {
    "type": "text",
@@ -9257,8 +9257,8 @@
    "baseline": 0,
    "lineHeight": 1.25,
    "containerId": null,
-   "text": "src/kubementat/config_answers.py",
-   "originalText": "src/kubementat/config_answers.py"
+   "text": "src/kubementat/config/answers.py",
+   "originalText": "src/kubementat/config/answers.py"
   },
   {
    "type": "text",
@@ -9484,8 +9484,8 @@
    "baseline": 0,
    "lineHeight": 1.25,
    "containerId": null,
-   "text": "src/kubementat/config_keys.py",
-   "originalText": "src/kubementat/config_keys.py"
+   "text": "src/kubementat/config/keys.py",
+   "originalText": "src/kubementat/config/keys.py"
   },
   {
    "type": "text",
@@ -9711,8 +9711,8 @@
    "baseline": 0,
    "lineHeight": 1.25,
    "containerId": null,
-   "text": "src/kubementat/config_validate.py",
-   "originalText": "src/kubementat/config_validate.py"
+   "text": "src/kubementat/config/validate.py",
+   "originalText": "src/kubementat/config/validate.py"
   },
   {
    "type": "text",

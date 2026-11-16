@@ -34,10 +34,11 @@ import logging
 from pathlib import Path
 import pytest
 
-from kubementat import automations as automations_layer, config_init
+from kubementat import automations as automations_layer
+from kubementat.config import init as config_init
 from kubementat.core import constants
 from kubementat.core.config.config import Config
-from kubementat.config_init import (CREATED, EXISTED, SKIPPED, InitStep, init_configuration,
+from kubementat.config.init import (CREATED, EXISTED, SKIPPED, InitStep, init_configuration,
                                     warn_cluster_not_addressed)
 
 ENVIRONMENT = "dev"

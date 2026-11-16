@@ -36,11 +36,11 @@ box("cli", "src/cli/commands/", ["cli.commands"], "11 verb groups, one module ea
 
 box("core", "src/kubementat/errors.py", ["kubementat.errors"], "every exception class lives here; 37 of them, raised and never returned", "")
 box("core", "src/kubementat/crypto_utils.py", ["kubementat.crypto_utils"], "ssh and gpg keypairs — the one flat primitive that imports nothing", "")
-box("verbs", "src/kubementat/config_init.py", ["kubementat.config_init"], "lays the configuration files down", "kmt config init")
-box("verbs", "src/kubementat/config_bootstrap.py", ["kubementat.config_bootstrap"], "runs init's layer plan, then git-commits the tree", "kmt config …")
-box("verbs", "src/kubementat/config_answers.py", ["kubementat.config_answers"], "what is answered today", "kmt config show")
-box("verbs", "src/kubementat/config_keys.py", ["kubementat.config_keys"], "the deployer keypair", "kmt config set/unset")
-box("verbs", "src/kubementat/config_validate.py", ["kubementat.config_validate"], "the verdict on a tree", "kmt config validate")
+box("verbs", "src/kubementat/config/init.py", ["kubementat.config.init"], "lays the configuration files down", "kmt config init")
+box("verbs", "src/kubementat/config/bootstrap.py", ["kubementat.config.bootstrap"], "runs init's layer plan, then git-commits the tree", "kmt config …")
+box("verbs", "src/kubementat/config/answers.py", ["kubementat.config.answers"], "what is answered today", "kmt config show")
+box("verbs", "src/kubementat/config/keys.py", ["kubementat.config.keys"], "the deployer keypair", "kmt config set/unset")
+box("verbs", "src/kubementat/config/validate.py", ["kubementat.config.validate"], "the verdict on a tree", "kmt config validate")
 
 box("automations", "automations/install/", ["kubementat.automations.install"], "one slice per install verb", "")
 box("automations", "automations/uninstall/", ["kubementat.automations.uninstall"], "one slice per uninstall verb", "")
