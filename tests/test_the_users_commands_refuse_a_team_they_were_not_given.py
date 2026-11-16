@@ -34,6 +34,7 @@ from cli.commands import users
 from cluster_fixture import STAGING_SERVER, write_kubeconfig
 from conftest import is_a_write
 import kubementat.infrastructure.user_management as user_management
+from kubementat.consent import Consent
 from kubementat.automations.accounts.accounts import create_team_account, create_team_account_read_only, delete_team_account
 from cluster_fixture import configuration_only_context
 
@@ -186,7 +187,7 @@ def test_creating_an_account_prints_a_kubeconfig_for_the_namespace_the_team_owns
     """
     with caplog.at_level(logging.INFO):
         create_team_account(configuration_only_context(fixture_repo.environment, fixture_repo.team), 
-            ACCOUNT, assume_yes=True)
+            ACCOUNT, consent=Consent.assumed())
 
     text = kubeconfig_printed_in(caplog)
     assert text is not None, "the command printed no kubeconfig"
@@ -372,7 +373,7 @@ def test_deleting_an_account_removes_the_service_account_and_the_token_that_outl
     Secret goes with it.
     """
     delete_team_account(configuration_only_context(fixture_repo.environment, fixture_repo.team), 
-        ACCOUNT, assume_yes=True)
+        ACCOUNT, consent=Consent.assumed())
 
     deleted = [(method, kwargs) for method, kwargs in recorded_api.calls
                if method.startswith("delete_")]
@@ -392,7 +393,7 @@ def test_deleting_an_account_leaves_the_roles_and_destroys_the_credential(
     in somebody's `~/.kube/config`.
     """
     delete_team_account(configuration_only_context(fixture_repo.environment, fixture_repo.team), 
-        ACCOUNT, assume_yes=True)
+        ACCOUNT, consent=Consent.assumed())
 
     assert not [kwargs for method, kwargs in recorded_api.calls
                 if method == "delete_namespaced_role"], "a delete swept Roles the team still needs"
@@ -411,12 +412,12 @@ def test_deleting_an_account_unbinds_every_binding_the_create_wrote(
     one.
     """
     context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
-    create_team_account(context, ACCOUNT, assume_yes=True)
+    create_team_account(context, ACCOUNT, consent=Consent.assumed())
     created = bindings_created(recorded_api)
     assert created, "the create wrote no bindings at all"
     recorded_api.calls.clear()
 
-    delete_team_account(context, ACCOUNT, assume_yes=True)
+    delete_team_account(context, ACCOUNT, consent=Consent.assumed())
 
     still_bound = created - bindings_deleted(recorded_api)
     assert still_bound == set(), f"left behind by delete: {sorted(still_bound)}"
@@ -431,10 +432,10 @@ def test_a_binding_for_a_tunnel_into_a_component_that_is_not_here_is_not_deleted
     """
     cluster_holding(recorded_api, [ns for ns in CLUSTER_NAMESPACES if ns != "polaris"])
     context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
-    create_team_account(context, ACCOUNT, assume_yes=True)
+    create_team_account(context, ACCOUNT, consent=Consent.assumed())
     recorded_api.calls.clear()
 
-    delete_team_account(context, ACCOUNT, assume_yes=True)
+    delete_team_account(context, ACCOUNT, consent=Consent.assumed())
 
     assert not any(kwargs.get("namespace") == "polaris"
                    for method, kwargs in recorded_api.calls
@@ -450,12 +451,12 @@ def test_the_read_only_variant_is_a_full_account_save_for_the_role_name(
     is the exact shape of the bug that made this command red for two lanes.
     """
     create_team_account_read_only(configuration_only_context(fixture_repo.environment, fixture_repo.team), 
-        ACCOUNT, assume_yes=True)
+        ACCOUNT, consent=Consent.assumed())
     read_only_writes = write_shapes(recorded_api)
     recorded_api.calls.clear()
 
     create_team_account(configuration_only_context(fixture_repo.environment, fixture_repo.team), 
-        ACCOUNT, assume_yes=True)
+        ACCOUNT, consent=Consent.assumed())
     admin_writes = write_shapes(recorded_api)
 
     assert read_only_writes == admin_writes
@@ -469,10 +470,10 @@ def test_an_account_created_twice_is_the_same_account_and_not_two_of_them(
     no-op on the shape of what is there, not an error and not a second set of bindings.
     """
     context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
-    create_team_account(context, ACCOUNT, assume_yes=True)
+    create_team_account(context, ACCOUNT, consent=Consent.assumed())
     once = [repr(operation) for operation in recorded_api.operations()]
     recorded_api.calls.clear()
 
-    create_team_account(context, ACCOUNT, assume_yes=True)
+    create_team_account(context, ACCOUNT, consent=Consent.assumed())
 
     assert [repr(operation) for operation in recorded_api.operations()] == once

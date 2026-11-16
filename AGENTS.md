@@ -136,6 +136,17 @@ raises is a named `kubementat.errors` class. The one line that decides how a ref
 `config` and `environments` groups carry directly, because those two verbs build no `Context` on purpose. So a
 library consumer is handed a class name and a sentence, and `kmt` decides the exit code and the `Error:` prefix
 
+After item 7 the same separation covers the terminal: no module under `src/kubementat/` reads stdin or asks
+whether there is a terminal to read (`grep -rn "\binput(\|isatty(" src/kubementat/` is empty — the single
+surviving `gen_key_input(` is a GPG binding that builds a document and opens nothing). The four commands that
+used to be able to block inside the library now receive a `kubementat.consent.Consent` parameter and ask nothing:
+`--yes` arrives as a decision, a terminal arrives as the CLI's `ask` callback, and a caller that brings neither is
+refused before the first write. One case forces the callback and not just the answer — `kmt routing install
+--update` needs consent only when the cluster turns out to already run somebody else's Traefik, and reading the
+cluster twice to decide whether to ask would be a second answer to the same question — so `cli/consent.py` owns
+the question, the accepted answers and the refusal text, and the library owns whether the branch needs an answer
+and what to do with it
+
 ## Configuration Management
 
 ### The configuration directory

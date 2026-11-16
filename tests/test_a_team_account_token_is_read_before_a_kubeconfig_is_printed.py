@@ -30,6 +30,7 @@ import time
 import pytest
 
 import kubementat.infrastructure.user_management as user_management
+from kubementat.consent import Consent
 from kubementat.automations.accounts.accounts import create_team_account
 from kubementat.errors import ServiceAccountTokenNotFoundError
 from kubementat.infrastructure.kubernetes import KubernetesUtils
@@ -229,7 +230,7 @@ def test_a_run_that_cannot_read_a_token_prints_no_kubeconfig(
     context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
 
     with caplog.at_level(logging.INFO), pytest.raises(ServiceAccountTokenNotFoundError):
-        create_team_account(context, ACCOUNT, assume_yes=True)
+        create_team_account(context, ACCOUNT, consent=Consent.assumed())
 
     text = "\n".join(record.getMessage() for record in caplog.records)
     assert "Please put the settings below" not in text, "it printed a credential it did not have"

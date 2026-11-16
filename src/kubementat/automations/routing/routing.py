@@ -34,7 +34,6 @@ attached, and nothing in this module retries. A cluster that will not answer a *
 
 import json
 import logging
-import sys
 from dataclasses import dataclass, field, replace
 
 import yaml
@@ -43,15 +42,15 @@ from kubernetes import client
 from kubementat import errors
 from kubementat.infrastructure import shell
 from kubementat.automations.routing import traefik_presence
+from kubementat.consent import Consent
 from kubementat.core.config.config import Config
 from kubementat.core.constants import COMPONENT, DEFAULT_INGRESS_CLASSES, TRAEFIK_CHART
 from kubementat.infrastructure.helm import HelmUtils
 
-from kubementat.errors import (
-    ClusterManagerEmailNotConfiguredError,
-    ConfirmationDeclinedError,
-    ConfirmationUnavailableError,
-)
+# The confirmation errors are raised by `kubementat.consent.Consent` and by the CLI's ask, not here:
+# this file decides whether a branch needs consent and what to do with the answer, and stops short of
+# asking anybody anything. Both names stay reachable through `kubementat.errors`.
+from kubementat.errors import ClusterManagerEmailNotConfiguredError
 
 # What `install_routing` decided. One of these three is what the CLI and any later caller reads, and
 # the string is the one that has to survive being pasted into a bug report.
@@ -175,7 +174,7 @@ def _apply_note(result: RoutingInstallResult) -> None:
 # ---------------------------------------------------------------------------------------
 
 def install_routing(ctx, update: bool = False,
-                    assume_yes: bool = False) -> RoutingInstallResult:
+                    consent: Consent = None) -> RoutingInstallResult:
     """Apply the routing group, installing Traefik only when the cluster has none.
 
     Parameters
@@ -194,10 +193,13 @@ def install_routing(ctx, update: bool = False,
         one: the repository index is refreshed and the chart's CustomResourceDefinitions are applied
         server-side *before* the release, because Helm will not do either of those for a release that
         already exists.
-    assume_yes:
-        The scripted answer to the one branch that needs consent -- a foreign controller being
-        overwritten. It does not silence the warning, it answers it, and the difference is stated in
-        the log rather than skipped.
+    consent:
+        What the caller decided about the one branch that needs consent -- a foreign controller
+        being overwritten. `kmt routing install --update --yes` hands down `Consent.assumed()`,
+        which does not silence the warning, it answers it, and the difference is stated in the log
+        rather than skipped. A run at a terminal hands down the way to ask, because the question only
+        arises once the cluster has been read: this command reads the cluster once, and a second read
+        to decide whether to ask would be a second answer to the same question.
 
     Returns
     -------
@@ -213,16 +215,17 @@ def install_routing(ctx, update: bool = False,
         command's output attached, like every other apply in the codebase. Nothing retries, so a run
         that half-applied is the operator's to read rather than a second attempt's to hide.
     kubementat.errors.ConfirmationUnavailableError:
-        When consent is needed and there is no terminal to ask in. It says so and names `--yes`, and
-        applies nothing at all.
+        When consent is needed and the caller neither decided nor carried a way to ask. It says so
+        and names `--yes`, and applies nothing at all.
     kubementat.errors.ConfirmationDeclinedError:
-        When the operator answered no.
+        When the operator answered no, which only the caller's ask can report.
     """
     environment = ctx.environment
     ingress_class, namespace = _configuration(ctx)
     presence = traefik_presence.discover(ctx, namespace=namespace)
 
-    installs_traefik, action, consent = _decide(presence, namespace, update, assume_yes)
+    installs_traefik, action, consent_state = _decide(presence, namespace, update,
+                                                      consent or Consent.undecided())
     label_filter = INSTALL_LABEL_FILTER if installs_traefik else SKIP_LABEL_FILTER
     result = RoutingInstallResult(
         environment=environment,
@@ -236,7 +239,7 @@ def install_routing(ctx, update: bool = False,
         crds_applied=False,
         releases_applied=False,
         issuers_applied=False,
-        consent=consent,
+        consent=consent_state,
         presence=presence,
     )
     _apply_note(result)
@@ -296,7 +299,7 @@ def _configuration(ctx) -> tuple:
 # steps 2 and 3: the decision table
 # ---------------------------------------------------------------------------------------
 
-def _decide(presence, namespace: str, update: bool, assume_yes: bool) -> tuple:
+def _decide(presence, namespace: str, update: bool, consent: Consent) -> tuple:
     """Read the classification, say what it means, return `(installs, action, consent)`.
 
     The action is the table. The *message* is what the table says plus whose Traefik it was, because
@@ -341,7 +344,7 @@ def _decide(presence, namespace: str, update: bool, assume_yes: bool) -> tuple:
                         _update_command(presence))
         return False, ACTION_SKIP, CONSENT_NOT_NEEDED
 
-    consent = _consent_to_a_second_controller(presence, namespace, assume_yes)
+    consent_state = _consent_to_a_second_controller(presence, namespace, consent)
     if not _found_release(presence):
         # The manifest-install row of the table: there is a controller but no release to upgrade, so
         # `--update` cannot "upgrade" it. What it does is apply the definitions underneath a
@@ -351,40 +354,29 @@ def _decide(presence, namespace: str, update: bool, assume_yes: bool) -> tuple:
                         " applied while the existing controller stays, and kubementat's own release"
                         " is applied alongside it.",
                         _found(presence, presence.foreign_findings()))
-    return True, ACTION_INSTALL, consent
+    return True, ACTION_INSTALL, consent_state
 
-def _consent_to_a_second_controller(presence, namespace: str, assume_yes: bool) -> str:
+def _consent_to_a_second_controller(presence, namespace: str, consent: Consent) -> str:
     """Say the second-controller sentence, then get the answer the branch is running on.
 
     The sentence comes first and is not conditional on the answer: a warning that is only printed
     when somebody has already agreed to it is not a warning. `--yes` answers it, and saying
-    "accepted because --yes" is the difference between a scripted run and a silent one -- `kmt
-    uninstall` keeps the same distinction, and for the same reason (`_confirm_uninstall`).
+    "accepted because --yes" is the difference between a scripted run and a silent one -- the same
+    distinction `kmt uninstall` keeps, and for the same reason. The asking itself is the CLI's, as it
+    is everywhere else now: this function decides whether the branch needs an answer and what to do
+    with it, and never reads a terminal.
     """
     logging.warning("--update on a cluster that already runs Traefik applies kubementat's own"
                     " release into namespace %s beside it: that is a second controller, a second"
                     " class and a second status writer. What is already running is left running --"
                     " kubementat has no way to stop two controllers both writing Ingress.status.",
                     namespace)
-    if assume_yes:
+    if consent.is_assumed():
         logging.warning("Accepted because --yes was given, so this run continues without asking.")
         return CONSENT_ACCEPTED
-    if not sys.stdin.isatty():
-        raise ConfirmationUnavailableError(
-            f"Installing a second Traefik next to the one already running needs confirmation, but"
-            f" stdin is not a terminal. Re-run with --yes (or -y) to accept the second-controller"
-            f" warning, or run {_update_command(presence)} alone to see what is there: "
-            f"kmt routing status {presence.environment or '<environment>'}.")
-    while True:
-        answer = input("A Traefik is already running here. Install a second controller, class and"
-                       " status writer alongside it? (yes/no): ").strip().lower()
-        if answer in ("y", "yes"):
-            return CONSENT_ASKED
-        if answer in ("n", "no"):
-            raise ConfirmationDeclinedError(
-                "Cancelled. Nothing was applied and the controller that is running was left"
-                " alone; re-run with --yes (or -y), or answer yes, to go ahead.")
-        logging.info("Please answer yes or no.")
+    consent.decide(f"install a second Traefik controller beside the one already running in"
+                   f" namespace {namespace}")
+    return CONSENT_ASKED
 
 # ---------------------------------------------------------------------------------------
 # step 4: the definitions `--update` owes, ordered before the release

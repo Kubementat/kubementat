@@ -14,27 +14,30 @@ to bind anything in.
 
 import logging
 
+from kubementat.consent import Consent
 from kubementat.core.config.teams import team_namespaces
 from kubementat.infrastructure import user_management
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 
-def create_team_account(ctx, service_account_name: str, assume_yes: bool = False) -> None:
+def create_team_account(ctx, service_account_name: str, consent: Consent = None) -> None:
     """Create a team account that can do anything inside the team's namespaces.
 
     Parameters:
 
     - service_account_name: str - Name the account is created under.
-    - assume_yes: bool = False - Skip the confirmation (`kmt users create-team-account --yes`).
+    - consent: kubementat.consent.Consent = undecided - What the caller decided about writing.
+      `kmt users create-team-account --yes` hands down `Consent.assumed()`.
     """
     _ensure_team_account(ctx, service_account_name,
         role_name=user_management.NAMESPACE_ADMIN_ROLE,
         rules=user_management.ADMIN_RULES,
-        assume_yes=assume_yes,
+        consent=consent or Consent.undecided(),
         action=f"create the team account '{service_account_name}' on this cluster",)
 
 
-def create_team_account_read_only(ctx, service_account_name: str, assume_yes: bool = False) -> None:
+def create_team_account_read_only(ctx, service_account_name: str,
+                                  consent: Consent = None) -> None:
     """Create a team account that can read everything and change nothing.
 
     The only difference from `create_team_account` is which Role gets bound, so there is
@@ -45,16 +48,17 @@ def create_team_account_read_only(ctx, service_account_name: str, assume_yes: bo
     Parameters:
 
     - service_account_name: str - Name the account is created under.
-    - assume_yes: bool = False - Skip the confirmation (`kmt users create-team-account-read-only --yes`).
+    - consent: kubementat.consent.Consent = undecided - What the caller decided about writing.
+      `kmt users create-team-account-read-only --yes` hands down `Consent.assumed()`.
     """
     _ensure_team_account(ctx, service_account_name,
         role_name=user_management.NAMESPACE_READ_ONLY_ROLE,
         rules=user_management.READ_ONLY_RULES,
-        assume_yes=assume_yes,
+        consent=consent or Consent.undecided(),
         action=f"create the read-only team account '{service_account_name}' on this cluster",)
 
 
-def _ensure_team_account(ctx, service_account_name, role_name, rules, assume_yes, action) -> None:
+def _ensure_team_account(ctx, service_account_name, role_name, rules, consent, action) -> None:
     """Write a team account and the Roles that say what it may do.
 
     The order is the bash's, because the order is what makes the result readable: name
@@ -73,7 +77,7 @@ def _ensure_team_account(ctx, service_account_name, role_name, rules, assume_yes
     team = ctx.team
     kubernetes_utils = KubernetesUtils(ctx)
 
-    user_management.check_cluster_and_access(kubernetes_utils, assume_yes, action)
+    user_management.check_cluster_and_access(kubernetes_utils, consent, action)
     pipeline_ns, app_ns = team_namespaces(ctx, team)
     tunnels = _team_account_tunnel_roles(ctx)
     present = set(kubernetes_utils.list_namespaces())
@@ -134,7 +138,7 @@ def _ensure_team_account(ctx, service_account_name, role_name, rules, assume_yes
     _print_team_account_kubeconfig(ctx, service_account_name, app_ns)
 
 
-def delete_team_account(ctx, service_account_name: str, assume_yes: bool = False) -> None:
+def delete_team_account(ctx, service_account_name: str, consent: Consent = None) -> None:
     """Remove a team account and every RoleBinding that let it act.
 
     Both Roles are unbound whether or not this account was created by the admin or the
@@ -144,10 +148,11 @@ def delete_team_account(ctx, service_account_name: str, assume_yes: bool = False
     Parameters:
 
     - service_account_name: str - Account to delete.
-    - assume_yes: bool = False - Skip the confirmation (`kmt users delete-team-account --yes`).
+    - consent: kubementat.consent.Consent = undecided - What the caller decided about the
+      deletion. `kmt users delete-team-account --yes` hands down `Consent.assumed()`.
 
     Raises:
-    - kubementat.errors.ConfirmationUnavailableError: No terminal to answer in.
+    - kubementat.errors.ConfirmationUnavailableError: Nothing decided, and no way to ask.
     - kubementat.errors.ConfirmationDeclinedError: The operator answered no.
     - kubementat.errors.ClusterAccessDeniedError: A verb the cluster will not grant.
     """
@@ -156,7 +161,7 @@ def delete_team_account(ctx, service_account_name: str, assume_yes: bool = False
     kubernetes_utils = KubernetesUtils(ctx)
 
     user_management.check_cluster_and_access(
-        kubernetes_utils, assume_yes,
+        kubernetes_utils, consent or Consent.undecided(),
         f"delete the team account '{service_account_name}' and everything it can do on this cluster")
     pipeline_ns, app_ns = team_namespaces(ctx, team)
     tunnels = _team_account_tunnel_roles(ctx)

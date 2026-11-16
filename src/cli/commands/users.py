@@ -16,6 +16,7 @@ import sys
 
 import click
 
+from cli.consent import team_account_consent
 from cli.context import kmt_context
 from cli.helpers import team_option
 import kubementat.infrastructure.grafana.accounts as grafana_accounts
@@ -77,7 +78,8 @@ def users():
 @kmt_context
 def create_team_account(ctx, service_account_name, environment, team, yes):
     _require_confirmation('kmt users create-team-account', yes)
-    team_accounts.create_team_account(ctx, service_account_name, assume_yes=yes)
+    team_accounts.create_team_account(ctx, service_account_name,
+                                           consent=team_account_consent(yes))
 
 
 @users.command(name='create-team-account-read-only',
@@ -89,7 +91,8 @@ def create_team_account(ctx, service_account_name, environment, team, yes):
 @kmt_context
 def create_team_account_read_only(ctx, service_account_name, environment, team, yes):
     _require_confirmation('kmt users create-team-account-read-only', yes)
-    team_accounts.create_team_account_read_only(ctx, service_account_name, assume_yes=yes)
+    team_accounts.create_team_account_read_only(
+        ctx, service_account_name, consent=team_account_consent(yes))
 
 
 @users.command(name='delete-team-account',
@@ -101,7 +104,8 @@ def create_team_account_read_only(ctx, service_account_name, environment, team, 
 @kmt_context
 def delete_team_account(ctx, service_account_name, environment, team, yes):
     _require_confirmation('kmt users delete-team-account', yes)
-    team_accounts.delete_team_account(ctx, service_account_name, assume_yes=yes)
+    team_accounts.delete_team_account(ctx, service_account_name,
+                                       consent=team_account_consent(yes))
 
 
 # ---------------------------------------------------------------------------------------

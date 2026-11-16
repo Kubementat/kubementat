@@ -1,4 +1,48 @@
 # Unreleased
+- **Four library functions used to read stdin. None of them does now: the question moved to the
+  command layer, a human at a terminal cannot tell the difference, and an automated run that cannot
+  answer is refused sooner than it was.**
+
+  `install/kubementat.py`, `uninstall/kubementat.py`, `routing/routing.py` and
+  `infrastructure/user_management.py` each carried a pair of lines: a check of the terminal and then a
+  read of a line. That made the library the owner of a terminal it could not see, so a run standing in a
+  pipe blocked wherever the library happened to be standing, and a run at a terminal was asked by the
+  automation layer rather than by the command that offered `--yes` to answer it. Both halves moved: the
+  decision is a parameter (`kubementat.consent.Consent`), and the asking is a callback the CLI builds and
+  hands down (`cli/consent.py`).
+
+  * **The library can no longer ask.** `grep -rn "\binput(\|isatty(" src/kubementat/` is empty. The one
+    line that still reads like the pattern is `crypto_utils.py`'s `gpg.gen_key_input(...)`, which builds a
+    key document and opens no stdin; `tests/test_the_cli_asks_and_the_library_does_not.py` says so out
+    loud rather than leaving the next reader to wonder.
+  * **What an operator sees is what they saw before.** Same four questions, same position in the flow,
+    same accepted answers down to the fact that `kmt install` never trimmed whitespace from an answer while
+    the other three did. The decline sentences are the same ones, including the install decline that still
+    prints a line and exits 1 instead of being promoted to a tidier refusal.
+  * **One command is measurably earlier, and that is the observable change.** `kmt install dev team` with
+    no terminal used to say "install requires confirmation, but stdin is not a terminal" *after* the
+    dependency probes had run, because the library learned about the pipe by standing in it. The guard is
+    now at the command's own door, so the same three `ERROR` lines arrive first and no subprocess runs.
+    Exit code 1, unchanged. The other three commands were already refused at their own door by the guards
+    items 3 and 4 left in place, so for them this item is text moved and nothing more — and `kmt routing
+    install --update` stays where it is, because its question only arises after the cluster has been read.
+  * **`--yes` is a decision and not a silence.** It arrives as `Consent.assumed()`, which is what the E2E
+    lane's every-install-everywhere flag path uses; a terminal arrives as the callback, and a caller that
+    brings neither gets one refusal naming `--yes` and writing nothing. The sentence for that last case is
+    new text — it is a new state, not a rename — and it is only reachable to a library caller, since every
+    `kmt` command builds a consent before it calls anything.
+  * **The consent that cannot be pre-answered keeps its shape.** `kmt routing install dev --update` needs
+    consent only when the cluster turns out to already run a Traefik kubementat did not install. Reading the
+    cluster a second time to decide whether to ask would be a second answer to the same question, so the
+    CLI hands that branch the *way to ask* instead of an answer, and the library decides at the moment the
+    branch is reached whether it needs it.
+  * **Proven with a capture and not with a claim.** A driver ran the same nine cases (four sites, a
+    terminal that answers and declines, a pipe that cannot) against a detached worktree of the parent commit
+    and against this one, and both halves printed the tree they resolved plus a count of the very construct
+    being removed: 4 `isatty(` and 5 stdin reads in the before tree, 0 and 0 in the after one. Every
+    operator-visible byte matched except the documented earlier refusal.
+
+
 - **"What exists" is answered once, from the release index. The refusal a shipped release used to
   get was the sentence for a typo, and it is now the sentence for what it actually is.**
 
@@ -229,7 +273,6 @@
   and the CI-template guards among them). Those read shipped artefacts — a manifest, a Task, a
   template — not source, which is the line the rule draws, and they stayed because nothing else
   currently asserts what they assert. Retiring them is a later change with a replacement, not this one.
-
 
 - **The unit suite now has CI: every push and every pull request runs `uv run pytest -q`.**
 
@@ -1795,7 +1838,6 @@
   `python3 .agent-work/import_graph.py src` prints `none` under `== CYCLES ==` and under
   `== LAYER VIOLATIONS ==`, with `kubementat.shell -> kubementat.errors` the only new edge.
 
-
 - **The seven cluster refusals moved out of `kubementat.cluster` and into `kubementat.errors`.**
   `ClusterResolutionError`, `ClusterNotConfiguredError`, `ClusterContextNotFoundError`,
   `ClusterFileUnreadableError`, `ServiceAccountNotMountedError`, `StatedClusterMismatchError` and
@@ -2002,7 +2044,6 @@
   `<dir>/kubementat.yaml`) instead of naming a command that would do it, because no command will. If this
   ever becomes measurable again the instrument is a statement of what changed between versions, not a
   re-implementation of a verb this project decided it did not want.
-
 
 - **The e2e lane configures through `kmt config`, and no longer through `jq` (T-33 / R-16.1).** R-15.1's
   sentence is blunt — "an e2e lane that writes configuration files directly is a defect, not a shortcut"
@@ -2360,7 +2401,6 @@
 
   This was invisible to 1687 passing tests because `tests/conftest.py` seeds the key into every fixture
   tree. The hazard is not fixtures that are wrong, it is **fixtures that are richer than the product**.
-
 
 - **A cloned configuration is opened by a step of its own, and the key to open it is something kubementat
   creates (§10 R-10.3).** `git_crypt_symmetric.key` is gitignored, which is the whole problem in one word:

@@ -157,11 +157,11 @@ def test_answering_no_says_the_uninstall_was_cancelled_and_exits_non_zero(
     recorded_api.calls.clear()
     fake_binaries.take_calls()
     # `script -qec` on the lane is what makes the command's stdin a terminal; a `CliRunner`
-    # replaces `sys.stdin` while it invokes, so patching the real one is not enough -- the two
-    # guards that read it get a stand-in module attribute instead.
-    monkeypatch.setattr("cli.commands.kubementat.sys",
-                        SimpleNamespace(stdin=SimpleNamespace(isatty=lambda: True)))
-    monkeypatch.setattr("kubementat.automations.uninstall.kubementat.sys",
+    # replaces `sys.stdin` while it invokes, so patching the real one is not enough -- the one
+    # module that reads it gets a stand-in module attribute instead. It is `cli.consent` since item
+    # 7: the guard at the command's door and the question after the plan are the same reader now,
+    # and a decline that reads EOF in either place would be a refusal that never says so.
+    monkeypatch.setattr("cli.consent.sys",
                         SimpleNamespace(stdin=SimpleNamespace(isatty=lambda: True)))
     monkeypatch.setattr("builtins.input", lambda prompt="": "n")
 

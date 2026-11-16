@@ -19,6 +19,7 @@ The environment arrives the way every other command takes it, as an argument tha
 
 import click
 
+from cli.consent import routing_consent
 from cli.context import kmt_context
 from kubementat.automations.routing import routing as routing_install
 from kubementat.automations.routing import traefik_presence
@@ -83,5 +84,10 @@ def install(ctx, environment, yes, update):
     # explicit that a command which cannot act on a team does not accept one, so the option goes -
     # which is also what makes the e2e harness's `kmt routing install <env> --yes` correct rather
     # than a workaround.
-    result = routing_install.install_routing(ctx, update=update, assume_yes=yes)
+    # `--yes` answers the second-controller question; a terminal is handed the question down, because
+    # the branch it is asked on only exists once the cluster has been read once. Reading the cluster a
+    # second time to decide whether to ask would be a second answer to the same question, and the
+    # report this command prints is built from the first one.
+    result = routing_install.install_routing(ctx, update=update,
+                                             consent=routing_consent(environment, yes))
     click.echo(result.summary())

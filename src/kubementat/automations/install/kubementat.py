@@ -15,7 +15,6 @@ because `kmt uninstall` is a command that has no team to satisfy its guard.
 
 
 import logging
-import sys
 
 from kubementat import errors
 from kubementat.infrastructure import shell
@@ -32,6 +31,7 @@ from kubementat.automations.install.dependencies import (
     check_dependencies_are_installed,
 )
 from kubementat.automations.install.pipelines import setup_pipelines
+from kubementat.consent import Consent
 
 
 # What the install preflight proves this service account may do, spelled as the API spells it.
@@ -45,7 +45,8 @@ CLUSTER_PERMISSION_CHECK_RESOURCES = (
     "namespaces", "deployments", "clusterroles", "roles", "daemonsets", "replicasets")
 
 
-def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installation_group='standard', assume_yes=False):
+def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installation_group='standard',
+                       consent=None):
     '''
     Main installation logic for Kubementat components including Tekton and pipeline setup.
 
@@ -53,7 +54,9 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
 
     - configure_tekton_pipelines: bool = True - Whether to configure Tekton pipelines
     - helmfile_installation_group: str = 'standard' - Helmfile installation group
-    - assume_yes: bool = False - Skip the interactive confirmation (`kmt install --yes`)
+    - consent: kubementat.consent.Consent = undecided - What the caller decided about writing to
+      this cluster. `kmt install --yes` hands down `Consent.assumed()`; a terminal hands down the
+      way to ask. A caller that hands down nothing is refused before the first write.
 
     Returns:
 
@@ -72,7 +75,7 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
 
     check_dependencies_are_installed(KUBEMENTAT_DEPENDENCIES)
 
-    validate_cluster_prompt(ctx, assume_yes=assume_yes)
+    validate_cluster(ctx, consent or Consent.undecided())
     check_cluster_permissions(ctx)
 
     logging.info("######################################################")
@@ -108,7 +111,7 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
 
     # helmfile apply
     # The install path applies without asking, exactly as before: `kmt install` has its own
-    # confirmation (validate_cluster_prompt), and helmfile's `[y/n]` is not reachable from
+    # confirmation (`validate_cluster`), and helmfile's `[y/n]` is not reachable from
     # `kmt install --yes`. Passing the flag explicitly keeps that promise if the CLI-side
     # rule ever changes its default.
     group_filter = f"group={helmfile_installation_group}"
@@ -143,20 +146,21 @@ def install_kubementat(ctx, configure_tekton_pipelines=True, helmfile_installati
 
     _print_install_finish_message(ctx)
 
-def validate_cluster_prompt(ctx, assume_yes=False):
-    """Validates cluster connectivity and prompts user confirmation before proceeding.
+def validate_cluster(ctx, consent):
+    """Validates cluster connectivity and carries the run's consent before proceeding.
 
     This method asks the API server for its version, which is the request that answers
-    "is there a cluster here at all", then asks for confirmation to continue. A cluster that
-    does not answer stops the install before the first write.
+    "is there a cluster here at all", and then settles whether this run is allowed to write to it.
+    A cluster that does not answer stops the install before the first write.
 
     The read is the client's now: `kubectl cluster-info` printed four namespace names that mean
     nothing to kubementat and exit-coded on nothing, so it was standing in for a question the
     client answers directly. What it was standing in for is what is checked now.
 
-    With assume_yes the prompt is skipped, which is what `kmt install --yes` does.
-    Without it, a run that has no terminal to ask in fails closed instead of dying
-    inside `input()`.
+    The question is not asked here. `--yes` hands the answer down (`kmt install --yes`), a terminal
+    hands down the way to ask it, and a caller that hands down neither is refused before the first
+    write instead of reading a line from a terminal it cannot see — which is the whole reason the
+    prompt moved to the CLI and not just to a different function in this file.
     """
 
     environment = ctx.environment
@@ -164,32 +168,15 @@ def validate_cluster_prompt(ctx, assume_yes=False):
     kubernetes_utils = KubernetesUtils(ctx)
 
 
-    if assume_yes:
+    if consent.is_assumed():
         logging.info("Confirmation: --yes was given, installing without prompting.")
-    else:
-        if not sys.stdin.isatty():
-            logging.error("install requires confirmation, but stdin is not a terminal.")
-            logging.error("Re-run with --yes (or -y) to install kubementat without prompting:")
-            logging.error(f"  kmt install {environment} {team} --yes")
-            exit(1)
 
     if not kubernetes_utils.cluster_is_reachable():
         logging.info("Error: the cluster did not answer. Cannot proceed without a valid"
                      " Kubernetes cluster connection.")
         exit(1)
 
-    if assume_yes:
-        return
-
-    while True:
-        yn = input("Do you really wish to install kubementat on this cluster? (yes/no): ")
-        if yn.lower() in ['yes', 'y']:
-            break
-        elif yn.lower() in ['no', 'n']:
-            logging.info("Cancelled install script.")
-            exit(1)
-        else:
-            logging.info("Please answer yes or no.")
+    consent.decide(f"install kubementat on this cluster ({environment}/{team})")
 
 
 def check_cluster_permissions(ctx):

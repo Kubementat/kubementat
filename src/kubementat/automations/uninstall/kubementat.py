@@ -13,7 +13,6 @@ read as teams and which were not.
 """
 
 import logging
-import sys
 
 from kubementat import errors
 from kubementat.core.config.teams import TEAM_NAMESPACE_KEYS
@@ -44,10 +43,9 @@ from kubementat.automations.uninstall.residue import (
 from kubementat.automations.uninstall.sweep import namespace_sweep
 
 from kubementat.errors import (
-    ConfirmationDeclinedError,
-    ConfirmationUnavailableError,
     EnvironmentConfigurationFileMissingError,
 )
+from kubementat.consent import Consent
 
 HELM_DEPLOYER_CLUSTER_ROLE = tekton_install.HELM_DEPLOYER_CLUSTER_ROLE_NAME
 
@@ -64,7 +62,7 @@ HELM_DEPLOYER_CLUSTER_ROLE = tekton_install.HELM_DEPLOYER_CLUSTER_ROLE_NAME
 #   and every cluster mutation the generated client can express goes through
 #   `KubernetesUtils`.
 
-def uninstall_kubementat(ctx, assume_yes: bool = False) -> None:
+def uninstall_kubementat(ctx, consent: Consent = None) -> None:
     '''
     Delete every kubementat component, team namespace, release and claim from the cluster.
 
@@ -105,13 +103,17 @@ def uninstall_kubementat(ctx, assume_yes: bool = False) -> None:
 
     Parameters:
 
-    - assume_yes: bool = False - Skip the interactive confirmation (`kmt uninstall --yes`).
+    - consent: kubementat.consent.Consent = undecided - What the caller decided about this
+      deletion. `kmt uninstall --yes` hands down `Consent.assumed()`; a run standing at a terminal
+      hands down the way to ask. A caller that hands down neither is refused before the first
+      delete.
 
     Raises:
 
     - kubementat.errors.ConfirmationDeclinedError: On "no" at the confirmation, so a
       cancellation is one line rather than a traceback of the CLI's own argument parsing.
-    - kubementat.errors.ConfirmationUnavailableError: When there is no terminal to answer in.
+    - kubementat.errors.ConfirmationUnavailableError: When nothing decided it and nothing can ask.
+      `kmt uninstall` cannot reach this one: its own no-terminal guard fires before this line is.
     - kubementat.errors.UninstallIncompleteError: When the cluster still carries something
       kubementat owned, named in the message. An uninstall that says DONE while releases survive
       is the failure this command exists to stop.
@@ -122,8 +124,7 @@ def uninstall_kubementat(ctx, assume_yes: bool = False) -> None:
 
     plan = read_uninstall_plan(ctx)
     print_uninstall_plan(ctx, plan)
-    if not assume_yes:
-        confirm_uninstall()
+    (consent or Consent.undecided()).decide("uninstall all kubementat resources")
 
     logging.info("#########################")
     logging.info(f"Uninstalling kubementat components and team spaces from environment: {environment}")
@@ -265,36 +266,6 @@ def print_uninstall_plan(ctx, plan: dict) -> None:
         logging.info(line)
     logging.info("This cannot be undone. Every resource inside those namespaces goes with them.")
     logging.info("###################################")
-
-def confirm_uninstall() -> None:
-    '''
-    Ask. Failing closed is the whole contract: no terminal, no deletion.
-
-    `kmt uninstall` keeps the CLI-side guard that raises a `UsageError` before this is
-    reached, so the only way to arrive here without a terminal is a caller that built the
-    library itself. The answer is the same either way: say what is wrong, name `--yes`,
-    delete nothing.
-    '''
-    if not sys.stdin.isatty():
-        raise ConfirmationUnavailableError(
-            "uninstall requires confirmation, but stdin is not a terminal."
-            " Re-run with --yes (or -y) to uninstall kubementat without prompting."
-        )
-    while True:
-        answer = input("Do you really wish to uninstall all kubementat resources? ").strip().lower()
-        if answer in ("y", "yes"):
-            return
-        if answer in ("n", "no"):
-            # The message is what the operator and the next person reading a log have: the
-            # bash printed `Cancelled uninstall script.` and exited 1, so declining had a
-            # voice. Raising is the right shape for the library -- it gives the CLI a clean
-            # one-line `Error:` and a non-zero exit -- but the answer still has to say what
-            # happened and what would have happened, in the same words a test can grep.
-            raise ConfirmationDeclinedError(
-                "Cancelled uninstall script. Nothing was deleted and the cluster is untouched"
-                "; re-run with --yes (or -y), or answer yes, to go ahead."
-            )
-        logging.info("Please answer yes or no.")
 
 ###########################
 

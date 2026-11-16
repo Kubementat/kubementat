@@ -39,6 +39,7 @@ import pytest
 from click.testing import CliRunner
 
 from cli.commands import component, helm, kubernetes, routing
+from kubementat.consent import Consent
 from kubementat.automations.routing import routing as routing_module
 from kubementat.core.identity.context import Context
 
@@ -381,7 +382,7 @@ def test_the_routing_group_is_applied_by_a_context_that_was_given_no_team(enviro
     fake_binaries.respond("helm", json.dumps([]), subcommand="list")
     fake_binaries.take_calls()
 
-    result = routing_module.install_routing(Context.build(ENVIRONMENT, None), assume_yes=True)
+    result = routing_module.install_routing(Context.build(ENVIRONMENT, None), consent=Consent.assumed())
 
     assert result.action == routing_module.ACTION_INSTALL
     assert result.namespace, "the namespace came back empty, so nothing was addressed"

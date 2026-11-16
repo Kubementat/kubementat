@@ -24,20 +24,18 @@ Everything here raises; nothing here exits.
 
 import json
 import logging
-import sys
 import time
 
 import yaml
 
+from kubementat.consent import Consent
 from kubementat.infrastructure import shell
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 
-from kubementat.errors import (
-    ClusterAccessDeniedError,
-    ConfirmationDeclinedError,
-    ConfirmationUnavailableError,
-    ResolvedKubeconfigUnusableError,
-)
+# The confirmation errors belong to `kubementat.consent` and to the CLI's ask now: this file settles
+# whether the flow has permission and then asks the cluster for its verbs. It reads no terminal, so it
+# no longer raises on its own behalf -- both names remain reachable through `kubementat.errors`.
+from kubementat.errors import ClusterAccessDeniedError, ResolvedKubeconfigUnusableError
 
 # How long the token controller gets to fill in a Secret it was just told about. The Secret
 # is created empty and the controller writes the token into it, so reading immediately can
@@ -113,26 +111,29 @@ TUNNEL_COMPONENTS = (
     ("polaris", POLARIS_TUNNELING_ROLE),
 )
 
-def check_cluster_and_access(kubernetes_utils: KubernetesUtils, assume_yes: bool,
+def check_cluster_and_access(kubernetes_utils: KubernetesUtils, consent: Consent,
                              action: str) -> None:
-    """Say which cluster this is, ask, and prove the verbs the flow will need.
+    """Say which cluster this is, settle consent, and prove the verbs the flow will need.
 
     `action` is what the run is about to do, phrased as a question the operator can answer.
     It is an argument rather than text hardcoded here so the three commands that call this
-    can each say what they mean, which is what the duplicated bash copy could not do.
+    can each say what they mean, which is what the duplicated bash copy could not do. It is also
+    what the CLI interpolates into the sentence it asks, so the answer the operator gives is about
+    the command they ran and not about this function.
 
     Three exits, in this order, and all three fail closed:
 
-    * `assume_yes` skips the prompt only. That is the scripted escape hatch the E2E lane
-      needs, and it is what `--yes` means.
-    * No `--yes` and no terminal means nobody is there to answer, so nothing gets edited.
+    * A consent that was already assumed skips the asking. That is the scripted escape hatch the
+      E2E lane needs, and it is what `--yes` means.
+    * Nothing decided and no way to ask means nobody is there to answer, so nothing gets edited.
       A prompt that reads EOF would be answered by the empty string and the old script's
       `set -e` would then abort it with no message at all, which is exactly how
-      `cap:create-team-account` looked red without saying why.
-    * A "no" cancels.
+      `cap:create-team-account` looked red without saying why. Asking on stdin is what the CLI
+      owns now, so this function refuses a caller that brought neither answer nor ask.
+    * A "no" cancels, which only the caller's ask can report.
 
     Raises:
-    - kubementat.errors.ConfirmationUnavailableError: No terminal, no `--yes`.
+    - kubementat.errors.ConfirmationUnavailableError: No decision, and no way to get one.
     - kubementat.errors.ConfirmationDeclinedError: The operator answered no.
     - kubementat.errors.ClusterAccessDeniedError: A verb the cluster will not grant.
     """
@@ -148,20 +149,10 @@ def check_cluster_and_access(kubernetes_utils: KubernetesUtils, assume_yes: bool
                  "%s, address %s (resolved from %s)",
                  target.environment, target.context, target.address, target.source)
 
-    if assume_yes:
+    if consent.is_assumed():
         logging.info("Skipping the cluster confirmation because --yes was given.")
-    elif not sys.stdin.isatty():
-        raise ConfirmationUnavailableError(
-            f"Confirmation required, but stdin is not a terminal. Re-run with --yes for: {action}"
-        )
     else:
-        while True:
-            answer = input(f"Do you really wish to {action}? ").strip().lower()
-            if answer in ("y", "yes"):
-                break
-            if answer in ("n", "no"):
-                raise ConfirmationDeclinedError("Cancelled.")
-            logging.info("Please answer yes or no.")
+        consent.decide(action)
 
     denied = []
     for verb, resource in CLUSTER_ACCESS_CHECKS:

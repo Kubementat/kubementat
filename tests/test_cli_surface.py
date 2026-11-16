@@ -926,18 +926,22 @@ def test_the_update_flag_reaches_the_function_that_decides(monkeypatch, resolvab
     # test's stand-in: both flags have a named parameter to land in, or the keyword call is a
     # TypeError the surface would have taken instead of a decision.
     parameters = inspect.signature(routing_core.install_routing).parameters
-    assert "update" in parameters and "assume_yes" in parameters, (
+    assert "update" in parameters and "consent" in parameters, (
         "install_routing has no parameter for the flags kmt routing install offers; the CLI is "
-        "offering flags with nowhere to go")
+        "offering flags with nowhere to go. `consent` is where --yes lands: the flag answers the "
+        "one branch that needs it, and the CLI decides how it is answered (item 7).")
     assert "ctx" in parameters, (
         "install_routing no longer takes the one `Context` every class that reaches a cluster is "
         "given; the CLI's `@kmt_context` has nothing to hand over")
 
     calls = []
 
-    def recording(ctx, update=False, assume_yes=False):
+    def recording(ctx, update=False, consent=None):
         calls.append({"environment": ctx.environment, "team": ctx.team,
-                      "update": update, "assume_yes": assume_yes})
+                      "update": update,
+                      # What the flag became: `assumed` is `--yes`, `undecided` is the CLI handing
+                      # down a terminal to ask on. The flag's whole job is which of the two arrives.
+                      "consent": consent.answer if consent is not None else None})
         return types.SimpleNamespace(summary=lambda: "recorded")
 
     monkeypatch.setattr(routing_core, "install_routing", recording)
@@ -957,9 +961,10 @@ def test_the_update_flag_reaches_the_function_that_decides(monkeypatch, resolvab
     assert len(calls) == 2, "neither invocation reached install_routing"
 
     without_flags, with_flags = calls
-    assert (without_flags["update"], without_flags["assume_yes"]) == (False, False), (
-        f"the bare command asked for an upgrade anyway: {without_flags}")
-    assert (with_flags["update"], with_flags["assume_yes"]) == (True, True), (
+    assert (without_flags["update"], without_flags["consent"]) == (False, "undecided"), (
+        f"the bare command asked for an upgrade anyway, or decided consent for the operator: "
+        f"{without_flags}")
+    assert (with_flags["update"], with_flags["consent"]) == (True, "assumed"), (
         f"--yes/--update did not reach install_routing as they were given: {with_flags}")
     for call in calls:
         assert (call["environment"], call["team"]) == ("dev", None), (

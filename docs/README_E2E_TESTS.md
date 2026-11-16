@@ -215,10 +215,21 @@ Nothing, on the smoke lane: the last run is **66 assertions, 0 failed**
 (`20261022T225043Z`). The suite still reports product blockers instead of hiding them,
 so if a future run is red, `result.json` names the ticket.
 
-- **nothing** — both halves of FIN-11 are **closed**: `kmt install ENV TEAM --yes`/`-y` and
-  `kmt uninstall ENV --yes`/`-y` skip the confirmation, and without the flag each one fails
-  closed with an actionable message when it cannot prompt. The lane runs both with `--yes`
-  and no stdin, so the flag itself is under test.
+- **nothing** — both halves of FIN-11 are **closed**: `kmt install ENV TEAM --yes`/`-y`,
+  `kmt uninstall ENV --yes`/`-y`, `kmt routing install ENV --update --yes`/`-y` and the three
+  `kmt users …-team-account … --yes`/`-y` verbs answer their own confirmation, and without the flag
+  each one fails closed with an actionable message when it cannot prompt. The lane runs them with
+  `--yes` and no stdin, so the flag itself is under test.
+
+  Where the refusal lands is now uniform, and it is the CLI that stands there: since the four
+  library prompts moved to the command layer (`kubementat/consent.py` carries the decision, and the
+  asking lives in `cli/consent.py`), a run with no terminal is refused at the command's own door —
+  `kmt install` exits **1** with the three `ERROR` lines naming `--yes`, `kmt uninstall` and
+  `kmt users …` exit **2** with a Click usage error, and `kmt routing install --update` exits
+  **1** with a one-line `Error:` — printed after the warning it emits whether or not anybody agreed.
+  `kmt install` is the one command whose non-TTY failure got *earlier*: it used to find the pipe only
+  after the dependency probes had run, and now finds it before, with the same message either way.
+  Interactive (TTY) runs are unaffected — same question, same order, same accepted answers.
 
 Resolved by removing things rather than fixing them: the dead `twuni` repo (FIN-88) and
 the `kubernetes-dashboard` release (FIN-89) are gone from the tree. The dashboard

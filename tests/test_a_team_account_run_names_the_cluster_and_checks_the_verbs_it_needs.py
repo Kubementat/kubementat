@@ -19,6 +19,8 @@ could not skip. There is one implementation now; this is what it owes:
   told it did not have.
 """
 
+from cli.consent import team_account_consent
+from kubementat.consent import Consent
 from kubementat.errors import (ClusterAccessDeniedError, ConfirmationDeclinedError, ConfirmationUnavailableError)
 import base64
 import json
@@ -187,7 +189,7 @@ def test_the_cluster_is_named_before_anything_on_it_is_changed(
     through `Config` — and no kubeconfig on the machine running pytest is consulted.
     """
     with caplog.at_level(logging.INFO):
-        create_team_account(on_a_cluster_that_grants_everything, "ops-account")
+        create_team_account(on_a_cluster_that_grants_everything, "ops-account", consent=team_account_consent(yes=False))
 
     text = "\n".join(record.getMessage() for record in caplog.records)
     named = text.find("You are going to edit users on the following cluster")
@@ -205,7 +207,7 @@ def test_the_verbs_of_everything_the_flow_is_about_to_do_are_asked_about(
     Both sides are asserted: `CLUSTER_ACCESS_CHECKS` is what the flow plans, the recorded argv
     is what it asked, and the two have to agree verb for verb.
     """
-    create_team_account(on_a_cluster_that_grants_everything, "ops-account")
+    create_team_account(on_a_cluster_that_grants_everything, "ops-account", consent=team_account_consent(yes=False))
 
     asked = can_i_asked(recorded_api)
     assert asked == list(user_management.CLUSTER_ACCESS_CHECKS), (
@@ -246,7 +248,7 @@ def test_a_denied_verb_stops_the_run_before_the_first_write_and_names_it(
     ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
     with pytest.raises(ClusterAccessDeniedError) as raised:
-        create_team_account(ctx, "ops-account")
+        create_team_account(ctx, "ops-account", consent=team_account_consent(yes=False))
 
     assert "create rolebindings" in str(raised.value)
     assert client_writes(recorded_api) == [], "it wrote to the cluster after being told no"
@@ -266,7 +268,7 @@ def test_every_denied_verb_is_reported_and_not_only_the_first(
     ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
     with pytest.raises(ClusterAccessDeniedError) as raised:
-        create_team_account(ctx, "ops-account")
+        create_team_account(ctx, "ops-account", consent=team_account_consent(yes=False))
 
     assert "create rolebindings" in str(raised.value)
     assert "patch roles" in str(raised.value)
@@ -285,7 +287,7 @@ def test_answering_no_at_the_prompt_creates_nothing(
     ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
     with pytest.raises(ConfirmationDeclinedError) as raised:
-        create_team_account(ctx, "ops-account")
+        create_team_account(ctx, "ops-account", consent=team_account_consent(yes=False))
 
     assert "Cancelled" in str(raised.value)
     assert client_writes(recorded_api) == []
@@ -304,7 +306,7 @@ def test_an_answer_that_is_neither_yes_nor_no_is_asked_again(
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
     ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
-    create_team_account(ctx, "ops-account")
+    create_team_account(ctx, "ops-account", consent=team_account_consent(yes=False))
 
     assert client_writes(recorded_api), "the account was never created"
 
@@ -321,7 +323,7 @@ def test_yes_skips_the_question_and_changes_nothing_else(
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
     by_hand = Context.build(asked_cluster.environment, asked_cluster.team)
-    create_team_account(by_hand, "ops-account")
+    create_team_account(by_hand, "ops-account", consent=team_account_consent(yes=False))
     by_hand_operations = recorded_api.operations()
     by_hand_checks = can_i_asked(recorded_api)
     recorded_api.calls.clear()
@@ -332,7 +334,7 @@ def test_yes_skips_the_question_and_changes_nothing_else(
 
     monkeypatch.setattr("builtins.input", no_prompt)
     create_team_account(Context.build(asked_cluster.environment, asked_cluster.team),
-        "ops-account", assume_yes=True)
+        "ops-account", consent=Consent.assumed())
 
     assert recorded_api.operations() == by_hand_operations
     assert can_i_asked(recorded_api) == by_hand_checks
@@ -349,7 +351,7 @@ def test_no_terminal_and_no_yes_is_refused_before_the_cluster_is_asked_anything(
     ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
     with pytest.raises(ConfirmationUnavailableError) as raised:
-        create_team_account(ctx, "ops-account")
+        create_team_account(ctx, "ops-account", consent=team_account_consent(yes=False))
 
     assert "--yes" in str(raised.value)
     assert client_writes(recorded_api) == []
@@ -370,7 +372,7 @@ def test_the_question_asked_of_the_operator_says_what_the_command_is_about(
     ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
     user_management.check_cluster_and_access(
-        KubernetesUtils(ctx), False,
+        KubernetesUtils(ctx), team_account_consent(yes=False),
         "delete the team account 'ops-account' and everything it can do on this cluster")
 
     assert any("delete the team account" in prompt for prompt in asked)
@@ -383,7 +385,7 @@ def test_the_checks_happen_before_any_write_whichever_command_is_standing_there(
     A second copy of this function is exactly what let one variant walk past it, so the
     read-only command is measured here rather than trusted to reuse it.
     """
-    create_team_account_read_only(on_a_cluster_that_grants_everything, "ops-account")
+    create_team_account_read_only(on_a_cluster_that_grants_everything, "ops-account", consent=team_account_consent(yes=False))
 
     assert can_i_asked(recorded_api) == list(user_management.CLUSTER_ACCESS_CHECKS)
     assert client_writes(recorded_api), "the read-only command wrote nothing"
@@ -398,6 +400,6 @@ def test_a_command_that_deletes_an_account_checks_the_same_verbs(asked_cluster, 
     """
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
-    delete_team_account(Context.build(asked_cluster.environment, asked_cluster.team), "ops-account")
+    delete_team_account(Context.build(asked_cluster.environment, asked_cluster.team), "ops-account", consent=team_account_consent(yes=False))
 
     assert can_i_asked(recorded_api) == list(user_management.CLUSTER_ACCESS_CHECKS)

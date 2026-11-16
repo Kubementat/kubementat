@@ -1,7 +1,6 @@
-import sys
-
 import click
 
+from cli.consent import install_consent, uninstall_consent
 from cli.context import kmt_context
 from kubementat.automations.install import kubementat as install_slice
 from kubementat.automations.install import registry as registry_slice
@@ -19,11 +18,18 @@ from kubementat.automations.uninstall import kubementat as uninstall_slice
 def install(ctx, environment, team, configure_tekton_pipelines, helmfile_installation_group, yes):
     click.echo(f"Helmfile installation group: {helmfile_installation_group}")
     click.echo(f"Configure tekton pipelines: {configure_tekton_pipelines}")
+    # The question is asked here, after the two lines this command has always printed before it
+    # called anything, and before it touches a cluster. `kmt install` used to find out it had no
+    # terminal to ask in only after the dependency probes had run; the message is the same three
+    # lines either way, so the only thing the earlier guard changes is how much work a doomed run
+    # does before saying so. The library still decides *where* the answer is needed -- after the
+    # cluster has been read -- so the order of the operator's lines does not move.
+    consent = install_consent(environment, team, yes)
     install_slice.install_kubementat(
         ctx,
         configure_tekton_pipelines=configure_tekton_pipelines,
         helmfile_installation_group=helmfile_installation_group,
-        assume_yes=yes
+        consent=consent
     )
 
 # Uninstall kubementat
@@ -35,17 +41,13 @@ def uninstall(ctx, environment, yes):
     # The confirmation contract belongs to the CLI and it did not change when the bash did:
     # without `--yes` a run that has no terminal to ask in fails closed, naming the flag. The
     # deleted `uninstall_kubementat.sh` used to read stdin itself, which is why `kmt uninstall`
-    # could hold a lane open - and why answering "no" meant running a script at all.
-    if not yes and not sys.stdin.isatty():
-        raise click.UsageError(
-            "uninstall requires confirmation, but stdin is not a terminal. "
-            "Re-run with --yes (-y) to uninstall kubementat without prompting.")
-    # Environment-scoped: the sweep covers every team the environment's layer of the configuration
-    # directory configures,
-    # so passing one team along would be a claim about the install that is not true. The `Context`
-    # the decorator resolved is all this command hands the uninstall slice: a cluster to sweep, and
-    # no team, whose shape is decided by the command and not defaulted from the caller's context.
-    uninstall_slice.uninstall_kubementat(ctx, assume_yes=yes)
+    # could hold a lane open - and why answering "no" meant running a script at all. What moved
+    # in item 7 is the *question*, which the library used to ask after printing the deletion plan:
+    # it is in `cli/consent.py` now, and what travels down is the answer. Environment-scoped, as
+    # it was: the sweep covers every team the environment's layer configures, so passing one team
+    # along would be a claim about the install that is not true, and the `Context` the decorator
+    # resolved is all this command hands the uninstall slice.
+    uninstall_slice.uninstall_kubementat(ctx, consent=uninstall_consent(environment, yes))
 
 
 # --------------------------------------------
