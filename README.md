@@ -447,7 +447,15 @@ uv run kmt setup-docker-registry-access dev dev1
 uv run kmt setup-secrets dev dev1
 
 
-# Optional (but recommmended)
+# Routing is not part of kmt install. Read the cluster first, then apply the routing group.
+# Both ClusterIssuers register their ACME account with CLUSTER_MANAGER_EMAIL, so answer it
+# first; a --update that would install a second Traefik controller asks first, and --yes answers.
+uv run kmt config set dev CLUSTER_MANAGER_EMAIL=you@example.com
+uv run kmt routing status dev
+uv run kmt routing install dev
+
+
+# Optional (but recommended)
 # Configure cluster wide auto cleanup of finished tekton pipeline runs
 # This is implemented via Kubernetes cronjob, in the namespace the environment's
 # CLUSTER_CRONJOBS_DEPLOYMENT_NAMESPACE names
@@ -595,9 +603,12 @@ installed by `kmt routing install`'s decision — the command reads the cluster 
 same question `kmt routing status` answers: *mine, foreign, or absent*. Nothing there → kubementat
 applies its own release. Already kubementat's → nothing is applied, because upgrading a serving
 controller is a values edit and a version bump, and `kmt routing install <environment> --update` is
-the verb that does it. Already somebody else's → refused, applying nothing, because a second
+the verb that does it. Already somebody else's → this command refuses and applies nothing, because a second
 controller, class and status writer is not a thing a command named `install` gets to decide; `kmt
-routing install <environment> --update` is the verb that can ask. `cert-manager` is not asked, because
+routing install <environment> --update` is the verb that can ask. The same finding through `kmt
+routing install` without `--update` is not a refusal: kubementat's Traefik release is skipped and the
+rest of `group=routing` — cert-manager and the ClusterIssuers — is applied anyway, because a skip that
+suppressed the whole group would take the platform issuer down. `cert-manager` is not asked, because
 it is an issuer and not a controller.
 
 **The git providers are not components.** `gitea`, `gitbucket` and `gitlab` were retired as kubementat
@@ -616,7 +627,13 @@ old one is documented in the CHANGELOG rather than left as a second route to the
 - Routing: `uv run kmt routing install <environment>` installs kubementat's Traefik controller and the
   cert-manager that fronts it, and `kmt routing status <environment>` says first which controller the cluster
   is already running, whose it is, and what `install` would do. Traefik ships as the cluster's default
-  IngressClass, so an Ingress that names no class is routed. `kmt install` installs no controller; nginx
+  IngressClass, so an Ingress that names no class is routed. It takes `--yes` like every command that
+  writes: applying `--update` beside a foreign controller means a second controller, class and status
+  writer, and that is the one branch the command asks about — `--yes` answers it, and without it and
+  without a terminal to ask in, nothing is applied and the run fails naming the flag. It also refuses
+  until `CLUSTER_MANAGER_EMAIL` is answered, because both ClusterIssuers register their ACME account
+  with it: `uv run kmt config set <environment> CLUSTER_MANAGER_EMAIL=<address>`. `kmt install` installs
+  no controller; nginx
   ingress went out on 2026-10-28 and is swept from clusters that really had it. See the CHANGELOG and
   `docs/README_PLATFORM_CONFIG.md`.
 - Helmfile based component installation: The releases kubementat applies are declared in

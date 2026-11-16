@@ -30,9 +30,8 @@ changes, and `CHANGELOG.md` records it.
 - helm and helmfile — every release kubementat applies arrives through helmfile
 - Docker
 
-What is **not** in the stack is a layer of shell scripts. The verbs that used to be bash are Python in
-`src/kubementat/` now, and the `.sh` files still in the tree build CI images and drive the e2e lanes —
-nothing a `kmt` command execs.
+There is no shell-script layer. Every `kmt` verb is Python in `src/kubementat/`; the `.sh` files still
+in the tree build CI images and drive the e2e lanes, and no `kmt` command execs them.
 
 ### Python Environment Setup
 
@@ -121,40 +120,28 @@ place to discover a lane was broken.
 4. **Tag and push it.** `git tag -a vX.Y.Z -m "release vX.Y.Z"`, then `git push origin vX.Y.Z && git push
 forgejo vX.Y.Z`. Annotated only, and never move a tag that is already on a remote — cut a new tag instead.
 
-The tags before **2.0.0** (`0.1.0`, `0.2.0`, `0.3.0`) are lightweight and carry no `v`, and they stay as they
-are; nothing reads a tag, so renaming them would cost history for no behaviour. From 2.0.0 the convention above
-holds, and `git log --oneline 0.3.0..develop` is the raw list for anything cut after it.
-
 ## Architecture
 
-We separate the cli implementation ( `src/cli` ) strictly from the core kubementat logic ( `src/kubementat` )
+The cli implementation (`src/cli`) is strictly separated from the core kubementat logic
+(`src/kubementat`). The library imports no `click` and raises every refusal as a named
+`kubementat.errors` class; it reads no terminal and no stdin. `RENDERED_REFUSALS` in `cli/context.py`,
+caught by `RenderingGroup`, is the single place that decides how a refusal reaches a terminal: the
+library hands a consumer a class name and a sentence, and `kmt` decides the exit code and the `Error:`
+prefix.
 
-After item 4 that claim is testable rather than aspirational: `import click` appears under `src/cli/**` and
-nowhere else (`grep -rn "^import click\|^from click" src/kubementat/` is empty), and every refusal the library
-raises is a named `kubementat.errors` class. The one line that decides how a refusal reaches a terminal is
-`RENDERED_REFUSALS` in `cli/context.py`, caught by `RenderingGroup` — which the root group inherits and the
-`config` and `environments` groups carry directly, because those two verbs build no `Context` on purpose. So a
-library consumer is handed a class name and a sentence, and `kmt` decides the exit code and the `Error:` prefix
-
-After item 7 the same separation covers the terminal: no module under `src/kubementat/` reads stdin or asks
-whether there is a terminal to read (`grep -rn "\binput(\|isatty(" src/kubementat/` is empty — the single
-surviving `gen_key_input(` is a GPG binding that builds a document and opens nothing). The four commands that
-used to be able to block inside the library now receive a `kubementat.consent.Consent` parameter and ask nothing:
-`--yes` arrives as a decision, a terminal arrives as the CLI's `ask` callback, and a caller that brings neither is
-refused before the first write. One case forces the callback and not just the answer — `kmt routing install
---update` needs consent only when the cluster turns out to already run somebody else's Traefik, and reading the
-cluster twice to decide whether to ask would be a second answer to the same question — so `cli/consent.py` owns
-the question, the accepted answers and the refusal text, and the library owns whether the branch needs an answer
-and what to do with it
+Every command that writes receives a `kubementat.consent.Consent` parameter and asks nothing: `--yes`
+arrives as a decision, a terminal arrives as the CLI's `ask` callback, and a caller that brings neither
+is refused before the first write. `cli/consent.py` owns the question, the accepted answers and the
+refusal text; the library owns whether a branch needs an answer and what to do with it.
 
 ## Configuration Management
 
 ### The configuration directory
 
-kubementat is configured by an **external configuration directory**: a directory the operator chooses that
-is a git repository in its own right, prepared by `kmt config init`. It is not in this checkout, nothing is
-written into it from this checkout, and no code path looks for a `platform_config/` beside the installed
-package. That name survives only inside help text and old prose.
+kubementat is configured by an **external configuration directory**: a directory the operator chooses
+that is a git repository in its own right, prepared by `kmt config init`. It is not in this checkout,
+nothing is written into it from this checkout, and no code path looks for a `platform_config/` beside
+the installed package.
 
 - It is **named, never located**: `--config-dir PATH` on the command, which outranks
   `$KUBEMENTAT_PLATFORM_CONFIG_DIR`. With neither, a command refuses — `core/config/paths.py` owns that
@@ -169,8 +156,8 @@ package. That name survives only inside help text and old prose.
 - An `export` of a configuration key's name answers nothing. The variables that mean anything all point,
   none of them configures: `KUBEMENTAT_HOME` and `KUBEMENTAT_PLATFORM_CONFIG_DIR` for the two roots,
   `KUBECONFIG` and `ENVIRONMENT` for the machine and the environment, and `CLUSTER_KUBE_CONTEXT` /
-  `CLUSTER_KUBECONFIG_PATH` as the layer above what an environment declares — a way to state a cluster from
-  outside, not a way to configure one.
+  `CLUSTER_KUBECONFIG_PATH` as the layer above what an environment declares — a way to state a cluster
+  from outside, not a way to configure one.
 - An environment is exactly one cluster. The two `CLUSTER_*` keys are what make that true, and they are
   checked against each other across the whole tree before anything touches a cluster.
 
