@@ -415,7 +415,11 @@ def test_the_manifest_hands_its_component_name_to_the_operator_layers():
               if 'template "kubementat-operator-values"' in line
               and not line.lstrip().startswith("#")]
 
-    assert len(labelled) == 10, f"expected ten release blocks with a component_name label, got {labelled}"
+    assert len(labelled) == len(passed), (
+        f"{len(labelled)} blocks declare a component_name and {len(passed)} hand one to the "
+        f"operator layers -- the difference is a block that declares without handing over, which "
+        f"is the miss this pair of counts is for, whatever the census of the file happens to be")
+    assert len(labelled) >= 10, f"a file that lost a whole release block reads like this: {labelled}"
     assert sorted(labelled) == sorted(passed), (
         "the name handed to the operator layers stopped being the name `kmt component install` "
         f"addresses: {sorted(set(labelled) - set(passed))} / {sorted(set(passed) - set(labelled))}")

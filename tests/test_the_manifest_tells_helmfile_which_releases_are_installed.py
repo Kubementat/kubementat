@@ -21,6 +21,7 @@ helmfile is not installed these skip, which is the honest answer and not a pass.
 """
 
 import os
+import re
 import shutil
 import subprocess
 
@@ -39,6 +40,38 @@ MANIFEST = values_path("helmfile.yaml.gotmpl")
 # guards is a specific release's line. `alloy` is named in the second test's prose rather than asserted
 # separately: its build state is checked there, as one of the releases nobody disabled.
 SWITCHED_OFF = "grafana"
+
+# `{release: its own `installed:` default}` as the shipped manifest declares it. The read starts at
+# the `releases:` line and skips comments for the same reasons the manifest guard gives:
+# `repositories:` shares the shape of the release header, and a commented release is not a release.
+# This is the file's census of opt-in: everything ships `default "true"` except what `extra` keeps
+# out of the default install (concourse ships "false" on purpose), and a hard-coded *all build
+# installed* here would be a statement about yesterday's manifest. The measurement this file makes
+# is knob-to-boolean resolution, and the truth it measures against is the manifest's own default.
+INSTALLED_LINE = re.compile(r'^\s+installed: \{\{ env "[A-Z0-9_]+" \| default "(true|false)" \}\}$')
+NAME_LINE = re.compile(r"^- name:\s*(\S+)\s*$")
+
+
+def installed_defaults():
+    """`{release name: the built `installed` a run that declares nothing must produce}`."""
+    lines = MANIFEST.read_text(encoding="utf-8").splitlines()
+    started = False
+    defaults, current = {}, None
+    for line in lines:
+        if line.strip() == "releases:":
+            started = True
+            continue
+        if not started or line.lstrip().startswith("#"):
+            continue
+        declared = NAME_LINE.match(line)
+        if declared:
+            current = declared.group(1)
+            continue
+        found = INSTALLED_LINE.match(line)
+        if found and current is not None:
+            defaults[current] = found.group(1) == "true"
+    assert defaults, "the shipped manifest declares no templated `installed:` line, so this guard reads nothing"
+    return defaults
 
 
 def built_releases(**knobs):
@@ -71,19 +104,26 @@ def built_releases(**knobs):
 
 
 @helmfile_only
-def test_a_manifest_that_nobody_edited_builds_every_release_installed():
-    """The default case, and the one a fresh cluster runs on: every release is installed, as booleans.
+def test_a_manifest_that_nobody_edited_builds_every_release_at_its_own_default():
+    """The default case, and the one a fresh cluster runs on: every release builds its own default,
+    as booleans -- installed where the block is wound true, not-installed where it ships wound false.
 
     `is True` and not `== True`, because the point is the field. helmfile resolves an unquoted
     `true` inside `{{ env ... }}` into its boolean `installed`, and a string that reads `"true"` is
     not that field -- so a template that quoted the answer would pass an equality assert and fail the
-    apply.
+    apply. The same holds for `false`: the opt-in releases (`concourse` in `group: extra`) must come
+    out the field `False`, not the string `"false"` and not silently `True`.
     """
     releases = built_releases()
+    expected = installed_defaults()
 
     assert releases, "the shipped manifest built nothing at all"
-    assert all(release.get("installed") is True for release in releases.values()), \
-        {name: release.get("installed") for name, release in releases.items()}
+    assert set(expected) == set(releases), \
+        f"the blocks the manifest declares and the releases the build returned disagree: " \
+        f"{sorted(set(expected) ^ set(releases))}"
+    assert {name: release.get("installed") for name, release in releases.items()} == expected, \
+        {name: (release.get("installed"), expected[name])
+         for name, release in releases.items() if release.get("installed") is not expected[name]}
 
 
 @helmfile_only
@@ -96,9 +136,10 @@ def test_the_release_the_environment_switched_off_builds_as_not_installed():
     through the knob this run set for something else.
     """
     releases = built_releases(**{f"{SWITCHED_OFF.upper()}_ENABLED": "false"})
+    expected = installed_defaults()
 
     assert releases[SWITCHED_OFF]["installed"] is False
-    assert all(release["installed"] is True
+    assert all(release["installed"] is expected[name]
                for name, release in releases.items() if name != SWITCHED_OFF), \
         "disabling one release decided all of them"
 

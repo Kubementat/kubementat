@@ -48,8 +48,11 @@ SUFFIXES = ("ENABLED", "VERSION")
 # `helmfile_apply` makes.
 
 # `installed:` unquoted, so helmfile's boolean field gets a boolean; `version:` quoted, so a version
-# that reads like `1.0` survives as the string helm resolves.
-INSTALLED_KNOB = re.compile(r'^\s+installed: \{\{ env "(?P<key>[A-Z0-9_]+)" \| default "true" \}\}$')
+# that reads like `1.0` survives as the string helm resolves. The default is read in either boolean
+# shape: every release ships as an opt-out (`default "true"`) except the members of `extra` that the
+# plan makes opt-in (`concourse` ships `default "false"`), and the knob is still a knob in both --
+# what this guard measures is the templated line and the key it addresses, not which way it is wound.
+INSTALLED_KNOB = re.compile(r'^\s+installed: \{\{ env "(?P<key>[A-Z0-9_]+)" \| default "(?:true|false)" \}\}$')
 VERSION_KNOB = re.compile(r'^\s+version: "\{\{ env "(?P<key>[A-Z0-9_]+)" \| default "(?P<version>.*)" \}\}"$')
 # The shape either knob loses by being written the other way round: a quoted `installed` is a string
 # helmfile does not resolve, and an unquoted `version` is a number.
