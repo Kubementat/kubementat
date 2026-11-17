@@ -5402,9 +5402,9 @@ echo "HTTP=$code DIGEST=$digest"
             config_path = CONCOURSE_PIPELINE_FILE
 
         set_pipeline = self._concourse_fly(namespace,
-                                           ["-t", CONCOURSE_FLY_TARGET, "set-pipeline",
+                                           ["-t", CONCOURSE_FLY_TARGET, "set-pipeline", "-n",
                                             "-p", CONCOURSE_PIPELINE, "-c", config_path],
-                                           timeout=180, stdin="y\n")
+                                           timeout=180)
         self.expect("concourse-pipeline-configured", set_pipeline.ok,
                     "fly set-pipeline exited %s: %s" % (set_pipeline.exit_code, set_pipeline.excerpt(300)))
         if not set_pipeline.ok:
