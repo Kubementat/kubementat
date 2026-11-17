@@ -1,12 +1,14 @@
 # The unit suite, on every push and every pull request. Nothing else runs here.
 #
-# Four steps, each one justified rather than inherited:
+# Five steps, each one justified rather than inherited:
 #
 #   checkout          — nothing can be asserted about code that was never fetched.
 #   install uv        — `uv` is how the README tells a developer to run this suite, so the job runs
 #                       it exactly that way instead of maintaining a second dependency story. The
 #                       interpreter is not chosen here: `.python-version` answers 3.9, and that file
 #                       is the only source of the pin (setup-uv reads it; so does `uv run`).
+#   install git-crypt — the suite shells out to the real binary, and the runner image does not carry
+#                       it. See the step.
 #   uv run pytest -q  — byte-for-byte the command a developer types at the repo root. Never written
 #                       as `-m integration`: that marker selects zero tests unless it is asked for,
 #                       and the things it marks need a cluster, which this job must not need.
@@ -52,6 +54,21 @@ jobs:
       # runner cannot resolve, and the job dies before `uv` exists. Bumping this is a commit of its own.
       - name: Install uv
         uses: astral-sh/setup-uv@v10.3.3
+
+      # `git-crypt` is not on the runner image — `git` is, `git-crypt` is not, and the request to add
+      # it (actions/runner-images#6171) was closed without action — so a checkout of this repository
+      # has no binary to find.
+      #
+      # Two cases in `test_exactly_one_base64_layer_sits_between_the_key_and_the_unlock_step.py` need
+      # it: they create a real encrypted repository and run a real `git-crypt unlock -`, because telling
+      # one base64 layer from two cannot be done by reading the step's text — a double encoding leaves
+      # every token in place and only fails at unlock. They answer a missing binary with a failure
+      # rather than a skip on purpose, and that is the right call: a lane that skips the transport it
+      # ships does not test the transport. So the lane installs the binary instead of the test
+      # softening, and installs it from apt the same way the e2e guest does
+      # (`tests/e2e/stages/01-provision.sh`) rather than inventing a second source for it here.
+      - name: Install git-crypt
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq git-crypt
 
       - name: Run the unit suite
         # `shell: bash` matters more than it looks: GitHub's default shell is `bash -e`, which does
