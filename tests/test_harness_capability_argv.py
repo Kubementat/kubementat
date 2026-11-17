@@ -1,10 +1,11 @@
-"""Guards the E2E capability table's argv against the scripts and commands it drives.
+"""Guards the E2E capability table's argv against the command surface it drives.
 
-These are the two mistakes that made capabilities red without any product change:
-a `{placeholder}` that no stage supplies (it survives into argv verbatim), and a
-script invoked with fewer arguments than its `Usage:` line requires. The account
-scripts need `<ENVIRONMENT> <TEAM> <SERVICE_ACCOUNT_NAME>`, and for a long time the
-table handed them two.
+Three mistakes made capabilities red without any product change, and each is checked here against
+the table as it resolves rather than against a list written in this file: a `{placeholder}` no stage
+supplies, which survives into argv verbatim; an option a command stopped defining, which the parser
+refuses at run time; and a row whose argv no longer names a command the CLI has — the shape a rename
+leaves behind. Because every row is resolved through the real `kmt` surface, a row that drifted fails
+here instead of three stages into a lane on a VM.
 """
 
 import contextlib
@@ -46,27 +47,6 @@ def load_harness_config():
 @pytest.fixture(scope="module")
 def harness():
     return load_harness_config()
-
-
-def script_invocation(argv):
-    """The script path followed by the arguments it gets, from a run-script argv.
-
-    Handles both `--args VALUE` and the unambiguous `--args=VALUE` form.
-    """
-    tokens = []
-    for token in argv[argv.index("run-script") + 1:]:
-        if token == "--args":
-            continue
-        if token.startswith("--args="):
-            tokens.append(token[len("--args="):])
-            continue
-        tokens.append(token)
-    return tokens
-
-
-def positionals(invocation):
-    """The arguments a script reads as `$1..$N`; everything else is a flag like `--yes`."""
-    return [token for token in invocation[1:] if not token.startswith("-")]
 
 
 def test_every_placeholder_is_somewhere_the_stage_can_supply_it(harness):
@@ -195,28 +175,6 @@ def test_the_read_only_account_is_not_the_admin_account(harness):
     assert deleted == admin, "the stage checks that the account it created is gone"
     assert harness.TEAM_ACCOUNT == admin
     assert re.fullmatch(r"[a-z0-9-]+", admin) and re.fullmatch(r"[a-z0-9-]+", read_only), "not valid SA names"
-
-
-def declared_positional_parameters(script_text):
-    """How many positionals a script reads: the highest `$N` it assigns to itself."""
-    indices = [int(n) for n in re.findall(r'="\$(\d+)"', script_text)]
-    return max(indices) if indices else 0
-
-
-def run_script_capabilities(harness):
-    return sorted(name for name, cap in harness.CAPABILITIES.items() if "run-script" in cap.argv)
-
-
-@pytest.mark.parametrize("capability", run_script_capabilities(load_harness_config()))
-def test_no_run_script_capability_passes_more_arguments_than_its_script_reads(harness, capability):
-    invocation = script_invocation(harness.argv_for(capability, **harness.LANE_PLACEHOLDERS, group="standard"))
-    script = REPO_ROOT / invocation[0]
-    declared = declared_positional_parameters(script.read_text())
-
-    assert script.exists(), "capability %s points at a script that is not in the checkout" % capability
-    assert len(positionals(invocation)) <= declared, (
-        "%s reads %d positionals but %s supplies %d - one of them is being read as the wrong parameter"
-        % (script.name, declared, capability, len(positionals(invocation))))
 
 
 def team_flagged_capabilities(harness):

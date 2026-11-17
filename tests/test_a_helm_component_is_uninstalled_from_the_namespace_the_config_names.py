@@ -1,31 +1,19 @@
 """One component comes off the cluster — the release the cluster names, and the claims it made.
 
-`scripts/automation/components/uninstall_helm_deployment.sh` is deleted by this commit. What it
-asked the cluster for is still reachable:
+`kmt uninstall component` is the only way to take one component off without tearing the platform
+down, and it does two things that have to happen together. The release goes by the name the cluster
+reports for the component's namespace rather than by a name guessed from a configuration key, and the
+claims it made — the `PersistentVolumeClaim` objects a release leaves behind — go by name in the same
+command, because deleting the release alone leaves the data mounted on a namespace about to be swept.
 
-    git show b2d471a:scripts/automation/components/uninstall_helm_deployment.sh
-
-prints the file, and the comparison below reads that blob at test time instead of copying it in, so
-the record cannot drift away from the script it came from. A checkout without history says so
-instead of passing quietly.
-
-The script had two holes, and both are the product gap this closes. It had **no caller in `src/` at
-all** — nothing but documentation ever mentioned it — so kubementat could install a component and
-could tear the whole platform down, but removing one component was not something a `kmt` command
-did. And inside that unreachable script the claim half printed advice
-
-    echo "If you also want to remove collected data ensure to also delete the pv and pvc"
-
-and deleted nothing, which is the half that was recorded as a failure. The release now goes by the name
-the cluster reports, and the claims go by name in the same command.
+Both halves are asserted against a fake API server and fake cluster binaries, so a component that
+reports no claims, a namespace that does not exist, and a release that refuses to uninstall each get
+an answer that names what happened instead of an exit code.
 """
 
 from kubementat.errors import UninstallIncompleteError
 import json
-import re
-import subprocess
 from types import SimpleNamespace
-from pathlib import Path
 
 import pytest
 
@@ -38,12 +26,6 @@ from kubementat.core.identity.context import Context
 from kubementat.infrastructure.helm import HelmUtils
 from conftest import run_kmt
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-
-# The commit the script was still in. The file is deleted here, so the blob is a record, not a run.
-BLOB_REVISION = "b2d471a"
-SCRIPT_IN_HISTORY = "scripts/automation/components/uninstall_helm_deployment.sh"
-
 COMPONENT = "polaris"
 NAMESPACE = "polaris"
 RELEASE = "polaris"
@@ -53,35 +35,6 @@ CLAIMS = ["polaris-data-0", "polaris-scratch-0"]
 # checkout that lost the entry fails here rather than in a test that believed a string.
 ROUTER = "traefik"
 ROUTER_NAMESPACE = constants.DEFAULT_NAMESPACES[ROUTER]
-
-
-def deleted_script():
-    """The script's own text, out of git history. Skips, loudly, if the history is not there."""
-    result = subprocess.run(["git", "show", f"{BLOB_REVISION}:{SCRIPT_IN_HISTORY}"],
-                            cwd=str(REPO_ROOT), capture_output=True, text=True)
-    if result.returncode != 0:
-        pytest.skip(f"the script's record is not reachable in this checkout: git show "
-                    f"{BLOB_REVISION}:{SCRIPT_IN_HISTORY} exited {result.returncode} "
-                    f"({result.stderr.strip()}). The parity below is a comparison, and without "
-                    f"the other side of it there is nothing to compare.")
-    return result.stdout
-
-
-def executed_commands(script):
-    r"""Only the lines bash ran, not the lines bash printed.
-
-    The advice about deleting claims is an `echo` line, so "the script told the operator to do this"
-    and "the script did this" differ by exactly one leading `echo`. A substring match over the whole
-    file cannot see that difference, and would hand the parity comparison a claim deletion that
-    never happened.
-    """
-    kept = []
-    for line in script.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or line.startswith("echo"):
-            continue
-        kept.append(line)
-    return "\n".join(kept)
 
 
 def namespace_of(argv):
@@ -177,60 +130,6 @@ def what_the_cluster_was_asked_to_lose(calls_or_commands):
                 stopped.append(name)
             lost.update(("claim", namespace_of(argv), name) for name in stopped)
     return lost
-
-
-def what_the_client_was_asked_to_delete(recorded_api):
-    """The same triples, read from the client calls instead of the argv.
-
-    A delete the client makes arrives as `(kind, namespace, name)` already, so this is a shape
-    change and not a translation. The claim sweep stopped asking kubectl; a parity test
-    that only reads kubectl would read that as "the Python path deletes nothing", which is the old
-    script's bug appearing from the other side.
-    """
-    deleted = set()
-    for method, kwargs in recorded_api.calls:
-        if method == "delete_namespaced_persistent_volume_claim":
-            deleted.add(("claim", kwargs["namespace"], kwargs["name"]))
-    return deleted
-
-
-def script_loses(script, values):
-    """The same triples, read out of the script's command lines.
-
-    `values` is what bash substituted into `$DEPLOYMENT_NAMESPACE` and `$DEPLOYMENT_NAME`, and both
-    come from the fixture's `static.json` — the file the script ran `jq` against. Nothing here is
-    hardcoded: the variables come out of the blob, the values out of the same configuration the
-    Python side reads.
-    """
-    ran = executed_commands(script).splitlines()
-    loss = set()
-    for line in ran:
-        if re.search(r'\bhelm\s+-n\s+"?\$\{?DEPLOYMENT_NAMESPACE\}?"?\s+delete\b', line):
-            loss.add(("release", values["namespace"], values["name"]))
-        if re.search(r'\bkubectl\b[^\n]*\bdelete\b[^\n]*\bpvc\b', line):
-            loss.add(("claim", values["namespace"], "<the operator was told to name one>"))
-    return loss
-
-
-def script_reads(script):
-    """What the script read off the cluster — all of it reads, which is the whole sentence.
-
-    `kubectl get all`, the `get pvc | grep`, the `get pv | grep`: three reads, no writes, and the
-    second one is the `echo`d advice's only evidence that a claim was even looked at.
-    """
-    return sorted(set(re.findall(r'\bkubectl\s+\w+', executed_commands(script))))
-
-
-def script_values(fixture_repo, component=COMPONENT):
-    """What the script's two `jq` calls would have answered out of this fixture's configuration.
-
-    `jq` is not one of the fakes, so this is read rather than run: it is the same file, and the same
-    keys, the script pointed `jq` at.
-    """
-    static = json.loads((fixture_repo.platform_config / fixture_repo.environment /
-                         "static.json").read_text())
-    return {"namespace": static.get(f"{component.upper()}_DEPLOYMENT_NAMESPACE"),
-            "name": static.get(f"{component.upper()}_DEPLOYMENT_NAME")}
 
 
 def configured(fixture_repo, namespace=NAMESPACE, release_name=RELEASE):
@@ -586,49 +485,3 @@ def test_renaming_the_routers_namespace_uninstalls_from_the_new_place(fixture_re
     assert {namespace_of(command) for command in written_commands(commands)} == {"edge"}, commands
 
 
-def test_what_the_script_took_off_the_cluster_against_what_this_took_off(fixture_repo,
-                                                                         dry_run_env,
-                                                                         fake_binaries, recorded_api):
-    """The comparison, with the other side read out of git.
-
-    Both sides address the same release in the same namespace, and the two differences between them
-    are the whole point of the migration: bash deleted no claims, and bash guessed at the release
-    name from a key instead of asking the cluster.
-    """
-    configured(fixture_repo)
-    respond(fake_binaries, recorded_api, releases=[(RELEASE, NAMESPACE)], claims=CLAIMS)
-    uninstalled(fixture_repo, recorded_api)
-
-    script = deleted_script()
-    script_side = script_loses(script, script_values(fixture_repo))
-    # The Python side is read from both recorders now: the release still goes through `helm`, the
-    # claims go through the client, and a comparison that looked only at the shim would
-    # report a parity that the run never earned.
-    python_side = what_the_cluster_was_asked_to_lose(fake_binaries.calls()) \
-        | what_the_client_was_asked_to_delete(recorded_api)
-
-    # The release, identical in kind, namespace and name.
-    assert {entry for entry in script_side if entry[0] == "release"} == \
-           {entry for entry in python_side if entry[0] == "release"}, (script_side, python_side)
-
-    # ...and the claims: bash ran no `delete pvc` at all, so what it removed is the empty set.
-    assert {entry for entry in script_side if entry[0] == "claim"} == set(), script_side
-    assert {entry for entry in python_side if entry[0] == "claim"} == {
-        ("claim", NAMESPACE, name) for name in CLAIMS}, python_side
-
-
-def test_the_script_read_and_told_and_deleted_nothing_about_the_claims(fixture_repo, dry_run_env,
-                                                                       fake_binaries):
-    """The advice-only half, stated as a fact about the deleted file.
-
-    Three `kubectl` reads, one `helm delete`, and the claim advice in `echo` lines: the script looked
-    at the cluster, printed what a human could type next, and exited 0 having deleted one thing.
-    """
-    script = deleted_script()
-
-    assert script_reads(script) == ["kubectl get", "kubectl version"] or \
-           set(script_reads(script)) <= {"kubectl get", "kubectl version"}, script_reads(script)
-    assert "delete pvc" in script, "the advice is the record of what was never done"
-    assert len([line for line in executed_commands(script).splitlines()
-                if "delete pvc" in line]) == 0
-    assert "delete the pv and pvc" in script

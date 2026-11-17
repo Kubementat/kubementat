@@ -1,50 +1,29 @@
-"""The cleanup job goes where the environment says, and the prune is the one the script wrote.
+"""The cleanup cronjob goes where the environment says, and it prunes what it is told to prune.
 
-`setup_tekton_pipelinerun_cleanup_job.sh` is deleted by this commit. What it asked the cluster for
-is still reachable — `git show 6d55f7d:scripts/automation/tekton/setup_tekton_pipelinerun_cleanup_job.sh`
-prints the file, and the heredocs below are read out of that blob at test time rather than copied
-into this file, so the record cannot drift away from the script it came from. A checkout without
-history says so instead of passing quietly.
-
-The behaviour this locks down is the one that was broken: the namespace. bash carried
-`CRONJOB_NAMESPACE="cluster-cronjobs"` as a constant of its own, so after a namespace rename the
-job was created in one place and looked for in another — which is why the harness's
-`assert:cleanup-cronjob-exists` and `assert:cleanup-cronjob-scheduled` reported a cluster with no
-cronjobs on it. The replacement reads the same key the install deploys into and the uninstall
-sweeps, so a rename moves the job, the asserts and the sweep together.
+The job's namespace is read from the same key the install deploys into and the uninstall sweeps, so
+renaming it moves the job, the lane's `cleanup-cronjob-exists` assert and the teardown together. A
+namespace carried as a constant in the job's own definition is the bug this file exists for: the job
+was created in one place and looked for in another, and the lane reported a cluster with no cronjobs
+on it.
 """
 
 import json
 import re
-import subprocess
 from pathlib import Path
 
 import pytest
-import yaml
 from kubernetes.client.exceptions import ApiException
 
-from cluster_parity import ClusterOperation, cluster_named, compare, operations_from_calls
-from conftest import FIXTURE_ENVIRONMENT, RecordedCall
 from kubementat.errors import CleanupJobImageNotConfiguredError
 # The cleanup job's names and the reader that answers its image moved out of `tekton_utils.py`
 # (P4-3) into the module that builds the job, which is where a patch of them has to land.
-from kubementat.infrastructure.tekton.runs import (CLEANUP_JOB_CLUSTER_ROLE_BINDING_NAME,
-                                                   CLEANUP_JOB_CLUSTER_ROLE_NAME, CLEANUP_JOB_NAME,
+from kubementat.infrastructure.tekton.runs import (CLEANUP_JOB_NAME,
                                                    CLEANUP_JOB_SERVICE_ACCOUNT_NAME,
                                                    cleanup_job_image)
-from cluster_fixture import configuration_only_cluster, configuration_only_context
-
-# The cluster both sides of this comparison address. The Python side gets it from the `Context` it
-# is handed, and the record of the deleted script is declared with the same value: the script
-# addressed its cluster through `KUBECONFIG` in the environment, so its argv carried nothing, and
-# the record still has to say which cluster it meant.
-CLUSTER = configuration_only_cluster(FIXTURE_ENVIRONMENT)
+from cluster_fixture import configuration_only_context
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# The commit the script was still in. The file is deleted here, so this is a record and not a run.
-BLOB_REVISION = "6d55f7d"
-SCRIPT_IN_HISTORY = "scripts/automation/tekton/setup_tekton_pipelinerun_cleanup_job.sh"
 
 NAMESPACE = "fixture-cronjobs"
 TEAM = "fixture"
@@ -63,82 +42,6 @@ BASH_VARIABLES = {
 # Kinds that live outside a namespace, so bash applied them without `-n`.
 CLUSTER_SCOPED = {"clusterrole", "clusterrolebinding"}
 
-_HEREDOC = re.compile(r"<<-?EOF\n(.*?)EOF\n", re.S)
-
-
-def deleted_script():
-    """The script's own text, out of git history. Skips, loudly, if the history is not there."""
-    result = subprocess.run(["git", "show", f"{BLOB_REVISION}:{SCRIPT_IN_HISTORY}"],
-                            cwd=str(REPO_ROOT), capture_output=True, text=True)
-    if result.returncode != 0:
-        pytest.skip(f"the cleanup script's record is not reachable in this checkout: git show "
-                    f"{BLOB_REVISION}:{SCRIPT_IN_HISTORY} exited {result.returncode} "
-                    f"({result.stderr.strip()}). The parity below is a comparison, and without "
-                    f"the other side of it there is nothing to compare.")
-    return result.stdout
-
-
-def expand_bash_heredoc(text):
-    r"""What bash wrote into the heredoc, as text.
-
-    An unquoted `<<EOF` expands `$VAR` and leaves `\$VAR` alone — the escaped ones being the
-    variables the *job* expands at run time, inside its own container. Longest names first, so
-    `$NUMBER_OF_JOBS_TO_KEEP` does not eat the `$…_PLUS_1` that contains it.
-    """
-    guard = "\x00DOLLAR\x00"
-    text = text.replace("\\$", guard)
-    for name in sorted(BASH_VARIABLES, key=len, reverse=True):
-        text = text.replace(f"${{{name}}}", BASH_VARIABLES[name])
-        text = text.replace(f"${name}", BASH_VARIABLES[name])
-    return text.replace(guard, "$")
-
-
-def the_script_asks():
-    """The whole record: namespace, secret, account, patch, roles, job, in that order.
-
-    The Secret arrives as one call carrying its own arguments. bash wrote it through a pipe —
-    `create secret … --dry-run=client -o yaml | kubectl apply -f -` — where the first half never
-    touches the cluster and the second is the write. One operation is what that is: counting two
-    would say bash wrote the Secret twice and Python once, which is a fact about how many lines of
-    kubectl ran and not about what the cluster holds.
-
-    The `describe` and the `get` at the end are kept too. They show a cronjob to a human; the
-    comparison declares them as bash-only rather than pretend they never happened.
-    """
-    calls = [RecordedCall("kubectl", ["create", "namespace", NAMESPACE], cwd="/")]
-    calls.append(RecordedCall("kubectl", [
-        "-n", NAMESPACE, "create", "secret", "docker-registry", "docker-registry-secret",
-        "--docker-server=https://registry.example.test",
-        "--docker-username=deployer",
-        "--docker-password=not-a-password",
-        "--docker-email=team@example.test",
-        "--dry-run=client", "-o", "yaml"], cwd="/"))
-
-    for document in _HEREDOC.findall(deleted_script()):
-        expanded = expand_bash_heredoc(document)
-        kind = str(yaml.safe_load(expanded).get("kind", "")).lower()
-        argv = ["apply"]
-        if kind not in CLUSTER_SCOPED:
-            argv += ["-n", NAMESPACE]
-        calls.append(RecordedCall("kubectl", argv + ["-f", "-"], cwd="/", stdin=expanded))
-        # The account is patched with the pull secret straight after it is created, and that is a
-        # separate operation: `apply` of the manifest does not carry `imagePullSecrets`.
-        if kind == "serviceaccount":
-            calls.append(RecordedCall("kubectl", [
-                "-n", NAMESPACE, "patch", "serviceaccount", CLEANUP_JOB_SERVICE_ACCOUNT_NAME,
-                "-p", '{"imagePullSecrets":[{"name":"docker-registry-secret"}]}'], cwd="/"))
-
-    return calls
-
-
-def the_script_reports():
-    """The two reads bash made to show its work, reduced the same way everything else is."""
-    return operations_from_calls([
-        RecordedCall("kubectl", ["-n", NAMESPACE, "describe", "serviceaccount",
-                                 CLEANUP_JOB_SERVICE_ACCOUNT_NAME], cwd="/"),
-        RecordedCall("kubectl", ["-n", NAMESPACE, "get", "cronjob", CLEANUP_JOB_NAME,
-                                 "-o=yaml"], cwd="/"),
-    ], cluster=CLUSTER)
 
 
 def configured_fixture(fixture_repo, namespace=NAMESPACE):
@@ -170,46 +73,6 @@ def the_python_setup(fixture_repo, namespace=NAMESPACE):
     context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
     runs.setup_cleanup_job(context, KubernetesUtils(context), context.config, context.environment)
     return None
-
-
-def without_self_named_body(operations):
-    """One namespace, one claim: this name exists. Both sides then say it the same way.
-
-    bash asked with `kubectl create namespace NAME`, which carries no body to reduce; the client
-    asks with a `V1Namespace` whose whole body *is* that name, so it arrives with an extra fact that
-    repeats the `name=` the operation already has. Nothing in the harness is claiming two namespaces
-    are different because one of them spelled its own name in two places.
-    """
-    normalised = []
-    for operation in operations:
-        if operation.kind == "namespace":
-            operation = ClusterOperation(operation.verb, operation.kind, operation.namespace,
-                                         operation.name, (), cluster=operation.cluster)
-        normalised.append(operation)
-    return normalised
-
-
-def test_the_rbac_and_the_job_the_python_writes_are_the_ones_the_script_wrote(fixture_repo,
-                                                                              dry_run_env,
-                                                                              recorded_api):
-    """Nine operations, same kinds, same namespaces, same payloads, same order.
-
-    Order is part of the comparison because these depend on each other: the namespace before
-    anything addressed at it, the pull Secret before the account that names it, the account before
-    the binding that binds it, and the whole RBAC before the CronJob that starts a pod as it.
-
-    The CronJob payload is compared whole, which is the interesting half: `schedule`, both history
-    limits, `concurrencyPolicy: Forbid`, the pod labels, the image and the prune script itself all
-    have to agree character for character, because a cleanup job that prunes in a different order
-    deletes the wrong runs.
-    """
-    the_python_setup(fixture_repo)
-    compare(without_self_named_body(operations_from_calls(the_script_asks(), cluster=CLUSTER)),
-            without_self_named_body(recorded_api.operations()),
-            bash_only=the_script_reports(),
-            python_only=[ClusterOperation("read", "serviceaccount", NAMESPACE, None, (), cluster=CLUSTER)],
-            context="what setup_tekton_pipelinerun_cleanup_job.sh asked the cluster, against what "
-                    "`runs.setup_cleanup_job()` asks it now")
 
 
 def test_the_namespace_comes_from_the_environment_config_and_nowhere_else(fixture_repo,

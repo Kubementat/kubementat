@@ -45,11 +45,6 @@ WAIT_SOURCE = REPO_ROOT / "src" / "kubementat" / "infrastructure" / "tekton" / "
 # Every module of the package, for the half of the rule that holds everywhere: an import-time sleep
 # is a hang for whoever imports the module, whichever module of the package it sits in.
 TEKTON_PACKAGE = sorted((REPO_ROOT / "src" / "kubementat" / "infrastructure" / "tekton").glob("*.py"))
-# What the Task and the deleted script looked like before this ticket, for the comparisons that
-# need the other side of a change that has not been committed yet.
-SCRIPT_REVISION = "40f281b"
-
-
 def pipelinerun(status, reason, message, name="hello-run-abcdef"):
     """One run, as the API answers it: `status.conditions[0]` is the whole contract.
 
@@ -442,14 +437,22 @@ def test_a_global_run_is_still_started_by_a_global_prefix(fixture_repo, dry_run_
     assert applied["spec"]["pipelineRef"]["name"] == "hello"
 
 
-def test_the_task_runs_the_command_and_no_longer_the_script():
-    """The manifest that pays for all of this, read as the contract it is.
+def test_the_task_runs_the_command_and_declares_everything_its_callers_bind():
+    """The manifest that pays for the wait, read as the contract it is.
 
     One step, one command, `set -ue`, the workspace path as `KUBEMENTAT_HOME`, and the polling
-    param feeding `--poll-interval`. Nothing is sourced and nothing loops, and the params the live
-    pipeline passes by name are all still there.
+    parameter feeding `--poll-interval`. Nothing is sourced and nothing loops: the step starts a run,
+    waits for it, and reports what it saw, which is the whole reason the step exists.
+
+    `cd ` is banned for the same reason the step has one command — a `cd` is a second job hiding in the
+    script text — but the ban is only half the rule, and a reader who sees only this loop will "fix"
+    the next line by putting the `cd` back. The step's directory is load-bearing and it is declared on
+    the step itself with `workingDir`, which is Tekton's way and what `helmfile-cli.yml` and
+    `terraform-cli.yml` already do. Both halves stay together: `cd` without `workingDir` is the old
+    shape, `workingDir` alone is the current one. See
+    `test_no_step_runs_kmt_from_a_directory_the_manifest_does_not_declare.py` for that rule across
+    every Task, and for what uv does when the directory is undeclared.
     """
-    import subprocess
     import yaml
 
     manifest = yaml.safe_load(TASK.read_text(encoding="utf-8"))
@@ -462,60 +465,28 @@ def test_the_task_runs_the_command_and_no_longer_the_script():
     assert "--parallel" in script, "allow-parallel-run has nowhere to go"
     assert '--poll-interval "$(params.polling-sleep-time)"' in script, \
         "the polling param no longer feeds the wait"
-    # `cd ` is banned for this ticket's own reason — one command per step, and a `cd` is a second job
-    # hiding in the script text — but the ban is only half the rule, and a reader who sees only this
-    # loop will "fix" the next line by putting the `cd` back. The step's directory is load-bearing and
-    # it is declared on the step itself with `workingDir`, which is Tekton's way and what
-    # helmfile-cli.yml and terraform-cli.yml already do. Both halves have to stay together: `cd`
-    # without `workingDir` is the old shape, `workingDir` alone is this ticket, and the first one's
-    # reason for existing is not a licence to delete the second. See
-    # `test_no_step_runs_kmt_from_a_directory_the_manifest_does_not_declare.py` for the half that
-    # outlives this ticket, and for what uv does when the directory is undeclared.
     for left_behind in ("source run_pipeline.sh", "while true", "tkn pipelinerun describe",
                         "POLLING_SLEEP_TIME", "cd "):
-        assert left_behind not in script, f"the old step still has {left_behind!r} in it"
-    assert script.count("uv run") == 1, "one command per step is the point of this ticket"
+        assert left_behind not in script, f"the step still has {left_behind!r} in it"
+    assert script.count("uv run") == 1, "one command per step is the point"
 
     env = {entry["name"]: entry["value"] for entry in step["env"]}
     assert env["KUBEMENTAT_HOME"] == "$(params.path-to-configuration)", \
         "the configuration half of the old param was supposed to become the command's home"
     # The other half of the same param: the step runs its command from the directory it calls its
-    # home. Where that rule lives for every Task is the guard file named above; this line is only the
-    # drift check, so the two uses of the param cannot be moved independently.
+    # home. Where that rule lives for every Task is the guard file named in the docstring; this line
+    # is the drift check, so the two uses of the param cannot be moved independently.
     assert step.get("workingDir") == env["KUBEMENTAT_HOME"], \
         "the step runs its command from a directory that is not the one it exports as its home"
 
-    # The params are what a calling pipeline binds to, so the set is compared against the manifest as
-    # it stood before this change rather than against a list somebody liked. The configuration-clone
-    # change is the one change that had to be added to it deliberately: `configuration-root` arrived so
-    # the root the command *reads* can stop being a path inside the checkout this step *starts* in,
-    # and everything
-    # else is pinned in the order the earlier tickets left them. A param added here is a caller's
-    # problem, so it is named in the assertion rather than allowed silently.
-    before = subprocess.run(["git", "show",
-                             f"{SCRIPT_REVISION}:tekton_ci/tasks/run-tekton-pipeline.yml"],
-                            cwd=str(REPO_ROOT), capture_output=True, text=True)
-    if before.returncode != 0:
-        pytest.skip(f"git show {SCRIPT_REVISION}:tekton_ci/tasks/run-tekton-pipeline.yml is not "
-                    "reachable here, so the param set is asserted against this file only")
-    old = yaml.safe_load(before.stdout)["spec"]
-    param_names = [param["name"] for param in manifest["spec"]["params"]]
-    # Two additions, one per rule that landed on the same line. `configuration-root` is what the command
-    # reads; `cluster-kubeconfig` is where the work happens, and it joins
-    # the contract for the same reason the root did: a pod cannot find out either answer, and the
-    # lookup that used to guess both of them is deleted.
-    additions = ["configuration-root", "cluster-kubeconfig"]
-    assert [name for name in param_names if name not in additions] == \
-           [param["name"] for param in old["params"]], \
-        "a calling pipeline passes these by name; the set is contract, and the two rules named above " \
-        "are what made those additions, for that reason"
-    assert "configuration-root" in param_names, \
-        "the rule needs the root the command reads to be a param of its own; without it the root " \
-        "is still a path inside the checkout the step starts in"
-    assert "cluster-kubeconfig" in param_names, \
-        "the stated cluster has to be a param of its own; a step that leaves it to the cloned " \
-        "static.json resolves to a file the pod does not have"
-    assert "configuration-root" in param_names, \
-        "the rule needs the root the command reads to be a param of its own; without it the root " \
-        "is still a path inside the checkout the step starts in"
+    # The params are what a calling pipeline binds to by name, so the set is contract: adding one is a
+    # caller's problem and removing one breaks a pipeline already committed. It is pinned here in full
+    # rather than diffed against an older revision of the same file. `configuration-root` is the root
+    # the command reads, which had to become a param of its own because that root is not necessarily a
+    # path inside the checkout this step starts in; `cluster-kubeconfig` is where the work happens, and
+    # a pod cannot find that answer out by itself either.
+    assert [param["name"] for param in manifest["spec"]["params"]] == [
+        "image", "environment", "team", "path-to-configuration", "configuration-root",
+        "cluster-kubeconfig", "polling-sleep-time", "allow-parallel-run",
+        "path-to-pipeline-run-file"]
     assert step["computeResources"], "the step ships its own limits, and they are part of it"

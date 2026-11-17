@@ -1,12 +1,13 @@
 """What one team's trigger setup asks the cluster for, and what it refuses to ask.
 
-`triggers.setup_triggers()` is the Python half of the flow. Everything in this file is judged
-against the two shapes the deleted script had: nine heredocs it piped into `kubectl apply -f -`,
-two Secrets written from `static.encrypted.json`, and one directory of generated manifests. The
-comparison of the heredoc half against the script's record is in
-`test_the_trigger_setup_asks_the_cluster_for_the_same_rbac.py`; this file holds the branches,
-because a record cannot show what happens when the object is already there, when the namespace is
-not configured, or when a team has generated nothing yet.
+`triggers.setup_triggers()` writes one team's trigger RBAC, their webhook Secrets, and the
+generated manifests, in that order. The order is the contract: an EventListener applied before the
+service account it runs as exists is accepted and then never runs, and the shared ClusterRole has to
+precede the binding that points at it.
+
+What a team can actually get wrong is the half this file is for — the object that is already there,
+the namespace that is not configured, the token that was never set, the directory that holds nothing —
+because each of those is a branch the setup has to answer rather than an exception on the way out.
 
 Four things here are not inherited from bash and are stated where they are:
 
@@ -106,8 +107,8 @@ def test_the_setup_writes_the_rbac_a_webhook_needs_and_nothing_else(fixture_repo
 
     The order is not decoration: an EventListener applied before `tekton-triggers-sa` exists is
     accepted and then never runs, and the shared ClusterRole has to be there before the binding
-    that points at it. This is the same list the record test compares against, spelled as tuples
-    so a failure says which object moved instead of showing two columns of harness output.
+    that points at it. It is spelled as tuples rather than counted so a failure says which object
+    moved.
     """
     fixture_repo.team_static()
 

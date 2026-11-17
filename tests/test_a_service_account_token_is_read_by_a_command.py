@@ -1,30 +1,18 @@
 """A service account's token is a read a command can do, not a grep an operator types.
 
-`scripts/secret_management/retrieve_token_for_service_account.sh` is deleted here. Its record is:
+`kmt kubernetes service-account-token` reads the token off the annotation
+`kubernetes.io/service-account.name` rather than off a `<name>-token` naming convention, because the
+annotation is what says whose token a Secret is — and since 1.24 a cluster mints a Secret only for a
+service account that declares it, so a name-based read finds nothing exactly when the cluster is
+newest.
 
-    git show 19b97d0:scripts/secret_management/retrieve_token_for_service_account.sh
-
-and the comparison below reads that blob at test time rather than copying it, so the record cannot
-drift from the file it came from. What the blob is: `kubectl get secret` piped through
-`grep "<service-account>-token"`, then `jsonpath={.data.token} | base64 --decode`. It read the name
-as the convention, and the convention is only half the story — the annotation is what says whose
-token a Secret is, and since 1.24 a cluster mints one only for a Secret that declares it.
-
-That difference is the parity this file proves, and so is the part bash got wrong quietly. The
-script's failure modes were silence and exit 0:
-
-* no Secret at all -> `token_name` was empty, the `get secret` still exited, and the operator got
-  `Token for service account X:` over nothing;
-* a Secret the token controller has not filled in yet -> the same, with `token:` empty.
-
-Both now answer in one line that names what is missing and says what fixes it, because the command
-is the difference between those two states and a kubeconfig built on an empty token.
+The two empty answers are the reason the failure modes are named. A service account with no token
+Secret and a Secret the token controller has not filled in yet both used to print a header over
+nothing and exit 0; each now answers in one line that names what is missing and says what fixes it,
+because an operator cannot tell "no token yet" from "a kubeconfig built on an empty token".
 """
 
 import base64
-import re
-import subprocess
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -37,23 +25,6 @@ from conftest import FIXTURE_ENVIRONMENT
 NAMESPACE = "kubernetes-dashboard"
 SERVICE_ACCOUNT = "kubernetes-dashboard-read-only-cluster-user"
 TOKEN = "eyJhbGciOiJSUzI1NiJ9.a-real-token.c-0nc34t3n4t3"
-
-BLOB_REVISION = "19b97d0"
-SCRIPT_IN_HISTORY = "scripts/secret_management/retrieve_token_for_service_account.sh"
-
-
-def deleted_script():
-    """The script's own text, out of git history. Skips, loudly, if the history is not there."""
-    result = subprocess.run(["git", "show", f"{BLOB_REVISION}:{SCRIPT_IN_HISTORY}"],
-                            cwd=str(Path(__file__).resolve().parent.parent),
-                            capture_output=True, text=True)
-    if result.returncode != 0:
-        pytest.skip(f"the script's record is not reachable in this checkout: git show "
-                    f"{BLOB_REVISION}:{SCRIPT_IN_HISTORY} exited {result.returncode} "
-                    f"({result.stderr.strip()}). The parity below is a comparison, and without "
-                    f"the other side of it there is nothing to compare.")
-    return result.stdout
-
 
 def token_secret(name, *, for_service_account=SERVICE_ACCOUNT, token=TOKEN):
     """A token Secret as the client returns it — type and annotation, which is how it is found.
@@ -203,44 +174,12 @@ def test_the_command_is_on_the_surface_once_and_under_one_name():
     assert [name for name in group if "token" in name] == ["service-account-token"], sorted(group)
 
 
-def test_the_script_found_the_token_by_a_name_and_this_finds_it_by_an_annotation():
-    """The comparison, with the other side read out of git.
-
-    Both sides end at the same bytes — `data.token`, base64-decoded. The difference is which Secret
-    each one is willing to believe, and it is visible in the one line of the script that does the
-    finding.
-    """
-    script = deleted_script()
-
-    # The finding half, verbatim: a grep over `kubectl get secret` for `<service-account>-token`.
-    assert re.search(r'grep\s+"\$\{SERVICE_ACCOUNT_NAME\}-token"', script), script
-    # ...and the decode, which is the one thing both sides do identically.
-    assert "jsonpath={.data.token}" in script and "base64" in script, script
-    # No `kubernetes.io/service-account.name` anywhere: bash never asked who the token belonged to.
-    assert "service-account.name" not in script, script
-
-
-def test_the_script_had_no_answer_for_a_token_that_is_not_there():
-    """The failure modes as facts about the deleted file, so they cannot be re-introduced.
-
-    Empty `token_name`, then `get secret "" --output=jsonpath=...` failing or printing nothing, and
-    the script echoing the header anyway. `set -eu` is on *after* the usage check, which is why a
-    missing token still exited 0: the `token_name` assignment is not the line that fails, `get
-    secret ""` is, and by then the header has been printed.
-    """
-    script = deleted_script()
-
-    assert 'echo "Found token: $token_name"' in script
-    assert 'echo "Token for service account $SERVICE_ACCOUNT_NAME:"' in script
-    assert "exit 1" not in script.split("set -eu")[1], "the failure half never failed"
-
-
 @pytest.fixture(autouse=True)
 def _an_environment_the_command_can_resolve(resolvable_environment):
     """The command resolves a cluster before it reads, so this module needs one declared.
 
-    `@kmt_context` runs ahead of the body and a token read is a cluster read whatever the
-    script that preceded it believed. Nothing here uses the answer — the namespace is the argument
-    the operator typed — so the fixture that declares a cluster and nothing else is the right size.
+    `@kmt_context` runs ahead of the body and a token read is a cluster read. Nothing here uses the
+    answer — the namespace is the argument the operator typed — so the fixture that declares a
+    cluster and nothing else is the right size.
     """
     return resolvable_environment
