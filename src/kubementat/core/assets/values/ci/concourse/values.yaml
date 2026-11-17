@@ -1,0 +1,118 @@
+# Concourse. Seeded from the Phase-1 prototype of 2026-11-17 (chart 20.3.3, Concourse 8.3.3, the
+# same release that stood up and served a registered worker on a kind cluster), with key material
+# and operator credentials stripped. What is here is the shape that worked; the layering rule is
+# the platform's: this file is the shipped default, the environment and team layers override what
+# an operator may change (replicas, persistence size, ingress, an external database), and key
+# material reaches the release from the encrypted layer only -- a plain layer that carried a
+# private key would undo the whole sanitizing exercise below.
+
+image: concourse/concourse
+# The two pins of one release: 20.3.3 is the chart and 8.3.3 is its `appVersion`, and bumping
+# `CONCOURSE_VERSION` without this line runs an 8.3.3 binary under a chart judged against another
+# version. Move them together, per the plan's runbook.
+imageTag: "8.3.3"
+imagePullPolicy: IfNotPresent
+
+concourse:
+  web:
+    encryption:
+      # At-rest encryption of pipeline configuration and stored credentials is the platform
+      # baseline, and here it is also the gate: with it on, the chart refuses to render when
+      # `secrets.encryptionKey` is empty and `secrets.create` is true, so enabling this release
+      # before the encrypted layer supplies keys fails early, with a message naming the key --
+      # which is exactly the failure plan R-2 wants. (The chart's own default is off; leaving it
+      # off would let an unlocked Secret object stand for the whole credential story.)
+      enabled: true
+    auth:
+      mainTeam:
+        # The chart's default names the user `test`, whose password the chart itself ships. The
+        # floor the plan puts under this value is emptiness: nobody joins the main team until the
+        # operator says who may, through the encrypted layer or an auth connector.
+        localUser: ""
+  worker:
+    # containerd is the v8-supported runtime. The prototype proved the alternative: guardian comes
+    # up with `--no-image-plugin` and the ATC then refuses every image, so this is fixed, not
+    # offered.
+    runtime: containerd
+    containerd:
+      privilegedMode: full   # the chart's documented default, and what a worker needs to run
+                             # privileged task containers; a CI worker without it is not a CI worker.
+    # HPA stays off, and stays an offered key only with the plan's caveat attached (R-7):
+    # Concourse exposes CPU and container counts, never queue depth, so autoscaling here is
+    # garnish, not the scale story.
+    autoscaling: {}
+
+web:
+  replicas: 1
+  # Ingress off by default. A CI server is a routing-layer member like everything else that wants
+  # a hostname and TLS: traefik and cert-manager arrive through `kmt routing install`, and the
+  # environment layer then writes `web.ingress.enabled: true` and the hosts. Until that decision
+  # is made for this environment, the API is a ClusterIP and `fly login` reaches it the way a
+  # tunnel does.
+  ingress:
+    enabled: false
+  service:
+    api:
+      type: ClusterIP
+
+worker:
+  # The plan's R-5, fixed rather than configured: Deployment-mode workers lose their volume on
+  # replacement and exhaust a node's loopback filesystem under load, and RWO PVCs survive the
+  # StatefulSet that owned them. StatefulSet plus persistence on is therefore what ships, and the
+  # ephemeral mode is not offered as a key. The teardown step that names the leftover PVCs belongs
+  # to the uninstall docs (plan §5), not to a value.
+  kind: StatefulSet
+  replicas: 1
+  persistence:
+    enabled: true
+    accessMode: ReadWriteOnce
+    size: 20Gi
+
+postgresql:
+  # Bundled postgres is dev-grade on purpose (plan R-6): the production recipe is
+  # `postgresql.enabled: false` with `concourse.web.postgres.*` answered on the encrypted layer,
+  # because the DB is this release's single point of failure and a bundled copy is not where a
+  # backup story begins.
+  enabled: true
+
+secrets:
+  create: true
+  # The chart's own values defaults carry demo private keys and the `test:test` local user --
+  # material whose public halves are published on the chart index. Every one of those defaults is
+  # overwritten here with emptiness, and `concourse.web.encryption.enabled` is fixed true above,
+  # so a release enabled without key material from the operator's encrypted layer fails on the
+  # chart's own gate (an `encryptionKey` is required when `secrets.create` is true) instead of
+  # quietly deploying keys somebody else owns. The keys
+  # are generated outside helm (`concourse generate-key`, `openssl rand -hex 16` -- the recipe the
+  # prototype used lives in its report); this block is their landing place, not their source.
+  hostKey: ""
+  hostKeyPub: ""
+  sessionSigningKey: ""
+  workerKey: ""
+  workerKeyPub: ""
+  encryptionKey: ""
+  localUsers: ""
+  # A worker that lives inside the release is accepted by the TSA through the `workerKeyPub` the
+  # web mounts from this same Secret, and needs no entry here. A worker outside it (the hybrid
+  # fleet the prototype trialled) registers only if its key is listed by team:
+  #   teamAuthorizedKeys: [{team: main, key: "<worker_key.pub>"}]
+  teamAuthorizedKeys: []
+
+# On the namespace, before the first install, if the cluster enforces PodSecurity at `restricted`
+# (plan R-1). This release cannot deliver that labeling itself -- helm's namespace creation (the
+# `createNamespace: true` that applies to every release in this manifest) creates a namespace it
+# cannot label, and kubementat ships no Namespace-manifest mechanism -- so it is a documented
+# operator step, and this is the whole text of it:
+#
+#   kubectl create namespace concourse
+#   kubectl label namespace concourse \
+#     pod-security.kubernetes.io/enforce=privileged \
+#     pod-security.kubernetes.io/warn=privileged
+#
+# If the namespace already exists -- helm will have created one, unlabeled, on the first apply --
+# the label alone is the step. The prototype established both halves this sentence depends on: the
+# worker pods carry `securityContext.privileged: true`, and a namespace labeled
+# `enforce=privileged` admits them while one labeled `restricted` rejects them with
+# `FailedCreate ... violates PodSecurity`. A cluster whose own default admits privileged pods
+# needs this as insurance, not as a precondition; a cluster that enforces `restricted` needs it
+# before the workers can schedule, and that answer belongs to whoever owns the target cluster.

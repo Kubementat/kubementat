@@ -67,6 +67,13 @@ with both.
 DEFAULT_NAMESPACES = {
     "cert-manager": "cert-manager",
     "cluster-cronjobs": "cluster-cronjobs",
+    # The CI server arrived 2026-11-17 as the second member of the `extra` group. Opt-in is the
+    # release's business (the helmfile block defaults `CONCOURSE_ENABLED` false); the entry's
+    # business is addressability, and it is load-bearing twice over exactly as openbao's is:
+    # `HelmUtils._export_component_namespaces` iterates this set to export
+    # `CONCOURSE_DEPLOYMENT_NAMESPACE` before helmfile runs, and `kmt uninstall` deletes the
+    # namespaces in it.
+    "concourse": "concourse",
     "goldilocks": "goldilocks",
     "grafana": "grafana",
     "loki": "loki",

@@ -113,6 +113,14 @@ repositories:
 # chart kubementat no longer installs.
 - name: openbao
   url: https://openbao.github.io/openbao-helm
+# Concourse CI. The alias is named for its publisher like every alias above, and the rule that
+# sent the retired aliases out rather than leaving them commented applies here in the keeping
+# direction: `helmfile repos` fetches this index on every run, not only when `concourse` is
+# installed. It stays because the release block below is its only reader and that block is a live
+# pin, re-read from the index on 2026-11-17 -- and if the index ever moves, this is the line that
+# fails first, says so, and names the chart it is loading.
+- name: concourse
+  url: https://concourse-charts.storage.googleapis.com/
 # Mail, cluster DNS, and a kanban board left the platform's scope and took their repositories with
 # them, the way the three git providers did. The cost is the one spelled out above the `sstarcher`
 # line: all three indexes were fetched on every `helmfile repos` run for releases this file no longer
@@ -468,11 +476,72 @@ releases:
     - openbao/values.yaml
     {{- template "kubementat-operator-values" "openbao" }}
 
-# The git-provider releases were retired as kubementat components on 2026-10-29, so the `extra`
-# group here is `openbao` and nothing else. The group is not an accident of history: `extra` is what
-# keeps this release out of a default install and out of every lane's `install_groups`, which is why
-# the harness's tunnel row for it is and stays a negative case. What a team wants from a git server it
-# can have the way it wants anything from third-party software: its own helm release, its own values
-# file, its own name, applied by whoever wants it. kubementat neither installs nor uninstalls that
-# release.
+# On CI (Concourse)
+#
+# Concourse arrives alongside Tekton, not in its place: the coexistence decision is the plan's
+# OQ-1, and it is settled by this block's `group: extra` rather than by any code, because `extra`
+# keeps the release out of `kmt install` and out of every lane's `install_groups` exactly as it
+# keeps openbao out. The opt-in is the same two-answer shape as everywhere else --
+# `kmt component install <environment> concourse` applies the label, and the knob this file reads
+# is `CONCOURSE_ENABLED`, which `component_config_key` derives from the `component_name` label
+# below and no code spells out (`keys.py`, same as openbao's).
+#
+# The `default "false"` on `installed:` is the release's second opt-in line, and it is a departure
+# from openbao only where it has to be: openbao is in `extra` but ships enabled-on-by-default
+# because it is the platform's secret manager and a tree that says nothing still expects it. A CI
+# server is not expected, and the plan's config surface (its §4) says so -- a tree that says
+# nothing installs and runs nothing here, and the two `default`s on the next lines are therefore
+# only ever read when the knob is already "true".
+#
+# 20.3.3 is Concourse 8.3.3, re-read from the chart index on 2026-11-17, where it is the newest
+# entry. The pin carries the argument every block above makes -- unpinned, helm resolves
+# "newest" and the cluster runs a chart nobody judged -- plus one that is this chart's own: the
+# chart's `appVersion` decides the `concourse/concourse` image tag, and the image and chart must
+# move as one, so the shipped values file pins `imageTag: "8.3.3"` beside this line and an upgrade
+# bumps both, per the plan's runbook.
+#
+# Two cluster-visible facts are stated here because a failure on either is silent in the manifest
+# and loud on the cluster. **Privilege:** the worker pods are privileged -- `helm show template`
+# for the worker StatefulSet writes `securityContext.privileged: true`, and the Phase-1 prototype
+# confirmed on 2026-11-17 that a namespace whose PodSecurity `enforce` level is `restricted`
+# rejects them while one labeled `privileged` admits them. Helm's `--create-namespace` -- what
+# `createNamespace: true` in `helmDefaults` above boils down to -- creates a namespace it cannot
+# carry labels into, and kubementat ships no Namespace-manifest mechanism that could, so this
+# release cannot deliver the labeling and does not pretend to: the documented operator step,
+# spelled out in `ci/concourse/values.yaml`, is to create the namespace with
+# `pod-security.kubernetes.io/enforce: privileged` and `warn: privileged` before enabling the
+# release. Skipping it on a `restricted` cluster yields workers stuck at `FailedCreate ...
+# violates PodSecurity`, which is the honest failure mode and the one this comment predicts.
+# **Key material:** the chart ships demo private keys and a `test:test` local user as *values
+# defaults*, so a release that renders the chart's own defaults is a release with public keys
+# somebody else owns. The shipped values overwrite every key default with the empty value and the
+# `test:test` floor with emptiness, which is why enabling the release without key material from
+# the operator's encrypted layer fails on the chart's own gate -- the shipped values fix
+# `concourse.web.encryption.enabled` true, and the chart then refuses to render without an
+# `encryptionKey` -- instead of deploying demo credentials quietly. When an
+# operator wants workers that live outside the release, their keys go in `secrets.teamAuthorizedKeys` --
+# the in-release StatefulSet worker does not need the entry, but a fleet does, and the Phase-1
+# experiment proved which is which.
+- name: concourse
+  chart: concourse/concourse
+  installed: {{ env "CONCOURSE_ENABLED" | default "false" }}
+  version: "{{ env "CONCOURSE_VERSION" | default "20.3.3" }}"
+  namespace: {{ env "CONCOURSE_DEPLOYMENT_NAMESPACE" | default "concourse" }}
+  labels:
+    component: ci
+    component_name: concourse
+    group: extra
+  values:
+    - ci/concourse/values.yaml
+    {{- template "kubementat-operator-values" "concourse" }}
+
+# The git-provider releases were retired as kubementat components on 2026-10-29, and for the while
+# between that retirement and Concourse's arrival in 2026-11 the `extra` group here was `openbao`
+# and nothing else. Concourse joined it as the second member, and what the group is *for* did not
+# move with the membership: `extra` is what keeps releases out of a default install and out of
+# every lane's `install_groups`, which is why the harness's tunnel row for openbao is and stays a
+# negative case and why a Concourse that is installed by nobody changes no lane. What a team wants
+# from a git server it can have the way it wants anything from third-party software: its own helm
+# release, its own values file, its own name, applied by whoever wants it. kubementat neither
+# installs nor uninstalls that release.
 
