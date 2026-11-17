@@ -31,8 +31,12 @@ import yaml
 from asset_paths import values_path
 
 HELMFILE = shutil.which("helmfile")
-helmfile_only = pytest.mark.skipif(HELMFILE is None,
-                                   reason="helmfile is what is under test, and it is not installed")
+# `helmfile build` asks the installed helm for its version before it renders anything, so a host with
+# helmfile and no helm does not skip this: it fails inside helmfile with `error determining helm
+# version`. Both binaries are preconditions, and the guard says so.
+helmfile_only = pytest.mark.skipif(HELMFILE is None or shutil.which("helm") is None,
+                                   reason="helmfile builds its state through the installed helm, and "
+                                           "this host is missing one of the two")
 
 MANIFEST = values_path("helmfile.yaml.gotmpl")
 

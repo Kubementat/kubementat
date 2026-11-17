@@ -58,8 +58,12 @@ ENVIRONMENT = "classtest"
 TEAM = "routing-team"
 
 HELMFILE = shutil.which("helmfile")
-helmfile_only = pytest.mark.skipif(HELMFILE is None,
-                                   reason="helmfile is what is under test, and it is not installed")
+# `helmfile build` asks the installed helm for its version before it renders anything, so a host with
+# helmfile and no helm does not skip this: it fails inside helmfile with `error determining helm
+# version`. Both binaries are preconditions, and the guard says so.
+helmfile_only = pytest.mark.skipif(HELMFILE is None or shutil.which("helm") is None,
+                                   reason="helmfile builds its state through the installed helm, and "
+                                           "this host is missing one of the two")
 
 # The value an operator would write, spelled so that nothing in this file can confuse it with the
 # default: a build that fell back would come back `traefik` and every assertion below would say so.

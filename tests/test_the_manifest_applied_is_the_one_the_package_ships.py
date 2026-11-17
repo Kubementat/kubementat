@@ -232,8 +232,11 @@ def test_the_operator_layers_are_absolute_and_the_manifest_answer_ignores_them(t
     import yaml
 
     helmfile = shutil.which("helmfile")
-    if helmfile is None:
-        pytest.skip("helmfile is what is being read here, and it is not installed")
+    if helmfile is None or shutil.which("helm") is None:
+        # helmfile reads its own state through the installed helm, so a host missing either one cannot
+        # answer this; it is not a host whose manifest is wrong.
+        pytest.skip("helmfile reads this manifest through the installed helm, and one of the two "
+                    "binaries is not installed")
 
     config, root = seeded_config(tmp_path, monkeypatch)
     utils = HelmUtils(configuration_only_context(ENVIRONMENT, TEAM, config))
