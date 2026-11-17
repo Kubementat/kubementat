@@ -3482,6 +3482,11 @@ echo "HTTP=$code DIGEST=$digest"
             # questions about the uninstall command itself, and belong to `--scope full`.
             self.km_uninstall(timeout=660, label="cap:uninstall")
             self._expect_no_residue()
+            if self._concourse_lane():
+                # After the sweep and not before it: the two volumeClaimTemplate claims concourse
+                # makes are deleted by this sweep and by nothing before it, so "the release made
+                # no claim that outlives it" can only be read honestly here.
+                self._expect_concourse_claims_swept()
             self._expect_routing_lane_absence()
             return
 
@@ -5469,16 +5474,64 @@ echo "HTTP=$code DIGEST=$digest"
                     % (namespace, ", ".join(row["release"] for row in self.cluster.helm_list()
                                             if row["namespace"] == namespace) or "nothing"))
 
-        def claims():
+        # What the release *created* that its own deletion does not reach: Concourse creates a
+        # namespace per team (`concourse-main` for the main team) while it runs, and those
+        # namespaces belong to no manifest, so neither `helm uninstall` nor the label sweep can
+        # delete them -- and they carry no kubementat label either, so the ordinary sweep leaves
+        # them behind. If this lane ran a pipeline on team main, the team namespace is the lane's
+        # own residue, and the lane takes it back off here, where its existence is still
+        # attributable. This is a finding about the product's uninstall surface, not a shortcut:
+        # it is recorded in the run exactly so.
+        teams = [name for name in self.cluster.namespaces() if name.startswith("%s-" % namespace)]
+        deleted = all(self.cluster.kubectl("delete", "namespace", name, timeout=150).ok
+                      for name in teams)
+        gone = self.cluster.wait(
+            "team namespaces of %s are gone" % namespace,
+            lambda: (not [n for n in self.cluster.namespaces() if n.startswith("%s-" % namespace)],
+                     "still present: %s" % ", ".join(n for n in self.cluster.namespaces()
+                                                     if n.startswith("%s-" % namespace)) or "none"),
+            timeout=180, interval=3)
+        self.record("assert:concourse-team-namespaces-removed", "product", deleted and gone[0],
+                    "concourse created team namespaces while the release ran (%s); after the lane's "
+                    "component uninstall: %s" % (", ".join(teams) or "none", gone[1]))
+
+    def _expect_concourse_claims_swept(self):
+        """The claims check the brief asks for, timed where the cluster can honestly answer it.
+
+        This assert first ran straight after `kmt component uninstall` -- and that is the correct
+        place to ask what the *verb* took off. It found two claims the verb leaves by design: the
+        worker's work-dir and the PostgreSQL data claim are made by StatefulSet volumeClaimTemplates
+        at runtime, and helm's release bookkeeping never owned them, so only the ordinary
+        `kmt uninstall` sweep deletes them (the sweep knows the namespace because concourse is in
+        `DEFAULT_NAMESPACES`). So the verb check stays here as "nothing is still pending on the
+        release's own account", and the names of the two volumeClaimTemplate claims are read after
+        the sweep, where "gone" means gone.
+        """
+        namespace = self._concourse_configuration()["namespace"]
+        made_by = {
+            "concourse-work-dir-concourse-worker-0": "the worker's work-dir claim, from the "
+                                                     "worker StatefulSet's volumeClaimTemplate",
+            "data-concourse-postgresql-0": "the PostgreSQL data claim, from the database "
+                                           "StatefulSet's volumeClaimTemplate",
+        }
+
+        def check():
             status = self.cluster.pvc_status()
-            concourse = sorted(set(status["bound"]) | {name for name, _phase, _m in status["pending"]}
-                               | set(status["waiting_for_consumer"]))
-            left = [name for name in concourse if name.startswith("%s/" % namespace)]
-            return not left, "claims still naming %s: %s; pending cluster-wide: %s" % (
-                namespace, ", ".join(left) or "none",
-                ", ".join(name for name, _phase, _m in status["pending"]) or "none")
-        self.wait("concourse-no-claims-left-pending", "the release made no claim that is still pending",
-                  claims, timeout=180, interval=3)
+            named = (sorted(set(status["bound"])
+                            | {name for name, _phase, _message in status["pending"]}
+                            | set(status["waiting_for_consumer"])))
+            concourse = [name for name in named if name.startswith("%s/" % namespace)]
+            pending = [name for name, _phase, _message in status["pending"]
+                       if name.startswith("%s/" % namespace)]
+            return (not concourse and not pending,
+                    "claims still naming %s: %s; still pending: %s%s" % (
+                        namespace, ", ".join(concourse) or "none",
+                        ", ".join(pending) or "none",
+                        " -- the two volumeClaimTemplate claims (%s) are only deleted by the "
+                        "uninstall sweep, not by kmt component uninstall" % ", ".join(made_by)
+                        if concourse else ""))
+        self.wait("concourse-claims-swept", "no concourse claim survives the uninstall sweep",
+                  check, timeout=180, interval=3)
 
     # The lifecycle, in the order it runs: stage name to method. A scope is a subset of these names, so
     # a lane that wants a shorter run says so in its scope and not here. This is the one place that says
@@ -5723,6 +5776,10 @@ def _concourse_pipeline_manifest():
     container and the task's container -- must run to completion, and that is precisely what the
     kind prototype could not make run under nested-kernel EPERM.
     """
+    # `config:`, not the step-level `image_resource:`/`run:` the plan once used: that shape is the
+    # pre-5.3 task shorthand, and modern fly refuses it on set-pipeline with an unmarshal error that
+    # names neither key. Inside `config` the task is the same one container the prototype could not
+    # start, and `platform: linux` is what the schema demands before it will read the run step.
     return "\n".join([
         "resources:",
         "- name: busybox",
@@ -5734,14 +5791,16 @@ def _concourse_pipeline_manifest():
         "  plan:",
         "  - get: busybox",
         "  - task: greet",
-        "    image_resource:",
-        "      type: registry-image",
-        "      source:",
-        "        repository: busybox",
-        "    run:",
-        "      path: /bin/sh",
-        "      args:",
-        "      - -c",
-        "      - echo \"%s\"" % CONCOURSE_TASK_MARKER,
+        "    config:",
+        "      platform: linux",
+        "      image_resource:",
+        "        type: registry-image",
+        "        source:",
+        "          repository: busybox",
+        "      run:",
+        "        path: /bin/sh",
+        "        args:",
+        "        - -c",
+        "        - echo \"%s\"" % CONCOURSE_TASK_MARKER,
         "",
     ])
