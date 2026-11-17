@@ -5056,10 +5056,10 @@ echo "HTTP=$code DIGEST=$digest"
         the one local user the lane logs in as (`uv run --with bcrypt` -- the guest's stdlib does
         not speak bcrypt, and the chart accepts nothing else).
 
-        The landing place is documented: `platform_config/<env>/values.encrypted/<component>.yaml`
-        is where kubementat says keys live, the plain layer that carried a key would undo the
-        sanitizing, and the guest's worktree is plaintext by design -- a staged file reads to
-        helmfile exactly as a committed one would.
+        The landing place is documented: `platform_config/<env>/values/<component>.encrypted.yaml`
+        is where kubementat says the component layer lives, and the name is what puts it under
+        git-crypt's `*.encrypted.*` declaration -- a staged file reads to helmfile exactly as a
+        committed one would, and in the guest's worktree it is plaintext by design.
         """
         made = self.guest.run(
             command="rm -rf %s && mkdir -p %s && cd %s"
@@ -5110,7 +5110,7 @@ echo "HTTP=$code DIGEST=$digest"
             "        localUser: admin",
             "",
         ])
-        path = self._config_path(config.ENVIRONMENT, "values.encrypted", CONCOURSE_RELEASE + ".yaml")
+        path = self._config_path(config.ENVIRONMENT, "values", CONCOURSE_RELEASE + ".encrypted.yaml")
         staged = self.guest.run(command="mkdir -p %s" % shlex.quote(posixpath.dirname(path)),
                                 timeout=20)
         staged = self.guest.write_file(path, layer, timeout=30) and staged

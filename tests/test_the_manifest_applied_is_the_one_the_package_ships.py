@@ -239,7 +239,8 @@ def test_the_operator_layers_are_absolute_and_the_manifest_answer_ignores_them(t
     utils = HelmUtils(configuration_only_context(ENVIRONMENT, TEAM, config))
     before = utils.helmfile_paths()
     (root / ENVIRONMENT / "values").mkdir(parents=True, exist_ok=True)
-    (root / ENVIRONMENT / "values" / "grafana.yaml").write_text("{replicas: 3}\n", encoding="utf-8")
+    (root / ENVIRONMENT / "values" / "grafana.encrypted.yaml").write_text("{replicas: 3}\n",
+                                                                         encoding="utf-8")
 
     for name in ("KUBEMENTAT_CONFIG_ROOT", "KUBEMENTAT_ENVIRONMENT", "KUBEMENTAT_TEAM"):
         monkeypatch.delenv(name, raising=False)
@@ -256,7 +257,7 @@ def test_the_operator_layers_are_absolute_and_the_manifest_answer_ignores_them(t
                    if release["name"] == "grafana")
     entries = [str(entry) for entry in grafana.get("values") or [] if isinstance(entry, str)]
 
-    assert str(root / ENVIRONMENT / "values" / "grafana.yaml") in entries, \
+    assert str(root / ENVIRONMENT / "values" / "grafana.encrypted.yaml") in entries, \
         f"the operator layer exported by the real command was not handed to helm: {entries}"
     assert all(not entry.startswith("../") for entry in entries), entries
     assert utils.helmfile_paths() == before, \

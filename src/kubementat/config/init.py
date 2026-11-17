@@ -52,7 +52,7 @@ The write set is not only files. Init also creates the layer directories its own
 nothing, so a layer that is correct in code lands in a tree that is empty there). They are created
 through `Config`'s properties and never a spelled path, because the property is the reader's own name
 for the place. The candidates deliberately left alone — the environment's `tekton/triggers` and
-`tekton/pipeline-runs`, `values/`, `values.encrypted/`, `secrets/` — are refused *silently* and each
+`tekton/pipeline-runs`, `values/`, `secrets/` — are refused *silently* and each
 reason is written where the choice is made.
 
 A layer's *name* is decided before the first byte: a name that is not exactly one path element, or
@@ -127,7 +127,7 @@ CONFIG_MANIFEST_FILENAME = constants.CONFIG_MANIFEST_FILENAME
 # The directory names a prepared tree accumulates from other commands. They are named for the
 # record and are consulted by nothing: a directory is never foreign material (see
 # `_foreign_material`), so a list of them would be a list of things that are not evidence.
-ALLOWED_DIRECTORY_NAMES = ("tekton", "values", "values.encrypted", "secrets")
+ALLOWED_DIRECTORY_NAMES = ("tekton", "values", "secrets")
 
 # Names of the five things init can do, one per write target. The step carries the path, so these
 # say *which job* was done and not where.
@@ -154,7 +154,7 @@ RESERVED_ROOT_NAMES = ("kubementat.yaml", "secrets", "deployer_ssh_key", "deploy
 # `kubementat_components` stays here even though the team listing stopped filtering it by name: the
 # rule this list enforces is about *naming*, not about listing. A layer is one directory, and a team
 # wearing one of these names is a directory two rules both claim, whatever the listing answers.
-LAYER_DIRECTORY_NAMES = ("values", "values.encrypted", "tekton", "triggers", "pipeline-runs",
+LAYER_DIRECTORY_NAMES = ("values", "tekton", "triggers", "pipeline-runs",
                          "kubementat_components")
 
 @dataclass(frozen=True)
@@ -505,8 +505,8 @@ def init_configuration(root, environment, team=None, answers=(), encrypted_answe
     #     epic deleted.
     #   * `<environment>/tekton/pipeline-runs` — same: no reader. This one is also output rather than
     #     input, written when a run happens and not looked for as a layer.
-    # `values/` and `values.encrypted/` are not created either: helmfile's `isFile` guard exists
-    # precisely because they may be absent, and `secrets/` is made with the keys in phase 5.
+    # `values/` is not created either: helmfile's `isFile` guard exists precisely because it may be
+    # absent, and `secrets/` is made with the keys in phase 5.
     layer_directories: list[tuple[str, Path]] = [
         (ENVIRONMENT_TEKTON_STEP, config.tekton_env_task_dir),
         (ENVIRONMENT_TEKTON_STEP, config.tekton_env_pipeline_dir),
@@ -533,7 +533,7 @@ def _foreign_material(directories: list[Path], owned: set[str]) -> list[Path]:
     """Files in `directories` that kubementat did not write and this init does not own.
 
     Two rules make the set both honest and small. **A directory is never foreign.** kubementat's own
-    readers tolerate an absent layer, so an existing `tekton/`, `values/`, `values.encrypted/` or
+    readers tolerate an absent layer, so an existing `tekton/`, `values/` or
     `secrets/` directory is not evidence of anything, and demanding `force` for one would train the
     operator to pass `force` — which is exactly the flag that must mean something.
 

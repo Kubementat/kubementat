@@ -9,7 +9,7 @@ read. The seam is `read_decrypted(path, what)` in `kubementat/core/config/reads.
 enforces is **one sentence, many error types**: every caller keeps its own exception and its own
 shape, and the sentence is the same one.
 
-Seven claims, one per read that the census measured, plus two about what the seam must not do:
+Eight claims, one per read that the census measured, plus two about what the seam must not do:
 
 1. `Config._load_json_file` — the bottom of the encrypted-value graph, which everything downstream
    (`infrastructure/helm.py`, `infrastructure/grafana/client.py`, `infrastructure/tekton`,
@@ -31,11 +31,15 @@ Seven claims, one per read that the census measured, plus two about what the sea
    the cluster-resolution reads. Both re-raise `ClusterFileUnreadableError`, the cluster layer's own
    refusal type, with the seam's sentence inside it and neither rewriting it. Both now live one level
    below the resolver that calls them, which is why both rows below carry their own path.
-8. **The seam does not route around `missing_team_config_files`.** A missing *optional* team file
+8. `infrastructure/helm.refuse_locked_operator_values` — the operator's component layers, read
+   before helmfile starts. These are the files helm opens after the template's `isFile` guard, and
+   ciphertext reaching helm would die as apply output that never says the word "unlock"; the seam
+   read turns that into a refusal naming the file.
+9. **The seam does not route around `missing_team_config_files`.** A missing *optional* team file
    still degrades the way it did: a warning at load and a named refusal at read. This is the
    falsification of the seam's own boundary — `FileNotFoundError` propagates and nothing converts it.
-9. **The census is a test.** The read graph is walked out of the tree rather than asserted from a
-   list, so a sixth read that forgets the seam fails here.
+10. **The census is a test.** The read graph is walked out of the tree rather than asserted from a
+   list, so a read that forgets the seam fails here.
 
 Falsifications run while writing this file, each one breaking what it names: letting one site keep
 its own `read_text` fails that site's row and the census row alone; making `cluster_is_unaddressed`
@@ -448,7 +452,7 @@ EXEMPT = {
         "is here and not in the module the run path left, so the key moved with it (P4-3)",
 }
 
-# The seven reads the seam is expected to cover, spelled as (file, function). A read that is not here
+# The eight reads the seam is expected to cover, spelled as (file, function). A read that is not here
 # and is not exempt has to be caught by `reads_outside_the_seam` below, but this list is what makes the number
 # itself a fact and not a guess.
 DOCUMENTED_SEAM_SITES = [
@@ -459,6 +463,7 @@ DOCUMENTED_SEAM_SITES = [
     ("kubementat/config/validate.py", "_cluster_fact_finding"),
     ("kubementat/core/identity/registry.py", "_static_declaration"),
     ("kubementat/core/identity/kubeconfig.py", "_read_kubeconfig"),
+    ("kubementat/infrastructure/helm.py", "refuse_locked_operator_values"),
 ]
 
 def _spliced(lines, node) -> str:
@@ -598,7 +603,7 @@ def reads_outside_the_seam() -> list:
 
 
 def test_every_read_of_configuration_material_in_src_goes_through_the_seam():
-    """The census that made the count seven, running as a test instead of as a note.
+    """The census that made the count eight, running as a test instead of as a note.
 
     A sixth read that forgets `read_decrypted` fails here and nowhere else needs to fail — which is
     how the seam stays one, rather than a rule a reviewer checks by hand and forgets next month.
@@ -612,12 +617,12 @@ def test_every_read_of_configuration_material_in_src_goes_through_the_seam():
         + "\nEither route it through read_decrypted or add the reason it is exempt to EXEMPT.")
 
 
-def test_the_seven_documented_reads_still_call_the_seam():
+def test_the_eight_documented_reads_still_call_the_seam():
     """The count itself is the claim, so it is asserted and not merely implied.
 
     An earlier claim of "three sites" was three names for fewer reads than that and four reads nobody
-    had counted; this list is what the 2026-11-03 census measured, and the row below is what breaks when
-    someone adds a seventh or silently drops one.
+    had counted; this list is what the census measured, and the row below is what breaks when
+    someone adds a ninth read or silently drops one.
     """
     missing = []
     for relative, function in DOCUMENTED_SEAM_SITES:

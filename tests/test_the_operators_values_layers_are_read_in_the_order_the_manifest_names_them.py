@@ -1,22 +1,27 @@
-"""The operator's values layers, read in the order the manifest names them.
+"""The operator's values layer, read in the order the manifest names it.
 
-The rule under test is one sentence: a release's `values:` list is the shipped default, then the
-environment's plain file, then the environment's encrypted file, then the team's plain file and the
-team's encrypted file. helm merges `-f` arguments in the order they arrive, so the order is the
-whole of the precedence, and an operator layer that is not there must cost nothing.
+The rule under test is one sentence: a release's `values:` list is the shipped default and then
+exactly one operator file, `<root>/<environment>/values/<component>.encrypted.yaml`. helm merges
+`-f` arguments in the order they arrive, so the order is the whole of the precedence, and an
+operator layer that is not there must cost nothing.
 
-Both halves of that sentence belong to helmfile, not to this repository: the order it hands `helm`
-comes out of its own templating, and a warning about a file it could not read is its own. So these
-tests run the binary rather than restating its behaviour in Python, which is the only honest way to
-check a gotmpl. It is also how the two failures this ticket exists to end would show up:
+The single file exists because kubementat's components are cluster-wide: a team has no
+cluster-wide answer to give a component, so no values path resolves through a team directory, and
+the layer that carries key material is named after the `*.encrypted.*` pattern git-crypt declares,
+so it is encrypted by its name rather than by living in a directory the declaration does not match.
+
+Both halves of the precedence sentence belong to helmfile, not to this repository: the order it
+hands `helm` comes out of its own templating, and a warning about a file it could not read is its
+own. So these tests run the binary rather than restating its behaviour in Python, which is the only
+honest way to check a gotmpl. It is also how the two failures this test exists to end would show
+up:
 
 * a values file listed but absent is fatal (measured on helmfile 1.7.0), so a rule
-  that listed all four candidates unconditionally would break every tree that declares nothing; and
+  that listed the candidate unconditionally would break every tree that declares nothing; and
 * The per-entry `missingFileHandler` a values entry could carry turns out not to exist in
-  1.7.0 -- measured: a values entry
-  written as a mapping is read as inline values, so the handler would land in the chart's values and
-  the file would still be fatal. Which leaves `isFile` guards, and a guard that silently evaluated
-  `false` would look identical to a tree that declares nothing.
+  1.7.0 -- measured: a values entry written as a mapping is read as inline values, so the handler
+  would land in the chart's values and the file would still be fatal. Which leaves `isFile` guards,
+  and a guard that silently evaluated `false` would look identical to a tree that declares nothing.
 
 Two harnesses, because the shipped releases read charts over a network:
 
@@ -55,19 +60,18 @@ COMPONENT = "grafana"
 # assertion is about its *position*, and a position assertion needs the neighbour by name.
 GRAFANA_DEFAULT = "monitoring/grafana_values.yaml"
 
-# A component key per layer, so a layer that lost shows up as a wrong answer and not as a file that
-# is not there.
-PROBE_KEYS = ("product", "environment_plain", "environment_encrypted",
-              "team_plain", "team_encrypted")
+# A probe key per position in the merge, so a layer that lost shows up as a wrong answer and not
+# as a file that is not there.
+PROBE_KEYS = ("product", "operator")
 
 
-def child_environment(root=None, environment=ENVIRONMENT, team=None):
-    """The three coordinates a packaged manifest reads, plus what its own templating requires.
+def child_environment(root=None, environment=ENVIRONMENT):
+    """The two coordinates a packaged manifest reads for its values, plus what templating needs.
 
-    `KUBEMENTAT_CONFIG_ROOT` / `KUBEMENTAT_ENVIRONMENT` / `KUBEMENTAT_TEAM` are what
-    `export_configuration_coordinates` in `infrastructure/helm.py` writes before helmfile starts, and they are
-    the manifest's only way to address the operator's tree. Passing no root answers a hand-run
-    helmfile, which exports nothing and should apply exactly the shipped defaults.
+    `KUBEMENTAT_CONFIG_ROOT` and `KUBEMENTAT_ENVIRONMENT` are what
+    `export_configuration_coordinates` in `infrastructure/helm.py` writes before helmfile starts,
+    and they are the manifest's only way to address the operator's tree. Passing no root answers a
+    hand-run helmfile, which exports nothing and should apply exactly the shipped defaults.
     """
     child = dict(os.environ)
     for name in ("KUBEMENTAT_CONFIG_ROOT", "KUBEMENTAT_ENVIRONMENT", "KUBEMENTAT_TEAM"):
@@ -76,8 +80,6 @@ def child_environment(root=None, environment=ENVIRONMENT, team=None):
         child["KUBEMENTAT_CONFIG_ROOT"] = str(root)
     if environment is not None:
         child["KUBEMENTAT_ENVIRONMENT"] = environment
-    if team is not None:
-        child["KUBEMENTAT_TEAM"] = team
     # `grafana`'s block names its admin pair through `requiredEnv`, exactly as a real apply does,
     # where HelmUtils exports it from `static.encrypted.json` first. Without these two the state
     # file fails to template and every assertion below is about the wrong failure.
@@ -94,15 +96,15 @@ def run_helmfile(cwd, *arguments, **env_overrides):
                           capture_output=True, text=True)
 
 
-def resolved_values_lists(root=None, environment=ENVIRONMENT, team=None):
+def resolved_values_lists(root=None, environment=ENVIRONMENT):
     """`{release: [values entries in the order helmfile will hand them to helm]}`.
 
-    `helmfile build` prints the desired state after templating, so this is what the ticket asks for
+    `helmfile build` prints the desired state after templating, so this is what the rule asks for
     as "the order helmfile was handed" -- it is produced by helmfile, not by a parser that read the
     manifest looking for lines that look like the rule.
     """
     result = run_helmfile(values_path(), "-f", str(MANIFEST), "build",
-                          root=root, environment=environment, team=team)
+                          root=root, environment=environment)
     assert result.returncode == 0, f"`helmfile build` said: {result.stderr.strip()}"
     state = yaml.safe_load(result.stdout)
     assert state and state.get("releases"), f"helmfile returned no releases:\n{result.stdout[:400]}"
@@ -125,7 +127,7 @@ name: layerprobe
 version: 0.1.0
 """
 
-# Everything the layer files may set, dumped through the chart so precedence is a value and not a
+# Everything the layer file may set, dumped through the chart so precedence is a value and not a
 # missing file.
 PROBE_TEMPLATE = """apiVersion: v1
 kind: ConfigMap
@@ -137,7 +139,7 @@ data:
 """
 
 # One release, shaped exactly like a block of the shipped manifest: its default first, then the
-# operator layers, addressed by the component name.
+# operator layer, addressed by the component name.
 PROBE_RELEASE = """releases:
 - name: layerprobe
   chart: ./layerprobe
@@ -161,18 +163,15 @@ def shipped_operator_block():
     text = MANIFEST.read_text(encoding="utf-8")
     start = text.index('{{- define "kubementat-operator-values"')
     block = text[start:text.index("# Releases configuration for deployments", start)]
-    for expected in ('env "KUBEMENTAT_CONFIG_ROOT"', 'env "KUBEMENTAT_ENVIRONMENT"',
-                     'env "KUBEMENTAT_TEAM"'):
+    for expected in ('env "KUBEMENTAT_CONFIG_ROOT"', 'env "KUBEMENTAT_ENVIRONMENT"'):
         assert expected in block, f"the shipped operator block no longer reads {expected}"
-    for layer in ("values/%s.yaml", "values.encrypted/%s.yaml"):
-        assert block.count(block_path_pattern(layer)) >= 1, \
-            f"the shipped operator block no longer addresses .../{layer}"
+    # The team coordinate must reach no values path: a cluster-wide component is not a team's
+    # answer, and a block that read the coordinate again would resurrect a layer nothing declares.
+    assert 'env "KUBEMENTAT_TEAM"' not in block, \
+        "the operator block addresses a team layer again, which no cluster-wide release has"
+    assert block.count("%s/%s/values/%s.encrypted.yaml") >= 1, \
+        "the shipped operator block no longer addresses .../values/<component>.encrypted.yaml"
     return block
-
-
-def block_path_pattern(layer):
-    """The printf format string the shipped block uses for one layer directory."""
-    return "%s/" + layer
 
 
 def scratch_tree(tmp_path):
@@ -195,29 +194,29 @@ def scratch_tree(tmp_path):
     return configuration, state_directory
 
 
-def declare(root, layer, component, values, environment=ENVIRONMENT, team=None):
+def declare(root, component, values, environment=ENVIRONMENT, directory="values",
+            suffix=".encrypted.yaml"):
     """Write one operator values file where the tree's layout puts it, and nothing else.
 
-    No `static.json`, no `.gitattributes`, no directory this function was not told to create.
+    No `static.json`, no `.gitattributes`, no directory this function was not told to create. The
+    keyword arguments exist for the one test that puts files where the rule does *not* read them,
+    so the addresses the manifest ignores are provable and not assumed.
     """
-    directory = root / environment
-    if team is not None:
-        directory = directory / team
-    target = directory / layer
+    target = root / environment / directory
     target.mkdir(parents=True, exist_ok=True)
-    path = target / f"{component}.yaml"
+    path = target / f"{component}{suffix}"
     path.write_text(yaml.dump(values, default_flow_style=False), encoding="utf-8")
     return path
 
 
-def render_merged_values(configuration, state_directory, environment=ENVIRONMENT, team=None):
+def render_merged_values(configuration, state_directory, environment=ENVIRONMENT):
     """helmfile's answer as `(the merged values, the missing-file warnings it produced)`.
 
     The warnings are returned rather than asserted here because "one warning is the most a quiet
     tree is allowed to produce" is a count, and a count belongs to the test that states it.
     """
     result = run_helmfile(state_directory, "-f", "helmfile.yaml.gotmpl", "template",
-                          root=configuration, environment=environment, team=team)
+                          root=configuration, environment=environment)
     warnings = [line for line in result.stderr.splitlines()
                 if "does not exist" in line or "missing values file" in line]
     assert result.returncode == 0, f"`helmfile template` said: {result.stderr.strip()}"
@@ -251,14 +250,13 @@ def test_a_tree_that_declares_no_operator_values_applies_the_shipped_defaults(tm
 
 @helmfile_only
 def test_a_run_that_named_no_configuration_root_reads_the_shipped_defaults_only():
-    """The third rule from the other side: the exports are the only path, so their absence is survivable.
+    """The coordinate rule from the other side: the exports are the only path, so their absence is survivable.
 
     A hand-run helmfile in the packaged directory exports none of them. It must apply exactly the
     shipped defaults rather than fail, guess, or reach for a checkout it was never told about.
     """
     for release, values in resolved_values_lists(root=None).items():
-        assert all("/values/" not in entry and "/values.encrypted/" not in entry
-                   for entry in listed_files(values)), \
+        assert all("/values/" not in entry for entry in listed_files(values)), \
             f"{release} addressed an operator layer with no root exported: {listed_files(values)}"
 
 
@@ -266,140 +264,134 @@ def test_a_run_that_named_no_configuration_root_reads_the_shipped_defaults_only(
 
 
 @helmfile_only
-def test_the_environment_layer_is_handed_after_the_default_and_the_team_layer_after_it(tmp_path):
-    """The resolved list of a release whose four operator files all exist, as helmfile printed it.
+def test_the_operator_layer_is_handed_after_the_default_and_nothing_is_handed_after_it(tmp_path):
+    """The resolved list of a release whose operator file exists, as helmfile printed it.
 
-    This is the ordering assertion the ticket asks for, and it is the binary's own answer: the
-    shipped default, then environment plain, environment encrypted, team plain, team encrypted.
+    This is the ordering assertion the rule asks for, and it is the binary's own answer: the shipped
+    default, then the one layer. No team entry follows -- a team address is not a values address.
     """
     configuration, _ = scratch_tree(tmp_path)
-    declare(configuration, "values", COMPONENT, {"layer": "environment-plain"})
-    declare(configuration, "values.encrypted", COMPONENT, {"layer": "environment-encrypted"})
-    declare(configuration, "values", COMPONENT, {"layer": "team-plain"}, team=TEAM)
-    declare(configuration, "values.encrypted", COMPONENT, {"layer": "team-encrypted"}, team=TEAM)
-
-    listed = listed_files(resolved_values_lists(configuration, team=TEAM)[COMPONENT])
+    written = declare(configuration, COMPONENT, {"layer": "environment"})
     environment_directory = configuration / ENVIRONMENT
 
-    assert listed == [GRAFANA_DEFAULT,
-                      str(environment_directory / "values" / f"{COMPONENT}.yaml"),
-                      str(environment_directory / "values.encrypted" / f"{COMPONENT}.yaml"),
-                      str(environment_directory / TEAM / "values" / f"{COMPONENT}.yaml"),
-                      str(environment_directory / TEAM / "values.encrypted" / f"{COMPONENT}.yaml")], \
+    listed = listed_files(resolved_values_lists(configuration)[COMPONENT])
+
+    assert listed == [GRAFANA_DEFAULT, str(written)], \
         f"the order helmfile was handed is not the layering the rule states: {listed}"
+    assert str(environment_directory / TEAM) not in " ".join(listed), listed
 
 
 @helmfile_only
-def test_an_environment_override_wins_over_the_default_and_a_team_override_wins_over_it(tmp_path):
+def test_the_addresses_the_rule_does_not_read_stay_addresses_and_produce_no_entries(tmp_path):
+    """The old layout and the team directory: files that sit where nothing reads.
+
+    A tree that once had four candidate files, or that names a team, keeps the cluster-wide
+    components exactly where the rule puts them -- the manifest neither reads nor warns about a
+    file at an address it does not have. This is the migration made visible: nothing about an old
+    file can leak into the apply.
+    """
+    configuration, _ = scratch_tree(tmp_path)
+    declare(configuration, COMPONENT, {"layer": "old-plain"}, directory="values", suffix=".yaml")
+    declare(configuration, COMPONENT, {"layer": "old-encrypted"},
+            directory="values.encrypted", suffix=".yaml")
+    declare(configuration, COMPONENT, {"layer": "team-plain"},
+            directory=f"{TEAM}/values", suffix=".yaml")
+
+    listed = listed_files(resolved_values_lists(configuration)[COMPONENT])
+
+    assert listed == [GRAFANA_DEFAULT], \
+        f"an address the rule does not have was read: {listed}"
+
+
+@helmfile_only
+def test_an_operator_override_wins_over_the_default_and_leaves_the_rest_to_it(tmp_path):
     """The order above is not decoration: one rendered chart says which layer answered each key.
 
-    The environment layer is read first, so it overrides the product's own key and touches nothing
-    else; the team layer is read after it, so the same key is answered by the team while a key the
-    team never declares stays with the environment.
+    The layer is read after the default, so it overrides the product's own key and touches nothing
+    else; a key it never declares stays answered by the shipped file.
     """
     configuration, state_directory = scratch_tree(tmp_path)
-    declare(configuration, "values", "layerprobe", {"environment_plain": "environment"})
-    declare(configuration, "values.encrypted", "layerprobe",
-            {"environment_encrypted": "environment"})
-    declare(configuration, "values", "layerprobe", {"environment_plain": "team"}, team=TEAM)
-    declare(configuration, "values.encrypted", "layerprobe", {"team_encrypted": "team"}, team=TEAM)
+    declare(configuration, "layerprobe", {"operator": "operator-won"})
 
-    environment_only, warnings = render_merged_values(configuration, state_directory)
-    assert warnings == [], f"a complete environment layer warned: {warnings}"
-    assert environment_only["environment_plain"] == "environment", \
-        "the environment layer did not override the shipped default for its own key"
-    assert environment_only["product"] == "product-default", \
+    merged, warnings = render_merged_values(configuration, state_directory)
+
+    assert warnings == [], f"a layer that exists warned: {warnings}"
+    assert merged["operator"] == "operator-won", \
+        "the operator layer did not override the shipped default for its own key: " + str(merged)
+    assert merged["product"] == "product-default", \
         "the shipped default moved without an override of that key"
 
-    merged, warnings = render_merged_values(configuration, state_directory, team=TEAM)
-    assert warnings == [], f"a complete tree warned: {warnings}"
-    assert merged["environment_plain"] == "team", \
-        "the team layer did not override the environment: " + str(merged)
-    assert merged["environment_encrypted"] == "environment", \
-        "the team layer answered a key it never declared: " + str(merged)
-    assert merged["team_encrypted"] == "team", merged
-    assert merged["product"] == "product-default", merged
 
-
-# --- (c) a quiet tree is quiet ----------------------------------------------------------------
+# --- (c) a quiet tree is quiet -----------------------------------------------------------------
 
 
 @helmfile_only
-def test_a_team_named_and_declaring_nothing_does_not_warn_about_four_missing_files(tmp_path):
-    """Four candidate files, none of them there, and a tree that says nothing.
+def test_a_tree_that_declares_no_layer_warns_about_nothing_and_writes_the_default(tmp_path):
+    """One candidate file, none of them there, and a tree that says nothing.
 
     The count is the assertion. helmfile's default handler is `Error`, so a rule that listed the
-    files unconditionally would end this run before it rendered anything, and the release-level
-    `Warn` that is the only handler 1.7.0 has would leave four warnings about files its operator
-    never intended to write. One is the most this tree is allowed to produce.
+    file unconditionally would end this run before it rendered anything, and the release-level
+    `Warn` that is the only handler 1.7.0 has would leave a warning about a file its operator never
+    intended to write. One is the most this tree is allowed to produce.
     """
     configuration, state_directory = scratch_tree(tmp_path)
-    (configuration / ENVIRONMENT / TEAM).mkdir(parents=True)
+    (configuration / ENVIRONMENT).mkdir(parents=True)
 
-    merged, warnings = render_merged_values(configuration, state_directory, team=TEAM)
+    merged, warnings = render_merged_values(configuration, state_directory)
 
     assert len(warnings) <= 1, f"a quiet tree produced {len(warnings)} warnings: {warnings}"
     assert merged["product"] == "product-default", merged
-    for key in PROBE_KEYS[1:]:
-        assert merged[key] == "product-default", f"{key} was answered by nothing: {merged}"
+    assert merged["operator"] == "product-default", f"operator was answered by nothing: {merged}"
 
 
 @helmfile_only
-def test_an_environment_that_declared_only_an_encrypted_file_lists_exactly_that_file(tmp_path):
-    """One file present is one entry, not four with three absent.
+def test_a_layer_that_exists_lists_exactly_one_file(tmp_path):
+    """One file present is one entry, not one entry with ghosts.
 
     The same shape as the quiet tree, from the other side: presence is what makes an entry.
     """
     configuration, _ = scratch_tree(tmp_path)
-    written = declare(configuration, "values.encrypted", COMPONENT, {"layer": "env-encrypted"})
+    written = declare(configuration, COMPONENT, {"layer": "environment"})
 
     listed = listed_files(resolved_values_lists(configuration)[COMPONENT])
 
     assert listed == [GRAFANA_DEFAULT, str(written)], listed
 
 
-# --- (d) the encrypted layer, by the same rule -------------------------------------------------
+# --- (d) the layer is named for its material ----------------------------------------------------
 
 
 @helmfile_only
-def test_a_key_that_lives_only_in_values_encrypted_is_still_applied(tmp_path):
-    """The done-when for this rule. No `values/layerprobe.yaml` exists anywhere, and the key is only ever
-    written under `values.encrypted/`. A rule that looked only at the plain directory answers
-    `product-default`."""
+def test_a_key_that_lives_only_in_the_layer_is_still_applied(tmp_path):
+    """The done-when for this rule. No plain file exists anywhere, and the key is only ever written
+    in `<component>.encrypted.yaml`. A rule that looked for the plain name answers `product-default`."""
     configuration, state_directory = scratch_tree(tmp_path)
-    declare(configuration, "values.encrypted", "layerprobe", {"team_plain": "encrypted-only"})
+    declare(configuration, "layerprobe", {"operator": "encrypted-only"})
 
     merged, warnings = render_merged_values(configuration, state_directory)
 
     assert warnings == [], f"a file that exists warned: {warnings}"
-    assert merged["team_plain"] == "encrypted-only", merged
+    assert merged["operator"] == "encrypted-only", merged
 
 
-@helmfile_only
-def test_the_encrypted_layer_is_read_after_the_plain_one_at_each_level(tmp_path):
-    """Within one layer the encrypted file wins, because it is the one the operator means secretly.
+def test_the_layer_is_named_as_the_encryption_declaration_reads_it():
+    """The `.encrypted.` half is what puts the file under `*.encrypted.*`, so it must be the name.
 
-    Same key in both, one layer, no team: the encrypted answer is what renders. This is the same
-    order `Config._load_config` applies to `static.json` and its encrypted neighbour.
+    A layer that moved into a `values.encrypted/` directory would put its key material where the
+    git-crypt declaration does not look -- the whole protection story rests on the file's name, so
+    this is asserted on the shipped manifest and not on a scratch tree.
     """
-    configuration, state_directory = scratch_tree(tmp_path)
-    declare(configuration, "values", "layerprobe", {"environment_plain": "plain-won?",
-                                                    "team_plain": "plain-layer-only"})
-    declare(configuration, "values.encrypted", "layerprobe", {"environment_plain": "encrypted"})
+    body = MANIFEST.read_text(encoding="utf-8")
 
-    merged, warnings = render_merged_values(configuration, state_directory)
-
-    assert warnings == [], warnings
-    assert merged["environment_plain"] == "encrypted", merged
-    assert merged["team_plain"] == "plain-layer-only", \
-        "the encrypted layer answered a key only the plain one declared: " + str(merged)
-    assert merged["product"] == "product-default", merged
+    assert "values/%s.encrypted.yaml" in body, "the layer's name no longer carries .encrypted."
+    assert "values.encrypted/%s.yaml" not in body, \
+        "the manifest reads a values.encrypted/ directory again, which git-crypt does not declare"
 
 
 # --- the halves that hold without the binary ---------------------------------------------------
 
 
-def test_the_manifest_hands_its_component_name_to_the_operator_layers():
+def test_the_manifest_hands_its_component_name_to_the_operator_layer():
     """Every release block passes its own `component_name` label, not its release name.
 
     The two prometheus exporters and `polaris` are what make this a check: for them the label, the
@@ -417,11 +409,11 @@ def test_the_manifest_hands_its_component_name_to_the_operator_layers():
 
     assert len(labelled) == len(passed), (
         f"{len(labelled)} blocks declare a component_name and {len(passed)} hand one to the "
-        f"operator layers -- the difference is a block that declares without handing over, which "
+        f"operator layer -- the difference is a block that declares without handing over, which "
         f"is the miss this pair of counts is for, whatever the census of the file happens to be")
     assert len(labelled) >= 10, f"a file that lost a whole release block reads like this: {labelled}"
     assert sorted(labelled) == sorted(passed), (
-        "the name handed to the operator layers stopped being the name `kmt component install` "
+        "the name handed to the operator layer stopped being the name `kmt component install` "
         f"addresses: {sorted(set(labelled) - set(passed))} / {sorted(set(passed) - set(labelled))}")
 
 
@@ -433,7 +425,7 @@ def test_no_release_block_carries_a_per_release_missing_file_handler():
     into the chart's values and still fails the apply on the missing file. The only handler left is
     the release's own, and it silences a missing *product* default as well: a shipped file that
     moved would install chart defaults while the manifest looked satisfied. So the manifest keeps
-    helmfile's default `Error` handler and guards every operator entry with `isFile` instead.
+    helmfile's default `Error` handler and guards the operator entry with `isFile` instead.
     """
     body = MANIFEST.read_text(encoding="utf-8")
     live = [line for line in body.splitlines() if not line.lstrip().startswith("#")]
@@ -443,14 +435,16 @@ def test_no_release_block_carries_a_per_release_missing_file_handler():
     assert "isFile" in body, "the guard that makes an absent operator file invisible is gone"
 
 
-def test_the_operator_layers_are_addressed_by_the_three_exports_and_by_nothing_else():
-    """The third rule, asserted as text. No path in the manifest names the checkout, and nothing is derived
-    from `kubementat_main_dir`."""
+def test_the_operator_layer_is_addressed_by_the_two_coordinates_and_by_nothing_else():
+    """The coordinate rule, asserted as text. No path in the manifest names the checkout, and a
+    team coordinate reaches no values path, because a cluster-wide component has no team address."""
     body = MANIFEST.read_text(encoding="utf-8")
     live = "\n".join(line for line in body.splitlines() if not line.lstrip().startswith("#"))
 
     assert "KUBEMENTAT_CONFIG_ROOT" in live, "the operator's root is not read by the manifest"
-    assert "KUBEMENTAT_TEAM" in live, "the team layer is not addressed"
+    assert "KUBEMENTAT_ENVIRONMENT" in live, "the environment is not read by the manifest"
+    assert 'env "KUBEMENTAT_TEAM"' not in live, \
+        "the manifest addresses a team layer again, and cluster-wide components have none"
     for not_a_path in ("kubementat_main_dir", "KUBEMENTAT_PLATFORM_CONFIG_DIR", "platform_config/"):
         assert not_a_path not in live, f"{not_a_path} reached the manifest, which is the old address"
     assert "../" not in live, "a relative upward path resolves against wherever helmfile was run"

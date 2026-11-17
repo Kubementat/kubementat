@@ -221,10 +221,12 @@ reading whatever manifest is actually applied.
 *Why load-bearing:* this is the shape of v2 §11's "which file did this apply from" question, and plan row
 13's stale-copy bug cannot be constructed once the entry point is product-owned.
 
-**R-4.5 (values live in the layer, not beside it).** `values/<component>.yaml` and
-`values.encrypted/<component>.yaml` in both layers. Encrypted values keep the `*.encrypted.*` filter.
-*Done when:* a component's value list is ordered default → environment → team, and an encrypted
-override is applied without anyone exporting anything.
+**R-4.5 (values live in the layer, not beside it).** One operator layer per component:
+`values/<component>.encrypted.yaml` at the environment level. The components kubementat installs are
+cluster-wide, so no values path resolves through a team directory, and the name carries the
+`*.encrypted.*` marker so git-crypt declares the file rather than a directory that would hide it.
+*Done when:* a component's value list is ordered default → operator layer, the layer is encrypted by its
+name, and a locked layer is refused by name before helmfile starts.
 
 ---
 
@@ -238,8 +240,7 @@ override is applied without anyone exporting anything.
   <environment>/                       # one directory == exactly one cluster (N-1)
       static.json                      # namespace/domain/registry/cluster keys, incl. CLUSTER_KUBE_CONTEXT
       static.encrypted.json            # environment credentials — git-crypt protected
-      values/<component>.yaml          # optional overrides (§4.2)
-      values.encrypted/<component>.yaml
+      values/<component>.encrypted.yaml  # the operator's component layer — git-crypt protected by name
       tekton/{tasks,pipelines,triggers,pipeline-runs}/
       <team>/                          # a directory that carries its own static.json
           static.json
@@ -579,10 +580,11 @@ file, it consults a `Config` that opened one. The seven independent reads of lay
 bites. The `kubementat.yaml` read (`config_validate.py:197`) is deliberately out: that file is not
 encrypted material, and a seam that wraps it would promise coverage it does not need.
 *Reads that are not this seam, said rather than discovered:* the Kubernetes client's own kubeconfig read
-and `kubectl config view`, which Python cannot wrap; and `values.encrypted/*.yaml`, which helmfile's
-Go template opens only to ask whether the file exists, and helm opens the bytes itself, so a
-Python-only seam leaves that surface exactly as locked as it is today and its failure reaches us as a
-non-zero `helmfile apply` rather than as this function's refusal, and it is not a place `read_decrypted` may pretend to cover.
+and `kubectl config view`, which Python cannot wrap. The operator's component layers —
+`values/<component>.encrypted.yaml` — reach the seam from one side: `helmfile_apply` reads each layer that
+exists through `read_decrypted` before the child starts, so a locked tree is refused here by name, and
+helm's own read afterwards is never the first one. Helm still opens the same bytes, and that read could not
+be wrapped from Python; what changed is that its failure is no longer the only thing the operator hears.
 *The failure this seam exists to stop* is not the traceback, it is the asymmetry: `UnicodeDecodeError` is a
 `ValueError` and not an `OSError`, so four sites catch it and describe it in four different words, two
 sites do not catch it at all, and `config_init.cluster_is_unaddressed` swallows it and answers *"this

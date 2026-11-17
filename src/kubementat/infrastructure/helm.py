@@ -11,6 +11,7 @@ from kubementat.core.config import release_index as config_reads_index
 from kubementat.core import components, constants
 from kubementat.core.identity.target import ClusterTarget, helm_target_args
 from kubementat.core.config.keys import component_config_key
+from kubementat.core.config.reads import read_decrypted
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 from kubementat.errors import (
@@ -158,6 +159,13 @@ class HelmUtils:
         # package is told where to cross to; it names the root, the environment and the team, and
         # nothing here guesses at a fourth variable the operator's shell carries.
         exported_coordinates = export_configuration_coordinates(self.config, self.environment)
+
+        # The operator's component layers carry key material, so a checkout that was not unlocked
+        # leaves ciphertext exactly where helmfile's `isFile` guard asks for text, and helm would
+        # get a non-YAML document that dies as a non-zero apply saying nothing about unlocking. The
+        # layers that exist are read here, before the child starts, for that refusal to arrive
+        # named rather than as helm's output.
+        refuse_locked_operator_values(self.config, self.environment)
 
         # The helmfile working directory and the manifest inside it. One resolution of each, in
         # `helmfile_paths`, because the same two paths are what `component_release_index` reads the
@@ -884,6 +892,24 @@ def _components_named_by_selector(helmfile_label_filter: str):
         if "component_name" in clause:
             return None  # presence or negation: it reaches more than one name
     return sorted(named) or None
+
+def refuse_locked_operator_values(config, environment: str) -> None:
+    r'''
+    Refuse before helmfile starts when one of the operator's component layers is ciphertext.
+
+    The layer a component reads is named `<component>.encrypted.yaml` because that is what puts it
+    under git-crypt's `*.encrypted.*` declaration, and the price of the name is that an unlocked
+    checkout leaves it encrypted. helmfile's `isFile` guard cannot tell the two apart -- ciphertext
+    is bytes either way -- and helm, not kubementat, opens the document: the failure would surface
+    as a non-zero apply whose output says nothing about unlocking. So the layers that exist under
+    `<root>/<environment>/values/` are read here, through `read_decrypted`, and the refusal names
+    the file before a cluster is touched. A layer that is not there is not read, because an absent
+    layer is the state most trees live in.
+    '''
+    values_directory = Path(str(config.platform_config_dir)) / environment / "values"
+    for path in sorted(values_directory.glob("*.encrypted.yaml")):
+        read_decrypted(path, f"values layer file for the {path.stem} component")
+
 
 def export_configuration_coordinates(config, environment: str) -> dict:
     r'''

@@ -142,15 +142,24 @@ repositories:
 # ---------------------------------------------------------------------------
 # The operator's own values layers, spelled once (spec R-4.2 and R-4.5).
 #
-# Every release below reads the same four candidate files after its packaged
-# default, and the order is the whole rule: the product's shipped default first,
-# then the environment's plain file, then the environment's encrypted file, then
-# the team's plain file and the team's encrypted file when a team is named. helm
-# merges `-f` arguments in the order they arrive, so the last file that declares a
-# key is the answer -- the same layering `kmt config` applies to `static.json`, on
-# the two directories §5's layout names:
-# `<config>/<environment>/values/<component>.yaml`, `.../values.encrypted/<component>.yaml`,
-# and the same two under `.../<environment>/<team>/`.
+# Every release below reads its packaged default and then exactly one operator
+# file: `<config>/<environment>/values/<component>.encrypted.yaml`. helm merges
+# `-f` arguments in the order they arrive, so the order is the whole of the
+# precedence -- the shipped default answers what the operator did not, and the
+# operator's file answers everything it declares.
+#
+# There is one layer and no team directory under it because kubementat's
+# components are cluster-wide. A namespace, an ingress class and a release belong
+# to the cluster, and a team has no cluster-wide answer to give one; the values a
+# team does give belong to its applications and are read by the application
+# machinery below `<environment>/<team>/`, not by this file.
+#
+# The `.encrypted.` in the file name is the rule, not decoration: kubementat's
+# git-crypt declaration keys on `*.encrypted.*` file names, so a layer that
+# carries key material is encrypted by its name. A `values.encrypted/` directory
+# would hide the layer from that declaration while looking like protection, and
+# the name also says what the file may hold: keys land here, and nothing else
+# needs a second file beside it.
 #
 # `<component>` is the release's `component_name` label, because that is the name
 # `kmt component install` addresses the release by. Not the chart and not the
@@ -160,40 +169,32 @@ repositories:
 # Two things make this addressable from inside a wheel, and both were measured on
 # helmfile 1.7.0 rather than read off the syntax:
 #
-# * No path here names the checkout. `KUBEMENTAT_CONFIG_ROOT`, `KUBEMENTAT_ENVIRONMENT`
-#   and `KUBEMENTAT_TEAM` are exported by `helm_utils.export_configuration_coordinates`
-#   before helmfile starts, which is why a run that names no team gets no team layer
-#   (`env` of an unset variable answers ""; it is not an error). A hand-run `helmfile`
-#   in this directory exports none of them, so it applies exactly the shipped
-#   defaults and says nothing about a configuration tree it was never told about.
+# * No path here names the checkout. `KUBEMENTAT_CONFIG_ROOT` and
+#   `KUBEMENTAT_ENVIRONMENT` are exported by
+#   `helm_utils.export_configuration_coordinates` before helmfile starts, which is
+#   why a hand-run `helmfile` in this directory exports neither and applies
+#   exactly the shipped defaults, saying nothing about a configuration tree it was
+#   never told about. `KUBEMENTAT_TEAM` is exported with them as the identity this
+#   run was given, but no cluster-wide values path resolves through it.
 # * Absent is cheap and present is correct, but NOT through `missingFileHandler`.
 #   helmfile 1.7.0 has no per-entry handler: a values entry written as a mapping is
 #   read as inline values, so `- missingFileHandler: Warn` would put that word and a
 #   `values:` key into the chart's values and still fail the apply on the missing
 #   file. A release-level handler would work, but it would also silence a missing
 #   *product* default -- a shipped file that moved or lost its suffix would install
-#   chart defaults while the manifest looked satisfied. So each operator entry is
-#   guarded by `isFile` instead and helmfile's own Error handler is left alone: a
-#   file that is not there is not listed, so it cannot warn and cannot be applied,
-#   and a file the manifest does list is a file the operator wrote.
+#   chart defaults while the manifest looked satisfied. So the operator entry is
+#   guarded by `isFile` and helmfile's own Error handler is left alone: a file that
+#   is not there is not listed, so it cannot warn and cannot be applied, and a file
+#   the manifest does list is a file the operator wrote. And because the layer is
+#   encrypted material, a file that is there as ciphertext is refused before the
+#   child starts: `helmfile_apply` reads each operator layer through
+#   `read_decrypted`, so a locked tree is told to unlock instead of reaching helm.
 {{- define "kubementat-operator-values" }}
 {{- $root := env "KUBEMENTAT_CONFIG_ROOT" }}
 {{- $env := env "KUBEMENTAT_ENVIRONMENT" }}
 {{- if and $root $env }}
-{{- if isFile (printf "%s/%s/values/%s.yaml" $root $env .) }}
-    - {{ printf "%s/%s/values/%s.yaml" $root $env . }}
-{{- end }}
-{{- if isFile (printf "%s/%s/values.encrypted/%s.yaml" $root $env .) }}
-    - {{ printf "%s/%s/values.encrypted/%s.yaml" $root $env . }}
-{{- end }}
-{{- $team := env "KUBEMENTAT_TEAM" }}
-{{- if $team }}
-{{- if isFile (printf "%s/%s/%s/values/%s.yaml" $root $env $team .) }}
-    - {{ printf "%s/%s/%s/values/%s.yaml" $root $env $team . }}
-{{- end }}
-{{- if isFile (printf "%s/%s/%s/values.encrypted/%s.yaml" $root $env $team .) }}
-    - {{ printf "%s/%s/%s/values.encrypted/%s.yaml" $root $env $team . }}
-{{- end }}
+{{- if isFile (printf "%s/%s/values/%s.encrypted.yaml" $root $env .) }}
+    - {{ printf "%s/%s/values/%s.encrypted.yaml" $root $env . }}
 {{- end }}
 {{- end }}
 {{- end }}

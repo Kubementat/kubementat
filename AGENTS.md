@@ -166,9 +166,11 @@ the installed package.
 **This repository ships no encrypted files, so nothing here is ever unlocked.** git-crypt belongs to the
 configuration directory, and `config init` sets it up in the order that makes the first encrypted file land
 encrypted. kubementat runs git-crypt for `init` and never again: a read that finds ciphertext is a named
-refusal, and unlocking is the operator's act or the pipeline's, not the library's. The one exception is not
-ours to make: the helmfile template asks only whether a `values.encrypted/<component>.yaml` exists, and
-helm opens the bytes itself.
+refusal, and unlocking is the operator's act or the pipeline's, not the library's. The operator's component
+values follow the same rule by their name: each layer is `<environment>/values/<component>.encrypted.yaml`,
+so git-crypt's `*.encrypted.*` filter matches the file rather than a directory that hides it, and
+`helmfile_apply` reads the layers that exist before helmfile starts, refusing a locked tree by name instead
+of letting helm open ciphertext.
 
 The verbs, the order and the reason each step sits where it does are in
 [docs/README_GIT_CRYPT.md](docs/README_GIT_CRYPT.md).

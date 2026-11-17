@@ -1,10 +1,11 @@
 # Concourse. Seeded from the Phase-1 prototype of 2026-11-17 (chart 20.3.3, Concourse 8.3.3, the
 # same release that stood up and served a registered worker on a kind cluster), with key material
 # and operator credentials stripped. What is here is the shape that worked; the layering rule is
-# the platform's: this file is the shipped default, the environment and team layers override what
-# an operator may change (replicas, persistence size, ingress, an external database), and key
-# material reaches the release from the encrypted layer only -- a plain layer that carried a
-# private key would undo the whole sanitizing exercise below.
+# the platform's: this file is the shipped default, the operator's component layer
+# `<environment>/values/concourse.encrypted.yaml` overrides what the operator may change
+# (replicas, persistence size, ingress, an external database) and carries the key material -- the
+# layer is encrypted by its name, and a layer that carried a private key without declaring it to
+# git-crypt would undo the whole sanitizing exercise below.
 
 image: concourse/concourse
 # The two pins of one release: 20.3.3 is the chart and 8.3.3 is its `appVersion`, and bumping

@@ -25,17 +25,16 @@ missing" is a state `core/config/config.py`'s `missing_team_config_files` machin
 at load and a named refusal at read, and a helper that raised its own error there would turn a
 degradable tree into a hard failure.
 
-**The reads this deliberately does not cover, said rather than discovered.** Seven reads go through
+**The reads this deliberately does not cover, said rather than discovered.** Eight reads go through
 it. Out of its reach, and not a defect in it: `kubementat.yaml`, which `config validate` reads and
-which is not encrypted material; the Kubernetes client's own read of the same kubeconfig, and
-`kubectl config view`, which leave Python entirely; and `values.encrypted/<component>.yaml`, which
-helmfile's Go template only asks `isFile` about them; helm opens the bytes itself, against the packaged
-`assets/values/` directory. That last one is the product's second and larger encrypted surface, and no
-Python function sees it — and what is worth knowing is *how it fails*: if one of those files were
-encrypted, helm would get a non-YAML document and the release would die as a non-zero `helmfile apply`,
-so no code of ours would ever say "run git-crypt unlock" about it. A `read_decrypted` that claimed to
-cover every secret would be the falsest sentence this ticket could write, so it says the boundary here
-instead.
+which is not encrypted material; and the Kubernetes client's own read of the same kubeconfig, and
+`kubectl config view`, which leave Python entirely. The operator's component layers —
+`values/<component>.encrypted.yaml`, opened by helm and named by helmfile's `isFile` guard — reach
+this seam on one side only: `helm.py`'s `refuse_locked_operator_values` reads each layer that exists
+before helmfile starts, so a locked tree is refused here by name, and what helm then opens is
+text. Helm still reads the same bytes afterwards, and that second read is not this seam's and could
+not be; what matters is that it is no longer the first read, because a failure that arrives as
+helm's output never says the word "unlock".
 
 One consequence of wiring it, stated before a test finds it: `Config._load_config` reads all four
 layer files on the first answer of any category, so the commands that ask a category (`config show`

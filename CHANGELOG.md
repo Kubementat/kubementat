@@ -1,4 +1,30 @@
 # Unreleased
+- **One operator values file per component, encrypted by its name, read only at the environment
+  layer: `kmt helm apply` and every component install now resolve a release's operator values
+  through exactly one file, `<environment>/values/<component>.encrypted.yaml`.** Breaking.
+  - **Why one file and one layer.** The components kubementat installs through helmfile are
+    cluster-wide — a namespace, an ingress class and a release belong to the cluster, and no team
+    has a cluster-wide answer to give one. Teams keep their configuration (application values,
+    env files, pipelines, `static.json` answers under `<environment>/<team>/`); what is gone is
+    the team address in the *component* values list. And the four candidates
+    (`values/<c>.yaml`, `values.encrypted/<c>.yaml`, both again under the team directory) collapse
+    into one because the layer must be encrypted: git-crypt declares `*.encrypted.*` file names,
+    so the old `values.encrypted/` directory sat beside the declaration instead of under it — its
+    files were committed in plaintext while looking protected. The name carries the marker now,
+    and one file answers both plain overrides and keys, so no plain sibling needs to exist.
+  - **The locked tree fails loudly.** The name is also what makes a locked checkout dangerous:
+    ciphertext lands exactly where helmfile's `isFile` guard asks for text, and helm would die on
+    a non-YAML document that never says the word "unlock". So `helmfile_apply` reads each layer
+    that exists through `read_decrypted` before the child starts, and the refusal
+    (`LockedConfigFileError`) names the file. The read seam's documented exception ("helm opens
+    the bytes itself") is closed from this side: helm still opens them, but it is no longer the
+    first one asked.
+  - **What a tree must change.** Files must move to the new address; a file that stays at
+    `values/<c>.yaml` or `values.encrypted/<c>.yaml` is read by nothing and warns about nothing.
+    The move is a `git mv`, and the commit after it stores ciphertext for the first time.
+  - The manifest no longer reads `KUBEMENTAT_TEAM` for values — the coordinate is still exported
+    for a run that names a team, because it names the identity of the run, but no cluster-wide
+    values path resolves through it.
 - **`kmt tunnel concourse <environment>` joins the tunnel group, reaching the CI server the way
   `kmt tunnel tekton` reaches the dashboard: the entry sits beside tekton's in the same registry,
   the flags are the same, and no new mechanism was invented.** The web Service of the Concourse

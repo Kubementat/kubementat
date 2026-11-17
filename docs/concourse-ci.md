@@ -29,8 +29,8 @@ an upgrade bumps both, never one (see the runbook).
 
 Values layering is the platform's, stated once in
 [README_PLATFORM_CONFIG.md](README_PLATFORM_CONFIG.md): shipped default →
-`<root>/<env>/values/concourse.yaml` → `<root>/<env>/values.encrypted/concourse.yaml` → the team
-layers. Key material reaches the release from the encrypted layer only.
+`<root>/<env>/values/concourse.encrypted.yaml`. The component is cluster-wide, so there is one layer
+and no team address; the layer is encrypted by its name, and it is where key material lands.
 
 ## Coexistence with Tekton
 
@@ -65,8 +65,8 @@ sources of truth. Pick per pipeline, not per cluster.
 apply (the chart's encryption gate says so; see *Keys*), and the namespace must exist with its
 PodSecurity labels before the workers can be admitted.
 
-1. **Generate keys** (next section) and write the encrypted layer
-   `<root>/<env>/values.encrypted/concourse.yaml`.
+1. **Generate keys** (next section) and write the component layer
+   `<root>/<env>/values/concourse.encrypted.yaml`.
 2. **Label the namespace.** kubementat's `createNamespace: true` creates a namespace it cannot
    label, and no Namespace manifest ships, so this is an operator step (the whole rationale is in
    the shipped values file):
@@ -160,9 +160,9 @@ docker run --rm --entrypoint sh python:3.12-slim -c \
   "pip install -q bcrypt && python3 -c \"import bcrypt; print(bcrypt.hashpw(b'<PASSWORD>', bcrypt.gensalt(rounds=12)).decode())\""
 ```
 
-and land them in `<root>/<env>/values.encrypted/concourse.yaml` — the git-crypt layer
-([README_GIT_CRYPT.md](README_GIT_CRYPT.md)), which the e2e lane uses the same way (per-run keys,
-bcrypt `admin`, same file):
+and land them in `<root>/<env>/values/concourse.encrypted.yaml` — encrypted by its name, declared
+by `*.encrypted.*` ([README_GIT_CRYPT.md](README_GIT_CRYPT.md)), which the e2e lane uses the same
+way (per-run keys, bcrypt `admin`, same file):
 
 ```yaml
 concourse:
@@ -221,7 +221,7 @@ concourse:
       sslmode: require        # verify against `helm show values concourse/concourse --version 20.3.3`
 ```
 
-and in `values.encrypted/concourse.yaml` the credentials (`secrets.postgresqlUser`,
+and in `values/concourse.encrypted.yaml` the credentials (`secrets.postgresqlUser`,
 `secrets.postgresqlPassword`, and the chart's TLS/role keys if the provider uses them) — the
 chart wires them to `web` with the same mechanism as the key material. The one rule that survives
 any provider: this is a documented example, not a shipped default; a tree that says nothing

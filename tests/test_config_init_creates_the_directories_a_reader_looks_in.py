@@ -13,7 +13,7 @@ with `--team` adds the team's four, where `Config.tekton_team_*` says they live.
 `tekton/pipeline-runs` are read by nothing — the apply path that opens a trigger directory is
 team-only, and a pipeline run is written when it happens and not looked for as a layer. A directory
 that exists and is read by nothing is the shape of `kubementat_components/`, which the epic deleted,
-so their absence is asserted and the *reason* is the failure message. `values/`, `values.encrypted/`
+so their absence is asserted and the *reason* is the failure message. `values/` and `secrets/`
 and `secrets/` are absent for the reasons written at the step.
 
 **A name is decided before the first byte.** An environment named after something kubementat puts at
@@ -156,9 +156,10 @@ def test_the_environment_directories_nothing_reads_are_absent_and_the_reason_is_
 
 
 def test_init_makes_no_values_or_secrets_directory_and_nothing_a_default_already_answers(tmp_path):
-    """`values/` and `values.encrypted/` are guarded by helmfile's `isFile` *because* they may be
-    absent, and `secrets/` arrives with the keys in phase 5 — so a fresh tree is the environment's
-    two directories, the team's four, and nothing else."""
+    """`values/` is guarded by helmfile's `isFile` *because* it may be absent, and `secrets/`
+    arrives with the keys — so a fresh tree is the environment's two directories, the team's four,
+    and nothing else. A `values.encrypted/` directory is asserted absent too: the layer's name
+    carries the encryption marker now, and init creates no directory that nothing reads."""
     root = config_root(tmp_path)
 
     init_configuration(root, ENVIRONMENT, TEAM)
