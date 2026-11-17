@@ -5424,21 +5424,23 @@ echo "HTTP=$code DIGEST=$digest"
                        "" if watched else " | " + triggered.excerpt(300)))
 
         def check():
-            # The run's table, not a -j filter: the first reads came back "ok" with zero rows for
-            # the bare job name (a fly flag-matching quirk, recorded rather than argued with). The
-            # table carries the same fact with no matcher to trust, and the watch already proved
-            # this exact build finished.
+            # The read goes through the *combined* stream: fly prints the builds table to stderr,
+            # so a stdout-only read was an empty table with exit 0 -- that is what made two runs
+            # "find no builds" while the builds row was there the whole time. The row shape is
+            # `1  kmt-e2e/hello/1  succeeded  ...`: id, build reference, status. Verified against
+            # the live web's own table, not assumed.
             reads = self._concourse_fly(namespace, ["-t", CONCOURSE_FLY_TARGET, "builds"], timeout=120)
             if not reads.ok:
                 return False, "fly builds read failed exit=%s: %s" % (reads.exit_code, reads.excerpt(200))
-            rows = (reads.stdout or "").strip().splitlines()[1:]  # the table's header is not a build
+            rows = [line for line in (reads.output or "").strip().splitlines()
+                    if line.split() and line.split()[0].isdigit()]
             for row in rows:
                 fields = row.split()
-                if not any(f == CONCOURSE_JOB or f.endswith("/" + CONCOURSE_JOB) for f in fields):
+                if not any(f.startswith("%s/" % CONCOURSE_JOB) for f in fields):
                     continue
                 if "success" in fields:
                     return True, "the builds table shows %s finished success: %s" % (
-                        CONCOURSE_JOB, " ".join(fields[:2]))
+                        CONCOURSE_JOB, " ".join(fields[:3]))
                 if [f for f in fields if f in ("errored", "aborted", "failed")]:
                     return False, "the builds table shows %s finished non-green: %s" % (
                         CONCOURSE_JOB, row.strip()[:160])
