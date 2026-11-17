@@ -47,8 +47,11 @@ jobs:
       - name: Check out the code
         uses: actions/checkout@v7
 
+      # Pinned to a patch tag on purpose. `setup-uv` publishes no floating major tag above v7 — `v8`,
+      # `v9` and `v10` answer 404 against the repo — so `@v10` is not an older major, it is a ref the
+      # runner cannot resolve, and the job dies before `uv` exists. Bumping this is a commit of its own.
       - name: Install uv
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@v10.3.3
 
       - name: Run the unit suite
         # `shell: bash` matters more than it looks: GitHub's default shell is `bash -e`, which does
