@@ -5438,10 +5438,14 @@ echo "HTTP=$code DIGEST=$digest"
                 fields = row.split()
                 if not any(f.startswith("%s/" % CONCOURSE_JOB) for f in fields):
                     continue
-                if "success" in fields:
+                if "succeeded" in fields or "success" in fields:
+                    # The table's status column is past-tense: the live web prints `succeeded`,
+                    # and that word, not a row-shape, is what three runs of "no finished build"
+                    # were really chasing. Accepting both spellings keeps the assert honest about
+                    # the one form observed and unhurt by whichever fly decides to prefer.
                     return True, "the builds table shows %s finished success: %s" % (
                         CONCOURSE_JOB, " ".join(fields[:3]))
-                if [f for f in fields if f in ("errored", "aborted", "failed")]:
+                if [f for f in fields if f in ("errored", "aborted", "failed", "canceled")]:
                     return False, "the builds table shows %s finished non-green: %s" % (
                         CONCOURSE_JOB, row.strip()[:160])
             return False, "no finished build row for %s yet: %s" % (
