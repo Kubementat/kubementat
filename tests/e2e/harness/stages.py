@@ -70,6 +70,32 @@ WORKLOAD_TIMEOUT_S = 180
 # rather than in an argv, and the stage that wrote it removes it.
 GUEST_STAGING_DIR = "/var/tmp"
 
+# ------------------------------------------------------------------ concourse lane
+# The names the concourse release puts on the cluster are composed by the chart from the release
+# name, but the lane reads them back before it execs anything (see `_concourse_workload_names`),
+# so these are the names *expected*, not a second authority. Everything the lane writes in the
+# guest for that subject lives under this prefix, and its teardown can name every path with it.
+CONCOURSE_RELEASE = "concourse"
+CONCOURSE_WEB = "concourse-web"
+CONCOURSE_WORKER = "concourse-worker"
+CONCOURSE_FLY_TARGET = "kmt-e2e"
+CONCOURSE_PIPELINE = "kmt-e2e"
+CONCOURSE_JOB = "kmt-e2e/hello"
+CONCOURSE_KEYS = posixpath.join(GUEST_STAGING_DIR, "kmt-e2e-concourse-keys")
+CONCOURSE_PIPELINE_FILE = posixpath.join(GUEST_STAGING_DIR, "kmt-e2e-concourse-pipeline.yml")
+# The string the pipeline's task prints. The build's success is read back from the cluster (the
+# `fly builds` line), and the marker is what proves the task's *output* reached the lane's log --
+# the difference between "a build says it succeeded" and "the container the worker ran said it".
+CONCOURSE_TASK_MARKER = "hello, kubementat concourse lane"
+# How long the first run gets per fact. The web window carries the lane's biggest single pull (the
+# concourse image, read once by the node); the worker shares that node cache, so it gets its own
+# window only for the registration handshake that follows the pull. The build window is the one
+# the deferred gate lives in, and it stays generous until a measurement says otherwise.
+CONCOURSE_WEB_WAIT_S = 600
+CONCOURSE_WORKER_WAIT_S = 600
+CONCOURSE_BUILD_TIMEOUT_S = 600
+CONCOURSE_APPLY_TIMEOUT_S = 1200
+
 # ------------------------------------------------------------- the routing lane
 #
 # The routing lane is the only one that turns k3s's bundled controller off, and the only one that
@@ -1558,6 +1584,13 @@ print(json.dumps({"declared": dict(constants.PINNED_BINARY_VERSIONS), "observed"
             # routing command put on it. This is the only place in the suite where the install branch
             # of the guard runs: every other lane starts with a controller on the node already.
             self._install_routing_and_expect_it()
+        if self._concourse_lane():
+            # The component behind the group, behind the group verb: installed by its label after
+            # everything the standard group needs, so a slow concourse image pull never eats the
+            # budget of the capabilities before it. It lives in this stage and not in a feature
+            # stage because the lane's scope is `install`, and a claim that needs a cluster has to
+            # live where the scope actually runs.
+            self._install_concourse_and_expect_it()
         self.state["post_install_resource_sets"] = asserts.resource_sets(self.cluster, config.IDEMPOTENCY_KINDS,
                                                                           config.IDEMPOTENCY_EXCLUDED_NAMESPACES)
         self.state["post_install_pvcs"] = self.cluster.pvc_status()["bound"]
@@ -3437,6 +3470,11 @@ echo "HTTP=$code DIGEST=$digest"
             raise StageFailed("no cluster to tear down")
         before = self.cluster.namespaces()
         self.artifacts.snapshot("ns-before-uninstall", before)
+        if self._concourse_lane():
+            # The component verb goes first, while its namespace is still on the cluster to say
+            # what it contained. `kmt uninstall` deletes that namespace afterwards, and from then
+            # on "the release's claims are gone" would be a claim about garbage collection.
+            self._uninstall_concourse_and_expect_it()
 
         if self.scope == "install":
             # The everyday run: one scripted uninstall, then the same residue checks the full
@@ -4914,7 +4952,533 @@ echo "HTTP=$code DIGEST=$digest"
                     "names the group that was missed."
                     % (", ".join(left) or "none"))
 
-    # ------------------------------------------------------------- dispatching
+    # ---------------------------------------------------------------- concourse
+    #
+    # The steps the `concourse` lane walks. The shape is the routing lane's and it is deliberate:
+    # the feature is the gate and not the lane name, the cluster is what decides the verdict, and
+    # every wait is read. What changes is the subject: one release of `group: extra` that no lane
+    # installs, and the question t2's kind prototype could not answer -- nested unprivileged check
+    # containers hit kernel EPERM there, so a real pipeline run never finished. The k3s-in-VM guest
+    # is not nested, so the lane can pay that deferred gate here and nowhere cheaper.
+
+    def _concourse_lane(self):
+        """Whether this run walks the concourse steps. Gated on the feature, not the lane name.
+
+        The routing lane's argument applies twice here: the day another lane grows `concourse_ci`
+        it has decided to install Concourse, and the gate must be that decision, not whichever
+        lane name came off the command line.
+        """
+        return "concourse_ci" in self.lane.features
+
+    def _concourse_configuration(self):
+        """The values this run uses for concourse, read from the file the product reads them from.
+
+        `CONCOURSE_DEPLOYMENT_NAMESPACE` is the environment's own key, and `_environment_config_value`
+        is where every other stage reads a key like this one. The fallback is stated and not hidden,
+        because it is what the manifest's own block defaults to, and silently using it would assert
+        about a namespace the product never chose.
+        """
+        cached = self.state.get("concourse_configuration")
+        if cached:
+            return cached
+        namespace = self._environment_config_value("CONCOURSE_DEPLOYMENT_NAMESPACE")
+        configuration = {"namespace": namespace or CONCOURSE_RELEASE,
+                         "from_config": bool(namespace)}
+        self.state["concourse_configuration"] = configuration
+        return configuration
+
+    def _install_concourse_and_expect_it(self):
+        """Put one component on the cluster, and let the cluster answer every question about it.
+
+        The order is the release's, not the lane's. The knob goes first, because the release is
+        opt-in and `installed:` reads that answer from the environment layer: an apply that follows
+        no knob is an apply of nothing, and the green command that applies nothing is the named
+        failure of the component verbs. The key layer goes second, because the chart is the judge of
+        what keys are: the shipped values fix encryption on, and the chart refuses to render without
+        the encryption key -- so a lane that turns the release on without material has a red that
+        belongs to the fixture, not the product. The namespace step is third and before the apply,
+        because the worker's privilege question is answered best by pods starting than mid-budget.
+        """
+        if "concourse_installed" in self.state:
+            return
+        namespace = self._concourse_configuration()["namespace"]
+        self.state["concourse_installed"] = False
+
+        if not self._config_set("CONCOURSE_ENABLED", "true"):
+            self.expect("concourse-knob-answered", False,
+                        "kmt config set did not write CONCOURSE_ENABLED=true to the environment"
+                        " layer, and the release's installed: has no other answer to read")
+            return
+        self.state.setdefault("config_adjustments", []).append({
+            "file": self._config_report(config.ENVIRONMENT, "static.json"),
+            "field": "CONCOURSE_ENABLED", "value": "true"})
+        self.log("concourse: CONCOURSE_ENABLED answered true by the verb that answers keys")
+
+        if not self._stage_concourse_key_layer():
+            return
+        self._prepare_concourse_namespace(namespace)
+
+        installed = self.km("component.concourse-install", timeout=CONCOURSE_APPLY_TIMEOUT_S)
+        self.record_result("cap:component.concourse-install", "product", installed,
+                           detail_prefix="component=concourse ")
+        if not installed.ok:
+            self.state["concourse_failure"] = installed.excerpt(300)
+            return
+        self.state["concourse_installed"] = True
+
+        # What must be true, in the order it becomes observable: the web answers, the namespace
+        # admitted the privileged worker pods (the answer the brief asks for), a worker registered,
+        # and a build ran. The last one is the deferred gate, so it gets the last and widest wait.
+        web = self.wait("concourse-web-deployment-ready",
+                        "the %s Deployment is Available" % CONCOURSE_WEB,
+                        lambda: self._concourse_web_condition(namespace),
+                        timeout=CONCOURSE_WEB_WAIT_S, interval=5)
+        if web:
+            self._expect_concourse_health(namespace)
+            if self._expect_concourse_privileged_admission(namespace):
+                if self._expect_concourse_worker_registered(namespace):
+                    self._expect_concourse_pipeline_run(namespace)
+
+    def _stage_concourse_key_layer(self):
+        """The key material, made for this run and laid where the operator's keys belong.
+
+        Three of the release's secrets are keys the chart will not substitute: host/worker/session
+        material the pods need at startup, and the `encryptionKey` the chart gate demands when
+        encryption is on -- which the shipped values fix it on, deliberately, so a keyless enable
+        fails once on a line that names the key instead of shipping keys whose public halves live
+        on a public chart index. So the lane is the operator here: RSA material generated in the
+        guest with ssh-keygen and openssl, the encryption key as 32-char hex, and a bcrypt hash for
+        the one local user the lane logs in as (`uv run --with bcrypt` -- the guest's stdlib does
+        not speak bcrypt, and the chart accepts nothing else).
+
+        The landing place is documented: `platform_config/<env>/values.encrypted/<component>.yaml`
+        is where kubementat says keys live, the plain layer that carried a key would undo the
+        sanitizing, and the guest's worktree is plaintext by design -- a staged file reads to
+        helmfile exactly as a committed one would.
+        """
+        made = self.guest.run(
+            command="rm -rf %s && mkdir -p %s && cd %s"
+                    " && ssh-keygen -q -t rsa -b 4096 -m PEM -N '' -f host_key"
+                    " && ssh-keygen -q -t rsa -b 4096 -m PEM -N '' -f worker_key"
+                    " && openssl genrsa 4096 2>/dev/null | openssl rsa -traditional 2>/dev/null > session_signing_key"
+                    " && openssl rand -hex 16 > encryption_key"
+                    " && openssl rand -hex 16 > web_password"
+                    " && uv run --quiet --with bcrypt python3 -c 'import bcrypt;"
+                    "print(bcrypt.hashpw(open(\"web_password\").read().strip().encode(),"
+                    " bcrypt.gensalt(rounds=10)).decode())' > bcrypt_hash"
+            % (shlex.quote(CONCOURSE_KEYS), shlex.quote(CONCOURSE_KEYS), shlex.quote(CONCOURSE_KEYS)),
+            timeout=600)
+        if not made.ok:
+            self.expect("concourse-key-material", False,
+                        "generating the per-run key material exited %s: %s"
+                        % (made.exit_code, made.excerpt(300)))
+            return False
+        fields = {}
+        for name in ("host_key", "host_key.pub", "worker_key", "worker_key.pub",
+                     "session_signing_key", "encryption_key", "web_password", "bcrypt_hash"):
+            read = self.guest.run(command="cat %s" % shlex.quote(posixpath.join(CONCOURSE_KEYS, name)),
+                                  timeout=20)
+            if not read.ok:
+                self.expect("concourse-key-material", False,
+                            "the generated %s could not be read back from the guest" % name)
+                return False
+            fields[name] = (read.stdout or "").strip()
+        self._concourse_password = fields["web_password"]
+
+        layer = "\n".join([
+            "secrets:",
+            "  create: true",
+            "  hostKey: |",
+            _concourse_yaml_block(fields["host_key"]),
+            "  hostKeyPub: %s" % fields["host_key.pub"],
+            "  sessionSigningKey: |",
+            _concourse_yaml_block(fields["session_signing_key"]),
+            "  workerKey: |",
+            _concourse_yaml_block(fields["worker_key"]),
+            "  workerKeyPub: %s" % fields["worker_key.pub"],
+            "  encryptionKey: %s" % fields["encryption_key"],
+            "  localUsers: \"admin:%s\"" % fields["bcrypt_hash"],
+            "concourse:",
+            "  web:",
+            "    auth:",
+            "      mainTeam:",
+            "        localUser: admin",
+            "",
+        ])
+        path = self._config_path(config.ENVIRONMENT, "values.encrypted", CONCOURSE_RELEASE + ".yaml")
+        staged = self.guest.run(command="mkdir -p %s" % shlex.quote(posixpath.dirname(path)),
+                                timeout=20)
+        staged = self.guest.write_file(path, layer, timeout=30) and staged
+        self.guest.run(command="rm -rf %s" % shlex.quote(CONCOURSE_KEYS), timeout=30)
+        self.expect("concourse-key-layer-staged", staged.ok,
+                    "the generated material could not be staged at %s: %s"
+                    % (path, staged.excerpt(200)))
+        self.state.setdefault("config_adjustments", []).append({
+            "file": path,
+            "field": "the component's key layer",
+            "value": "generated for this run (RSA 4096 host/worker/session keys, 32-char encryption"
+                     " key, one bcrypt localUser) and destroyed with the VM"})
+        return staged.ok
+
+    def _prepare_concourse_namespace(self, namespace):
+        """The documented operator step, before the release is wound on.
+
+        The shipped values say the part that matters: helm's namespace creation cannot carry labels
+        through, and the worker pods are privileged, which a namespace left at `restricted` rejects.
+        This is not a lane shortcut -- the values spell this exact pair of commands as the step an
+        operator takes before enabling the release -- so the lane takes it, and the assert that
+        follows reports what the cluster actually admitted.
+        """
+        created = self.cluster.kubectl("create", "namespace", namespace,
+                                       "--dry-run=client", "-o", "yaml",
+                                       timeout=60)
+        applied = self.cluster.kubectl("apply", "-f", "-", timeout=90, stdin=created.stdout) \
+            if created.ok else created
+        labelled = self.cluster.kubectl("label", "namespace", namespace,
+                                        "pod-security.kubernetes.io/enforce=privileged",
+                                        "pod-security.kubernetes.io/warn=privileged",
+                                        "--overwrite", timeout=60)
+        self.expect("concourse-namespace-prepared", applied.ok and labelled.ok,
+                    "the documented operator step is create-and-label; create/apply exited=%s"
+                    " label exited=%s%s" % (applied.exit_code, labelled.exit_code,
+                                            "" if applied.ok and labelled.ok else
+                                            " | " + (applied.output + labelled.output).strip()[:200]))
+        self.state.setdefault("config_adjustments", []).append({
+            "file": "namespace/%s" % namespace,
+            "field": "pod-security.kubernetes.io/enforce",
+            "value": "privileged (the documented operator step for a privileged worker)"})
+
+    def _concourse_web_condition(self, namespace):
+        """(available, what the Deployment and the web pods actually say)."""
+        result = self.cluster.kubectl("get", "deployment", CONCOURSE_WEB, "-n", namespace,
+                                      "-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}"
+                                            "|{.status.availableReplicas}", timeout=30)
+        raw = (result.stdout or "").strip()
+        available, _, replicas = raw.partition("|")
+        if available == "True" and replicas:
+            return True, "%s is Available with %s replica(s) serving" % (CONCOURSE_WEB, replicas)
+        pods = self._concourse_pod_says(namespace, CONCOURSE_WEB)
+        return False, "%s not Available yet (raw=%r); pods: %s" % (CONCOURSE_WEB, raw or result.excerpt(120), pods)
+
+    def _concourse_pod_says(self, namespace, name):
+        """One line per pod the release put there: phase, plus the message that names the reason.
+
+        The messages are what turn a red wait into a diagnosis without a re-run: a PodSecurity
+        rejection, an ImagePullBackOff, and a container still starting all read differently.
+        """
+        pods = [p for p in self.cluster.pod_list(namespace=namespace)
+                if name in ((p.get("metadata") or {}).get("name") or "")]
+        lines = []
+        for pod in pods:
+            status = pod.get("status") or {}
+            phase = status.get("phase") or "?"
+            reasons = []
+            for container in (status.get("containerStatuses") or []) + (status.get("initContainerStatuses") or []):
+                waiting = ((container.get("state") or {}).get("waiting") or {})
+                if waiting.get("reason"):
+                    reasons.append("%s:%s" % (waiting["reason"], (waiting.get("message") or "")[:80]))
+            lines.append("%s=%s%s" % ((pod.get("metadata") or {}).get("name"), phase,
+                                      " (%s)" % "; ".join(reasons) if reasons else ""))
+        return ", ".join(lines) or "no pods named like %s in %s" % (name, namespace)
+
+    def _expect_concourse_health(self, namespace):
+        """The API answers, from outside the pod: what an operator on the node would see.
+
+        The ClusterIP is the address the release's own Service declares, and the guest is the node,
+        so this is not a shortcut around the network -- it is the same dial the service exists for.
+        """
+        def check():
+            svc = self.cluster.kubectl("get", "svc", CONCOURSE_WEB, "-n", namespace,
+                                       "-o", "jsonpath={.spec.clusterIP}", timeout=30)
+            ip = (svc.stdout or "").strip()
+            if not ip:
+                return False, "no ClusterIP on svc/%s yet: %s" % (CONCOURSE_WEB, svc.excerpt(120))
+            body = self.guest.run(command="curl -fsS -m 10 http://%s:8080/api/v1/health" % ip,
+                                  timeout=30)
+            return (body.ok, "curl http://%s:8080/api/v1/health exit=%s: %s"
+                    % (ip, body.exit_code, body.excerpt(200)))
+        self.wait("concourse-health-endpoint", "GET /api/v1/health answers 200 with a body",
+                  check, timeout=120, interval=5)
+
+    def _expect_concourse_privileged_admission(self, namespace):
+        """The privileged-pod answer the brief asks for: read what the cluster admitted, not what
+        the spec says it should.
+
+        The worker pod spec is `securityContext.privileged: true` by the chart, so there are two
+        facts and they are different: the pods exist and run (the namespace admitted them -- this
+        is the observation), and no admission rejection of theirs is still being reported. Both
+        halves ride in one assert line, because a Running worker with a rejection event in the same
+        window would be a worker that failed over, not an admitted one.
+        """
+        def check():
+            pods = [p for p in self.cluster.pod_list(namespace=namespace)
+                    if (p.get("metadata") or {}).get("name", "").startswith(CONCOURSE_WORKER)]
+            running = [p for p in pods
+                       if ((p.get("status") or {}).get("phase") or "") == "Running"]
+            if not running:
+                return False, "no Running worker pod yet; " + self._concourse_pod_says(namespace,
+                                                                                       CONCOURSE_WORKER)
+            pod = running[0]
+            spec = pod.get("spec") or {}
+            privileged = [c.get("securityContext") or {} for c in spec.get("containers") or []]
+            flagged = any(p.get("privileged") for p in privileged)
+            events = self.cluster.kubectl("get", "events", "-n", namespace,
+                                          "--field-selector", "type=Warning",
+                                          "-o", "custom-columns=REASON:.reason,MSG:.message",
+                                          "--no-headers", timeout=30)
+            violations = [line for line in (events.stdout or "").splitlines()
+                          if "PodSecurity" in line or "violates" in line]
+            detail = ("%s is Running with %s; admission-rejection events: %s"
+                      % ((pod.get("metadata") or {}).get("name"),
+                         "privileged securityContext" if flagged else "NO privileged flag",
+                         ", ".join(v.strip()[:120] for v in violations) or "none"))
+            return flagged and not violations, detail
+        passed = self.wait("concourse-worker-privilege-admitted",
+                           "the privileged worker pod is admitted and Running in this guest",
+                           check, timeout=CONCOURSE_WORKER_WAIT_S, interval=5)
+        if not passed:
+            self.state["concourse_failure"] = (self.state.get("concourse_failure") or "") + \
+                " worker pod not admitted: " + self._concourse_pod_says(namespace, CONCOURSE_WORKER)
+        return passed
+
+    def _concourse_fly(self, namespace, argv, timeout=180, stdin=None):
+        """One `fly` run against this run's web.
+
+        The first probe asks the web container, because that image is the one place `fly` is
+        guaranteed to exist beside the API it speaks -- the deferred gate's lesson is that nothing
+        may depend on luck about the runtime, including where the CLI lives. If a future image stops
+        shipping it, the fallback downloads the release's own fly, pinned to the web image's tag so
+        client and server cannot disagree about the protocol.
+        """
+        location = self._concourse_fly_location(namespace)
+        if location[0] == "container":
+            return self.cluster.kubectl("exec", "-i", "-n", namespace, location[1], "--",
+                                        "fly", *argv, timeout=timeout, stdin=stdin)
+        return self.guest.run_argv([self._concourse_fly_binary(namespace)] + list(argv),
+                                   timeout=timeout, stdin=stdin)
+
+    def _concourse_fly_location(self, namespace):
+        """Where fly runs for this lane, discovered once: the container, or the guest with the URL.
+
+        The container answer is `("container", pod)`; the guest answer is `("host", clusterIP)` --
+        the web Service is ClusterIP by the shipped values, so the guest node addresses it the same
+        way kubementat's own commands do, which keeps the fallback honest about what network path
+        a "worker registered" claim traveled.
+        """
+        cached = self.state.get("concourse_fly_location")
+        if cached:
+            return cached
+        pod = self.state.get("concourse_web_pod")
+        if not pod:
+            names = sorted(name.split("/")[-1] for name in self.cluster.get_names("pod", namespace=namespace)
+                           if CONCOURSE_WEB in name)
+            if not names:
+                raise StageFailed("no %s pod on the cluster to run fly against" % CONCOURSE_WEB)
+            pod = names[0]
+            self.state["concourse_web_pod"] = pod
+        probe = self.cluster.kubectl("exec", "-n", namespace, pod, "--", "fly", "--version", timeout=60)
+        if probe.ok:
+            location = ("container", pod)
+            self.log("concourse: running fly inside %s (the web image ships it)" % pod)
+        else:
+            svc = self.cluster.kubectl("get", "svc", CONCOURSE_WEB, "-n", namespace, "-o",
+                                       "jsonpath={.spec.clusterIP}", timeout=30)
+            if not (svc.ok and (svc.stdout or "").strip()):
+                raise StageFailed("neither the web container's fly worked (%s) nor the web Service's "
+                                  "ClusterIP could be read, so the lane has no way to speak fly"
+                                  % probe.excerpt(150))
+            location = ("host", svc.stdout.strip())
+            self.log("concourse: fly not found in the web container; using the guest's own copy "
+                     "against http://%s:8080" % location[1])
+        self.state["concourse_fly_location"] = location
+        return location
+
+    def _concourse_fly_binary(self, namespace):
+        """The guest's fly, downloaded at the web image's tag. `curl | tar`, pinned by construction.
+
+        The tag is read from the Deployment the lane installed, so the fallback cannot drift from
+        the server it is talking to -- the same version argument the chart's own pin makes.
+        """
+        cached = self.state.get("concourse_fly_binary")
+        if cached:
+            return cached
+        image = self.cluster.kubectl("get", "deployment", CONCOURSE_WEB, "-n", namespace, "-o",
+                                     "jsonpath={.spec.template.spec.containers[0].image}", timeout=30)
+        tag = (image.stdout or "").rsplit(":", 1)[-1]
+        if not tag or tag == image.stdout.strip():
+            raise StageFailed("could not read an image tag from deployment/%s, so the fly fallback "
+                              "has no version to download" % CONCOURSE_WEB)
+        directory = posixpath.join(GUEST_STAGING_DIR, "kmt-e2e-fly")
+        url = ("https://github.com/concourse/concourse/releases/download/v%s/fly-%s-linux-amd64.tgz"
+               % (tag, tag))
+        got = self.guest.run(command="rm -rf %s && mkdir -p %s && curl -fsSL %s | tar -xz -C %s fly"
+                             % (shlex.quote(directory), shlex.quote(directory), shlex.quote(url),
+                                shlex.quote(directory)), timeout=300)
+        if not got.ok:
+            raise StageFailed("the web container has no fly and the pinned download failed (exit %s): %s"
+                              % (got.exit_code, got.excerpt(200)))
+        path = posixpath.join(directory, "fly")
+        self.guest.run(command="chmod 755 %s" % shlex.quote(path), timeout=20)
+        self.state["concourse_fly_binary"] = path
+        return path
+
+    def _concourse_fly_base_url(self, namespace):
+        location = self._concourse_fly_location(namespace)
+        if location[0] == "container":
+            return "http://127.0.0.1:8080"
+        return "http://%s:8080" % location[1]
+
+    def _concourse_fly_login(self, namespace):
+        """The lane's own operator login: the localUser the encrypted layer names."""
+        if self.state.get("concourse_logged_in"):
+            return True
+        login = self._concourse_fly(namespace, ["login", "-t", CONCOURSE_FLY_TARGET,
+                                                "-c", self._concourse_fly_base_url(namespace),
+                                                "--team-name", "main",
+                                                "-u", "admin", "-p", self._concourse_password],
+                                    timeout=120)
+        self.expect("concourse-fly-login", login.ok,
+                    "fly login as the layer's localUser exited %s: %s"
+                    % (login.exit_code, login.excerpt(200)))
+        if login.ok:
+            self.state["concourse_logged_in"] = True
+        return login.ok
+
+    def _expect_concourse_worker_registered(self, namespace):
+        """`fly workers` says at least one worker is registered and running.
+
+        This is the registration claim read from the web's own bookkeeping rather than from pod
+        count: a worker can be Running and never registered (the handshake is its own), and pod
+        count would call that success.
+        """
+        if not self._concourse_fly_login(namespace):
+            return False
+
+        def check():
+            result = self._concourse_fly(namespace, ["-t", CONCOURSE_FLY_TARGET, "workers"], timeout=120)
+            running = [line for line in (result.stdout or "").splitlines() if "running" in line]
+            return result.ok and bool(running), "fly workers exit=%s: %s" % (
+                result.exit_code, ("no running worker row: " + result.excerpt(300)) if not running
+                else result.excerpt(300))
+        return self.wait("concourse-worker-registered", "at least one worker is registered and running",
+                         check, timeout=300, interval=5)
+
+    def _expect_concourse_pipeline_run(self, namespace):
+        """ONE real pipeline run, green -- t2's deferred gate, paid here.
+
+        The pipeline is deliberately small (one image get, one hello task) because the assertion is
+        not what it builds but *that it builds*: on kind the check containers died on a kernel EPERM
+        and no build ever finished, which is exactly the failure this lane exists to disprove. The
+        watch is what proves the finish, the build status is what says it was green, and the task
+        marker is what says the container actually ran the command -- three facts, because a green
+        row with neither of the last two is not evidence.
+        """
+        if not self._concourse_fly_login(namespace):
+            return
+        written = self.guest.write_file(CONCOURSE_PIPELINE_FILE, _concourse_pipeline_manifest(),
+                                        timeout=30)
+        if not written.ok:
+            self.expect("concourse-pipeline-manifest-staged", False,
+                        "the pipeline config could not be staged in the guest: %s" % written.excerpt(200))
+            return
+        location = self._concourse_fly_location(namespace)
+        if location[0] == "container":
+            # The config has to live where fly reads it: same file, copied across.
+            config_path = "/tmp/kmt-e2e-pipeline.yml"
+            copied = self.cluster.kubectl("cp", CONCOURSE_PIPELINE_FILE,
+                                          "%s:%s" % (location[1], config_path), "-n", namespace,
+                                          timeout=120)
+            self.expect("concourse-pipeline-manifest-copied", copied.ok,
+                        "kubectl cp into %s exited %s: %s"
+                        % (location[1], copied.exit_code, copied.excerpt(200)))
+            if not copied.ok:
+                return
+        else:
+            config_path = CONCOURSE_PIPELINE_FILE
+
+        set_pipeline = self._concourse_fly(namespace,
+                                           ["-t", CONCOURSE_FLY_TARGET, "set-pipeline",
+                                            "-p", CONCOURSE_PIPELINE, "-c", config_path],
+                                           timeout=180, stdin="y\n")
+        self.expect("concourse-pipeline-configured", set_pipeline.ok,
+                    "fly set-pipeline exited %s: %s" % (set_pipeline.exit_code, set_pipeline.excerpt(300)))
+        if not set_pipeline.ok:
+            return
+        self._concourse_fly(namespace, ["-t", CONCOURSE_FLY_TARGET, "unpause-pipeline",
+                                        "-p", CONCOURSE_PIPELINE], timeout=120)
+
+        triggered = self._concourse_fly(namespace, ["-t", CONCOURSE_FLY_TARGET, "trigger-job",
+                                                    "-j", CONCOURSE_JOB, "--watch"],
+                                        timeout=CONCOURSE_BUILD_TIMEOUT_S)
+        self.artifacts.log(self.stage, "fly:trigger-job--watch", triggered.output)
+        watched = triggered.ok and CONCOURSE_TASK_MARKER in (triggered.stdout or "")
+        self.expect("concourse-build-watch-ran", watched,
+                    "trigger-job --watch exited %s; the task's printed line %s in the build's output%s"
+                    % (triggered.exit_code, "appeared" if CONCOURSE_TASK_MARKER in
+                       (triggered.stdout or "") else "DID NOT appear",
+                       "" if watched else " | " + triggered.excerpt(300)))
+
+        def check():
+            reads = self._concourse_fly(namespace, ["-t", CONCOURSE_FLY_TARGET, "builds",
+                                                    "-j", CONCOURSE_JOB], timeout=120)
+            if not reads.ok:
+                return False, "fly builds read failed exit=%s: %s" % (reads.exit_code, reads.excerpt(200))
+            rows = (reads.stdout or "").strip().splitlines()[1:]  # the table's header is not a build
+            for row in rows:
+                fields = row.split()
+                if len(fields) < 2 or not fields[0].isdigit():
+                    continue
+                if fields[1] == "success":
+                    return True, "build %s finished: %s" % (fields[0], fields[1])
+                if fields[1] in ("errored", "aborted", "failed"):
+                    return False, "build %s finished %s" % (fields[0], fields[1])
+            return False, "no finished build yet: %s" % " | ".join(rows[:4])
+        self.wait("concourse-pipeline-run-green", "the one real build ends success",
+                  check, timeout=CONCOURSE_BUILD_TIMEOUT_S, interval=10)
+
+    def _uninstall_concourse_and_expect_it(self):
+        """The pair's other verb, while its namespace can still say what it held.
+
+        This runs before `kmt uninstall` for one reason and one reason only: claims are assertions
+        about a namespace. Once the sweep has deleted the namespace, "the release's claims are gone"
+        is a sentence about garbage collection nobody scheduled -- and it is exactly the kind of
+        green the residue sweep exists to refuse. Here the namespace is still the lane's, and a
+        claim that outlives its release reads as itself.
+        """
+        if not self.state.get("concourse_installed"):
+            if "concourse_installed" in self.state:
+                # The install never landed (the stage already said why); there is no component
+                # uninstall to be accountable for.
+                self.log("concourse: no component uninstall claim -- the install never landed")
+            return
+        namespace = self._concourse_configuration()["namespace"]
+        uninstalled = self.km("component.concourse-uninstall", timeout=600)
+        self.record_result("cap:component.concourse-uninstall", "product", uninstalled,
+                           detail_prefix="component=concourse ")
+        if not uninstalled.ok:
+            return
+
+        released = self.cluster.wait(
+            "no release remains in namespace %s" % namespace,
+            lambda: (not [row for row in self.cluster.helm_list() if row["namespace"] == namespace],
+                     "helm still lists: %s" % ", ".join(row["release"] for row in self.cluster.helm_list()
+                                                        if row["namespace"] == namespace) or "nothing"),
+            timeout=180, interval=3)
+        self.record("assert:concourse-release-off-the-cluster", "product", released,
+                    "what is left in %s after kmt component uninstall: %s"
+                    % (namespace, ", ".join(row["release"] for row in self.cluster.helm_list()
+                                            if row["namespace"] == namespace) or "nothing"))
+
+        def claims():
+            status = self.cluster.pvc_status()
+            concourse = sorted(set(status["bound"]) | {name for name, _phase, _m in status["pending"]}
+                               | set(status["waiting_for_consumer"]))
+            left = [name for name in concourse if name.startswith("%s/" % namespace)]
+            return not left, "claims still naming %s: %s; pending cluster-wide: %s" % (
+                namespace, ", ".join(left) or "none",
+                ", ".join(name for name, _phase, _m in status["pending"]) or "none")
+        self.wait("concourse-no-claims-left-pending", "the release made no claim that is still pending",
+                  claims, timeout=180, interval=3)
 
     # The lifecycle, in the order it runs: stage name to method. A scope is a subset of these names, so
     # a lane that wants a shorter run says so in its scope and not here. This is the one place that says
@@ -5139,3 +5703,45 @@ def _grep_first(pattern, text):
             if group:
                 return group
     return ""
+
+
+def _concourse_yaml_block(text, indent="    "):
+    """PEM text as the body of a YAML block scalar: the block's own indent, nothing else.
+
+    A private key pasted into a values file must keep its line endings exactly, or helm's b64enc
+    wraps something the key generator did not write; the block scalar is the shape that keeps
+    them, and the indent is what makes it a block scalar and not a two-key accident.
+    """
+    return "\n".join(indent + line for line in text.splitlines())
+
+
+def _concourse_pipeline_manifest():
+    """The one small pipeline whose green run is this lane's deferred gate.
+
+    One registry-image resource and one hello task, because the point is not what it builds but
+    *that it builds*: both container-ish things a Concourse build runs -- the resource's check
+    container and the task's container -- must run to completion, and that is precisely what the
+    kind prototype could not make run under nested-kernel EPERM.
+    """
+    return "\n".join([
+        "resources:",
+        "- name: busybox",
+        "  type: registry-image",
+        "  source:",
+        "    repository: busybox",
+        "jobs:",
+        "- name: hello",
+        "  plan:",
+        "  - get: busybox",
+        "  - task: greet",
+        "    image_resource:",
+        "      type: registry-image",
+        "      source:",
+        "        repository: busybox",
+        "    run:",
+        "      path: /bin/sh",
+        "      args:",
+        "      - -c",
+        "      - echo \"%s\"" % CONCOURSE_TASK_MARKER,
+        "",
+    ])

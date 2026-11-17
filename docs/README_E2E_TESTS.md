@@ -69,6 +69,7 @@ change cannot quietly change which OS the suite proves. Image cache:
 | smoke | 4 | 6 GiB | 25 GiB | `standard` | ~16 min |
 | full | 8 | 16 GiB | 50 GiB | `standard` + `routing` | ~75 min |
 | tekton | 4 | 6 GiB | 25 GiB | `standard` | ~25 min |
+| concourse | 4 | 8 GiB | 30 GiB | `standard` + `concourse` component | ~35 min |
 
 The tekton lane is not another slice of the install claims: it runs the product's `docker-build-pipeline`
 end to end in stage 05 against fixtures the lane owns — a bare git repository served by the VM's own
@@ -77,6 +78,17 @@ the two outcomes that matter: the run reaches `Succeeded`, and the image tagged 
 the registry. Which tool builds inside the build step is the product's to decide; replacing it in
 `src/` should not touch a line of this lane. It needs `--scope full` because the feature stage is where
 its whole subject lives.
+
+The concourse lane is the `extra` group made observable from the outside, and it is not a slice of the
+install claims: the lane answers the release's own two knobs in the operator layer (`CONCOURSE_ENABLED`,
+plus the generated key material the chart gate demands), runs the documented namespace step, applies
+`kmt component install <env> concourse` by its label, and then asks the cluster — not the release record
+— for the web Deployment being Available, `/api/v1/health` answering, the privileged worker pods actually
+admitted under PSA `enforce=privileged`, one worker registered in the web's own bookkeeping, and ONE real
+pipeline run finishing green (the deferred Phase-1 gate). Teardown pays it back the other way: the
+component uninstall runs before `kmt uninstall` while the namespace can still say what it held. It runs
+`--scope install` and nothing else — that is where its whole subject lives — so `--lane concourse` refuses
+every other scope.
 
 The full lane knows about a third group, `extra`, and does not install it. `group=extra` is the
 secret-management release, and installing it exposed that OpenBao comes up uninitialized and never

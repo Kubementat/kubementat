@@ -234,7 +234,42 @@ BOOTSTRAP = Lane(
     config_dir=f"{GUEST_TREE}-config",
 )
 
-LANES = {"smoke": SMOKE, "full": FULL, "routing": ROUTING, "tekton": TEKTON, "bootstrap": BOOTSTRAP}
+# The lane that closes the hole `group: extra` leaves open: it is the only real-cluster coverage
+# for a release that no other lane installs. The `full` lane's note explains why `extra` stays out
+# of *its* groups (OpenBao comes up uninitialized and never becomes ready); Concourse, the group's
+# second member, is opt-in (`CONCOURSE_ENABLED` defaults false) and equally invisible to every
+# existing lane. Following the routing/tekton precedent, this is one component's own lane: `kmt
+# component install` puts it on the cluster, the health endpoint and a registered worker are read
+# back, and -- the part the `kind` prototype could not answer (t2's deferred smoke gate: nested
+# unprivileged check containers hit kernel EPERM there) -- ONE real pipeline run must go green. The
+# k3s-in-VM guest is not nested, so the gate is payable here and nowhere cheaper.
+#
+# The shape is web + one worker and nothing else, not the full lane's machinery: 4 vCPU / 8 GiB /
+# 30 GiB. More than `smoke`'s 6 GiB because the standard stack is also on the node and the worker
+# pod is not a small citizen; under it because no component that runs is scaling. The install
+# budget is wide for the same reason tekton's feature window is: it carries the first pulls of
+# every image the lane will ever run (the concourse image dominates, but the worker's task
+# container pays for the pipeline's images too), and a first run measures what those cost.
+CONCOURSE = Lane(
+    name="concourse",
+    vcpu=4,
+    ram_gib=8,
+    disk_gib=30,
+    install_groups=("standard",),
+    features=("concourse_ci",),
+    timeouts={
+        "01-provision": 600,
+        # standard install, the concourse component install behind it, and the one pipeline run --
+        # all in this stage, because the lane's whole subject lives where scope `install` walks.
+        # Wide until measured (NFR 6.1); this is the number the first run exists to tighten.
+        "02-install": 2400,
+        # component uninstall, then the everyday uninstall and its residue sweep.
+        "99-teardown": 1200,
+    },
+)
+
+LANES = {"smoke": SMOKE, "full": FULL, "routing": ROUTING, "tekton": TEKTON,
+         "bootstrap": BOOTSTRAP, "concourse": CONCOURSE}
 
 # How much of the lifecycle a run walks, independent of the lane's VM shape and install groups.
 # `install` is the everyday question - does kubementat prepare, install correctly and come off
@@ -687,6 +722,27 @@ CAPABILITIES = {
         lanes="-",  # never run as a mutation; it is the confirmation probe
         note="the uninstall capability with its --yes flag removed: "
         "answering 'no' must delete nothing, and no-terminal must fail closed",
+    ),
+    # The one-component pair. Both rows are label-driven: the command translates a component name
+    # into `helmfile apply/uninstall -l component_name=<name>`, so the only name the harness spells
+    # is the component's, and what `kmt install` proves for a group these two prove for a single
+    # release. They run on exactly one lane -- the concourse lane's steps, not any group's stages.
+    "component.concourse-install": _c(
+        capability="component.concourse-install",
+        argv=["kmt", "component", "install", "{env}", "concourse", "--config-dir", "{config_dir}"],
+        lanes="-",  # the concourse lane runs it; it belongs to no group's rerun set
+        note="installs one component: the concourse release, by its component_name label, through the "
+             "manifest kubementat ships. Nothing else in the group moves -- which is the whole reason "
+             "this pair exists and the group verbs do not cover it.",
+    ),
+    "component.concourse-uninstall": _c(
+        capability="component.concourse-uninstall",
+        argv=["kmt", "component", "uninstall", "{env}", "concourse", "--config-dir", "{config_dir}"],
+        lanes="-",
+        note="the pair's other half: the release and the claims it made, off one namespace, absence "
+             "answered as a normal result. The lane runs this before `kmt uninstall` deletes the "
+             "namespace, so the claims are proved gone while the namespace that held them is on "
+             "record.",
     ),
     "secrets.setup": _c(
         capability="secrets.setup",
