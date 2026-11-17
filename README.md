@@ -77,9 +77,9 @@ path under `src/` resolves a chart path against this checkout.
 
 ## Which document answers which question
 
-`docs/` holds 47 Markdown files, and this file links to exactly one of them. That is the whole reason for
+`docs/` holds 48 Markdown files, and this file links to exactly one of them. That is the whole reason for
 the table: a reader who finishes the quick start above still has to know where to go next, and most of
-those 47 files are dated records of work that is already finished. So — ten documents are **live**, and
+those 48 files are dated records of work that is already finished. So — eleven documents are **live**, and
 the rest are **records**, read for why a decision was made and never as an instruction:
 
 | What you want to know | Read |
@@ -87,6 +87,7 @@ the rest are **records**, read for why a decision was made and never as an instr
 | what a configuration directory is, which key belongs in which layer, and in what order a root is named | [docs/README_PLATFORM_CONFIG.md](docs/README_PLATFORM_CONFIG.md) |
 | how git-crypt is laid out inside that directory, and which of its commands a failure is about | [docs/README_GIT_CRYPT.md](docs/README_GIT_CRYPT.md) |
 | Tekton: the Tasks and Pipelines that ship, triggers, cleanup jobs, where generated pipeline runs go | [docs/README_TEKTON.md](docs/README_TEKTON.md) |
+| Concourse CI: what it runs beside Tekton, enabling it, key provisioning, external DB, backups, the upgrade/teardown runbook | [docs/concourse-ci.md](docs/concourse-ci.md) |
 | where the monitoring stack is, and what it answers | [docs/README_MONITORING_AND_LOGGING.md](docs/README_MONITORING_AND_LOGGING.md) |
 | what other tools kubementat ships and what they are for | [docs/README_ADDITIONAL_TOOLS.md](docs/README_ADDITIONAL_TOOLS.md) |
 | how work in this repository is done (branches, commits, the lanes) | [docs/README_DEVELOPMENT_FLOW.md](docs/README_DEVELOPMENT_FLOW.md) |
