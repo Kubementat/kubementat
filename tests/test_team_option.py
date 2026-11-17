@@ -44,10 +44,11 @@ TEAM_REFUSING_COMMANDS = [
 # one to resolve to nothing. Listed apart because what an operator hits without the flag is not a
 # refusal but a clean `Error: No such option: --team`, which is the other half of the same rule.
 TEAM_LESS_COMMANDS = [
-    # The four 11b made the finding for.
+    # The three the earlier finding made, and the tunnel command added beside them.
     (tunnels.tunnel_grafana, ("dev",)),
     (tunnels.tunnel_tekton, ("dev",)),
     (tunnels.tunnel_openbao_ui, ("dev",)),
+    (tunnels.tunnel_concourse, ("dev",)),
     (routing.status, ("dev",)),
     # And the seven 12b made it for, one layer down: the guard was in the service constructor
     # rather than in the command, so the refusal arrived before the code that could have read a
@@ -63,9 +64,11 @@ TEAM_LESS_COMMANDS = [
 ]
 
 
-# The three verbs `kmt tunnel` still opens, so the recorder below can be attached to the names the
-# commands actually look up: the tunnels layer handed them functions rather than an object.
-TUNNEL_FUNCTIONS = ("open_tunnel_grafana", "open_tunnel_tekton_dashboard", "open_tunnel_openbao")
+# The four verbs `kmt tunnel` opens component tunnels for, so the recorder below can be attached to
+# the names the commands actually look up: the tunnels layer handed them functions rather than an
+# object.
+TUNNEL_FUNCTIONS = ("open_tunnel_grafana", "open_tunnel_tekton_dashboard", "open_tunnel_openbao",
+                    "open_tunnel_concourse")
 
 
 class RecordingContext:
@@ -270,9 +273,11 @@ def test_a_command_that_cannot_act_on_a_team_says_the_flag_is_not_its_option(com
             "semantics hands it none")
 
 
-# The three tunnel verbs, identified by command so the test below can run them for real once the
-# flag it refuses is off. `routing.status` and the seven below it never reach the tunnels layer.
-TUNNEL_COMMANDS = {tunnels.tunnel_grafana, tunnels.tunnel_tekton, tunnels.tunnel_openbao_ui}
+# The four component tunnel verbs, identified by command so the test below can run them for real
+# once the flag it refuses is off. `routing.status` and the seven below it never reach the tunnels
+# layer.
+TUNNEL_COMMANDS = {tunnels.tunnel_grafana, tunnels.tunnel_tekton, tunnels.tunnel_openbao_ui,
+                   tunnels.tunnel_concourse}
 
 
 def test_no_team_is_hardcoded_in_the_command_modules():

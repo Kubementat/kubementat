@@ -1,9 +1,10 @@
 """`kmt tunnel` -- the port-forwards kubementat opens, and the one it cannot name for you.
 
-The four tunnels the lane measures are grouped here, and the shape is the one `kmt users`,
+The tunnels kubementat opens are grouped here, and the shape is the one `kmt users`,
 `kmt routing` and `kmt component` already have: `tunnel` says what kind of command this is, the verb
-says what it reaches. Four flat `tunnel-*` lines in `kmt --help` said the same thing four times, and
-the thing a reader actually compares is the target -- `pod`, `grafana`, `tekton`, `openbao-ui`.
+says what it reaches. The flat `tunnel-*` lines in `kmt --help` said the same thing on separate
+lines, and the thing a reader actually compares is the target -- `pod`, `grafana`, `tekton`,
+`openbao-ui`, `concourse`.
 
 **Renames, no aliases**: `kmt tunnel-grafana` is gone rather than answered twice.
 
@@ -19,6 +20,7 @@ from functools import partial
 import click
 
 from kubementat.automations.tunnels.tunnels import (
+    open_tunnel_concourse,
     open_tunnel_grafana,
     open_tunnel_openbao,
     open_tunnel_tekton_dashboard,
@@ -65,7 +67,7 @@ def open_tunnel(function, *args):
 #### TUNNEL SCRIPTS ######
 ##########################
 
-# These three reach a component by namespace and label, and every key that decides which namespace
+# These four reach a component by namespace and label, and every key that decides which namespace
 # that is (`*_DEPLOYMENT_NAMESPACE`, `*_SERVICE_SELECTOR`) is read from the *environment's* own
 # `static.json`. None of them reads one thing from the team layer, which is
 # why a `--team` here would be a flag they cannot use, and an echo of `TEAM: None` at an operator who
@@ -101,6 +103,22 @@ def tunnel_grafana(ctx, environment, local_port, remote_port, host):
 def tunnel_tekton(ctx, environment, local_port, remote_port, host):
     click.echo(f"ENVIRONMENT: {environment}")
     return open_tunnel(partial(open_tunnel_tekton_dashboard, ctx), local_port, remote_port, host)
+
+# Tunnel Concourse
+# The command the operator enables Concourse with (`kmt component install <environment>
+# concourse`) installs a web Service whose UI/API answers on 8080, so this is the verb that
+# reaches it while no ingress is configured: the shipped values leave the Service a ClusterIP
+# and the routing layer's keys an environment's decision, and `fly login` arrives over this
+# forward the way the docs say it arrives when nothing else does.
+@tunnel.command(name='concourse', help='open a network tunnel to the concourse UI')
+@click.argument('environment', envvar='ENVIRONMENT')
+@click.option('--local-port', default='8080')
+@click.option('--remote-port', default='8080')
+@click.option('--host', default='0.0.0.0')
+@kmt_context
+def tunnel_concourse(ctx, environment, local_port, remote_port, host):
+    click.echo(f"ENVIRONMENT: {environment}")
+    return open_tunnel(partial(open_tunnel_concourse, ctx), local_port, remote_port, host)
 
 # Tunnel OpenBao UI
 # NOTE: this command was once defined as `def tunnel_polaris` as well, which silently replaced the

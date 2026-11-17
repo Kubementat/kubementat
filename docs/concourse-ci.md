@@ -116,6 +116,24 @@ documented flag and behaves. And `fly builds` prints no header row: the data row
 column 2 is the build reference (not the status), the status word is past tense (`succeeded`),
 and `-j` needs `<pipeline>/<job>` (`-j kmt-e2e/hello`).
 
+## Reaching the web UI
+
+```
+kmt tunnel concourse <environment>
+```
+
+opens the same style of port-forward every sibling tunnel opens: the web Service's UI/API port —
+8080 — lands on `localhost:8080`, and `--local-port`, `--remote-port` and `--host` do what they do
+on `kmt tunnel tekton` and friends. The namespace and the pod selector the forward resolves come
+from the environment layer's `CONCOURSE_DEPLOYMENT_NAMESPACE` and `CONCOURSE_SERVICE_SELECTOR`,
+so a renamed namespace or a renamed release moves the tunnel the way they move the install. With
+ingress off — the value the shipped defaults write — this is how the API is addressed, and `fly`
+comes to the tunneled address:
+
+```
+fly login --team-name main --concourse-url http://localhost:8080
+```
+
 ## Keys — provisioning them once, the right place
 
 The chart ships **demo private keys and a `test:test` user as values defaults**, and their public

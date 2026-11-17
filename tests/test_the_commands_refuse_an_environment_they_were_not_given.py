@@ -31,6 +31,7 @@ DEFAULTED_POSITIONS = [
     (tunnels.tunnel_grafana, []),
     (tunnels.tunnel_tekton, []),
     (tunnels.tunnel_openbao_ui, []),
+    (tunnels.tunnel_concourse, []),
     (users.create_grafana_accounts, []),
     (users.create_grafana_read_only_account, []),
 ]

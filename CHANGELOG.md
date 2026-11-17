@@ -1,4 +1,13 @@
 # Unreleased
+- **`kmt tunnel concourse <environment>` joins the tunnel group, reaching the CI server the way
+  `kmt tunnel tekton` reaches the dashboard: the entry sits beside tekton's in the same registry,
+  the flags are the same, and no new mechanism was invented.** The web Service of the Concourse
+  release answers on 8080, and the forward's two lookups — namespace and pod selector — are the
+  environment layer's `CONCOURSE_DEPLOYMENT_NAMESPACE` and `CONCOURSE_SERVICE_SELECTOR`, whose
+  fallback is `app=concourse-web`, read off a live release rather than off a chart helper and
+  written beside tekton's entry in `constants.DEFAULT_SERVICE_SELECTORS`. Both ports default to
+  8080 and both are flags, so an operator whose local 8080 is busy types `--local-port` and
+  nothing else changes.
 - **Comments now describe the code and not the code's biography, and no behaviour moved.** A comment
   is worth its reader's time only if it is still true without another document, so the historical
   tellings (`used to`, `no longer`, `previously`) and the specification labels (`plan row 13`, `§6`,

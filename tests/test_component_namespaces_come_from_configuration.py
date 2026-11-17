@@ -46,6 +46,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TUNNEL_COMPONENTS = [
     ("open_tunnel_grafana", "grafana", "grafana"),
     ("open_tunnel_tekton_dashboard", "tekton", "tekton-pipelines"),
+    ("open_tunnel_concourse", "concourse", "concourse"),
     ("open_tunnel_openbao", "openbao", "openbao"),
 ]
 

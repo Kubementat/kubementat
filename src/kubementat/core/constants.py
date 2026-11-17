@@ -107,6 +107,13 @@ DEFAULT_SERVICE_SELECTORS = {
     # `kmt tunnel tekton` reaches the dashboard, and the dashboard release lands in the
     # tekton namespace, so the namespace and the selector belong to the same component.
     "tekton": "app=tekton-dashboard",
+    # The Concourse chart labels by component rather than by the kubernetes.io pair the Traefik
+    # and OpenBao charts write: `app=concourse-web` on the web pods, `app=concourse-worker` on the
+    # workers, `app=concourse-postgresql` on the database, so this selector is the web tier and
+    # nothing else. Read off a live release rather than a chart helper, and a config key for the
+    # same reason every entry here is one: the selector only matches while the release answers to
+    # `concourse`, and the key is where a renamed release is answered.
+    "concourse": "app=concourse-web",
     # Verified against the chart's own label helpers: `app.kubernetes.io/name` is the chart name
     # and `app.kubernetes.io/instance` is the release name, so this pair only matches while the
     # release is named `traefik` — which is exactly why the selector is a config key and not a

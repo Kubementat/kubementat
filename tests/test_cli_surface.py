@@ -68,8 +68,8 @@ EXPECTED_COMMANDS = {
     # them; once the other six were verbs, four commands whose first word is the group's name
     # answering to a hyphen was the inconsistency, so they joined the group and their flat names died.
     "tekton",
-    # The tunnel surface is the `tunnel` group and nothing else: the four
-    # measured verbs on the group, and the two flat names that were never on it -- `tunnel-polaris`
+    # The tunnel surface is the `tunnel` group and nothing else: the verbs on the group,
+    # and the two flat names that were never on it -- `tunnel-polaris`
     # and `tunnel-mysql` -- retired, so their absence from this list is the assertion now.
     "tunnel",
     "uninstall",
@@ -253,14 +253,14 @@ EXPECTED_COMPONENT_COMMAND_PARAMS = {
 # flat name still answers, and not a capability row that was never going to run them.
 # ------------------------------------------------------------------------------------------
 
-EXPECTED_TUNNEL_COMMANDS = {"pod", "grafana", "tekton", "openbao-ui"}
+EXPECTED_TUNNEL_COMMANDS = {"pod", "grafana", "tekton", "openbao-ui", "concourse"}
 
 EXPECTED_TUNNEL_COMMAND_PARAMS = {
     # `pod` takes the environment first, like every command that opens a socket to a cluster.
     # Which cluster the forward is opened against used to be the one thing this verb could not say.
     "pod": {"environment", "namespace", "pod_name", "local_port", "remote_port",
             "host"} | RESOLUTION_FLAGS,
-    # The three component tunnels reach their target by namespace and selector, both read from the
+    # The four component tunnels reach their target by namespace and selector, both read from the
     # *environment's* `static.json`, so a command that cannot act on a team leaves them without a
     # `--team`. Their absence from
     # these exact sets is the assertion: a flag that resolves to nothing an operator can decline is
@@ -269,6 +269,7 @@ EXPECTED_TUNNEL_COMMAND_PARAMS = {
     "grafana": {"environment", "local_port", "remote_port", "host"} | RESOLUTION_FLAGS,
     "tekton": {"environment", "local_port", "remote_port", "host"} | RESOLUTION_FLAGS,
     "openbao-ui": {"environment", "local_port", "remote_port", "host"} | RESOLUTION_FLAGS,
+    "concourse": {"environment", "local_port", "remote_port", "host"} | RESOLUTION_FLAGS,
 }
 
 # The whole tekton surface, which is the assertion now: the four verbs that joined late
@@ -807,12 +808,12 @@ def test_the_config_group_holds_the_init_that_lays_a_tree_down():
             f"refusal is a decision nobody reading the surface can find")
 
 
-def test_the_tunnel_group_holds_the_four_tunnels_and_their_flat_names_are_dead():
-    """`kmt tunnel <target>` replaced four `kmt tunnel-<target>` lines.
+def test_the_tunnel_group_holds_the_component_tunnels_and_their_flat_names_are_dead():
+    """`kmt tunnel <target>` replaced the flat `kmt tunnel-<target>` lines.
 
-    The four are the tunnels the lane measures, and since row 25 retired the two flat ones they are
-    the whole tunnel surface, which is why a bare equality here is the interesting assertion: a
-    fifth tunnel that drifted onto the group without a marker would be a second way to reach a
+    What the group holds is every tunnel `kmt` opens, and the two flat names that were never on it
+    were retired rather than grouped, so a bare equality here is the interesting assertion: a
+    tunnel that drifted onto the group without a row here would be a second way to reach a
     component that no row of the capability table reports.
     """
     from cli.commands import tunnels

@@ -1,4 +1,4 @@
-"""`kmt tunnel grafana`, `kmt tunnel tekton`, `kmt tunnel openbao`.
+"""`kmt tunnel grafana`, `kmt tunnel tekton`, `kmt tunnel openbao`, `kmt tunnel concourse`.
 
 Each function is two configuration reads and one port-forward. The namespace and the service
 selector come from `Config.component_namespace` and `Config.component_service_selector`, so a
@@ -68,6 +68,38 @@ def open_tunnel_tekton_dashboard(ctx, local_port=9097, remote_port=9097, host='0
     # namespace, so namespace and selector belong to the same component.
     namespace = config.component_namespace('tekton')
     selector = config.component_service_selector('tekton')
+    pod_name = kubernetes_utils.get_pod_name_for_deployment(namespace, selector)
+    return kubernetes_utils.open_tunnel(namespace, pod_name, local_port, remote_port, host)
+
+
+def open_tunnel_concourse(ctx, local_port=8080, remote_port=8080, host='0.0.0.0'):
+    '''
+    Opens a tunnel to the Concourse web UI.
+
+    Parameters:
+
+    - local_port: int = 8080 - Local port for tunnel
+    - remote_port: int = 8080 - Remote port (Concourse's UI/API port, where the web Service answers)
+    - host: str = '0.0.0.0' - Host IP
+
+    Returns:
+
+    - None (performs side-effect operations)
+
+    Raises:
+
+    - Exception - If tunneling fails
+
+    '''
+
+    config = ctx.config
+    kubernetes_utils = KubernetesUtils(ctx)
+
+    # 'concourse', not 'concourse-web': the web Service lands in the release's own namespace,
+    # so namespace and selector belong to the same component, and the worker and database pods
+    # the same release carries answer to other selectors.
+    namespace = config.component_namespace('concourse')
+    selector = config.component_service_selector('concourse')
     pod_name = kubernetes_utils.get_pod_name_for_deployment(namespace, selector)
     return kubernetes_utils.open_tunnel(namespace, pod_name, local_port, remote_port, host)
 
