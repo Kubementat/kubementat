@@ -5424,20 +5424,26 @@ echo "HTTP=$code DIGEST=$digest"
                        "" if watched else " | " + triggered.excerpt(300)))
 
         def check():
-            reads = self._concourse_fly(namespace, ["-t", CONCOURSE_FLY_TARGET, "builds",
-                                                    "-j", CONCOURSE_JOB], timeout=120)
+            # The run's table, not a -j filter: the first reads came back "ok" with zero rows for
+            # the bare job name (a fly flag-matching quirk, recorded rather than argued with). The
+            # table carries the same fact with no matcher to trust, and the watch already proved
+            # this exact build finished.
+            reads = self._concourse_fly(namespace, ["-t", CONCOURSE_FLY_TARGET, "builds"], timeout=120)
             if not reads.ok:
                 return False, "fly builds read failed exit=%s: %s" % (reads.exit_code, reads.excerpt(200))
             rows = (reads.stdout or "").strip().splitlines()[1:]  # the table's header is not a build
             for row in rows:
                 fields = row.split()
-                if len(fields) < 2 or not fields[0].isdigit():
+                if not any(f == CONCOURSE_JOB or f.endswith("/" + CONCOURSE_JOB) for f in fields):
                     continue
-                if fields[1] == "success":
-                    return True, "build %s finished: %s" % (fields[0], fields[1])
-                if fields[1] in ("errored", "aborted", "failed"):
-                    return False, "build %s finished %s" % (fields[0], fields[1])
-            return False, "no finished build yet: %s" % " | ".join(rows[:4])
+                if "success" in fields:
+                    return True, "the builds table shows %s finished success: %s" % (
+                        CONCOURSE_JOB, " ".join(fields[:2]))
+                if [f for f in fields if f in ("errored", "aborted", "failed")]:
+                    return False, "the builds table shows %s finished non-green: %s" % (
+                        CONCOURSE_JOB, row.strip()[:160])
+            return False, "no finished build row for %s yet: %s" % (
+                CONCOURSE_JOB, " | ".join(r.strip()[:90] for r in rows[:4]) or "no builds listed")
         self.wait("concourse-pipeline-run-green", "the one real build ends success",
                   check, timeout=CONCOURSE_BUILD_TIMEOUT_S, interval=10)
 
