@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from cluster_parity import API_PROGRAM
+from recorded_operations import API_PROGRAM
 
 from kubementat import errors
 from kubementat.core import constants

@@ -14,7 +14,7 @@ the same kind of thing, and pin the two halves of it: nothing is written, and th
 
 import logging
 
-from cluster_parity import ClusterOperation, cluster_named
+from recorded_operations import ClusterOperation, cluster_named
 
 from conftest import FIXTURE_KUBE_CONTEXT
 

@@ -34,7 +34,6 @@ not notice. `src/kubementat/automations/install/pipelines.py` only ever base64-e
 import base64
 from pathlib import Path
 
-from cluster_parity import operations_from_calls
 from kubementat.config import init as config_init, keys as config_keys
 from kubementat.automations.install import pipelines as pipelines_slice
 from kubementat.crypto_utils import CryptoUtils
@@ -161,4 +160,4 @@ def test_generating_a_key_talks_to_no_cluster_tool(tmp_path, fake_binaries):
     """
     generate_into(tmp_path)
 
-    assert operations_from_calls(fake_binaries.take_calls()) == []
+    assert fake_binaries.take_calls() == []

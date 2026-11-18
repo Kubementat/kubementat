@@ -63,7 +63,7 @@ TARGET_DEV = ClusterTarget(environment="dev", context="dev", kubeconfig_path=Non
 def target_cluster(target) -> str:
     """The cluster identity a recorded client call carries, in the harness's own spelling.
 
-    The same rule `cluster_parity.cluster_identity` applies to a `kubectl` argv — the context when
+    The same rule `recorded_operations.cluster_identity` applies to a `kubectl` argv — the context when
     there is one, the file when there is no context — so that a client call and a binary call say
     the same thing about the same run and can be compared. The address is deliberately not
     the identity: the `kubectl` side never carries one, and the whole point of the field is that
@@ -73,11 +73,11 @@ def target_cluster(target) -> str:
     recording an operation that looks addressed. That is the case the queue leaves to the end: a
     `ClusterTarget` built from a connection document has a host and no context.
     """
-    from cluster_parity import ParityError, cluster_named
+    from recorded_operations import UnaddressedOperationError, cluster_named
 
     named = cluster_named(context=target.context, kubeconfig=target.kubeconfig_path)
     if named is None:
-        raise ParityError(
+        raise UnaddressedOperationError(
             f"{target!r} addresses a cluster through {target.source}, which names neither a "
             f"kubecontext nor a file, so a call made through it cannot say which cluster it asked. "
             f"The recorder refuses to guess, and one failure class for "
@@ -97,7 +97,7 @@ def configuration_only_cluster(environment: str) -> str:
     It is a value read out of the fixture and not a claim that a cluster was contacted: the address
     behind it is still the sentinel that addresses nothing.
     """
-    from cluster_parity import cluster_named
+    from recorded_operations import cluster_named
 
     return cluster_named(context=environment)
 

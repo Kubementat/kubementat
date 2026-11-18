@@ -25,7 +25,6 @@ from types import SimpleNamespace
 
 import pytest
 from asset_paths import tekton_ci_path
-from cluster_parity import operations_from_calls
 from kubernetes import client
 
 from cli.commands import tekton
@@ -246,7 +245,7 @@ def test_the_wait_reads_the_api_and_never_a_command_line_tool(fake_binaries):
     assert runs.wait_for_pipeline_run(cluster, config, "hello-run-abcdef", PIPELINE_NAMESPACE,
                                        poll_interval_seconds=0, sleep=lambda _seconds: None) == 0
 
-    assert operations_from_calls(fake_binaries.take_calls()) == []
+    assert fake_binaries.take_calls() == []
 
 
 def test_importing_the_module_that_waits_sleeps_nothing():

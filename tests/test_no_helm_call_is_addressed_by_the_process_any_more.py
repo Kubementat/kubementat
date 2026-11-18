@@ -20,7 +20,7 @@ live
   change what it asks.
 
 The local-only calls (`helm repo update`, `helm version`, and the rest) stay declared in
-`cluster_parity.LOCAL_ONLY_HELM_CALLS`, which the lane's operation reducer also reads, so there is
+`recorded_operations.LOCAL_ONLY_HELM_CALLS`, which the lane's operation reducer also reads, so there is
 still one table answering "did this ask a cluster?" -- it is just no longer policed by a scan of the
 checkout. And the behaviour that guard was protecting is covered where it runs: the addressing flags
 are read off the argv the binaries are handed by

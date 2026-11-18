@@ -89,7 +89,7 @@ ENVIRONMENT_STATIC = {
     # OpenBao's chart puts `app.kubernetes.io/name` on the server pods as the *chart* name and
     # `app.kubernetes.io/instance` as the release name, so the pair is the shape the chart itself
     # writes and not what the Vault selector looked like. Order does not matter to `kubectl`, and
-    # `cluster_parity._selector` folds it anyway, but the fixture should not carry an order that
+    # `recorded_operations._selector` folds it anyway, but the fixture should not carry an order that
     # only ever matched a chart kubementat no longer installs.
     "OPENBAO_SERVICE_SELECTOR": "app.kubernetes.io/name=openbao,app.kubernetes.io/instance=openbao",
     "TEKTON_SERVICE_SELECTOR": "app=tekton-dashboard",
@@ -191,21 +191,6 @@ def _fixture_target():
 FIXTURE_TARGET = _fixture_target()
 
 
-def pytest_collection_modifyitems(config, items):
-    """`integration` means "needs a cluster", and this suite's promise is that it does not.
-
-    The marker is not decoration: a cluster-dependent test that runs everywhere turns a green
-    `pytest -q` into a green-on-one-machine-only, so these are skipped unless the operator
-    asks for them with `-m integration`.
-    """
-    if config.getoption("markexpr", default=""):
-        return
-    skip = pytest.mark.skip(reason="needs a cluster - run with -m integration to get it")
-    for item in items:
-        if "integration" in item.keywords:
-            item.add_marker(skip)
-
-
 class _CallLog(list):
     """A `(method, kwargs)` log that also remembers which cluster each entry was asked of.
 
@@ -267,7 +252,7 @@ class RecordedApi:
     """One generated Kubernetes client, recording instead of calling.
 
     Every call is appended to the shared `calls` log as `(method, kwargs)`, which is what
-    `cluster_parity.operations_from_api_calls` reads, together with the cluster this particular
+    `recorded_operations.operations_from_api_calls` reads, together with the cluster this particular
     client was built to address — which is what makes the same reading say *which* cluster was
     asked. `answers` decides what it gets back: anything unconfigured returns a plausible empty
     list for a `list_*`, and nothing for the rest, because the operations are what is under test,
@@ -353,7 +338,7 @@ class ApiRecorder:
         return self.api().__getattr__(method)
 
     def operations(self):
-        from cluster_parity import operations_from_api_calls
+        from recorded_operations import operations_from_api_calls
 
         return operations_from_api_calls(self.entries())
 
@@ -411,7 +396,7 @@ def is_a_write(method: str) -> bool:
     client calls a `SelfSubjectAccessReview` `create_...`, and a preflight is not a write. One
     function, and the reducer is where the answer lives, so the two cannot disagree.
     """
-    from cluster_parity import PROBE_METHODS
+    from recorded_operations import PROBE_METHODS
 
     if method in PROBE_METHODS:
         return False
@@ -685,22 +670,6 @@ def recorded_api(monkeypatch):
     # "this process", which is exactly the answer a parity test must not be able to fall back to.
     monkeypatch.setattr(ClusterTarget, "client", lambda self: recorder.for_target(self))
     return recorder
-
-
-def run_bash(script, args=(), cwd=None, env=None):
-    """Run a script the way `kmt run-script` would, through the shims.
-
-    bash is the reference implementation being compared against, so it is run directly rather
-    than through any wrapper: a wrapper that fixes the arguments up is a wrapper that can hide
-    what the script actually does.
-    """
-    script = Path(script)
-    return subprocess.run(["bash", str(script), *[str(arg) for arg in args]],
-                          cwd=str(cwd) if cwd else str(script.parent),
-                          env=env, capture_output=True, text=True, timeout=120,
-                          # /dev/null, not the terminal pytest itself is sitting on: a shim
-                          # that reads stdin would otherwise block on whoever ran the suite.
-                          stdin=subprocess.DEVNULL)
 
 
 def run_kmt(argv, env):

@@ -76,10 +76,10 @@ def cluster_refuses(recorded_api, verb, resource):
 def _attributes(body):
     """The review's `resource_attributes`, from either shape.
 
-    `cluster_parity.review_attributes` is the same reader the parity reducer uses, imported rather
+    `recorded_operations.review_attributes` is the same reader the parity reducer uses, imported rather
     than copied here so the two cannot disagree about where the verb lives.
     """
-    from cluster_parity import review_attributes
+    from recorded_operations import review_attributes
 
     found = review_attributes(body)
     return found
