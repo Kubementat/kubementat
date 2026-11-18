@@ -1,21 +1,4 @@
 """The lane reads a sentence out of `kmt routing install`'s output, so that sentence is a contract.
-
-`tests/e2e/harness/stages.py` decides "was kubementat's Traefik applied?" in a skip by looking for
-the phrase `was not applied` in the command's output. That is a string match against prose, and
-prose is what a summary is made of, so the moment nobody protects it the failure arrives in the
-expensive place: twenty-five minutes into a `--lane routing` run, three quarters of the way through
-a stage, on the one assert that says a skip really skipped. Nothing in the unit suite pinned the
-wording, so rewording a summary was free -- until it was not.
-
-Pinning it is cheaper than the alternative, which is the lane matching on a machine-readable field
-no one wants. `RoutingInstallResult` carries `installs_traefik`, and `--format json` could have been
-made to carry it, but the lane's whole vocabulary is "run the command the operator runs and read
-what it says"; a lane that ran a different command was the trade already refused in favour of
-reason `status` echoes the report rather than re-summarising it). So the sentence stays, and this
-file is what makes changing it a two-second failure with the lane named in it.
-
-The point is not the exact words. It is that the two files that must agree do agree, and that the
-test says so in terms of *which* consumer depends on it.
 """
 
 from kubementat.automations.routing import routing, traefik_presence
@@ -26,13 +9,7 @@ LANE_MATCHES_ON = "was not applied"
 
 
 def _result_for_skip(installs_traefik, classification, update=False):
-    """Build the result object the skip path builds, without touching a cluster.
-
-    Constructed directly rather than through `install_routing` because the question here is about the
-    summary's wording, and a cluster read is not needed to answer it. Everything else about the
-    object is what the real skip produces: `installs_traefik=False`, a foreign classification, no
-    CRD step.
-    """
+    """Build the result object the skip path builds, without touching a cluster."""
     return routing.RoutingInstallResult(
         environment="dev",
         namespace="traefik",
@@ -51,12 +28,6 @@ def _result_for_skip(installs_traefik, classification, update=False):
 
 
 def test_the_summary_holds_the_phrase_the_routing_lane_matches_on():
-    """The skip path's sentence, on the object the real decision produces.
-
-    Built rather than run, because the failure this guards is a reword, not a misdecision -- and the
-    decision itself is covered by `test_routing_install_skips_traefik_when_the_cluster_already_has_one.py`
-    running against a fake cluster. What is not duplicated here is the cluster read: this object is
-    the one `install_routing` returns for a foreign controller, fields and all.
-    """
+    """The skip path's sentence, on the object the real decision produces."""
     assert LANE_MATCHES_ON in _result_for_skip(False, traefik_presence
                                                .CLASSIFICATION_FOREIGN).summary()

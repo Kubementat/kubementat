@@ -1,33 +1,4 @@
-"""The `kmt` command surface: exactly the commands it says it has, registered once each.
-
-Two defects live here.
-
-* **D3** — `cli/commands/tunnels.py` defined `def tunnel_polaris` twice, so the second
-  definition (the vault tunnel, `openbao-ui` since the rename) won the name binding and `kmt tunnel-polaris` was registered
-  pointing at another component's tunnel. A name that appears once in `--help` and silently
-  does something else is invisible to every other kind of test: the command exists, it exits
-  0, it tunnels *something*. Row 25 retired that command outright, so what this file keeps is
-  the shape that made it possible — no callback answering to two names, and a surface that is
-  exactly the list below. The retired pair is guarded by
-  `test_the_polaris_and_mysql_tunnel_commands_stay_retired.py`, not here.
-* **The surface drifting without anyone saying so** — commands added, renamed, or left behind
-  by a migration that deleted its script.
-
-So this file asserts three things: the exact set of names `--help` prints, that no name is
-registered twice, and that no single function answers to two names.
-
-The fourth arrived when the surface grew its Click groups: a command that moved
-under a group is only *gone* if the flat name stopped answering too, and "gone" is the half a
-surface test that only reads `--help` can miss. Hence the `*_group_holds_...` tests below: the
-group's own listing, and the old flat name answered with "No such command".
-
-The fifth is the rule that the environment is the first positional of every command that touches a
-cluster, and it is here rather than in the modules a command is tested in because a command whose
-environment sits in the wrong slot fails nothing but its own shape: the old argv
-still parses, it parses the wrong things. So `CLUSTER_TOUCHING_POSITIONALS` pins the eleven
-positional lists, and the Task check that runs beside it compares each Tekton step's own argv to
-the command it calls -- the half of the rule a unit test on the command cannot see.
-"""
+"""The `kmt` command surface: exactly the commands it says it has, registered once each."""
 
 import re
 
@@ -111,19 +82,8 @@ EXPECTED_ENVIRONMENTS_COMMANDS = {"list"}
 # ------------------------------------------------------------------------------------------
 # The three groups: `tunnel`, `tekton`, `helm`
 #
-# Three groups, fourteen commands, no aliases. What is pinned below is the *subcommand* side of the
-# name, because that is the half a group has to get right: `tunnel` is the group and `pod` is the
-# verb, which together say the same thing `tunnel-pod` said on its own line.
-#
-# The grouping list started as the 11 commands the lane's capability table measures as still flat --
-# four tunnels, six tekton commands and one helm apply. Of the commands that list did not include,
-# the two flat tunnels (`tunnel-polaris`, `tunnel-mysql`) were retired rather than grouped (row 25)
-# and `helm-version` kept its flat name. The cleanup job and the three generators joined the `tekton`
-# group on 2026-11-11 for the reason the other nine had, except that no marker measured these four:
-# `kmt tekton` already existed, so commands that read `tekton-<verb>` on the flat surface beside
-# verbs that read `tekton <verb>` were a surface describing a rule it did not follow. What keeps a
-# rename nothing measures honest is the check below, which asks the shipped entry point whether the
-# flat name still answers, and not a capability row that was never going to run them.
+# Each verb lives under its group (`kmt tunnel pod`, `kmt tekton run-pipeline`), and the flat
+# spelling it replaced (`tunnel-pod`) is not registered. The check below asks the shipped entry point.
 # ------------------------------------------------------------------------------------------
 
 
@@ -159,19 +119,7 @@ def test_the_help_surface_is_the_expected_command_set():
 
 
 def test_the_environments_group_holds_the_listing_and_nothing_else():
-    """The environments listing, and the reason the group has one verb.
-
-    `kmt environments list` is the read-only half of what `kmt doctor` would be, and it is on the
-    surface because the inventory is `platform_config`, there is no cluster registry, and the
-    alternative to answering "which environment is which cluster" in one command is an operator
-    discovering it from a write that went to the wrong place.
-
-    The flag check is the interesting part. A `--context` here would mean the listing resolved a
-    cluster, and a listing that resolved its own answers would be a second opinion about what is
-    configured — the exact disagreement the shared primitive exists to prevent. So the one
-    flag it takes names the root and nothing else: the same root the 1:1 check resolves, which is
-    what keeps the listing and a command's refusal saying the same thing about one tree.
-    """
+    """The environments listing, and the reason the group has one verb."""
     from cli.commands import environments
 
     names = set(environments.environments.commands)
@@ -200,23 +148,7 @@ def test_the_environments_group_holds_the_listing_and_nothing_else():
 
 
 def test_the_update_flag_reaches_the_function_that_decides(monkeypatch, resolvable_environment):
-    """`--update` is honoured, not merely accepted.
-
-    Checking that a flag is on the command line cannot tell a value that arrives from one that is
-    dropped on the way in, and dropping it is the one defect this file exists to catch: `install_routing`
-    is where the repository refresh, the CRD apply and the second-controller consent live, so a run
-    that upgraded nothing while printing the upgrade's log is a run that lied to the
-    person who read it. Hence running the command twice against a recording `install_routing` -- once
-    with no flags, once with both -- and comparing what reaches the function to what the command line
-    said. `False` in both runs is the failure this is written to catch, so the first run has to say
-    `False` for it to mean anything.
-
-    Nothing in the path touches a cluster: `install_routing` is the only thing replaced, and the
-    command's own argument and option parsing is the real one. The environment that `kmt_context`
-    resolves before the body runs comes from `resolvable_environment`, which is the fixture's and
-    not this checkout's — a command that resolves a cluster cannot be tested by stubbing the thing
-    it resolves, only by giving it somewhere honest to have come from.
-    """
+    """`--update` is honoured, not merely accepted."""
     import inspect
     import types
 
@@ -232,7 +164,7 @@ def test_the_update_flag_reaches_the_function_that_decides(monkeypatch, resolvab
     assert "update" in parameters and "consent" in parameters, (
         "install_routing has no parameter for the flags kmt routing install offers; the CLI is "
         "offering flags with nowhere to go. `consent` is where --yes lands: the flag answers the "
-        "one branch that needs it, and the CLI decides how it is answered (item 7).")
+        "one branch that needs it, and the CLI decides how it is answered.")
     assert "ctx" in parameters, (
         "install_routing no longer takes the one `Context` every class that reaches a cluster is "
         "given; the CLI's `@kmt_context` has nothing to hand over")
@@ -319,12 +251,7 @@ CI_TASKS = tekton_ci_path("tasks")
 
 
 def _command_tree(registrations, group=None, prefix=()):
-    """Every registered command, keyed by the argv path that reaches it.
-
-    `main()` is what wires the commands in, so this walks the registrations the surface test
-    collected rather than the bare `cli` object — which knows nothing about them until `main()` has
-    run, and a test that read it before that would silently resolve nothing.
-    """
+    """Every registered command, keyed by the argv path that reaches it."""
     if group is None:
         entries = [((name,), command) for name, _callback, command in registrations]
     else:
@@ -349,11 +276,7 @@ def _positionals(command):
 
 
 def _task_scripts():
-    """The text of every step script in every Task, with the file it came from.
-
-    Parsed as YAML and not grepped, because the string that matters is inside a block scalar and a
-    grep reads the whole file, comments and param descriptions included.
-    """
+    """The text of every step script in every Task, with the file it came from."""
     for path in sorted(CI_TASKS.glob("*.yml")):
         document = yaml.safe_load(path.read_text(encoding="utf-8"))
         for step in document["spec"].get("steps", []):
@@ -363,15 +286,7 @@ def _task_scripts():
 
 
 def _kmt_argv_from(script, start):
-    """The tokens that follow one occurrence of the word `kmt`, read as a shell would read them.
-
-    Quoted arguments stay one token, a `$(params.x)` substitution stays one token, a `\n`
-    continuation is skipped, and the read stops where the command stops: at `;`, `&`, `|`, a
-    closing paren (bash's array assignment), or a comment. That last rule is why the read does not
-    have to know which lines of a script are prose — a sentence in a comment that says what a
-    command replaced is scanned as its own candidate, resolves to nothing, and is dropped by the
-    caller rather than mistaken for an invocation.
-    """
+    """The tokens that follow one occurrence of the word `kmt`, read as a shell would read them."""
     token = re.compile(r"""\$\([A-Za-z0-9_-]+\)
                           |\$\{?[A-Z_][A-Z0-9_]*\}?
                           |"[^"]*"
@@ -403,12 +318,7 @@ def _kmt_argv_from(script, start):
 
 
 def _kmt_invocations(script):
-    """Every argv the step builds from the word `kmt`, in the order it appears.
-
-    Full-line comments are dropped first, because a step may say what its command replaced — and
-    the sentence usually names the command in the same words the step uses to run it, which reads as
-    a second invocation that was never one.
-    """
+    """Every argv the step builds from the word `kmt`, in the order it appears."""
     body = "\n".join(line for line in script.splitlines() if not line.lstrip().startswith("#"))
     body = _without_message_text(body)
     return [_kmt_argv_from(body, match.end())
@@ -416,36 +326,13 @@ def _kmt_invocations(script):
 
 
 def _without_message_text(body: str) -> str:
-    """Blank the text an `echo` or `printf` prints, and keep everything a step actually executes.
-
-    The same reason comments are dropped, applied to the wider case the comment rule does not cover: a
-    step's *error message* names the verb that would fix the problem -- "check that kmt install ran against
-    the configuration directory that owns this clone" -- and that is prose inside shell quoting, not a
-    command. Read as argv it invents a long call to a short command and reports it against whichever Task
-    happened to be written politely to its operator, which is a failure with no cause and no fix.
-
-    Only the quoted argument of a message command is removed, so a step that prints and then runs is still
-    seen running. A call hidden inside a string that this strips would be a call Tekton never executes, and
-    there is no such thing.
-    """
+    """Blank the text an `echo` or `printf` prints, and keep everything a step actually executes."""
     return re.sub(r"(?<![\w-])(?:echo|printf)[ \t]+((?:[\"'][^\"']*[\"'])|(?:[^\\s]|\\\\)+)",
                   lambda m: "" if "kmt" in m.group(1) else m.group(0), body)
 
 
 def _positional_tokens(command, tokens):
-    """The argv tokens that are the command's arguments, with its flags taken out.
-
-    A flag is not one token: `--wait` costs one and `--config-dir PATH` costs two, and the shape of
-    the token cannot tell the two apart — both start with `-`. So the answer comes from the
-    command's own declarations, which is the same place every other sentence in this file reads
-    from. Until this ticket no shipped Task had passed a flag at all, and the helper that now reads
-    them had no reason to know the difference: everything after the command's name was counted as a
-    positional, which silently turned every boolean flag in the tree into a phantom argument and
-    every flag with a value into two.
-
-    An option the command does not declare stays in the list. Click refuses it when the step runs,
-    and the count that reports it is closer to the truth than a guess about what it meant to be.
-    """
+    """The argv tokens that are the command's arguments, with its flags taken out."""
     takes_value = {}
     for param in command.params:
         if isinstance(param, Option):
@@ -474,12 +361,7 @@ def _positional_tokens(command, tokens):
 
 
 def _split_invocation(registrations, argv):
-    """`('create-secret-from-json', ['$(params.environment)', ...])` for a step's argv.
-
-    The command path is read greedily from the front: a group name is a command's name too, and the
-    first token that is not a command is where the positionals start. The options that follow are
-    not positionals and come out here, by `--config-dir`'s first appearance on a shipped step.
-    """
+    """`('create-secret-from-json', ['$(params.environment)', ...])` for a step's argv."""
     for length in range(len(argv), 0, -1):
         command = _command_by_argv_path(registrations, argv[:length])
         if command is not None:
@@ -493,18 +375,7 @@ def _names_the_environment(token):
 
 
 def test_the_ci_task_manifests_pass_the_positionals_their_commands_take(registrations):
-    """Every Task that runs a `kmt` command, read out of its own script and not remembered.
-
-    This is the collateral most likely to be discovered late: the Tasks
-    and the commands move together, or a pipeline breaks somewhere no unit test can see. So the
-    check is general rather than pinned to the one Task this ticket changed. For each invocation
-    found in a Task: the command it names is registered, the number of positionals the step sends is
-    the number the command takes, and the first of them is the environment whenever the command
-    declares one.
-
-    Position and count, not values: a step may pass `$(params.environment)` or `$ENVIRONMENT`, and
-    both say the same thing.
-    """
+    """Every Task that runs a `kmt` command, read out of its own script and not remembered."""
     checked = []
     for path, script in _task_scripts():
         for argv in _kmt_invocations(script):

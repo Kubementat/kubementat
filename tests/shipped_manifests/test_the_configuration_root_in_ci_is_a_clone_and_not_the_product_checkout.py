@@ -1,42 +1,4 @@
-"""The configuration root is a clone, and it is not the code checkout.
-
-The sentence this file guards has two halves, and each of them was false until now.
-
-*1. The root is a clone.* `deploy-local-helm-chart.yml`'s `path-to-configuration` default was
-`$(workspaces.workspace.path)/kubementat`, and `kubementat` is the directory `git-clone-automation`
-creates out of `automation-git-project-name`. So the Task read configuration from wherever the **code**
-had been fetched, not out of a repository that owns configuration. It read correctly for one reason: the
-operator's fork carried `platform_config` inside it, so the code checkout *was* the configuration clone.
-That is the accident this rule exists to retire — a rule that holds because two things happen to be the
-same repo is a rule that breaks the day they are not.
-
-*2. The root is stated and not inferred.* The same default named a literal directory, so a pipeline that
-cloned the configuration anywhere else silently read the wrong tree. The lookup that used to answer
-"where is the configuration" is gone, and a TaskRun that guesses is not a lookup, it is a guess that
-keeps passing tests.
-
-The cheaper shape was ruled: both clones mount into the
-*same* workspace, at *different* paths. `/workspace/kubementat` is code, `/workspace/configuration` is
-configuration. A second workspace mount would have made "name your root" and "the root is a clone" agree
-by construction for free, but it is more pipeline surface — more workspaces to bind on every TaskRun,
-more places a `workspaces:` entry can be mis-typed — and this codebase is already a chain of Tasks. The
-cost of the cheaper shape is stated below and asserted here: **two params in one pipeline have to agree
-about one path, and nothing in Tekton enforces that.** The clone step and the reader name the same
-directory by different means — one a `git-project-name`, one a path — so this file checks the agreement
-itself, on the shipped templates, rather than trusting it.
-
-What is *not* done here, deliberately:
-
-* **No new key.** `AUTOMATION_GIT_URL` stops describing where the product lives and starts
-  describing the configuration repository, and no `CONFIG_GIT_URL` fills the gap. So the clone step
-  clones `$(params.automation-git-url)`, and the only param added is `configuration-git-project-name`,
-  which says *which directory of the same workspace* that clone occupies. A Task cannot learn which
-  repository it was cloned from, but it can be told which directory to read.
-* **Nothing in `src/`.** This is a CI-shape change. `core/config/config.py`, `kubementat/config/init.py`, and every
-  read path stay untouched: most trees in this suite are fixtures and not prepared directories, and a
-  rule that says "a root must be a clone" phrased against `Config` breaks 227 unrelated tests, which is
-  how this epic lost hours before. Enforcement lives in the shipped YAML, read off the tree.
-"""
+"""The configuration root is a clone, and it is not the code checkout."""
 
 
 import yaml
@@ -90,13 +52,7 @@ def _step_params(step):
 
 
 def _substitute(value, params, workspace="/workspace"):
-    """A Tekton reference down to what it would resolve to in the shipped defaults.
-
-    `$(params.x)` becomes the param's shipped default, `$(workspaces.x.path)` becomes the workspace the
-    Task mounts. A param with no default resolves to the empty string, which is honest: the manifest says
-    "the caller supplies this". The check is about *shape* — which param a path is built out of, and where
-    it lands — not about inventing absolute paths this repository does not own.
-    """
+    """A Tekton reference down to what it would resolve to in the shipped defaults."""
     text = str(value)
     for _ in range(8):
         replaced = text
@@ -110,11 +66,7 @@ def _substitute(value, params, workspace="/workspace"):
 
 
 def _clone_steps(manifest):
-    """The pipeline's clone steps, each resolved to the directory it puts on disk.
-
-    A clone is identified by the `git-clone-with-ssh-auth` reference rather than by a step name, because
-    step names are prose and the reference is what runs.
-    """
+    """The pipeline's clone steps, each resolved to the directory it puts on disk."""
     found = []
     for task in _pipeline_tasks(manifest):
         if (task.get("taskRef") or {}).get("name") != "git-clone-with-ssh-auth":
@@ -130,12 +82,7 @@ def _clone_steps(manifest):
 
 
 def _configuration_reads(manifest):
-    """Every value in the pipeline that points at a configuration tree.
-
-    Anything naming `platform_config` counts, plus the Task params that mean the same thing by name
-    (`path-to-configuration`). Both are read because a Task that takes a directory param and appends the
-    layer is the shape this pipeline actually uses.
-    """
+    """Every value in the pipeline that points at a configuration tree."""
     reads = []
     for task in _pipeline_tasks(manifest):
         for name, value in _step_params(task).items():
@@ -146,11 +93,7 @@ def _configuration_reads(manifest):
 
 
 def test_the_shipped_deploy_template_clones_the_configuration_repository():
-    """The first half of the sentence: there is a step that clones the configuration.
-
-    Without this step the Task's default would name a directory no pod ever puts on disk, which is a
-    quieter failure than the old default and no better: the old one at least existed.
-    """
+    """The first half of the sentence: there is a step that clones the configuration."""
     templates = sorted((TEMPLATES / n for n in CLONING_PIPELINE_TEMPLATES), key=lambda p: p.name)
     assert templates, f"the shipped deploy templates are gone: {CLONING_PIPELINE_TEMPLATES}"
 
@@ -172,11 +115,6 @@ def test_the_shipped_deploy_template_clones_the_configuration_repository():
 
 def test_the_configuration_clone_lands_where_the_reader_reads_from():
     """The cost of the cheaper shape, asserted: the clone's directory and the read path have to agree.
-
-    This is the one thing a single-workspace layout cannot enforce by construction, so it is enforced
-    here. Tekton binds `git-project-name` to a *directory name* and `path-to-configuration` to a *path*;
-    nothing checks that they describe one directory. When they drift, the clone step succeeds, the step
-    that reads configuration succeeds, and the failure is the file that is not there.
     """
     for name in sorted(CLONING_PIPELINE_TEMPLATES):
         path = TEMPLATES / name
@@ -208,12 +146,7 @@ def test_the_configuration_clone_lands_where_the_reader_reads_from():
 
 
 def test_the_task_default_is_a_configuration_path_and_not_a_borrowed_checkout():
-    """The half of the rule that says the root is stated and not inferred: the *default*.
-
-    A bare TaskRun has no pipeline to ask. Its root is therefore stated on the param, and it has to be
-    spelled without reference to `automation-git-project-name`, which is the param that names the code
-    clone and has been asked to stop meaning configuration.
-    """
+    """The half of the rule that says the root is stated and not inferred: the *default*."""
     path = TASKS / "deploy-local-helm-chart.yml"
     assert path.exists(), f"{path} is where this rule ships"
     manifest = _load(path)
@@ -239,13 +172,7 @@ def test_the_task_default_is_a_configuration_path_and_not_a_borrowed_checkout():
 
 
 def test_the_task_that_runs_kmt_names_the_configuration_root_from_a_param_of_its_own():
-    """The clause about the Task that runs `kmt`, in the shape it has now.
-
-    `create-secret-from-json.yml` had no directory param at all: it rebuilt the checkout path out of
-    `automation-git-project-name` and appended `platform_config` to it, which is one clone's answer. Now
-    it declares `configuration-root` and reads from there, while the `cd` that puts `uv` inside the
-    project stays on the code clone — two directories, two statements.
-    """
+    """The clause about the Task that runs `kmt`, in the shape it has now."""
     path = TASKS / "create-secret-from-json.yml"
     assert path.exists(), f"{path} is where this rule ships"
     manifest, steps = _task_steps(path)
@@ -273,13 +200,7 @@ def test_the_task_that_runs_kmt_names_the_configuration_root_from_a_param_of_its
 
 
 def test_the_two_clone_steps_land_in_different_directories():
-    """One workspace, so the two clones must not collide.
-
-    Both clone steps get the *same* URL by default — an operator whose configuration still lives in
-    their fork has nothing to change, and that is deliberate. What must not happen is both landing in one
-    directory: the second clone fails on a non-empty directory, or, if it does not, the reader gets
-    whichever one arrived last.
-    """
+    """One workspace, so the two clones must not collide."""
     for name in sorted(CLONING_PIPELINE_TEMPLATES):
         path = TEMPLATES / name
         if not path.exists():
@@ -303,11 +224,6 @@ def test_the_two_clone_steps_land_in_different_directories():
 
 def test_the_shipped_examples_that_clone_carry_the_same_shape():
     """An example is what an operator copies, so it carries the rule or the rule is documentation only.
-
-    The template is generated into a team's tree; these two are what a reader opens first. If the
-    example clones the code and nothing else, an operator following it ends up reading configuration out
-    of the checkout -- the accident the rule was written to end -- and no test in the template's own guard
-    file would notice, because it never reads this directory.
     """
     measured = set()
     for path in sorted(EXAMPLES.glob("*.yml")):
@@ -348,15 +264,7 @@ def _is_configuration_clone(clone, params):
 
 
 def test_the_shipped_tasks_that_read_configuration_by_path_still_name_a_workspace():
-    """The Tasks that read configuration by path before this change and were not touched by it.
-
-    `execute-mysql-file.yml`, `create-mysql-database.yml` and `skopeo-sync-images.yml` read configuration
-    out of a `path-to-configuration`-shaped param and were not part of this change. They are checked here
-    so that this file's new shape does not become the only place the rule is stated — a rule asserted on
-    one file is a rule that dies with that file. Their defaults still name the code checkout, which is
-    *reported* and not silently fixed: changing a default a customer pipeline may be overriding is a
-    contract change, and the rule names only `deploy-local-helm-chart`.
-    """
+    """The Tasks that read configuration by path before this change and were not touched by it."""
     untouched = {
         "execute-mysql-file.yml": "path-to-configuration",
         "create-mysql-database.yml": "path-to-configuration",

@@ -1,20 +1,4 @@
-"""The surface refuses what it was not told: no `--team`, no `ENVIRONMENT`, no run.
-
-Two defaults went in this ticket, and they are the same default: `DEFAULT_TEAM = "dev1"` in
-`cli/helpers.py`, and `default='dev'` on the environment arguments of `pvc-usage`, the three component
-tunnels and the two grafana-account commands — plus `kmt users`' `--environment` option, which the
-count of *arguments* never included but which guessed exactly the same way. Decision 19 refuses
-guessing "at the level of clusters *or* teams", and a hardcoded `dev` is `DEFAULT_TEAM`'s twin, which
-is why the two went in one commit.
-
-The shape of the answer differs only by where the value was declared, and this file asserts both:
-
-* the required *positional*, which Click refuses itself (`Missing argument 'ENVIRONMENT'`) before
-  kubementat's code runs;
-* the required *option*, refused by `cli.context._environment_of` in kubementat's own words.
-
-Neither is a warning, and neither becomes a `None` that survives into a service.
-"""
+"""The surface refuses what it was not told: no `--team`, no `ENVIRONMENT`, no run."""
 
 
 import pytest
@@ -22,8 +6,7 @@ from click.testing import CliRunner
 
 from cli.commands import kubernetes, tunnels, users
 
-# The commands that carried a `default='dev'` environment. Both spellings are here, because the ticket
-# is "every `default='dev'` goes" and not "the six arguments the brief counted".
+# Commands that must refuse rather than default to an environment, under both spellings of the argument.
 DEFAULTED_POSITIONS = [
     (kubernetes.pvc_usage, []),
     (tunnels.tunnel_grafana, []),
@@ -44,12 +27,7 @@ DEFAULTED_OPTIONS = [
 @pytest.mark.parametrize("command,args", DEFAULTED_POSITIONS,
                          ids=[command.name for command, _args in DEFAULTED_POSITIONS])
 def test_a_positional_environment_that_was_never_given_is_refused(command, args, monkeypatch):
-    """`kmt tunnel grafana` with nothing after it, on a shell that names no `ENVIRONMENT`.
-
-    The refusal is Click's and not kubementat's — that is what "required" means for a positional —
-    so the assertion is that the run stopped and named `ENVIRONMENT`, not that it used our sentence.
-    And it stops *before* the command body: nothing resolved, nothing read, no cluster asked anything.
-    """
+    """`kmt tunnel grafana` with nothing after it, on a shell that names no `ENVIRONMENT`."""
     monkeypatch.delenv("ENVIRONMENT", raising=False)
 
     result = CliRunner().invoke(command, args)
@@ -63,11 +41,7 @@ def test_a_positional_environment_that_was_never_given_is_refused(command, args,
                          ids=[command.name for command, _args in DEFAULTED_OPTIONS])
 def test_an_environment_option_that_was_never_given_is_refused_in_words(command, args, monkeypatch,
                                                                         resolvable_environment):
-    """The same refusal, in kubementat's own sentence, for the commands that spell it as a flag.
-
-    `--environment` keeps its `envvar`, so a lane that exports the variable is still answered. What
-    is gone is the fallback that made "which environment" an optional question.
-    """
+    """The same refusal, in kubementat's own sentence, for the commands that spell it as a flag."""
     monkeypatch.delenv("ENVIRONMENT", raising=False)
 
     result = CliRunner().invoke(command, args)
@@ -78,15 +52,7 @@ def test_an_environment_option_that_was_never_given_is_refused_in_words(command,
 
 def test_the_variable_still_answers_when_the_command_does_not_name_one(monkeypatch,
                                                                        resolvable_environment):
-    """The refusal is about the *default*, not about the operator's right to answer by variable.
-
-    One command from each half, because both read the same `ENVIRONMENT` and this is not a claim that
-    needs ten. The `--yes` on the team-account command keeps the confirmation gate out of the way, so
-    the only question the run answered was the environment — and it answered it with the variable.
-
-    The tunnel is handed no `--team`: the option is off it, and this is the assertion that a
-    run built that way still reads the variable rather than inventing a name for the second half.
-    """
+    """The refusal is about the *default*, not about the operator's right to answer by variable."""
     monkeypatch.setenv("ENVIRONMENT", "dev")
     monkeypatch.delenv("TEAM", raising=False)
 

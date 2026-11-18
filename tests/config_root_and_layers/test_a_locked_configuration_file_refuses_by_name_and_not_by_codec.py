@@ -1,51 +1,4 @@
-"""A locked configuration file is refused by name and not by codec.
-
-`UnicodeDecodeError` is a `ValueError` and not an `OSError`, and before this ticket that fact made
-every read of an encrypted kubementat file answer the same question in its own words: four sites
-caught it and described it in four different sentences, two did not catch it at all, and
-`config_init.cluster_is_unaddressed` swallowed it and answered *"this environment addresses no
-cluster"* — the one place in `src/` that printed a confident falsehood about a file it had never
-read. The seam is `read_decrypted(path, what)` in `kubementat/core/config/reads.py`, and the rule it
-enforces is **one sentence, many error types**: every caller keeps its own exception and its own
-shape, and the sentence is the same one.
-
-Eight claims, one per read that the census measured, plus two about what the seam must not do:
-
-1. `Config._load_json_file` — the bottom of the encrypted-value graph, which everything downstream
-   (`infrastructure/helm.py`, `infrastructure/grafana/client.py`, `infrastructure/tekton`,
-   `automations/`, `config show`) reads
-   through. A locked layer file refuses with the file's name and git-crypt.
-2. `config_init._read_document` — the read-modify-write verbs (`config set`, `config unset`,
-   `config set --generate`). It keeps its own refusal wording for unreadable and non-JSON, which is
-   why a `LockedConfigFileError` (a `KubementatError`, not an `OSError`) walks past that handler
-   intact.
-3. `config_init.cluster_is_unaddressed` — the fixed site. An undecodable file **raises**; absent,
-   `null` and blank still answer `True`. Both halves are asserted here because the bug was the
-   confusion between them, and the old docstring's rationalization of the swallowing is gone.
-4. `config_validate._read_object_file` — a locked file becomes the finding
-   `locked-configuration-file` and validate **keeps collecting** the rest of the tree's faults. A
-   verdict command that raises early stops being a verdict.
-5. `config_validate._cluster_fact_finding` — silent about a file it could not read. It used to print
-   "is null" over exactly that file, which is the same false sentence as row 3 wearing a warning.
-6. `core/identity/registry._static_declaration` and 7. `core/identity/kubeconfig._read_kubeconfig` —
-   the cluster-resolution reads. Both re-raise `ClusterFileUnreadableError`, the cluster layer's own
-   refusal type, with the seam's sentence inside it and neither rewriting it. Both now live one level
-   below the resolver that calls them, which is why both rows below carry their own path.
-8. `infrastructure/helm.refuse_locked_operator_values` — the operator's component layers, read
-   before helmfile starts. These are the files helm opens after the template's `isFile` guard, and
-   ciphertext reaching helm would die as apply output that never says the word "unlock"; the seam
-   read turns that into a refusal naming the file.
-9. **The seam does not route around `missing_team_config_files`.** A missing *optional* team file
-   still degrades the way it did: a warning at load and a named refusal at read. This is the
-   falsification of the seam's own boundary — `FileNotFoundError` propagates and nothing converts it.
-10. **The census is a test.** The read graph is walked out of the tree rather than asserted from a
-   list, so a read that forgets the seam fails here.
-
-Falsifications run while writing this file, each one breaking what it names: letting one site keep
-its own `read_text` fails that site's row and the census row alone; making `cluster_is_unaddressed`
-answer `True` over ciphertext fails row 3 alone; making `read_decrypted` raise on a missing file
-fails row 8 alone.
-"""
+"""A locked configuration file is refused by name and not by codec."""
 
 import json
 import logging
@@ -77,12 +30,7 @@ CODEC = "codec"
 
 
 def refused_by_name(message: str, path) -> None:
-    """The sentence these tests actually check: the file, asked about as git-crypt's.
-
-    Deliberately not `pytest.raises`-style matching on the exception: the row is about what an
-    operator reads, so it is asserted on the string and the same assertion holds whether the site
-    raised a `ClickException`, its own named error, or reported a finding.
-    """
+    """The sentence these tests actually check: the file, asked about as git-crypt's."""
     text = str(message)
     assert str(path) in text, f"the refusal does not name the file: {text}"
     assert GIT_CRYPT in text, f"the refusal never asks about git-crypt: {text}"
@@ -127,11 +75,7 @@ def a_config(root, team=None) -> Config:
 
 
 def test_a_locked_file_refuses_config_unset_because_unset_reads_the_whole_layer_pair(tmp_path):
-    """The verb the spec never named: `unset` opens both files of the layer, locked or not.
-
-    It is the same refusal wearing a different verb, which is the point of one seam — the sentence
-    is not written per call site.
-    """
+    """`config unset` opens both files of the layer, so a locked one refuses it."""
     root = tmp_path / "config"
     config_init.init_configuration(root=root, environment=ENVIRONMENT)
     locked = lock(root / ENVIRONMENT / "static.encrypted.json")
@@ -148,12 +92,7 @@ def test_a_locked_file_refuses_config_unset_because_unset_reads_the_whole_layer_
 
 
 def test_cluster_is_unaddressed_raises_over_a_locked_file_and_never_answers_true(tmp_path):
-    """The worst failure in the tree used to be this function's silence.
-
-    It answered *"this environment addresses no cluster"* over bytes it had not decoded, and its
-    docstring argued that a broken read is "the tree's own problem". Both halves are gone: the
-    predicate is allowed to say `True` only about a file that told it so.
-    """
+    """The worst failure in the tree used to be this function's silence."""
     locked = lock(tmp_path / "static.json")
 
     with pytest.raises(LockedConfigFileError) as refused:
@@ -165,11 +104,7 @@ def test_cluster_is_unaddressed_raises_over_a_locked_file_and_never_answers_true
 @pytest.mark.parametrize("document", [None, {"CLUSTER_KUBE_CONTEXT": None},
                                       {"CLUSTER_KUBE_CONTEXT": "   "}])
 def test_cluster_is_unaddressed_still_answers_true_for_the_three_states_that_mean_nothing(tmp_path, document):
-    """Absent, `null`, and blank — the half of the predicate that is *not* the bug.
-
-    A fixed refusal must not become a predicate that refuses to answer its real question, because
-    `config init` prints this sentence on every fresh tree that has not named a context yet.
-    """
+    """Absent, `null`, and blank — the half of the predicate that is *not* the bug."""
     path = tmp_path / "static.json"
     if document is None:
         assert config_init.cluster_is_unaddressed(path) is True
@@ -191,11 +126,8 @@ def a_validated_tree(tmp_path, team=TEAM) -> Path:
 
 
 def test_validate_never_prints_cluster_not_addressed_about_a_file_it_could_not_read(tmp_path):
-    """The rule that a warning may not state what a file never answered, aimed at the second site
-    that was saying it wrongly.
-
-    With `CLUSTER_KUBE_CONTEXT` unreadable the honest statement is the locked-file finding; a
-    "the cluster is null" warning would put the falsehood back in, only quieter.
+    """The rule that a warning may not state what a file never answered, aimed at the second site that
+    was saying it wrongly.
     """
     root = a_validated_tree(tmp_path)
     lock(root / ENVIRONMENT / "static.json")
@@ -207,11 +139,7 @@ def test_validate_never_prints_cluster_not_addressed_about_a_file_it_could_not_r
 
 
 def test_the_predicate_says_nothing_about_a_locked_file_to_the_verdict_that_asks(tmp_path):
-    """The same claim one level down, where the warning is built: no finding at all, not a raise.
-
-    `_cluster_fact_finding` is called on a tree it cannot read. It collects nothing and prints
-    nothing, and the finding that *is* about the file is the one `validate` raises on its own read.
-    """
+    """The same claim one level down, where the warning is built: no finding at all, not a raise."""
     root = a_validated_tree(tmp_path)
     lock(root / ENVIRONMENT / "static.json")
     findings = []
@@ -232,12 +160,7 @@ def test_the_predicate_says_nothing_about_a_locked_file_to_the_verdict_that_asks
 
 
 def test_a_missing_environment_layer_file_is_still_file_not_found(tmp_path):
-    """The same boundary one level up, where nothing guards the read first.
-
-    The environment-level files are not optional, so `Config` reaches them without asking whether
-    they are there, and the answer has to stay "this file was never created" — not "locked", which
-    would send an operator to run `git-crypt unlock` against a tree that has no ciphertext in it.
-    """
+    """The same boundary one level up, where nothing guards the read first."""
     root = config_root(tmp_path)
     (root / "platform_config" / ENVIRONMENT / "static.encrypted.json").unlink()
 
@@ -272,14 +195,7 @@ SRC = REPO_ROOT / "src"
 
 
 def test_a_locked_layer_file_is_rendered_as_one_error_line_and_never_as_a_traceback(tmp_path):
-    """The rendering is product: exit 1 and one sentence, because the fix is `git-crypt unlock`.
-
-    The exception is one of the tree refusals that the `config` verbs raise on their way, with no
-    `Context` built and therefore none of the decorator's wrapping. The root group renders it, which
-    is the whole point of putting the rendering there instead of leaving it to the decorated half:
-    a run of `kmt config show` over the same tree the read seam refuses prints the sentence and
-    nothing else.
-    """
+    """The rendering is product: exit 1 and one sentence, because the fix is `git-crypt unlock`."""
     root = tmp_path / "config"
     config_init.init_configuration(root=root, environment=ENVIRONMENT)
     locked = lock(root / ENVIRONMENT / "static.encrypted.json")

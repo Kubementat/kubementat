@@ -1,28 +1,4 @@
-"""Measured: two clusters in one process, and the constructor that never asks.
-
-The design buys this property here rather than paying for it later, because the future library API
-is the thing that needs two clusters alive at once and the alternative — sweeping every
-module that holds a kubernetes read later — is a worse ticket. So these tests are not a survey of the constructor;
-they are the two claims the design rests on, each asserted once and each with its opposite shown to
-be true of the shape it replaces.
-
-**The property.** Nothing in the construction path reads or writes process state, so two
-`KubernetesUtils` objects built from two `ClusterTarget`s answer for their own cluster, and building
-the second does not change the first. The suite's two guard tests keep the ambient loader out of
-`src/`;
-this file proves what their absence buys, because "no global is touched" is only worth something if
-"and the clients therefore disagree, correctly" is also true.
-
-**The laziness.** No client is built until one is asked for, and the reason is a command, not a
-benchmark: `kmt initialize` builds `Automation`, `Automation` builds this object, and `initialize`
-writes JSON files and contacts nothing. A constructor that resolved a kubeconfig made that command
-fail on a host that has none — which is why the refusal of a `target=None` `Context` lives where the
-client is built and not in the constructor: refusing early is not safety, it is the same
-failure with a shorter traceback.
-
-The negative controls at the end exist so the two assertions above are not decorative: each shows the
-shape the design replaces, in the same fixture, giving the wrong answer.
-"""
+"""Measured: two clusters in one process, and the constructor that never asks."""
 
 import pytest
 from cluster_fixture import DEV_SERVER, PROD_SERVER, UNREAD_ROOT, write_kubeconfig
@@ -36,34 +12,17 @@ from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 @pytest.fixture
 def two_clusters(tmp_path):
-    """One kubeconfig file holding two clusters, in a `tmp_path` no other test can see.
-
-    Both contexts live in one file because that is how the property reads from the caller's side: the
-    file is not the scarce thing, the answer is. Nothing here is contacted — resolving a context to an
-    address is a YAML read and building a client is a `Configuration`, so this fixture is the
-    whole of what the cluster means.
-    """
+    """One kubeconfig file holding two clusters, in a `tmp_path` no other test can see."""
     return write_kubeconfig(tmp_path / "kubeconfig", {"dev": DEV_SERVER, "prod": PROD_SERVER})
 
 
 def target_on(kubeconfig, context):
-    """The same construction a resolved `Context` would carry, minus the resolution.
-
-    `from_kubeconfig` is the only constructor the resolution order selects, so this is a real target
-    and not a
-    stub: it carries the address the 1:1 check compares and the path a client will be read from.
-    """
+    """The same construction a resolved `Context` would carry, minus the resolution."""
     return ClusterTarget.from_kubeconfig(str(kubeconfig), context, context)
 
 
 def test_two_targets_in_one_process_never_share_a_client(two_clusters, monkeypatch):
-    """Two `KubernetesUtils`, two clusters, neither one overwriting the other.
-
-    The order is the test. `dev` is asked first and `prod` second, and then `dev` is asked again —
-    because the way this fails is not a crash, it is `dev` quietly answering for `prod` after the
-    second object is built. That is the exact interference — namespace on cluster A, release on
-    cluster B — this design prevents, and it is why the second read matters more than the first.
-    """
+    """Two `KubernetesUtils`, two clusters, neither one overwriting the other."""
     # Starting clean, so that the assertion at the end means what it says and not what some earlier
     # test left behind. No global `Configuration` may be installed to build either client, and
     # `load_kube_config` is one of the things that does exactly that (shown below), so a return to it
@@ -95,16 +54,7 @@ def test_two_targets_in_one_process_never_share_a_client(two_clusters, monkeypat
 
 def test_building_the_utils_resolves_nothing_so_initialize_can_run_without_a_kubeconfig(
         tmp_path, monkeypatch):
-    """As a failure mode: the constructor may not touch a kubeconfig, in any of its forms.
-
-    The kubeconfig this target points at does not exist, so *anything* that reads it here would raise
-    on the spot — a constructor that loaded eagerly fails this test the way it fails the command. The
-    loader is also watched directly, so the first half is not inferred from the absence of an error.
-
-    The second half is the other half of laziness: the client *is* built the moment an API object is
-    asked for. A lazy constructor that stayed lazy forever would be a bug of a different kind, and
-    both directions are asserted here so the seam cannot drift either way.
-    """
+    """As a failure mode: the constructor may not touch a kubeconfig, in any of its forms."""
     loads = []
 
     def watching_loader(*args, config_file=None, context=None, **kwargs):
@@ -126,17 +76,7 @@ def test_building_the_utils_resolves_nothing_so_initialize_can_run_without_a_kub
 
 
 def test_a_client_cannot_be_built_against_an_unresolved_target(monkeypatch):
-    """`Context.require_target`'s first call site — the guard that must not be decorative.
-
-    Ticket 4 left the guard with no caller and said so, which is the right thing to do to a guard and
-    the wrong thing to leave it doing. It has one now, and it is placed where the client is built
-    rather than in the constructor, for the reason the laziness test above gives: `kmt initialize`
-    builds this object through `Context.for_configuration`, and an early refusal would have failed the
-    very command whose `target` is `None` on purpose.
-
-    So the sequence is: constructing is legal, touching nothing is legal, and asking for a client is
-    what says the sentence — naming the key that would fix it.
-    """
+    """`Context.require_target`'s first call site — the guard that must not be decorative."""
     asked = []
     monkeypatch.setattr(ClusterTarget, "client",
                         lambda self: asked.append(self) or client.ApiClient())

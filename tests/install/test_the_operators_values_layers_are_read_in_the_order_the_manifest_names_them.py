@@ -1,39 +1,4 @@
-"""The operator's values layer, read in the order the manifest names it.
-
-The rule under test is one sentence: a release's `values:` list is the shipped default and then
-exactly one operator file, `<root>/<environment>/values/<component>.encrypted.yaml`. helm merges
-`-f` arguments in the order they arrive, so the order is the whole of the precedence, and an
-operator layer that is not there must cost nothing.
-
-The single file exists because kubementat's components are cluster-wide: a team has no
-cluster-wide answer to give a component, so no values path resolves through a team directory, and
-the layer that carries key material is named after the `*.encrypted.*` pattern git-crypt declares,
-so it is encrypted by its name rather than by living in a directory the declaration does not match.
-
-Both halves of the precedence sentence belong to helmfile, not to this repository: the order it
-hands `helm` comes out of its own templating, and a warning about a file it could not read is its
-own. So these tests run the binary rather than restating its behaviour in Python, which is the only
-honest way to check a gotmpl. It is also how the two failures this test exists to end would show
-up:
-
-* a values file listed but absent is fatal (measured on helmfile 1.7.0), so a rule
-  that listed the candidate unconditionally would break every tree that declares nothing; and
-* The per-entry `missingFileHandler` a values entry could carry turns out not to exist in
-  1.7.0 -- measured: a values entry written as a mapping is read as inline values, so the handler
-  would land in the chart's values and the file would still be fatal. Which leaves `isFile` guards,
-  and a guard that silently evaluated `false` would look identical to a tree that declares nothing.
-
-Two harnesses, because the shipped releases read charts over a network:
-
-* `resolved_values_lists` reads the **shipped manifest** with `helmfile build`, whose output is the
-  desired state after templating -- literally "the order helmfile was handed".
-* `render_merged_values` renders a scratch tree: the shipped `kubementat-operator-values` block,
-  sliced out of the shipped manifest rather than transcribed, plus one local chart. That is where
-  "which layer won" and "did it warn" can actually be read.
-
-Neither writes into the repository, and neither needs a cluster: `build` resolves and `template`
-renders, and both work against a local chart.
-"""
+"""The operator's values layer, read in the order the manifest names it."""
 
 import os
 import shutil
@@ -69,13 +34,7 @@ PROBE_KEYS = ("product", "operator")
 
 
 def child_environment(root=None, environment=ENVIRONMENT):
-    """The two coordinates a packaged manifest reads for its values, plus what templating needs.
-
-    `KUBEMENTAT_CONFIG_ROOT` and `KUBEMENTAT_ENVIRONMENT` are what
-    `export_configuration_coordinates` in `infrastructure/helm.py` writes before helmfile starts,
-    and they are the manifest's only way to address the operator's tree. Passing no root answers a
-    hand-run helmfile, which exports nothing and should apply exactly the shipped defaults.
-    """
+    """The two coordinates a packaged manifest reads for its values, plus what templating needs."""
     child = dict(os.environ)
     for name in ("KUBEMENTAT_CONFIG_ROOT", "KUBEMENTAT_ENVIRONMENT", "KUBEMENTAT_TEAM"):
         child.pop(name, None)
@@ -93,19 +52,15 @@ def child_environment(root=None, environment=ENVIRONMENT):
 
 def run_helmfile(cwd, *arguments, **env_overrides):
     """One helmfile run: exit status, stdout, stderr. Nothing is swallowed, because stderr is an
-    assertion target (it is where helmfile's warning about a missing file lives)."""
+    assertion target (it is where helmfile's warning about a missing file lives).
+    """
     child = child_environment(**env_overrides)
     return subprocess.run([HELMFILE, *arguments], cwd=str(cwd), env=child,
                           capture_output=True, text=True)
 
 
 def resolved_values_lists(root=None, environment=ENVIRONMENT):
-    """`{release: [values entries in the order helmfile will hand them to helm]}`.
-
-    `helmfile build` prints the desired state after templating, so this is what the rule asks for
-    as "the order helmfile was handed" -- it is produced by helmfile, not by a parser that read the
-    manifest looking for lines that look like the rule.
-    """
+    """`{release: [values entries in the order helmfile will hand them to helm]}`."""
     result = run_helmfile(values_path(), "-f", str(MANIFEST), "build",
                           root=root, environment=environment)
     assert result.returncode == 0, f"`helmfile build` said: {result.stderr.strip()}"
@@ -115,11 +70,7 @@ def resolved_values_lists(root=None, environment=ENVIRONMENT):
 
 
 def listed_files(release_values):
-    """The paths a release's `values:` list names, in order, with inline entries dropped.
-
-    An inline entry is what the product contributes (`adminUser`, `ingressClass`), never a file, so
-    the layering question is only ever about the strings.
-    """
+    """The paths a release's `values:` list names, in order, with inline entries dropped."""
     return [str(entry).replace("\\", "/") for entry in release_values if isinstance(entry, str)]
 
 
@@ -157,12 +108,7 @@ PROBE_RELEASE = """releases:
 
 
 def shipped_operator_block():
-    """The shipped manifest's `kubementat-operator-values` definition, verbatim.
-
-    That this is a slice of the shipped file rather than a transcription is the point: a test that
-    re-typed the rule would keep passing after the rule changed, which is exactly how a guard like
-    this one becomes decoration.
-    """
+    """The shipped manifest's `kubementat-operator-values` definition, verbatim."""
     text = MANIFEST.read_text(encoding="utf-8")
     start = text.index('{{- define "kubementat-operator-values"')
     block = text[start:text.index("# Releases configuration for deployments", start)]
@@ -178,12 +124,7 @@ def shipped_operator_block():
 
 
 def scratch_tree(tmp_path):
-    """A tree that renders. Returns `(configuration_root, state_directory)`.
-
-    The two are siblings under `tmp_path` and neither is the repository: the configuration root is
-    what `KUBEMENTAT_CONFIG_ROOT` is pointed at, and the state directory holds the manifest and the
-    chart and is helmfile's working directory.
-    """
+    """A tree that renders. Returns `(configuration_root, state_directory)`."""
     state_directory = tmp_path / "state"
     configuration = tmp_path / "platform_config"
     (state_directory / "layerprobe" / "templates").mkdir(parents=True)
@@ -199,12 +140,7 @@ def scratch_tree(tmp_path):
 
 def declare(root, component, values, environment=ENVIRONMENT, directory="values",
             suffix=".encrypted.yaml"):
-    """Write one operator values file where the tree's layout puts it, and nothing else.
-
-    No `static.json`, no `.gitattributes`, no directory this function was not told to create. The
-    keyword arguments exist for the one test that puts files where the rule does *not* read them,
-    so the addresses the manifest ignores are provable and not assumed.
-    """
+    """Write one operator values file where the tree's layout puts it, and nothing else."""
     target = root / environment / directory
     target.mkdir(parents=True, exist_ok=True)
     path = target / f"{component}{suffix}"
@@ -213,11 +149,7 @@ def declare(root, component, values, environment=ENVIRONMENT, directory="values"
 
 
 def render_merged_values(configuration, state_directory, environment=ENVIRONMENT):
-    """helmfile's answer as `(the merged values, the missing-file warnings it produced)`.
-
-    The warnings are returned rather than asserted here because "one warning is the most a quiet
-    tree is allowed to produce" is a count, and a count belongs to the test that states it.
-    """
+    """helmfile's answer as `(the merged values, the missing-file warnings it produced)`."""
     result = run_helmfile(state_directory, "-f", "helmfile.yaml.gotmpl", "template",
                           root=configuration, environment=environment)
     warnings = [line for line in result.stderr.splitlines()
@@ -236,11 +168,7 @@ def render_merged_values(configuration, state_directory, environment=ENVIRONMENT
 
 @helmfile_only
 def test_the_operator_layer_is_handed_after_the_default_and_nothing_is_handed_after_it(tmp_path):
-    """The resolved list of a release whose operator file exists, as helmfile printed it.
-
-    This is the ordering assertion the rule asks for, and it is the binary's own answer: the shipped
-    default, then the one layer. No team entry follows -- a team address is not a values address.
-    """
+    """The resolved list of a release whose operator file exists, as helmfile printed it."""
     configuration, _ = scratch_tree(tmp_path)
     written = declare(configuration, COMPONENT, {"layer": "environment"})
     environment_directory = configuration / ENVIRONMENT
@@ -254,11 +182,7 @@ def test_the_operator_layer_is_handed_after_the_default_and_nothing_is_handed_af
 
 @helmfile_only
 def test_an_operator_override_wins_over_the_default_and_leaves_the_rest_to_it(tmp_path):
-    """The order above is not decoration: one rendered chart says which layer answered each key.
-
-    The layer is read after the default, so it overrides the product's own key and touches nothing
-    else; a key it never declares stays answered by the shipped file.
-    """
+    """The order above is not decoration: one rendered chart says which layer answered each key."""
     configuration, state_directory = scratch_tree(tmp_path)
     declare(configuration, "layerprobe", {"operator": "operator-won"})
 
@@ -276,13 +200,7 @@ def test_an_operator_override_wins_over_the_default_and_leaves_the_rest_to_it(tm
 
 @helmfile_only
 def test_a_tree_that_declares_no_layer_warns_about_nothing_and_writes_the_default(tmp_path):
-    """One candidate file, none of them there, and a tree that says nothing.
-
-    The count is the assertion. helmfile's default handler is `Error`, so a rule that listed the
-    file unconditionally would end this run before it rendered anything, and the release-level
-    `Warn` that is the only handler 1.7.0 has would leave a warning about a file its operator never
-    intended to write. One is the most this tree is allowed to produce.
-    """
+    """One candidate file, none of them there, and a tree that says nothing."""
     configuration, state_directory = scratch_tree(tmp_path)
     (configuration / ENVIRONMENT).mkdir(parents=True)
 
@@ -298,8 +216,9 @@ def test_a_tree_that_declares_no_layer_warns_about_nothing_and_writes_the_defaul
 
 @helmfile_only
 def test_a_key_that_lives_only_in_the_layer_is_still_applied(tmp_path):
-    """The done-when for this rule. No plain file exists anywhere, and the key is only ever written
-    in `<component>.encrypted.yaml`. A rule that looked for the plain name answers `product-default`."""
+    """The done-when for this rule. No plain file exists anywhere, and the key is only ever written in
+    `<component>.encrypted.yaml`. A rule that looked for the plain name answers `product-default`.
+    """
     configuration, state_directory = scratch_tree(tmp_path)
     declare(configuration, "layerprobe", {"operator": "encrypted-only"})
 
@@ -311,10 +230,6 @@ def test_a_key_that_lives_only_in_the_layer_is_still_applied(tmp_path):
 
 def test_the_layer_is_named_as_the_encryption_declaration_reads_it():
     """The `.encrypted.` half is what puts the file under `*.encrypted.*`, so it must be the name.
-
-    A layer that moved into a `values.encrypted/` directory would put its key material where the
-    git-crypt declaration does not look -- the whole protection story rests on the file's name, so
-    this is asserted on the shipped manifest and not on a scratch tree.
     """
     body = MANIFEST.read_text(encoding="utf-8")
 
@@ -327,12 +242,7 @@ def test_the_layer_is_named_as_the_encryption_declaration_reads_it():
 
 
 def test_the_manifest_hands_its_component_name_to_the_operator_layer():
-    """Every release block passes its own `component_name` label, not its release name.
-
-    The two prometheus exporters and `polaris` are what make this a check: for them the label, the
-    release name and the chart name are three different strings, and a block that passed its release
-    name would still render -- and read a file nobody writes.
-    """
+    """Every release block passes its own `component_name` label, not its release name."""
     body = MANIFEST.read_text(encoding="utf-8")
     labelled = body.splitlines()
     labelled = [line.split("component_name:")[1].strip() for line in labelled
@@ -354,13 +264,6 @@ def test_the_manifest_hands_its_component_name_to_the_operator_layer():
 
 def test_no_release_block_carries_a_per_release_missing_file_handler():
     """The handler is absent on purpose, and a `Warn` put back on a release would be the wrong fix.
-
-    helmfile 1.7.0 has no per-values-file handler -- measured: a values entry written as a mapping
-    is read as inline values, so `- missingFileHandler: Warn` puts that word and a `values:` key
-    into the chart's values and still fails the apply on the missing file. The only handler left is
-    the release's own, and it silences a missing *product* default as well: a shipped file that
-    moved would install chart defaults while the manifest looked satisfied. So the manifest keeps
-    helmfile's default `Error` handler and guards the operator entry with `isFile` instead.
     """
     body = MANIFEST.read_text(encoding="utf-8")
     live = [line for line in body.splitlines() if not line.lstrip().startswith("#")]
@@ -371,8 +274,9 @@ def test_no_release_block_carries_a_per_release_missing_file_handler():
 
 
 def test_the_operator_layer_is_addressed_by_the_two_coordinates_and_by_nothing_else():
-    """The coordinate rule, asserted as text. No path in the manifest names the checkout, and a
-    team coordinate reaches no values path, because a cluster-wide component has no team address."""
+    """The coordinate rule, asserted as text. No path in the manifest names the checkout, and a team
+    coordinate reaches no values path, because a cluster-wide component has no team address.
+    """
     body = MANIFEST.read_text(encoding="utf-8")
     live = "\n".join(line for line in body.splitlines() if not line.lstrip().startswith("#"))
 

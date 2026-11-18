@@ -1,16 +1,4 @@
-"""`GrafanaClient` answers, or it raises. Nothing in between, and no socket.
-
-Four shapes of failure made `cap:create-grafana-accounts` green while it created nothing, and each
-one is asserted here as a raised exception rather than remembered as a rule: a curl that could not
-connect inside a command substitution, a 2xx with an empty body, a `jq` read of that empty body
-that exited **0** with no output, and the `if` that read the nothing as "the user already exists".
-The tests are driven by a fake session, so every one of them is about what the client decides, and
-none of them is about whether something is listening on a port.
-
-The second half of the file is the credential rule: the pair comes from the environment's
-`static.encrypted.json`, which is the file `infrastructure/helm.py` installs grafana from, and a key that is
-not in that file is an error before a request, not a 401 afterwards.
-"""
+"""`GrafanaClient` answers, or it raises. Nothing in between, and no socket."""
 
 import json
 import logging
@@ -60,12 +48,7 @@ def ok(payload):
 
 
 class FakeSession:
-    """`requests.Session` for this module: remembers calls, answers from a queue or a callable.
-
-    One `answers` per (method, path) is what a caller that makes three requests has to write, and a
-    callable keyed on the call is what a test that needs *different* answers to the *same* call
-    needs -- so both are here, and neither of them is a socket.
-    """
+    """`requests.Session` for this module: remembers calls, answers from a queue or a callable."""
 
     def __init__(self, answers=None, response=None, error=None):
         self.calls = []
@@ -100,11 +83,7 @@ class FakeSession:
 
 
 def client_with(session=None, **kwargs):
-    """A client wired to the fake transport, with sane defaults the tests do not repeat.
-
-    Any keyword wins, so a test that wants the token path or a different address is saying so and
-    not building a second harness.
-    """
+    """A client wired to the fake transport, with sane defaults the tests do not repeat."""
     settings = {"base_url": BASE_URL, "admin_user": ADMIN, "admin_password": ADMIN_PASSWORD}
     settings.update(kwargs)
     return GrafanaClient(session=session or FakeSession(), **settings)
@@ -167,11 +146,7 @@ def test_the_credentials_are_read_from_the_environments_encrypted_file():
 
 
 def test_the_credentials_come_from_the_file_a_config_reader_actually_opens(tmp_path):
-    """The same reader `infrastructure/helm.py` uses, over a real `Config` on a real path.
-
-    A recording config proves which category is asked for; only a file on disk proves that the key
-    the operator wrote is the key the client sends.
-    """
+    """The same reader `infrastructure/helm.py` uses, over a real `Config` on a real path."""
     environment_dir = tmp_path / "platform_config" / "dev"
     environment_dir.mkdir(parents=True)
     (environment_dir / "static.json").write_text(json.dumps(
@@ -204,11 +179,8 @@ def test_an_environment_that_names_no_admin_and_no_token_is_refused_before_anyth
 
 
 def test_an_admin_user_with_no_password_is_refused_rather_than_answered_with_a_401():
-    """`HelmUtils` in `infrastructure/helm.py` only warns about a missing password, and there the install can still run.
-
-    Here the read is the whole command, and an empty password sends a real request that grafana
-    rejects for the wrong reason: it would say *the credential* is bad when what is missing is the
-    password that belongs to a user who does exist.
+    """`HelmUtils` in `infrastructure/helm.py` only warns about a missing password, and there the
+    install can still run.
     """
     class ScratchConfig:
         platform_config_dir = "/tmp/platform_config_under_test"
@@ -227,12 +199,7 @@ def test_an_admin_user_with_no_password_is_refused_rather_than_answered_with_a_4
 
 
 def test_a_blank_base_url_is_refused_because_the_scripts_default_made_the_row_vacuous():
-    """`http://127.0.0.1:31827` was the answer to an empty argument. This is the fix for that.
-
-    It is not that a tunnel on 31827 is wrong — it is that a *default* is the wrong way to pick an
-    address, because the address is the one fact here that a lane cannot check by reading the
-    config.
-    """
+    """`http://127.0.0.1:31827` was the answer to an empty argument. This is the fix for that."""
     with pytest.raises(GrafanaConfigurationError) as raised:
         client_with(base_url="", session=FakeSession())
     assert "127.0.0.1:31827" in str(raised.value), str(raised.value)
@@ -259,12 +226,7 @@ def test_two_accounts_sharing_one_email_is_not_resolved_by_picking_the_first():
 
 
 def test_a_search_that_answers_no_directory_at_all_is_not_read_as_an_absent_account():
-    """An empty `users` array is an answer. An object with no `users` key is not.
-
-    Getting those two wrong is the same bug with a different face: one guesses "not there" and
-    creates a duplicate, the other guesses "not there" and creates an account that grafana already
-    has, and both come out green.
-    """
+    """An empty `users` array is an answer. An object with no `users` key is not."""
     session = FakeSession(response=ok({"totalCount": 7}))
     with pytest.raises(GrafanaError) as raised:
         client_with(session).find_user(EMAIL)
@@ -305,9 +267,10 @@ def test_a_create_that_named_no_password_returns_the_one_this_run_generated():
 
 def test_a_generated_password_is_made_in_this_process_because_the_helper_used_gpg(
         monkeypatch):
-    """`gpg --gen-random --armor 1 14` is a subprocess, and a library that needs no shell should
-    not acquire one to make a string. `secrets` answers the same need; the assertion is about
-    which generator is called, not about the randomness."""
+    """`gpg --gen-random --armor 1 14` is a subprocess, and a library that needs no shell should not
+    acquire one to make a string. `secrets` answers the same need; the assertion is about which
+    generator is called, not about the randomness.
+    """
     called = []
 
     def fake_token_urlsafe(length):
@@ -322,8 +285,9 @@ def test_a_generated_password_is_made_in_this_process_because_the_helper_used_gp
 
 
 def test_a_200_that_named_no_user_is_a_failure_rather_than_a_success():
-    """The create side of the same hole. `jq -r '.id'` on nothing prints `null`, and the payload
-    that came back with no id is not evidence that anybody exists."""
+    """The create side of the same hole. `jq -r '.id'` on nothing prints `null`, and the payload that
+    came back with no id is not evidence that anybody exists.
+    """
     session = FakeSession(response=ok({"message": "User created"}))
     with pytest.raises(GrafanaError) as raised:
         client_with(session).create_user(EMAIL, NAME, PASSWORD)
@@ -353,8 +317,9 @@ def test_an_account_that_is_already_there_is_reported_as_existing_and_creates_no
 
 def test_an_account_that_exists_and_a_password_named_for_it_says_the_password_was_not_applied(
         caplog):
-    """Silence here would be a lie: the config has a password, the account has a different one,
-    and a rerun that quietly keeps the old login has to say so rather than store the fiction."""
+    """Silence here would be a lie: the config has a password, the account has a different one, and a
+    rerun that quietly keeps the old login has to say so rather than store the fiction.
+    """
     session = FakeSession(response=ok({"totalCount": 1, "users": [
         {"id": 17, "login": EMAIL, "email": EMAIL, "name": NAME}]}))
     with caplog.at_level(logging.WARNING):
@@ -364,8 +329,9 @@ def test_an_account_that_exists_and_a_password_named_for_it_says_the_password_wa
 
 
 def test_a_duplicate_that_grafana_refuses_to_name_is_reported_as_a_failure():
-    """412 says duplicate, the search says nobody. Either way nothing was created, so the message
-    has to say that and not blame an account that may not exist."""
+    """412 says duplicate, the search says nobody. Either way nothing was created, so the message has
+    to say that and not blame an account that may not exist.
+    """
     session = FakeSession(answers={
         ("GET", grafana_client.USER_SEARCH): ok({"users": [], "totalCount": 0}),
         ("POST", grafana_client.ADMIN_USERS): FakeResponse(
@@ -405,10 +371,10 @@ def test_setting_a_password_addresses_the_account_grafana_named_and_not_the_emai
 
 
 def test_adding_an_account_to_a_team_is_the_call_the_helper_named_and_never_made():
-    """`create_user` took `team_id`, threaded it along, and dropped it in the payload. This is the
-    call that sentence describes, held back until a decision lands on whether the config's rows
-    carry a
-    team — so nothing in this tree calls it, and the test is what keeps it from rotting."""
+    """`create_user` took `team_id`, threaded it along, and dropped it in the payload. This is the call
+    that sentence describes, held back until a decision lands on whether the config's rows carry a
+    team — so nothing in this tree calls it, and the test is what keeps it from rotting.
+    """
     session = FakeSession(response=ok({"message": "Member added"}))
     client_with(session).add_user_to_team(17, 2)
     call = session.calls[0]
@@ -448,11 +414,7 @@ def test_a_forbidden_that_is_not_about_credentials_still_carries_grafanas_messag
 
 
 def test_an_address_that_refuses_the_connection_is_not_reported_as_a_bad_credential():
-    """`curl` inside `$(...)` lost this one entirely, and the row stayed green.
-
-    The distinction the client has to get right: nothing answered is not a rejected credential,
-    and the fix is an address rather than a password.
-    """
+    """`curl` inside `$(...)` lost this one entirely, and the row stayed green."""
     session = FakeSession(error=requests.ConnectionError("Connection refused"))
     with pytest.raises(GrafanaError) as raised:
         client_with(session).find_user(EMAIL)
@@ -470,8 +432,9 @@ def test_a_timeout_raises_the_same_kind_of_error_as_a_refused_connection():
 
 
 def test_a_rejected_create_does_not_repeat_the_password_it_was_refusing():
-    """The password goes in the request body, which is where it belongs; the exception is a
-    message an operator pastes into a ticket, and a secret in a log line is a second leak."""
+    """The password goes in the request body, which is where it belongs; the exception is a message an
+    operator pastes into a bug report, and a secret in a log line is a second leak.
+    """
     session = FakeSession(response=FakeResponse(400, payload={"message": "email is invalid"}))
     with pytest.raises(GrafanaError) as raised:
         client_with(session).create_user(EMAIL, NAME, PASSWORD)

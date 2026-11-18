@@ -1,35 +1,4 @@
-"""`config set --generate` invents a value, and **no key is special**.
-
-The rule is one sentence: kubementat keeps no list of secrets that behave differently from any
-other answer. What differs is only *who supplied the value*, so the deliverable here is not the random
-string — it is a verb that will not write one where something already answers, and a verb that cannot
-tell what kind of key it is looking at. The nine tests below are the same claim from nine directions:
-refusal, layering, the file the flag chooses, and the key that has nothing to do with secrets.
-
-**The refusal is the ticket.** A generate that overwrote would make the act of touching a directory the
-way a credential is lost, so `generate_answer` is `unset_answer`'s mirror: the same searched-file set,
-the same "answers nothing", and a sentence that names the key, the file that answers, the layer that
-file belongs to, and the two-step that rotates it. Test 2 asserts the tree byte-for-byte afterwards,
-because "refuses" without "writes nothing" is only half of the promise.
-
-**The null case is where "absent" and "null" are pinned.** `null` answers nothing, so
-`--generate CLUSTER_KUBE_CONTEXT` on the environment layer — whose file `init` left holding that very
-null — must **succeed**. It is the one place `generate_answer`'s question differs from `unset`'s
-"is this key declared", and the reason it differs is that the answer to be taken away is not there.
-
-**No key class is required, and one test would survive as the evidence that the rule held.** Test 6
-generates `BASE_DOMAIN`, a key that could not be further from a credential, and checks it behaves
-identically; the same test reads the function's own source for the four names the rule discusses, and a
-list appearing there is what that reading is there to catch.
-
-Falsification, so the tests say which rule broke:
-* delete the already-answers refusal and **only test 2** fails;
-* make generation overwrite instead of refuse and tests **2 and 3** fail (3 because the rotation pair
-  is the only way a *different* value can appear twice);
-* echo the value and **test 8** fails alone;
-* add a branch that refuses non-secret keys, or one that forces `--encrypted` for a name containing
-  `PASSWORD`, and **test 6** fails alone — which is the point of it.
-"""
+"""`config set --generate` invents a value, and **no key is special**."""
 
 import hashlib
 import inspect
@@ -60,11 +29,8 @@ KEY_NAMES_DISCUSSED_BY_R_11_8 = ("GITHUB_WEBHOOK_SECRET", "GITLAB_WEBHOOK_SECRET
 # A key that has nothing to do with secrets, and which `--generate` is allowed to produce nonsense for.
 PLAIN_KEY = "BASE_DOMAIN"
 
-# A name that exists only so a `"PASSWORD" in key` branch can be caught here and nowhere else. It is
-# not a kubementat key, it answers nothing, and the claim attached to it is the ticket's own: the
-# **name** never chooses the file, `--encrypted` does. Naming it is not the list the rule forbids, which
-# would have to be consulted to decide what the verb does — it is a probe that fails the day one of
-# those branches appears.
+# A key named like a secret that is not one. `--encrypted` chooses the file, never the key's name,
+# so this key must land in the plain file.
 PASSWORD_SHAPED_PROBE = "ROTATION_PASSWORD_PROBE"
 
 ENV_STATIC = Path(ENVIRONMENT) / "static.json"
@@ -88,7 +54,8 @@ def initialized_root(tmp_path) -> Path:
 
 
 def generated(root: Path, key, *, team=None, encrypted=False) -> str:
-    """`kmt config set --generate`, through the verb and not the library, for the printed lines too."""
+    """`kmt config set --generate`, through the verb and not the library, for the printed lines too.
+    """
     return run_verb("set", root, ENVIRONMENT, "--generate", key,
                     *(["--team", team] if team else []), *(["--encrypted"] if encrypted else []))
 
@@ -110,12 +77,7 @@ def files(root: Path) -> dict[Path, bytes]:
 
 
 def digest(root: Path) -> str:
-    """One hash of the whole tree — bytes, names, and directories.
-
-    Test 2's claim is "nothing was written", and a tree digest is the strongest version of that claim
-    available: an mtime proves when and a path set proves which, but only a digest over every byte says
-    no file was touched, created, renamed, or emptied.
-    """
+    """One hash of the whole tree — bytes, names, and directories."""
     state = hashlib.sha256()
     for path in sorted(root.rglob("*")):
         state.update(str(path.relative_to(root)).encode("utf-8"))
@@ -132,12 +94,7 @@ def document(root: Path, relative: Path) -> dict:
 
 
 def run_verb(*arguments):
-    """`kmt config <verb> …`, invoked through the group so the verb's own name is exercised.
-
-    A bug inside the command is re-raised rather than folded into an exit code, so a refusal's `SystemExit`
-    is the only thing allowed to come back as a non-zero `exit_code`. That is what makes a `UsageError`
-    distinguishable from a `ValueError` in test 7.
-    """
+    """`kmt config <verb> …`, invoked through the group so the verb's own name is exercised."""
     # The root is the caller's second argument and it travels as `--config-dir`, which is the
     # only spelling the surface gives a root, so what is checked here is the command somebody can
     # actually type and not a private argv this file invented.
@@ -160,12 +117,7 @@ def reported(result) -> str:
 
 
 def refused(*arguments) -> str:
-    """Run a verb expecting a refusal, and return the sentence it said.
-
-    A refusal that printed stdout is caught here rather than asserted around: refusing is the answer
-    that comes with `nothing is written`, and a verb that prints steps and then errors is the
-    half-written tree this module keeps promising not to make.
-    """
+    """Run a verb expecting a refusal, and return the sentence it said."""
     result = run_verb(*arguments)
     assert result.exit_code != 0, reported(result)
     assert not printed(result), f"the refusal printed steps on stdout: {reported(result)}"
@@ -179,12 +131,7 @@ def added_team(root: Path) -> None:
 
 
 def generated_answer_value(root: Path, relative: Path, key) -> str:
-    """What `--generate` left in one file, asserted to be a string and nothing else.
-
-    The length is derived from the module's own constant through the generator that uses it, because
-    `secrets.token_urlsafe(nbytes)` expands to `ceil(4n/3)` URL-safe characters and a hard-coded 43
-    here would be a test that disagrees with its own generator the day the constant moves.
-    """
+    """What `--generate` left in one file, asserted to be a string and nothing else."""
     value = document(root, relative)[key]
     assert isinstance(value, str), f"the generated answer is a {type(value).__name__}: {value!r}"
     assert value, "the generated answer is the empty string, which answers nothing"
@@ -202,12 +149,7 @@ def generated_answer_value(root: Path, relative: Path, key) -> str:
 
 
 def test_generating_a_second_time_refuses_and_touches_not_one_byte(tmp_path):
-    """The centre of the rule, not a detail. Nothing is written, and the tree is byte-identical.
-
-    `--generate` on a key that answers is refused with the file that answers, the layer that file
-    belongs to, and the rotation pair. The digest is the assertion that matters: a refusal that wrote
-    a trailing newline somewhere would still be "refused" to a test that only looked at the exit code.
-    """
+    """The centre of the rule, not a detail. Nothing is written, and the tree is byte-identical."""
     root = initialized_root(tmp_path)
     added_team(root)
     generated(root, KEY, team=TEAM)
@@ -237,12 +179,7 @@ def test_generating_a_second_time_refuses_and_touches_not_one_byte(tmp_path):
 
 
 def test_a_key_with_nothing_to_do_with_secrets_generates_exactly_the_same_way(tmp_path):
-    """`BASE_DOMAIN` is answered identically, which is the deliverable rather than the example.
-
-    The price is that `--generate BASE_DOMAIN` is allowed to invent a nonsense-looking value. It
-    is the right price, because the alternative is code that classifies keys. So: the same write, the
-    same refusal, the same step line — and no key name anywhere in the function that decides.
-    """
+    """`BASE_DOMAIN` is answered identically, which is the deliverable rather than the example."""
     root = initialized_root(tmp_path)
 
     plain = generated(root, PLAIN_KEY)
@@ -280,12 +217,7 @@ def test_a_key_with_nothing_to_do_with_secrets_generates_exactly_the_same_way(tm
 
 
 def test_both_an_answer_and_generate_is_a_usage_error_that_writes_nothing(tmp_path):
-    """Nothing on disk can fix two spellings of one answer, so the answer is a `UsageError`.
-
-    `cli/context.py:150-155` draws the line this test stays on the right side of: a fault the operator
-    can only fix on the command line exits 2 and says so, and it is raised before the library is
-    called, so the tree never learns the command ran.
-    """
+    """Nothing on disk can fix two spellings of one answer, so the answer is a `UsageError`."""
     root = initialized_root(tmp_path)
     kept = digest(root)
 
@@ -296,12 +228,7 @@ def test_both_an_answer_and_generate_is_a_usage_error_that_writes_nothing(tmp_pa
 
 
 def test_generate_with_no_key_and_generate_with_no_answer_are_both_refused(tmp_path):
-    """`--generate` with nothing after it, and neither spelling at all.
-
-    Both are command-line questions, both exit 2, and neither writes: a verb with an optional
-    positional has to say what happens when it is empty, and the answer is a refusal and not an
-    implicit generate of nothing.
-    """
+    """`--generate` with nothing after it, and neither spelling at all."""
     root = initialized_root(tmp_path)
     kept = digest(root)
 
@@ -316,12 +243,7 @@ def test_generate_with_no_key_and_generate_with_no_answer_are_both_refused(tmp_p
 
 
 def test_the_generated_value_is_never_printed_by_the_command_that_made_it(tmp_path):
-    """No sentence about secrets, and no echo. The step line is the whole stdout.
-
-    Printing the value would put an answer into a terminal buffer that outlives the file, which is the
-    only genuinely new security claim in this ticket. The library's own refusal is checked the same way
-    for the same reason: the first run's value must not reappear in the second run's message.
-    """
+    """No sentence about secrets, and no echo. The step line is the whole stdout."""
     root = initialized_root(tmp_path)
     added_team(root)
 

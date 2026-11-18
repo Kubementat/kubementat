@@ -1,40 +1,4 @@
-"""What the effective configuration answers, and from which file.
-
-`config show` is the whole surface, and one claim runs through it: **the report says what a running
-`kmt` command sees, and nothing else.** That is why the library resolves every key through `Config`
-and why none of these tests compares the report to a hand-computed precedence — if the report and
-`Config` ever disagree, this file is the one that has to change, not the other way round.
-
-Nine claims, and the interesting ones are the ones a "simpler" implementation breaks:
-
-1. **Every key is tagged, not only the ones a file happens to mention.** `show` on a fresh tree
-   prints forty keys: the two cluster keys `config init` writes as `null`, thirteen namespaces, five
-   selectors, and the twenty knobs of the ten releases the shipped manifest labels. A key that
-   answers as a default and appears in no file is still in the universe, because "which keys does this
-    tree touch" is a different question from "what answers" — and the bar is the second one.
-2. **The tag is the layer that answers, not the file that was read first.** A team that declares a
-   key flips a key from `environment` to `team`; a team that leaves it alone does not, and the
-   same key says `environment` in the same tree with the `TEAM` argument dropped. That difference is
-   asserted in the tag and not only in the value, because a value that changed is a value and a tag
-   that changed is precedence.
-3. **The tag sits on the value's own line.** `show` prints `<KEY> = <value>   (<layer> from <path>)`,
-   so the answer and the layer that answered it arrive in one line: a reader — a lane parsing it, or a
-   human reading it — needs no second command to say where a value came from. The tag is separated by
-   three spaces so the value stays greppable, which is the shape a lane cuts on.
-4. **Read-only is a test and not a sentence.** The whole listing and every mtime of the tree are the
-   same after the read as before it.
-5. **No cluster is addressed.** `kubectl` and `helm` are patched to raise if they are called, and the
-   verb never triggers them.
-6. **A key nothing declares prints no line.** Printing `None` for a typo is how a typo becomes a
-   fact, so a key no layer declares and no default derives is simply not in the listing.
-7. **The universe contains nothing that no accessor can answer.** Every key `show` prints is planted
-   with a sentinel value, and the accessor the report claims to derive it from has to answer that
-   same key. This is the guard against the failure mode the ticket itself nearly shipped: the brief
-   spelled the selector family `<NAME>_DEPLOYMENT_SERVICE`, a key that exists nowhere in `src/`, and
-   a report that printed it would have tagged every real selector `default from constants.py` while a
-   `static.json` declared it.
-
-"""
+"""What the effective configuration answers, and from which file."""
 
 import hashlib
 import json
@@ -88,23 +52,14 @@ CLUSTER_KEYS = ("CLUSTER_KUBECONFIG_PATH", "CLUSTER_KUBE_CONTEXT")
 
 CLUSTER_KEYS = ("CLUSTER_KUBECONFIG_PATH", "CLUSTER_KUBE_CONTEXT")
 
-# The component families are read out of the two tables and the manifest that own them, because a
-# list written here is a second owner of a set that already has one. The plan's exit criterion for
-# this file is that the universe be derived rather than pinned, and the drift check that used to
-# police three typed lists is now an assertion that the derivation still answers.
+# The component families are read from the tables and the manifest that own them, not listed here.
 NAMESPACE_COMPONENTS = tuple(sorted(constants.DEFAULT_NAMESPACES))
 
 SELECTOR_COMPONENTS = tuple(sorted(constants.DEFAULT_SERVICE_SELECTORS))
 
 
 def release_components() -> tuple:
-    """The components the shipped manifest labels, read the way the report reads it.
-
-    `config_reads_index.read_release_index` is the same parser `kmt component install` addresses,
-    so a release commented out of the template leaves this universe without a row being edited, and
-    a release added to it arrives without one either. No `HelmUtils` here: the index is a filesystem
-    answer, and this read never addresses a cluster.
-    """
+    """The components the shipped manifest labels, read the way the report reads it."""
     unread = Config(ENVIRONMENT, None,
                     platform_config_dir=Path("/a-root-this-suite-reads-no-configuration") / "platform_config",
                     preload_configs=False)
@@ -116,13 +71,6 @@ RELEASE_COMPONENTS = release_components()
 
 def derived_keys() -> dict:
     """`{key: (family, component)}` for every key the module derives rather than reads out of a file.
-
-    The key comes from the module's own key function, so this asserts *which* keys exist and leaves
-    "is that key the one the read path consults" to the guard. Those are two different claims and
-    collapsing them is how a renamed suffix survives a test suite: the universe moves with the
-    rename, and only the guard notices that nothing reads the new name. Going through the function and
-    not a suffix constant is deliberate — it is the spelling owner, so a test that spelled the suffix
-    itself would be a second place that has to agree.
     """
     entries = {}
     for component in NAMESPACE_COMPONENTS:
@@ -136,22 +84,9 @@ def derived_keys() -> dict:
 
 
 def expected_universe() -> set:
-    """The whole universe of a fresh tree: declared keys, the three derived families, and the
-    answers that live only in `constants` — the ten static ones the templated answers added, and the
-    encrypted seed
-    `config init` writes.
-
-    That last source is the table of templated answers, and it is read out of the table rather than
-    spelled out here on out here on
-    purpose: a list of these ten names in this file would be a second place that has to agree with
-    the first, which is the exact failure the drift check above exists to catch. The names come from
-    `constants.py` and nothing else does, so the count below can only be right when the table is.
-
-    The encrypted table joins it for the same reason and by the same route, and not as a name typed
-    into this file. A key `config init` seeds is an *answered* key on a fresh tree, exactly the way a
-    templated default is: a report that stayed silent about it would say "this tree answers nothing
-    about grafana" while install quietly used the admin it was carrying. If that table ever grows a
-    key, this universe grows with it and neither file has to be read again.
+    """The whole universe of a fresh tree: declared keys, the three derived families, and the answers
+    that live only in `constants` — the ten static ones the templated answers added, and the
+    encrypted seed `config init` writes.
     """
     return (set(CLUSTER_KEYS) | set(derived_keys()) | set(constants.DEFAULT_STATIC_ANSWERS)
             | set(constants.DEFAULT_ENCRYPTED_ANSWERS) | set(constants.GENERATED_ENCRYPTED_ANSWERS))
@@ -178,23 +113,14 @@ def run_show(root, team=None) -> str:
 
 
 def plant(root, document: dict) -> None:
-    """Write answers into the environment's own `static.json`, the way `config set` would.
-
-    Written directly rather than through `set_answer` because several tests need dozens of answers at
-    once and the verb is not the subject of this file.
-    """
+    """Write answers into the environment's own `static.json`, the way `config set` would."""
     path = root / ENVIRONMENT / "static.json"
     existing = json.loads(path.read_text(encoding="utf-8"))
     path.write_text(json.dumps(existing | document, indent=2) + "\n", encoding="utf-8")
 
 
 def snapshot(root: Path) -> list:
-    """Every path in the tree with its mtime and its bytes.
-
-    mtime is the half that catches "the file was rewritten with the same content", and the digest is
-    the half that catches "the file was touched and not changed" — read-only claims have to fail on
-    both, or an implementation that re-serializes a document passes by leaving the bytes alone.
-    """
+    """Every path in the tree with its mtime and its bytes."""
     listing = []
     for path in sorted(root.rglob("*")):
         digest = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else ""
@@ -207,18 +133,7 @@ def snapshot(root: Path) -> list:
 # ---------------------------------------------------------------------------------------------
 
 def test_show_on_a_fresh_tree_tags_every_key_and_prints_no_other_keys(tmp_path):
-    """The whole of the tagging rule in one assertion: every key tagged, and no fifth kind.
-
-    A fresh tree is the interesting input because *nothing* is answered by a file but the two cluster
-    keys, so almost every line is a default — and a default line that does not say which file the
-    default lives in is the sentence the tagging rule was written to replace.
-
-    It is fifty keys and not forty since the templated answers became answered keys, and the
-    difference is that the ten templated answers are now *answered* keys, so a report that stayed
-    silent about them would be a
-    report that said "this tree answers nothing about Tekton" while `kmt install` quietly used the
-    versions it was carrying.
-    """
+    """The whole of the tagging rule in one assertion: every key tagged, and no fifth kind."""
     root = a_tree(tmp_path)
 
     answers = answers_by_key(root)
@@ -249,7 +164,7 @@ def test_show_on_a_fresh_tree_tags_every_key_and_prints_no_other_keys(tmp_path):
     assert (grafana.origin, grafana.value, grafana.source) == ("default", "grafana", None)
     assert grafana.default == constants.DEFAULT_NAMESPACES["grafana"]
 
-    # A release knob's L0 is the manifest's own `default`, not a code table.
+    # A release knob's default is the manifest's own `default`, not a code table.
     assert answers["GRAFANA_ENABLED"].value == "true"
     assert answers["GRAFANA_ENABLED"].origin == "default"
     assert answers["GRAFANA_VERSION"].default == "14.2.0"
@@ -304,12 +219,7 @@ def test_show_on_a_fresh_tree_tags_every_key_and_prints_no_other_keys(tmp_path):
 # ---------------------------------------------------------------------------------------------
 
 def test_show_writes_nothing_and_moves_no_mtime(tmp_path):
-    """The read-only claim, as a test.
-
-    A sentence in a docstring says "read-only"; a listing that is identical before and after says
-    nobody created the directory they needed, nobody re-serialized a document they only opened, and
-    nobody touched an mtime. The whole listing is read, so every file of the tree is opened.
-    """
+    """The read-only claim, as a test."""
     root = a_tree(tmp_path)
     before = snapshot(root)
     assert {entry[0] for entry in before} == INITIALIZED_TREE, (
@@ -331,13 +241,7 @@ def test_show_writes_nothing_and_moves_no_mtime(tmp_path):
 # ---------------------------------------------------------------------------------------------
 
 def test_a_declared_value_that_answers_nothing_is_tagged_default_and_named_by_the_file(tmp_path):
-    """The case `Config._defaulted_warning` warns about, reported rather than warned.
-
-    A blank in `static.json` is a declaration that did not answer, so the tag says `default` (that is
-    what a running command would use) and the path still names the file that is holding the
-    half-finished edit. Either fact alone would be a half-truth: the tag alone hides the file, the
-    file alone hides that nothing it declares is what answers.
-    """
+    """The case `Config._defaulted_warning` warns about, reported rather than warned."""
     root = a_tree(tmp_path)
     key = "GRAFANA_DEPLOYMENT_NAMESPACE"
     plant(root, {key: "   "})

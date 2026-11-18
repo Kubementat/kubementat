@@ -1,15 +1,4 @@
-"""One component comes off the cluster — the release the cluster names, and the claims it made.
-
-`kmt uninstall component` is the only way to take one component off without tearing the platform
-down, and it does two things that have to happen together. The release goes by the name the cluster
-reports for the component's namespace rather than by a name guessed from a configuration key, and the
-claims it made — the `PersistentVolumeClaim` objects a release leaves behind — go by name in the same
-command, because deleting the release alone leaves the data mounted on a namespace about to be swept.
-
-Both halves are asserted against a fake API server and fake cluster binaries, so a component that
-reports no claims, a namespace that does not exist, and a release that refuses to uninstall each get
-an answer that names what happened instead of an exit code.
-"""
+"""One component comes off the cluster — the release the cluster names, and the claims it made."""
 
 import json
 from types import SimpleNamespace
@@ -40,12 +29,7 @@ def namespace_of(argv):
 
 
 def _address_of(argv):
-    """The flags naming the cluster, and what they were given.
-
-    A helm command that carries its cluster puts the name of the release after those flags, not
-    directly after the verb, so an index-after-the-verb read lands on a path. This is what tells
-    the two apart: the flags and their values, left out.
-    """
+    """The flags naming the cluster, and what they were given."""
     dropped = set()
     for index, argument in enumerate(argv):
         if argument in ("--kubeconfig", "--kube-context", "--context", "--cluster", "--kube-token"):
@@ -54,25 +38,14 @@ def _address_of(argv):
 
 
 def release_commands_to(commands, verb, name, namespace):
-    """The commands that address *name* with *verb* in *namespace*, however they were spelled.
-
-    The cluster sits on this command's argv, which puts two flags and their values between
-    the verb and the release. A literal comparison of the whole command line therefore says "that
-    uninstall did not happen" about a run that did it correctly, to a reader who has to work out
-    that the disagreement is about where the flags sit. So the same facts are read back out of the
-    line — the verb, the release named after it, the namespace it was addressed in.
-    """
+    """The commands that address *name* with *verb* in *namespace*, however they were spelled."""
     return [command for command in commands
             if command[:1] == ["helm"] and verb in command
             and named_after(command, verb) == name and namespace_of(command) == namespace]
 
 
 def named_after(argv, verb):
-    """The release a `helm <verb>` addresses: the first word after the verb that is not a flag.
-
-    Spelled here and not read by position because the cluster sits on this command line, and
-    where the address sits is not something a comparison should have to agree about twice.
-    """
+    """The release a `helm <verb>` addresses: the first word after the verb that is not a flag."""
     dropped = _address_of(argv)
     following = False
     for index, word in enumerate(argv):
@@ -87,22 +60,14 @@ def named_after(argv, verb):
 
 
 def what_the_cluster_was_asked_to_lose(calls_or_commands):
-    """What a run would have taken off the cluster: `(kind, namespace, name)` triples.
-
-    Both sides reduce here — the recorded shim calls behind the Python path, and the command lines
-    out of the blob — because comparing argv would only prove that bash wrote
-    `helm -n ns delete NAME` where Python writes `helm uninstall NAME --namespace ns`. That is a
-    fact about two spellings of one act, and not about what the cluster ends up holding.
-    """
+    """What a run would have taken off the cluster: `(kind, namespace, name)` triples."""
     lost = set()
     for call in calls_or_commands:
         argv = list(call.argv if hasattr(call, "argv") else call)
         program = argv[0]
         if program == API_PROGRAM:
-            # A delete the client made, read out of the same log the shims write to. The path says
-            # what was deleted — `.../namespaces/<ns>/persistentvolumeclaims/<name>` is the same
-            # triple a `kubectl delete` line spells out, and reading it is what keeps the two sides
-            # of this comparison on one record instead of two that have to be joined by hand.
+            # A delete the client made, read from the shim log: the path names the namespace, kind
+            # and object, `.../namespaces/<ns>/persistentvolumeclaims/<name>`.
             if len(argv) > 2 and argv[1].upper() == "DELETE" and "persistentvolumeclaims" in argv[2]:
                 parts = [part for part in argv[2].strip("/").split("/") if part]
                 namespace = (parts[parts.index("namespaces") + 1]
@@ -128,11 +93,7 @@ def what_the_cluster_was_asked_to_lose(calls_or_commands):
 
 
 def configured(fixture_repo, namespace=NAMESPACE, release_name=RELEASE):
-    """The two keys the script's `jq` reads, spelled the way a team's are.
-
-    `*_DEPLOYMENT_NAME` is not in the fixture's defaults, and the script cannot address a release
-    without it — so comparing against the script means saying what the script was addressing.
-    """
+    """The two keys the script's `jq` reads, spelled the way a team's are."""
     fixture_repo.environment_static(**{
         f"{COMPONENT.upper()}_DEPLOYMENT_NAMESPACE": namespace,
         f"{COMPONENT.upper()}_DEPLOYMENT_NAME": release_name,
@@ -140,19 +101,7 @@ def configured(fixture_repo, namespace=NAMESPACE, release_name=RELEASE):
 
 
 def respond(fake_binaries, recorded_api, releases=(), claims=()):
-    """What the fake cluster answers when asked.
-
-    `helm list` is answered whichever flags it is asked with — the shim matches the subcommand and
-    not the argv, so nothing here proves the release's status was asked for. The statuses the
-    product actually asks for are guarded in
-    `tests/test_the_release_listing_asks_for_the_statuses_helm_actually_has.py`, which is the only
-    place that question is answered.
-
-    The claims moved: the claim read and delete came off `kubectl` and onto the client, so
-    they answer through `recorded_api` now and the deletions are left in silence — success, and no
-    output to pretend about. Answering them on the shim instead would have left a test that reads
-    like a cluster read and is not one.
-    """
+    """What the fake cluster answers when asked."""
     fake_binaries.respond("helm", json.dumps([{"name": name, "namespace": namespace}
                                               for name, namespace in releases]),
                           subcommand="list")
@@ -170,22 +119,12 @@ def respond(fake_binaries, recorded_api, releases=(), claims=()):
 
 
 def uninstalled(fixture_repo, recorded_api):
-    """One component off the cluster, with its claims answered by the recorder.
-
-    `recorded_api` is in the signature and not hidden in a fixture because it is what the converted
-    claim read needs: `HelmUtils` builds its `KubernetesUtils` from the `Context` this
-    command resolved, so the only seam left is the target's own client factory, which is exactly
-    what the recorder replaces.
-    """
+    """One component off the cluster, with its claims answered by the recorder."""
     return HelmUtils(Context.build(fixture_repo.environment, fixture_repo.team)).uninstall_release(COMPONENT)
 
 
 def uninstalled_router(fixture_repo, recorded_api):
-    """The same command with the router as its component.
-
-    Deliberately nothing else is set up differently: the claims sweep is expected to find none, so
-    the shape of the run is one release going and one read that answers empty.
-    """
+    """The same command with the router as its component."""
     return HelmUtils(Context.build(fixture_repo.environment, fixture_repo.team)).uninstall_release(ROUTER)
 
 
@@ -197,12 +136,7 @@ def written_commands(commands):
 def test_a_component_that_is_not_installed_says_so_and_deletes_nothing(fixture_repo,
                                                                        dry_run_env,
                                                                        fake_binaries, recorded_api):
-    """Absence is a normal answer, not a warning.
-
-    It is a *normal* answer rather than a warning because the command is safe to run against a
-    component that was never installed, and a run that warned about that would train somebody to
-    ignore the warning right up to the case where it is not absence.
-    """
+    """Absence is a normal answer, not a warning."""
     configured(fixture_repo)
     respond(fake_binaries, recorded_api, releases=[])
 
@@ -217,11 +151,7 @@ def test_a_component_that_is_not_installed_says_so_and_deletes_nothing(fixture_r
 def test_a_release_that_made_no_claims_leaves_the_claim_sweep_alone(fixture_repo,
                                                                     dry_run_env,
                                                                     fake_binaries, recorded_api):
-    """A stateless release: the uninstall runs, and the sweep reads nothing it should delete.
-
-    The difference between "nothing matched" and "I did not ask" is a `kubectl delete` with no names
-    in it, and kubectl makes that one loudly.
-    """
+    """A stateless release: the uninstall runs, and the sweep reads nothing it should delete."""
     configured(fixture_repo)
     respond(fake_binaries, recorded_api, releases=[(RELEASE, NAMESPACE)], claims=[])
 
@@ -236,11 +166,7 @@ def test_a_release_that_made_no_claims_leaves_the_claim_sweep_alone(fixture_repo
 def test_a_release_that_will_not_uninstall_keeps_its_claims_and_raises(fixture_repo,
                                                                        dry_run_env,
                                                                        fake_binaries, recorded_api):
-    """A real error fails loudly, and loudly in the one way that cannot make it worse.
-
-    `helm uninstall` exits non-zero. That release is still installed, its claims are its backing
-    store, and taking them out from under it is the one mistake here no later command can undo.
-    """
+    """A real error fails loudly, and loudly in the one way that cannot make it worse."""
     configured(fixture_repo)
     respond(fake_binaries, recorded_api, releases=[(RELEASE, NAMESPACE)], claims=CLAIMS)
     fake_binaries.respond("helm", "release: not found", exit_code=1, subcommand="uninstall")
@@ -254,18 +180,7 @@ def test_a_release_that_will_not_uninstall_keeps_its_claims_and_raises(fixture_r
 
 
 def test_the_command_is_on_the_surface_and_needs_no_team(fixture_repo, dry_run_env, fake_binaries, recorded_api):
-    """Reachability is the ticket: a method nobody can invoke is a library, not a command.
-
-    Run as its own process so the shim lookup and the resolution report are the real ones — an
-    in-process `CliRunner` can pass while `main()` never wired the command in. The component is
-    passed in upper case, because that is how the script it replaces took it and the case is not the
-    operator's problem.
-
-    And it is run with no team, which is the other half of what this test now proves: `kmt component
-    uninstall` used to refuse exactly this invocation, and the deletion it performs reads one
-    namespace out of the environment's `static.json`. A green run here is the evidence that the
-    guard was a false refusal and not a rule.
-    """
+    """`kmt component uninstall` is on the surface and needs no team."""
     configured(fixture_repo)
     respond(fake_binaries, recorded_api, releases=[(RELEASE, NAMESPACE)], claims=CLAIMS)
 
@@ -283,12 +198,7 @@ def test_the_command_is_on_the_surface_and_needs_no_team(fixture_repo, dry_run_e
 def test_the_command_names_a_component_it_does_not_know_and_deletes_nothing(fixture_repo,
                                                                             dry_run_env,
                                                                             fake_binaries, recorded_api):
-    """A typo through the CLI is one readable line, not a traceback, and it deletes nothing.
-
-    The library raises `KeyError` because a namespace is what the deletion is addressed at; the
-    CLI's job is to say which names exist and stop. That is the shape `open_tunnel` already gives
-    a tunnel that cannot find its component.
-    """
+    """A typo through the CLI is one readable line, not a traceback, and it deletes nothing."""
     from conftest import run_kmt
 
     configured(fixture_repo)
@@ -304,20 +214,7 @@ def test_the_command_names_a_component_it_does_not_know_and_deletes_nothing(fixt
 
 
 def test_the_uninstall_shows_up_once_and_under_the_group_name():
-    """One route to taking one component off the cluster, and its name is the group's.
-
-    This landed flat, because the surface then had one group (`users`) and the other offer was a
-    `helm` subgroup nothing else had. The install half landing beside it is what
-    made the pair a group: `install` and `uninstall` of one component are the two answers to one
-    question, and that is the shape `kmt routing` already has.
-
-    What a rename has to fail is the shape a migration leaves behind by accident: the flat name still
-    printed, still reachable, still doing the deletion. So the check here is not that the old name is
-    absent (that is `test_cli_surface`'s job) but that the two names do not coexist, and that the
-    group's `uninstall` is the only thing on the surface that takes one component off. The old name
-    is written here over its `-uninstall` half, for the same reason the check is: the grep that says
-    the rename landed has to stay empty, and a test that spells the old name has it back in the tree.
-    """
+    """One route to taking one component off the cluster, and its name is the group's."""
     from cli_help import commands_from_help, help_output, run_help
 
     names = commands_from_help(help_output())
@@ -335,13 +232,7 @@ def test_the_uninstall_shows_up_once_and_under_the_group_name():
 def test_renaming_the_routers_namespace_uninstalls_from_the_new_place(fixture_repo,
                                                                       dry_run_env,
                                                                       fake_binaries, recorded_api):
-    """The other half of the entry being load-bearing: a rename has to move the delete.
-
-    `traefik` is both the component and the namespace the template ships, so a namespace that was
-    written in code instead of read would be invisible right up to the day somebody put the router
-    somewhere else -- and `helm uninstall traefik --namespace traefik` against a release that lives
-    in `edge` reports an absent component while the router is still running.
-    """
+    """The other half of the entry being load-bearing: a rename has to move the delete."""
     fixture_repo.environment_static(**{f"{ROUTER.upper()}_DEPLOYMENT_NAMESPACE": "edge"})
     fake_binaries.respond("helm", json.dumps([{"name": ROUTER, "namespace": "edge"}]),
                           subcommand="list")

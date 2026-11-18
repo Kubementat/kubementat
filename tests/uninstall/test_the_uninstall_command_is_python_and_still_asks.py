@@ -1,18 +1,4 @@
-"""`kmt uninstall`'s contract, held through the swap from bash to Python.
-
-The command line had exactly two promises, and a migration that changes the implementation is
-not allowed to change either of them:
-
-* `--yes`/`-y` is the scripting form, and asking for a deletion without it on a stdin that
-  cannot answer makes the command fail closed, naming the flag. That is `click.UsageError` in
-  `cli/commands/kubementat.py`, and it used to be a `[[ ! -t 0 ]]` in the script — the same
-  rule one layer down, which is why the rule could look like a script's opinion.
-* what runs afterwards is kubementat's own code. No script is executed for `uninstall` any
-  more, so the argument list the script took (`environment`, and no team) is gone with it.
-
-The evidence that the *deletions* are right is in
-`test_uninstall_sweeps_everything_kubementat_owns.py`; this file only pins the door in.
-"""
+"""`kmt uninstall`'s contract, held through the swap from bash to Python."""
 
 import json
 from types import SimpleNamespace
@@ -26,11 +12,7 @@ CLUSTER_ADDONS = {"default", "kube-system", "kube-public", "kube-node-lease"}
 
 
 def namespace_list(names):
-    """A `list_namespace` answer over a set that shrinks when something is deleted.
-
-    A cluster that goes on reporting a namespace it was told to delete contradicts its own API, and
-    an uninstall reading that fake is right to call the leftovers unfinished rather than gone.
-    """
+    """A `list_namespace` answer over a set that shrinks when something is deleted."""
     present = set(names)
 
     def listing(**kwargs):
@@ -68,11 +50,7 @@ def responds(fake_binaries):
 
 def test_without_yes_and_without_a_terminal_it_refuses_and_names_the_flag(
         fixture_repo, dry_run_env, fake_binaries, recorded_api):
-    """The fail-closed guard is the CLI's and it still answers before anything is read.
-
-    `CliRunner` hands the command a stream that is not a terminal, which is exactly the case
-    this guard is for.
-    """
+    """The fail-closed guard is the CLI's and it still answers before anything is read."""
     cluster_is_installed(recorded_api, fixture_repo)
     responds(fake_binaries)
     recorded_api.calls.clear()
@@ -88,22 +66,13 @@ def test_without_yes_and_without_a_terminal_it_refuses_and_names_the_flag(
 
 def test_answering_no_says_the_uninstall_was_cancelled_and_exits_non_zero(
         fixture_repo, dry_run_env, fake_binaries, recorded_api, monkeypatch):
-    """`confirmation-rejected-changes-nothing` is a lane assert, and it greps for words.
-
-    A decline has to be legible three ways: to the person at the terminal, to the test that reads
-    the log, and in the exit code. The bash printed a line and exited 1; the Python CLI raises a
-    `ClickException`, which prints that line as its `Error:` and still exits 1 -- so long as the
-    message itself says what happened.
-    """
+    """`confirmation-rejected-changes-nothing` is a lane assert, and it greps for words."""
     cluster_is_installed(recorded_api, fixture_repo)
     responds(fake_binaries)
     recorded_api.calls.clear()
     fake_binaries.take_calls()
-    # `script -qec` on the lane is what makes the command's stdin a terminal; a `CliRunner`
-    # replaces `sys.stdin` while it invokes, so patching the real one is not enough -- the one
-    # module that reads it gets a stand-in module attribute instead. It is `cli.consent` since item
-    # 7: the guard at the command's door and the question after the plan are the same reader now,
-    # and a decline that reads EOF in either place would be a refusal that never says so.
+    # A `CliRunner` replaces `sys.stdin` while it invokes, so the terminal check is answered by a
+    # stand-in on `cli.consent`, the one module that reads it.
     monkeypatch.setattr("cli.consent.sys",
                         SimpleNamespace(stdin=SimpleNamespace(isatty=lambda: True)))
     monkeypatch.setattr("builtins.input", lambda prompt="": "n")

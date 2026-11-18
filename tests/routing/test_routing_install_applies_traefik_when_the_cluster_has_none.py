@@ -1,15 +1,4 @@
-"""No Traefik on the cluster: `kmt routing install` installs it, through the whole routing group.
-
-This is the `none` case, and the row the everyday lane cannot show -- a lane
-running on k3s finds the node's bundled controller first, so the install branch has to be proved on
-its own, against a cluster that answers "nothing". What "nothing" costs is the interesting part: the
-command has to select the whole group, not a narrower filter, and it must not run the CRD step, which
-belongs to `--update` alone.
-
-No cluster is needed to read this file, and none is used: the three discovery reads are answered the
-way a cluster answers them (`tests/shims/` on `PATH`, the same recorder the uninstall sweep is judged
-against), and the real `Config`, `HelmUtils` and `kubementat.infrastructure.shell` run on top of them.
-"""
+"""No Traefik on the cluster: `kmt routing install` installs it, through the whole routing group."""
 
 import json
 from types import SimpleNamespace
@@ -38,19 +27,7 @@ ACME_CONTACT = "platform-ops@example.test"
 
 def cluster(fake_binaries, recorded_api, monkeypatch, helm=(), classes=(), pods=(),
             crds=CRD_DOCUMENT, crds_exit=0):
-    """The reads answered on the channel each one travels, plus every binary the install reaches.
-
-    The release read is a command, so the shims answer it; the class and pod reads are client
-    calls now that the routing probes go through the client, so the recorder does. Writing all three
-    as shims now would
-    leave the install reading a cluster that answers in one channel and refuses in the other, and the
-    decision this file judges would be a decision about a cluster that does not exist.
-
-    Every shim response is keyed by subcommand, which is what keeps one program's two different
-    questions apart: `helm list` is a different file from `helm show crds`, and `kubectl apply` is
-    not answered by `helm` at all. A program-wide file would win over both (the shims try the least
-    specific answer first), so none is written here for `helm` or `kubectl`.
-    """
+    """The reads answered on the channel each one travels, plus every binary the install reaches."""
     fake_binaries.respond("helm", json.dumps(list(helm)), subcommand="list")
     fake_binaries.respond("helm", "", subcommand="repo.update")
     fake_binaries.respond("helm", crds, subcommand="show.crds", exit_code=crds_exit)
@@ -83,11 +60,7 @@ def cluster(fake_binaries, recorded_api, monkeypatch, helm=(), classes=(), pods=
 
 
 def _recorded(answer, started, method):
-    """The answer the recorder would have given, with the moment it was asked written down first.
-
-    The wrapper replaces the answer and calls the original, so the cluster's reply is untouched and
-    only the ordering is added to it.
-    """
+    """The answer the recorder would have given, with the moment it was asked written down first."""
     def asked(**kwargs):
         started.append(["api", method])
         return answer(**kwargs)
@@ -96,27 +69,19 @@ def _recorded(answer, started, method):
 
 def helm_list_read():
     """The release read as this run issues it: the statuses helm answers, addressed to the cluster.
-
-    Spelled from the product's own constant plus the address flags rather than hard-coded, because
-    this file is about the routing decision and not about flag plumbing -- but the read has to be
-    compared to *something*, and comparing it to a bare `helm list` would quietly assert that the
-    address flags are not on it.
     """
     from kubementat.infrastructure.helm import helm_list_releases_argv
     return helm_list_releases_argv(Context.build("dev", "fixture").target)
 
 
 def started_in_order(fake_binaries):
-    """Everything the run asked of anything, commands and client calls in the order they were made."""
+    """Everything the run asked of anything, commands and client calls in the order they were made.
+    """
     return fake_binaries.started
 
 
 def configured(fixture_repo, **overrides):
-    """`platform_config/dev/static.json` with the keys this command reads, and nothing else.
-
-    `CLUSTER_MANAGER_EMAIL` is one of them: both ClusterIssuers register an ACME account with it, so
-    a fixture that left it out would be a test of the error branch rather than of the install.
-    """
+    """`platform_config/dev/static.json` with the keys this command reads, and nothing else."""
     fixture_repo.environment_static(CLUSTER_MANAGER_EMAIL=ACME_CONTACT, **overrides)
     return fixture_repo
 
@@ -127,12 +92,7 @@ def commands(fake_binaries):
 
 
 def documents_applied(fake_binaries, kind):
-    """The manifests that reached a `kubectl apply -f -`, parsed back out of what was piped in.
-
-    The shims record stdin, so this reads the same YAML the cluster would have received rather than
-    the Python dictionary it was built from -- which is the only way to check what the solver field
-    was spelled as.
-    """
+    """The manifests that reached a `kubectl apply -f -`, parsed back out of what was piped in."""
     applied = []
     for call in fake_binaries.calls():
         if call.argv[:2] != ["kubectl", "apply"] or not call.stdin:
@@ -149,31 +109,22 @@ def issued(fake_binaries):
 
 
 def solver_classes(issuers):
-    """The `ingressClassName` each issuer's solver points at. There is only one place it comes from."""
+    """The `ingressClassName` each issuer's solver points at. There is only one place it comes from.
+    """
     return [issuer["spec"]["acme"]["solvers"][0]["http01"]["ingress"]["ingressClassName"]
             for issuer in issuers]
 
 
 def install(fake_binaries, **flags):
-    """`install_routing` run for real: one resolved `Context`, real `Config`, real `HelmUtils`,
-    real `shell.run`.
-
-    The `Context` is `Context.build` and not a fabricated one, because the point of this file is
-    what the routing group *does* — every read and write it makes is the product's — and the
-    cluster sits inside the object that decides them. `fake_binaries` is unused here: the shims are
-    installed by the fixture, and this is the call they record.
+    """`install_routing` run for real: one resolved `Context`, real `Config`, real `HelmUtils`, real
+    `shell.run`.
     """
     return routing.install_routing(Context.build("dev", "fixture"), **flags)
 
 
 @pytest.fixture
 def a_clean_cluster(fixture_repo, dry_run_env, fake_binaries, recorded_api, monkeypatch):
-    """A cluster that answers all three reads with nothing, and a config that is complete.
-
-    No releases, no IngressClasses, no pods. That is the state a freshly provisioned cluster without
-    an ingress controller is in, and the only state in which kubementat puts one there -- stated once
-    and on both channels, because two of those reads do not travel as commands any more.
-    """
+    """A cluster that answers all three reads with nothing, and a config that is complete."""
     configured(fixture_repo)
     return cluster(fake_binaries, recorded_api, monkeypatch)
 
@@ -184,12 +135,7 @@ def a_clean_cluster(fixture_repo, dry_run_env, fake_binaries, recorded_api, monk
 
 
 def test_no_discovery_read_was_skipped_just_because_nothing_was_there(a_clean_cluster):
-    """Three reads, in order, even when the first one could have decided it alone.
-
-    A controller installed from plain YAML answers in the second or third read and not in the first,
-    so an install that trusted `helm list` alone would install a second controller onto a cluster
-    that already runs one. This is the cheapest place to notice the difference.
-    """
+    """Three reads, in order, even when the first one could have decided it alone."""
     install(a_clean_cluster)
 
     asked = started_in_order(a_clean_cluster)
@@ -221,14 +167,7 @@ def test_no_discovery_read_was_skipped_just_because_nothing_was_there(a_clean_cl
 
 def test_both_cluster_issuers_are_applied_pointing_at_the_class_from_the_configuration(
         a_clean_cluster):
-    """The solver, in the field Traefik actually serves.
-
-    `ingressClassName` names the IngressClass; the older `class` field writes the
-    `kubernetes.io/ingress.class` annotation, which Traefik's default provider does not read, so a
-    solver written that way creates an Ingress nothing routes and a certificate that never arrives.
-    Both issuer names are kept, because `create_ingress_yml.sh` and both EventListener templates
-    reference them by string.
-    """
+    """The solver, in the field Traefik actually serves."""
     install(a_clean_cluster)
 
     issuers = issued(a_clean_cluster)

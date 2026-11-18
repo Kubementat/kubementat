@@ -1,35 +1,5 @@
-"""The class the routing release installs is the class the configuration answers -- measured, not restated.
-
-Two files used to answer one question, and the one that mattered answered second. `constants.py` (as
-L0) and the layers of `platform_config` answered `TRAEFIK_INGRESS_CLASS` for every
-Python reader, and `helmfile.yaml.gotmpl` answered it again for the traefik release with
-`env "TRAEFIK_INGRESS_CLASS" | default "traefik"`. Measured at the HEAD before this ticket, nothing in
-`src/` put that variable into the environment helmfile evaluates its templates in --
-`_export_component_namespaces` exports the namespaces and `export_component_release_knobs` exports the
-two release knobs, and neither touches this key -- so `env` found nothing, the `default` fired on
-every run, and a tree that declared `public` got a release configured with `traefik` while the same
-cluster's generated Ingress and the cert-manager solver named `public`. That is not a stale value: it
-is an answer that never reached the thing it is about.
-
-So this file measures three things, in the order a reviewer will read them:
-
-* **the manifest names no class of its own.** A template that can answer for itself is a second owner
-  that fires exactly when the export breaks, which is the failure that looks like success. Asserted by
-  reading the file, because "the file says no default" is a fact about the file.
-* **what the operator wrote reaches the built release** -- and that is asserted by running helmfile
-  over a tree that declares `public`, not by asserting that the export ran. If the release helmfile
-  builds does not say `public`, the export is decoration, which is the falsification the ticket asks
-  for and the reason this test is the ticket's whole value.
-* **a tree that declares nothing still gets `traefik`,** through L0, because the export does not skip
-  absent keys. That is the opposite of `export_component_release_knobs`, which is right to export
-  nothing for an undeclared knob: here the answer exists even when no layer wrote it, and an export
-  that copied that skip would fail for the common tree.
-
-The last pair of tests is the failure with no fallback in it. With no answer anywhere, the honest
-sentence is "helmfile's own failure" -- measured here, it is a build that renders an *empty* class
-name and not a silent `traefik`, which is what a class nothing routes to looks like from the outside.
-Nothing in `src/` codes a fallback for that case: `Config.component_ingress_class` refuses a component
-the table stopped answering for, and the apply never reaches helmfile.
+"""The class the routing release installs is the class the configuration answers -- measured, not
+restated.
 """
 
 import json
@@ -71,12 +41,7 @@ DECLARED = "public"
 
 
 def seed(root, environment_level=None, team_level=None) -> Config:
-    """A real `Config` over a seeded tree -- the four-file shape the layering tests use.
-
-    No literal for the answer appears here: `environment_level` is what the operator wrote, and a tree
-    built by this helper with nothing declared is a `config init` tree, which is the state that has to
-    keep working.
-    """
+    """A real `Config` over a seeded tree -- the four-file shape the layering tests use."""
     environment_dir = root / "platform_config" / ENVIRONMENT
     team_dir = environment_dir / TEAM
     environment_dir.mkdir(parents=True, exist_ok=True)
@@ -90,14 +55,8 @@ def seed(root, environment_level=None, team_level=None) -> Config:
 
 
 def built_class(**exported) -> list:
-    """Every `ingressClass.name` the **built** traefik release carries, with `exported` in the environment.
-
-    This is helmfile's own answer and not a re-reading of the gotmpl: `helmfile build` evaluates the
-    file in the environment it is handed and prints the state it will apply, which is the only place
-    "what the release says" and "what the template says" are the same sentence.
-
-    The three configuration coordinates are popped, as `test_the_manifest_tells_helmfile_which_releases_are_installed.py`
-    does, so a run from a shell that is carrying somebody's tree builds the shipped manifest.
+    """Every `ingressClass.name` the **built** traefik release carries, with `exported` in the
+    environment.
     """
     environment = dict(os.environ)
     for name in ("KUBEMENTAT_CONFIG_ROOT", "KUBEMENTAT_ENVIRONMENT", "KUBEMENTAT_TEAM", KEY):
@@ -124,11 +83,7 @@ def built_class(**exported) -> list:
 
 
 def template_expressions(text: str) -> list:
-    """Every `{{ ... }}` in the manifest that reads this key, with the surrounding line dropped.
-
-    Line-scoped on purpose: the release block carries a prose comment about the removed `default`, and
-    a guard that scanned the whole file for the word would be a guard against documentation.
-    """
+    """Every `{{ ... }}` in the manifest that reads this key, with the surrounding line dropped."""
     found = []
     for line in text.splitlines():
         for expression in re.findall(r"\{\{([^}]*)\}\}", line):
@@ -142,13 +97,6 @@ def template_expressions(text: str) -> list:
 
 def test_the_manifest_names_no_ingress_class_of_its_own():
     """No `default` for this key may survive in the file, and the reason is the failure it causes.
-
-    One `default` in a template is a second owner that is silent while it agrees and loud when it does
-    not: the value it hands out comes from the file and not from any layer, so an export that stops
-    working -- a renamed component, a `KeyError`, a `Config` that is not the one the command was given
-    -- is a run that installs `traefik` and says nothing about having made that decision. If the
-    variable is missing the honest answer is that it is missing, which is why no `default`, no
-    `requiredEnv`, no second table and no fallback in this file replaces it.
     """
     expressions = template_expressions(MANIFEST.read_text(encoding="utf-8"))
 
@@ -171,21 +119,14 @@ def _answered(config, key: str):
                                                            ENVIRONMENT, TEAM)}[key]
 @helmfile_only
 def test_a_tree_that_declares_nothing_builds_the_release_l0_answers(tmp_path, monkeypatch):
-    """The other half, and the half the copy-everything refactoring would have broken.
-
-    A `config init` tree declares nothing, so L0 answers (`config show` agrees: the key is tagged
-    `default` and names no file), and the export still exports. `export_component_release_knobs` skips a
-    key that answers `None` and is right to, because an undeclared knob belongs to the manifest's own
-    `default`; copying that skip here is how this ticket's fix would be undone, because for this key
-    "the layer said nothing" is not the same fact as "nothing answers it".
-    """
+    """The other half, and the half the copy-everything refactoring would have broken."""
     config = seed(tmp_path)
     monkeypatch.delenv(KEY, raising=False)
     exported = export_ingress_class(config)
     try:
         answer = _answered(config, KEY)
         assert answer.value == constants.DEFAULT_STATIC_ANSWERS[KEY]
-        assert answer.origin == "default", f"{KEY} was answered by {answer.origin}, not L0"
+        assert answer.origin == "default", f"{KEY} was answered by {answer.origin}, not by kubementat's default"
         assert answer.source is None, f"it claims a file answered it: {answer.source}"
         assert exported == {KEY: answer.value}, \
             "the export and the report gave two different answers for one key"
@@ -199,10 +140,6 @@ def test_a_tree_that_declares_nothing_builds_the_release_l0_answers(tmp_path, mo
 
 def test_helmfile_apply_hands_the_class_over_before_it_runs_helmfile(tmp_path, monkeypatch):
     """An export that exists but is never called by `helmfile_apply` is an export that never happens.
-
-    The variable is read out of the environment handed to the recorded `shell.run`, which is the
-    mapping the child actually evaluates its templates in. So this says two things at once -- the
-    answer is in the handover, and it is there before argv is assembled.
     """
     main_dir = tmp_path / "checkout"
     main_dir.mkdir(parents=True)
@@ -227,7 +164,9 @@ def test_helmfile_apply_hands_the_class_over_before_it_runs_helmfile(tmp_path, m
     seen = {}
 
     class RecordingShell:
-        """`kubementat.infrastructure.shell.run`, recording what the child was handed and what it could read."""
+        """`kubementat.infrastructure.shell.run`, recording what the child was handed and what it could
+        read.
+        """
 
         def __init__(self):
             self.calls = []

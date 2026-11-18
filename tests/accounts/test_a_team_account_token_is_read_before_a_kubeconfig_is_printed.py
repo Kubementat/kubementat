@@ -1,26 +1,4 @@
-"""The token behind a team account: how it is waited for, and what happens when it is not there.
-
-A service account carries no credentials. Since 1.24 a cluster does not mint a token for one;
-the flow has to request a Secret that names the account, and a controller fills that Secret in
-*after* it was created. That gap is the whole difference between the bash and the code: bash
-read the Secret once, immediately, and if the controller had not reached it, interpolated
-nothing into a heredoc and printed
-
-    token:
-
-as a kubeconfig, with exit code 0. Every later failure that produces it -- an authentication
-error, a `can-i` that answers nothing -- traces back to a credential that was never there. This
-module waits, and refuses rather than printing what it did not get.
-
-What is pinned:
-
-* the token is read from the Secret that *claims* the account, by annotation, and handed over
-  whole;
-* a Secret the controller has not filled in yet is waited for, with a bounded wait, so a
-  control plane that is behind is a delay and not a wrong answer;
-* a token that never arrives is an error where it is read, and the command prints no kubeconfig
-  at all -- the failure this flow shipped with for its whole bash life.
-"""
+"""The token behind a team account: how it is waited for, and what happens when it is not there."""
 
 import base64
 import json
@@ -66,13 +44,7 @@ def token_secret(name="ops-account-sa-secret", for_account=ACCOUNT, token=TOKEN,
 
 @pytest.fixture
 def cluster_client(recorded_api):
-    """A real `KubernetesUtils`, with its generated clients swapped for the recorder's.
-
-    The primitives take the utils object rather than an API, so that is what is constructed --
-    a test that reached for the API directly would be testing something no caller can build.
-    The recorder is injected rather than patched in, so nothing on this machine is read and
-    no kubeconfig is opened by building this object at all.
-    """
+    """A real `KubernetesUtils`, with its generated clients swapped for the recorder's."""
     return KubernetesUtils(TARGET_DEV, api_client=recorded_api)
 
 
@@ -86,11 +58,7 @@ def waits_quickly(monkeypatch):
 def test_a_secret_that_never_fills_in_raises_rather_than_returning_nothing(cluster_client,
                                                                           recorded_api,
                                                                           waits_quickly):
-    """The wait is bounded, and the deadline is an error rather than a `None`.
-
-    An unbounded wait is a lane that hangs forever; a bounded wait that returns nothing is a
-    kubeconfig with an empty `token:` field. Neither is what the command is for.
-    """
+    """The wait is bounded, and the deadline is an error rather than a `None`."""
     recorded_api.answer("list_namespaced_secret", secret_holding(token_secret(token=None)))
 
     start = time.monotonic()
@@ -103,11 +71,7 @@ def test_a_secret_that_never_fills_in_raises_rather_than_returning_nothing(clust
 
 def test_an_empty_token_in_the_secret_is_treated_as_no_token_at_all(cluster_client, recorded_api,
                                                                    waits_quickly):
-    """A Secret with a key of `token` and no value is the same state as no Secret.
-
-    `data: {token: ""}` is what a controller that is halfway through a write looks like, and it
-    is the shape that decodes into a `token:` line. It has to be refused, not decoded.
-    """
+    """A Secret with a key of `token` and no value is the same state as no Secret."""
     recorded_api.answer("list_namespaced_secret",
                         secret_holding(token_secret(token="")))
 
@@ -118,12 +82,7 @@ def test_an_empty_token_in_the_secret_is_treated_as_no_token_at_all(cluster_clie
 @pytest.fixture
 def a_cluster_that_has_no_token_yet(fixture_repo, dry_run_env, fake_binaries, recorded_api,
                                     monkeypatch):
-    """Everything the create needs except the thing the controller has not done.
-
-    The Secret is there and empty, which is what a real cluster looks like in the half-second
-    after it is written. The flow gets that state and has to decide what to do with it, and the
-    only answer that is not a lie is to stop before printing anything.
-    """
+    """Everything the create needs except the thing the controller has not done."""
     for verb, resource in user_management.CLUSTER_ACCESS_CHECKS:
         fake_binaries.respond("kubectl", "yes\n", subcommand=f"auth.can-i.{verb}.{resource}")
     fake_binaries.respond("kubectl", json.dumps({"clusters": [{
@@ -150,12 +109,7 @@ def cluster_holding(fixture_repo, recorded_api):
 
 def test_a_run_that_cannot_read_a_token_prints_no_kubeconfig(
         a_cluster_that_has_no_token_yet, fixture_repo, recorded_api, fake_binaries, caplog):
-    """The whole point of the wait, measured where the operator reads.
-
-    The account itself is written -- namespaces, ServiceAccount, Secret, Roles, Bindings -- and
-    the credential is what is missing. What must not happen is the second half of the bash's
-    answer: exit code 0, a banner, and a `token:` line to paste.
-    """
+    """The whole point of the wait, measured where the operator reads."""
     context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
 
     with caplog.at_level(logging.INFO), pytest.raises(ServiceAccountTokenNotFoundError):
@@ -171,13 +125,7 @@ def test_a_run_that_cannot_read_a_token_prints_no_kubeconfig(
 
 
 def test_the_emitter_refuses_a_credential_that_is_not_there():
-    """The second gate: the function that prints the text will not print an empty one.
-
-    `read_service_account_token` cannot hand back a blank today, so this is not a bug fix -- it
-    is the invariant held by the one function whose output is pasted into `~/.kube/config`. A
-    caller that later reads a token some other way still cannot write a document that
-    authenticates with nothing.
-    """
+    """The second gate: the function that prints the text will not print an empty one."""
     with pytest.raises(ValueError):
         user_management.kubeconfig_for_service_account(
             configuration_only_context("dev", "ops", platform_config_dir=UNREAD_ROOT),

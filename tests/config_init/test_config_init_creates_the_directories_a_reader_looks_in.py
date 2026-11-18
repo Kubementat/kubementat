@@ -1,31 +1,4 @@
-"""`config init` makes the layer directories its readers open, and refuses names it cannot use.
-
-Two claims, and both are census claims and not opinions.
-
-**The directories are the properties.** Census G found `<environment>/tekton/tasks` and
-`<environment>/tekton/pipelines` read at two sites in `src/` and created by nothing, which is how a
-layer that is correct in code lands in a tree that is empty there. So init creates them, through
-`Config`'s properties — and the assertion is `path == the property's path`, not a string typed into a
-test, because a test that spells the path cannot tell a moved property from a moved directory. A run
-with `--team` adds the team's four, where `Config.tekton_team_*` says they live.
-
-**The directories not created are not an omission.** The environment's `tekton/triggers` and
-`tekton/pipeline-runs` are read by nothing — the apply path that opens a trigger directory is
-team-only, and a pipeline run is written when it happens and not looked for as a layer. A directory
-that exists and is read by nothing is the shape of `kubementat_components/`, which the epic deleted,
-so their absence is asserted and the *reason* is the failure message. `values/` and `secrets/`
-and `secrets/` are absent for the reasons written at the step.
-
-**A name is decided before the first byte.** An environment named after something kubementat puts at
-the root of a configuration directory would be read as that root entry and not as a layer; the named
-case is an environment called `secrets`. A team named after one of kubementat's own layer directories
-is a directory two rules both claim; a name that is not one path element cannot be found by a reader
-at all. Each is one refusal, and nothing is written when one is raised.
-
-Idempotence is the same rule that governs the files: a directory that is already there reports
-`skipped` and is not made twice, so a second init is a no-op about directories exactly as it is about
-bytes.
-"""
+"""`config init` makes the layer directories its readers open, and refuses names it cannot use."""
 
 import pytest
 
@@ -55,7 +28,8 @@ def config_root(tmp_path):
 
 
 def unbuilt_root(tmp_path):
-    """A root that does not exist yet, for the refusals: `not root.exists()` is the whole verdict."""
+    """A root that does not exist yet, for the refusals: `not root.exists()` is the whole verdict.
+    """
     return tmp_path / "platform_config"
 
 
@@ -76,7 +50,8 @@ def directory_steps(steps):
 
 
 def the_layer_directories(root, environment, team=None):
-    """Every directory init creates, keyed by the property that names it. Spelled once, used thrice."""
+    """Every directory init creates, keyed by the property that names it. Spelled once, used thrice.
+    """
     config = layers(root, environment, team)
     found = {"tekton_env_task_dir": config.tekton_env_task_dir,
              "tekton_env_pipeline_dir": config.tekton_env_pipeline_dir}
@@ -94,12 +69,7 @@ def the_layer_directories(root, environment, team=None):
 
 
 def test_the_environment_directories_nothing_reads_are_absent_and_the_reason_is_the_message(tmp_path):
-    """Two candidates from the same census stay unmade, and *why* is what the assert says.
-
-    Both halves are census G: the trigger reader is team-only, so an environment `triggers/` would be
-    a directory that exists and is read by nothing; a pipeline run is output. Creating either would
-    recreate the dead `kubementat_components/` tree, which is the other half of the same finding.
-    """
+    """Two candidates from the same census stay unmade, and *why* is what the assert says."""
     root = config_root(tmp_path)
 
     init_configuration(root, ENVIRONMENT, TEAM)
@@ -114,10 +84,11 @@ def test_the_environment_directories_nothing_reads_are_absent_and_the_reason_is_
 
 
 def test_init_makes_no_values_or_secrets_directory_and_nothing_a_default_already_answers(tmp_path):
-    """`values/` is guarded by helmfile's `isFile` *because* it may be absent, and `secrets/`
-    arrives with the keys — so a fresh tree is the environment's two directories, the team's four,
-    and nothing else. A `values.encrypted/` directory is asserted absent too: the layer's name
-    carries the encryption marker now, and init creates no directory that nothing reads."""
+    """`values/` is guarded by helmfile's `isFile` *because* it may be absent, and `secrets/` arrives
+    with the keys — so a fresh tree is the environment's two directories, the team's four, and
+    nothing else. A `values.encrypted/` directory is asserted absent too: the layer's name carries
+    the encryption marker now, and init creates no directory that nothing reads.
+    """
     root = config_root(tmp_path)
 
     init_configuration(root, ENVIRONMENT, TEAM)
@@ -135,7 +106,8 @@ def test_init_makes_no_values_or_secrets_directory_and_nothing_a_default_already
 
 def test_a_second_run_reports_every_layer_directory_as_skipped_and_makes_no_new_one(tmp_path):
     """A directory that is there was put there. `created` on the second run would claim a write that
-    did not happen, which is the same lie the file steps must not tell."""
+    did not happen, which is the same lie the file steps must not tell.
+    """
     root = config_root(tmp_path)
     init_configuration(root, ENVIRONMENT, TEAM)
     before = tree(root)
@@ -156,7 +128,8 @@ def test_a_second_run_reports_every_layer_directory_as_skipped_and_makes_no_new_
 
 def test_a_tree_that_arrives_with_its_layers_already_on_disk_still_reports_skipped(tmp_path):
     """A directory is never foreign material, so an operator's tree is accepted and the step says
-    `skipped` rather than `created` — the same rule that keeps `force` from meaning `overwrite`."""
+    `skipped` rather than `created` — the same rule that keeps `force` from meaning `overwrite`.
+    """
     root = config_root(tmp_path)
     config = layers(root, ENVIRONMENT, TEAM)
     config.tekton_env_task_dir.mkdir(parents=True)
@@ -179,10 +152,6 @@ def obsolete_trigger_dir(root, environment=ENVIRONMENT, team=TEAM):
 
 def test_a_tree_with_the_old_trigger_directory_is_refused_and_nothing_is_written(tmp_path):
     """The upgrade case: an operator re-runs `config init` on a tree a pre-move kubementat laid down.
-
-    Scaffolding `tekton/triggers/` beside the old `triggers/` would leave both, and only the new
-    one is ever read — silently applying nothing is the failure this refusal exists to prevent,
-    so init stops, names both paths, and the tree is byte-for-byte what it was.
     """
     root = config_root(tmp_path)
     init_configuration(root, ENVIRONMENT, TEAM)
@@ -214,13 +183,7 @@ LAYER = list(config_init.LAYER_DIRECTORY_NAMES)
 
 @pytest.mark.parametrize("name", LAYER)
 def test_a_team_named_after_a_layer_directory_is_refused(tmp_path, name):
-    """A team that shares a name with a layer is a directory two rules both claim.
-
-    `kubementat_components` is in the list because it is one of kubementat's own layer directories,
-    so the row that matters is the one that says *taken* and not *not a name*. It used to be in the
-    list for a second reason — the team listing filtered it by name — and that filter is deleted with
-    the table it lived in, leaving this one rule in place.
-    """
+    """A team that shares a name with a layer is a directory two rules both claim."""
     root = unbuilt_root(tmp_path)
 
     with pytest.raises(LayerNameAlreadyTakenError) as excinfo:
@@ -235,7 +198,8 @@ def test_a_team_named_after_a_layer_directory_is_refused(tmp_path, name):
 @pytest.mark.parametrize("name", BAD_NAMES)
 def test_a_team_name_that_is_not_a_name_is_refused(tmp_path, name):
     """The other kind of refusal: not taken, just unusable. The value is quoted back and the reason
-    says what a layer directory's name is allowed to be."""
+    says what a layer directory's name is allowed to be.
+    """
     root = unbuilt_root(tmp_path)
 
     with pytest.raises(LayerNameUnusableError) as excinfo:
@@ -250,7 +214,8 @@ def test_a_team_name_that_is_not_a_name_is_refused(tmp_path, name):
 @pytest.mark.parametrize("name", [name for name in BAD_NAMES if name != ""])
 def test_an_environment_name_that_is_not_a_name_is_refused(tmp_path, name):
     """Same rule, one layer up. The empty case is skipped here because it is refused by the sentence
-    that says a tree needs an environment at all, which is the truer one."""
+    that says a tree needs an environment at all, which is the truer one.
+    """
     root = unbuilt_root(tmp_path)
 
     with pytest.raises(LayerNameUnusableError) as excinfo:
@@ -264,9 +229,6 @@ def test_an_environment_name_that_is_not_a_name_is_refused(tmp_path, name):
 
 def test_a_refused_name_leaves_the_tree_it_refused_exactly_as_it_found_it(tmp_path):
     """The refusal is not a half-run: an existing tree is untouched by a name it would have rejected.
-
-    This is the assertion a name check that lives inside the write path would pass anyway, so it is
-    made against bytes and not against a step list.
     """
     root = config_root(tmp_path)
     init_configuration(root, ENVIRONMENT, TEAM)

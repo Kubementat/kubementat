@@ -42,7 +42,7 @@ uv sync --all-extras  # Install dependencies with all extras
 ## Test
 
 ```bash
-uv run pytest -q                          # unit suite, no cluster, ~2 s
+uv run pytest -q                          # unit suite, no cluster, ~20 s
 uv run python tests/e2e/suite.py               # real VM: prepare, install, verify, uninstall
 uv run python tests/e2e/suite.py --lane full --scope full   # every stage incl. reinstall, run by hand
 ```

@@ -1,19 +1,4 @@
-"""An environment's own kubeconfig answers ahead of `$KUBECONFIG`.
-
-`platform_config/<environment>/kubeconfig.encrypted.yaml` is the file kubementat tells an operator to
-put there, and it is read when nothing above it declared a path. Three properties are worth writing
-down, because none of them is what the machinery would do by default:
-
-* the tree's own file beats `$KUBECONFIG`, which is the point of moving the default inside the tree;
-* a path someone *did* declare still beats the tree, so this is a default and not a second writer;
-* a file that is not there changes nothing, which is why the change can land without touching a
-  single existing installation.
-
-The name is load-bearing: git-crypt's filter in a prepared tree is `*.encrypted.*`, so a kubeconfig
-called anything else is plaintext with an encrypted-looking path. One test asserts the name, one
-asserts that the ciphertext refusal arrives rather than a YAML error, and one asserts `config init`
-does not quarantine the file it is telling people to create.
-"""
+"""An environment's own kubeconfig answers ahead of `$KUBECONFIG`."""
 
 from pathlib import Path
 
@@ -47,12 +32,6 @@ def write_kubeconfig(path: Path, address: str) -> Path:
 def environment_with_kubeconfig(fixture_repo, *, in_tree: bool, address=IN_TREE_ADDRESS,
                                 declare_path: bool = False, declared_address=None):
     """A tree whose environment declares a context and *no* path, with or without its own kubeconfig.
-
-    `CLUSTER_KUBECONFIG_PATH` is written here and not inherited: the fixture's own
-    `environment_static` merges a declared path into every tree it makes, and a test that used it
-    would be asserting about a path it had already declared, which is the one case this file is not
-    about. An empty pair of braces is the whole difference between "the environment carries nothing"
-    and "the environment carries its own file".
     """
     keys = {"CLUSTER_KUBE_CONTEXT": CONTEXT, "CLUSTER_KUBECONFIG_PATH": None}
     if in_tree:
@@ -71,11 +50,7 @@ def environment_with_kubeconfig(fixture_repo, *, in_tree: bool, address=IN_TREE_
 
 
 def test_an_environment_kubeconfig_is_read_ahead_of_the_variable(fixture_repo, monkeypatch):
-    """The whole decision, in one assert: the address comes from the tree and not from the shell.
-
-    `$KUBECONFIG` is set to a file that would have answered with a *different* address, so the result
-    cannot be read as "both point at the same cluster".
-    """
+    """The whole decision, in one assert: the address comes from the tree and not from the shell."""
     environment_with_kubeconfig(fixture_repo, in_tree=True)
     monkeypatch.setenv("KUBECONFIG", str(write_kubeconfig(
         fixture_repo.root / "ambient.kubeconfig", AMBIENT_ADDRESS)))
@@ -87,12 +62,7 @@ def test_an_environment_kubeconfig_is_read_ahead_of_the_variable(fixture_repo, m
 
 
 def test_a_declared_path_still_beats_the_environment_kubeconfig(fixture_repo, monkeypatch):
-    """The tree answers where nobody said anything, and that is all it does.
-
-    A `CLUSTER_KUBECONFIG_PATH` is a declaration, and a default that outvotes a declaration is not a
-    default, it is a second writer. The declared file is the one opened, and its address is the one
-    reported.
-    """
+    """The tree answers where nobody said anything, and that is all it does."""
     environment_with_kubeconfig(fixture_repo, in_tree=True, address=IN_TREE_ADDRESS,
                                 declare_path=True, declared_address=AMBIENT_ADDRESS)
     monkeypatch.delenv("KUBECONFIG", raising=False)

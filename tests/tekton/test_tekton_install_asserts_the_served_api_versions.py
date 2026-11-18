@@ -1,22 +1,4 @@
-"""An install has to say what it actually left running.
-
-The install ends with four `kubectl apply` commands having exited 0, and that is a claim about the
-manifests they sent and not about the controller that is now running. The failure this closes is the
-one the pins make easy: upstream moved where releases are served, so a version that is not in the
-old bucket can 404 its way through an install, or land a controller that answers a different API
-version than the tree writes. Either way the install prints success and the first pipeline run
-prints forty 404s.
-
-So the install asks the API server the same question the preflight asks before applying
-(`KubernetesUtils.api_version_is_served`) for both groups it brought up, and refuses to go on
-when the answer is no — naming the version the install tried to apply, because that is the half
-the operator cannot read off a cluster.
-
-Half of that is the other direction: what the install sends. The pins live in one JSON file and the
-release addresses are built from them, so the install is run for real against the recording fakes
-and the four URLs it asks for are asserted against the pins. That is the check that says the two
-halves mean the same release.
-"""
+"""An install has to say what it actually left running."""
 
 import json
 from types import SimpleNamespace
@@ -30,25 +12,14 @@ from kubementat.core.config import config as config_module
 from kubementat.errors import TektonControllerWithoutConfiguredApiError
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 
-# The post-install assertion moved to `preflight.py` (P4-2) and the release URLs, their base and the
-# ClusterRole they are authorised through moved to `install.py` (P4-4), both read module-qualified.
-# What is left of `tekton_utils.py` — a constructor and the team refusal — is gone with P4-6, so
-# the client this file hands the install is built from the `Context`, as the constructor built it.
 from kubementat.infrastructure.tekton import install as tekton_install
 from kubementat.infrastructure.tekton import preflight
 from kubementat.infrastructure.tekton.install import TEKTON_RELEASE_BASE_URL
 
-# What the installer is made of, read as a package and not as a file: the base URL, the manifest
-# table and the builder that turns the pins into addresses all moved into
-# `infrastructure/tekton/install.py` (P4-4), and "one base URL" is a rule about the split, not about
-# whichever file held it when the rule was written. `tekton_utils.py` is no longer in the set: the
-# split took every install name out of it in P4-4 and P4-6 deleted the file.
 TEKTON_PACKAGE = REPO_ROOT / "src/kubementat/infrastructure/tekton"
 STATIC_TEMPLATE = template_path("environment", "static.json.template")
 
-# Where upstream serves releases, spelled once because the whole point of the ticket is that
-# the pins and this string move together. Imported from the source rather than repeated here so
-# the assertions below cannot drift away from the code they check.
+# Where upstream serves releases, imported from the installer so the assertions move with the pins.
 RELEASE_BASE_URL = TEKTON_RELEASE_BASE_URL
 
 # The pinned triplet, read from the template so every assertion below is about the product and not
@@ -62,11 +33,7 @@ SERVES_BOTH_GROUPS = {"tekton.dev/v1", "triggers.tekton.dev/v1beta1"}
 
 
 class ClusterAnsweringDiscovery:
-    """The two discovery questions an install is supposed to have answered.
-
-    `appears_after` maps a `group/version` to the number of times it says no before saying yes,
-    which is what a CRD that `kubectl apply` accepted but has not yet registered looks like.
-    """
+    """The two discovery questions an install is supposed to have answered."""
 
     def __init__(self, served=(), appears_after=None, on_answer=None):
         self.served = set(served)
@@ -113,13 +80,16 @@ def the_pinned_config():
 
 
 def an_install_assertion_on(cluster, attempts=6):
-    """Ask the question with no waiting, because a test should not sleep for a controller that exists."""
+    """Ask the question with no waiting, because a test should not sleep for a controller that exists.
+    """
     return preflight.preflight_installed_tekton_api_versions(cluster, the_pinned_config(),
                                                              attempts=attempts, delay_seconds=0)
 
 
 def test_a_controller_that_never_serves_the_written_pipelines_version_names_the_pin_that_missed():
-    """The message has to name 1.17.1-equivalent, not just the group: that is the half the operator is blind to."""
+    """The message has to name 1.17.1-equivalent, not just the group: that is the half the operator is
+    blind to.
+    """
     cluster = ClusterAnsweringDiscovery(served=["triggers.tekton.dev/v1beta1"])
 
     with pytest.raises(TektonControllerWithoutConfiguredApiError) as error:
@@ -133,7 +103,8 @@ def test_a_controller_that_never_serves_the_written_pipelines_version_names_the_
 
 
 def test_a_cluster_left_without_the_triggers_api_fails_on_the_beta_api_it_did_not_get():
-    """Triggers is the half that is easy to get silently wrong: it is the one beta API still spoken."""
+    """Triggers is the half that is easy to get silently wrong: it is the one beta API still spoken.
+    """
     cluster = ClusterAnsweringDiscovery(served=["tekton.dev/v1"])
 
     with pytest.raises(TektonControllerWithoutConfiguredApiError) as error:
@@ -149,7 +120,9 @@ def test_a_cluster_left_without_the_triggers_api_fails_on_the_beta_api_it_did_no
 
 
 def test_the_wait_is_bounded_so_a_control_plane_that_arrives_never_makes_an_install_hang():
-    """Waiting is not the same as giving up: after the attempts run out the answer is still no, and that is an error."""
+    """Waiting is not the same as giving up: after the attempts run out the answer is still no, and
+    that is an error.
+    """
     cluster = ClusterAnsweringDiscovery(served=[])
 
     with pytest.raises(TektonControllerWithoutConfiguredApiError):
@@ -161,12 +134,7 @@ def test_the_wait_is_bounded_so_a_control_plane_that_arrives_never_makes_an_inst
 
 def test_an_install_asks_the_cluster_what_it_left_running_after_the_install_and_before_it_applies_anything(
         tmp_path, monkeypatch):
-    """The check's whole value is its position: after the install, before helmfile.
-
-    Anything that ran before the install would answer about the cluster as it was found, and
-    anything after helmfile would let a wrong pin already be applied. Both halves are what this
-    asserts, so the ordering is written out rather than implied.
-    """
+    """The check's whole value is its position: after the install, before helmfile."""
     journal = []
 
     def note_discovery(key):
@@ -175,12 +143,7 @@ def test_an_install_asks_the_cluster_what_it_left_running_after_the_install_and_
     cluster = ClusterAnsweringDiscovery(served=SERVES_BOTH_GROUPS, on_answer=note_discovery)
 
     class RecordingTektonInstall:
-        """Stands in for `tekton_install.install()` so the ordering is what is under test.
-
-        Patched on the module the install slice calls into — the function moved out of the class in
-        P4-4, so the class is no longer where this step can be intercepted, and patching it is also
-        the assertion that the step is Python: a script call would not be reachable here at all.
-        """
+        """Stands in for `tekton_install.install()` so the ordering is what is under test."""
 
         def install(kubernetes_utils, config, environment):
             journal.append("tekton_install")
@@ -216,20 +179,14 @@ def test_the_install_applies_the_urls_the_pinned_versions_actually_point_at(fixt
                                                                            fake_binaries,
                                                                            dry_run_env,
                                                                            recorded_api):
-    """Run the installer for real and read the addresses it asked `kubectl` to fetch.
-
-    The pins live in a JSON file and the URLs are built from them in Python, so this is the check
-    that says the two halves line up: a pin that resolves against a bucket upstream stopped serving
-    is caught here, against the recording fakes, the way `kmt install` will run it.
-    """
+    """Run the installer for real and read the addresses it asked `kubectl` to fetch."""
     fixture_repo.environment_static(**{
         "TEKTON_VERSION_PIPELINE": PIPELINES,
         "TEKTON_VERSION_TRIGGERS": TRIGGERS,
         "TEKTON_VERSION_DASHBOARD": DASHBOARD,
     })
 
-    # The install itself, module-qualified now (P4-4); what the class resolved — the client and the
-    # configuration the function takes — is read off the `Context` it was built from.
+    # The client and configuration the install takes are read off the `Context` it was built from.
     context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
     tekton_install.install(KubernetesUtils(context), context.config, context.environment)
 

@@ -61,8 +61,7 @@ sudo apt-get -qq install -y git-crypt yq python3-pip curl ca-certificates jq
 # was about whatever the installer handed us that day rather than about kubementat.
 #
 # Two things keep that from happening again, and neither one is a comment: this section installs
-# what the table says (`tests/test_the_lane_installs_the_binaries_the_product_declares.py` is what
-# keeps it that way), and stage 01 states what the guest ended up running
+# what the table says, and stage 01 states what the guest ended up running
 # (`assert:guest-tool-versions-match-the-pin`).
 #
 # A checkout that cannot be read is an error and not a licence to guess: without the table this

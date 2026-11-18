@@ -1,26 +1,4 @@
-"""`kmt users ...` fails closed, on the team and environment it was given.
-
-Three commands, one flow, and the whole point of the CLI surface is that the arguments decide
-what gets edited: `--environment` says which `platform_config/{environment}` this is, `--team`
-says which of its directories. Before D9 both were defaults hardcoded in the CLI, which is how
-`tunnel-*` commands came to read `dev1` no matter what an operator typed, and how a team account
-could be created for a team that environment does not configure.
-
-The contract is the one `kmt uninstall` established, and these commands inherit it:
-
-* without `--yes` and without a terminal to ask in, nothing is created and the message names the
-  flag. A lane run is exactly this case; the bash's answer to it was EOF, `set -e`, and an exit
-  code with no explanation.
-* `--yes` answers the question. It does not change what the flow does, and it does not skip the
-  checks that say whether this cluster will allow it at all (the ones in
-  `test_a_team_account_run_names_the_cluster_and_checks_the_verbs_it_needs.py`).
-* a team or environment that is not configured is an error that names the file, raised before
-  the cluster is asked anything. Guessing is not an option when the action is "create a
-  credential".
-* the account the delete command removes is the whole account: the ServiceAccount, the token
-  Secret that outlives it, and every RoleBinding that let it act, including the ones that let it
-  tunnel into a component's namespace.
-"""
+"""`kmt users ...` fails closed, on the team and environment it was given."""
 
 import base64
 import json
@@ -101,13 +79,7 @@ def bindings_created(recorded_api):
 
 def test_the_three_commands_are_the_same_gate_with_the_same_answer(
         cluster_ready_for_team_accounts, fake_binaries, recorded_api, fixture_repo):
-    """`--yes` is not a mode for one of them: it is the scripted answer for all three.
-
-    The duplicated bash script is what taught this the hard way -- the fix reached one copy and
-    not the other, so the read-only variant and the delete variant still asked. Running all
-    three through a non-terminal stdin and checking each one reaches the cluster is the
-    cheapest version of the assertion the lane needs.
-    """
+    """`--yes` is not a mode for one of them: it is the scripted answer for all three."""
     for command in TEAM_ACCOUNT_COMMANDS:
         recorded_api.calls.clear()
         fake_binaries.take_calls()
@@ -122,12 +94,7 @@ def test_the_three_commands_are_the_same_gate_with_the_same_answer(
 
 def test_a_team_configuration_that_is_not_json_is_refused_before_anything_is_written(
         cluster_ready_for_team_accounts, fixture_repo, recorded_api):
-    """The other unreadable file: valid namespaces cannot be read out of a broken document.
-
-    Uninstall skips such a directory because deleting less is the safe direction. This command
-    cannot skip it -- it has already been told which team to edit, and answering that question
-    would mean a traceback of the tool's own JSON reader where the operator asked for a filename.
-    """
+    """The other unreadable file: valid namespaces cannot be read out of a broken document."""
     path = fixture_repo.platform_config / fixture_repo.environment / fixture_repo.team / "static.json"
     path.write_text('{"PIPELINE_NAMESPACE": "broken",\n')
 
@@ -143,12 +110,7 @@ def test_a_team_configuration_that_is_not_json_is_refused_before_anything_is_wri
 
 def test_an_environment_that_was_never_initialized_is_named_by_the_file_that_is_missing(
         cluster_ready_for_team_accounts, fixture_repo, fake_binaries, recorded_api):
-    """The other half of "which environment am I editing": a directory that is not there.
-
-    Checked after the cluster's own permissions, which is the order the flow runs in, and
-    before a single write. A missing environment file has to arrive as a message that names the
-    path; anything else is a traceback where an operator expected a filename.
-    """
+    """The other half of "which environment am I editing": a directory that is not there."""
     (fixture_repo.platform_config / fixture_repo.environment / "static.json").unlink()
 
     result = CliRunner().invoke(users.create_team_account,
@@ -164,13 +126,7 @@ def test_an_environment_that_was_never_initialized_is_named_by_the_file_that_is_
 
 def test_deleting_an_account_leaves_the_roles_and_destroys_the_credential(
         cluster_ready_for_team_accounts, fixture_repo, recorded_api):
-    """A Role belongs to a namespace, not to the person who was bound to it.
-
-    Two accounts of one team share `namespace-admin`; a delete that swept the Roles with the
-    account would take the other one's access with it. Only the bindings, the account and its
-    token go. The credential is the part that must not survive, because it is already sitting
-    in somebody's `~/.kube/config`.
-    """
+    """A Role belongs to a namespace, not to the person who was bound to it."""
     delete_team_account(configuration_only_context(fixture_repo.environment, fixture_repo.team), 
         ACCOUNT, consent=Consent.assumed())
 
@@ -183,11 +139,7 @@ def test_deleting_an_account_leaves_the_roles_and_destroys_the_credential(
 
 def test_a_binding_for_a_tunnel_into_a_component_that_is_not_here_is_not_deleted(
         cluster_ready_for_team_accounts, fixture_repo, recorded_api):
-    """Nothing is claimed to be deleted in a namespace that was never in play.
-
-    The tunnels that were skipped at create time have no bindings to delete; a delete that
-    guessed by namespace name would report a cleanup that never happened.
-    """
+    """Nothing is claimed to be deleted in a namespace that was never in play."""
     cluster_holding(recorded_api, [ns for ns in CLUSTER_NAMESPACES if ns != "polaris"])
     context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
     create_team_account(context, ACCOUNT, consent=Consent.assumed())
@@ -202,11 +154,7 @@ def test_a_binding_for_a_tunnel_into_a_component_that_is_not_here_is_not_deleted
 
 def test_an_account_created_twice_is_the_same_account_and_not_two_of_them(
         cluster_ready_for_team_accounts, fixture_repo, recorded_api):
-    """Idempotence, because the lane runs the create twice and a rerun must not fight itself.
-
-    The flow goes through create-or-replace primitives; running it a second time has to be a
-    no-op on the shape of what is there, not an error and not a second set of bindings.
-    """
+    """Idempotence, because the lane runs the create twice and a rerun must not fight itself."""
     context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
     create_team_account(context, ACCOUNT, consent=Consent.assumed())
     once = [repr(operation) for operation in recorded_api.operations()]

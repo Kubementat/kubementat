@@ -1,22 +1,5 @@
 """The 1:1 check compares the siblings in the root the command was told about — not the ones the
 process finds for itself.
-
-The whole claim about `Context.build` is that one root is threaded, and its declaration layers are
-the half where that is easy to get wrong: the environment's own `static.json` and the sibling
-sweep are two reads, and plumbing the flag to only the first would still resolve *this*
-environment correctly. It would just compare it against a different tree's siblings, which is how
-a second environment that addresses the same cluster goes unnoticed until a write lands on it.
-
-So the assertion is a collision. Two trees:
-
-* the one the process's own environment names — `dev` and `staging` on two clusters, so the check
-  has nothing to refuse;
-* the one only a flag can name — `dev` and `prod` on **one** cluster, which the rule refuses.
-
-If the flag reaches `Context.build`'s registry, building `dev` against the second tree raises. If
-it reaches only the `Config`, or not at all, the same call reads the first tree's siblings and
-answers that nothing collides. That asymmetry is the test: the refusal is the only observable
-difference, and nothing about it needs a cluster.
 """
 
 import pytest
@@ -35,11 +18,7 @@ PLATFORM_CONFIG_VARIABLE = "KUBEMENTAT_PLATFORM_CONFIG_DIR"
 
 
 def a_root(tmp_path, name, declarations):
-    """A `platform_config` with the environments and contexts the test lists, in its own tree.
-
-    `declarations` is `{environment: server}`. Two environments sharing a server string is how a
-    collision is written down here: the check compares addresses, not context names.
-    """
+    """A `platform_config` with the environments and contexts the test lists, in its own tree."""
     root = tmp_path / name
     root.mkdir(parents=True, exist_ok=True)
     kubeconfig = write_kubeconfig(root / "kubeconfig",

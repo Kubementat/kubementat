@@ -1,24 +1,4 @@
-"""What helmfile builds is what the two knobs say, measured out of the binary and not restated.
-
-The read path and the template meet in one place: helmfile evaluates its own file in the environment
-it is handed, so `Config` answering `false` only becomes a release that is not installed if the
-`installed:` line resolves to helmfile's boolean field. That is a fact about helmfile 1.7.0 and not
-about this repository, which is why this file runs the binary: a Python re-reading of a gotmpl is not
-a measurement of anything, and every other assertion here could pass while helmfile ignored the
-variable completely.
-
-What is measured, on a machine that has helmfile:
-
-* nothing declared, so every release builds `installed: true` -- the manifest's own `default`, which
-  is what a tree that never edited a knob is entitled to;
-* one release switched off by its variable, which builds `installed: false` and is not an error; and
-* the version a build resolves, which comes out of the quoted `default` and is a string and not the
-  number `1.0` that the same characters would parse as.
-
-The shape of the last two was measured by hand on helmfile 1.7.0 and is asserted here so the day a
-helmfile upgrade changes how a quoted `installed:` resolves is the day this file says so. Where
-helmfile is not installed these skip, which is the honest answer and not a pass.
-"""
+"""What helmfile builds is what the two knobs say, measured out of the binary and not restated."""
 
 import os
 import re
@@ -74,13 +54,7 @@ def installed_defaults():
 
 
 def built_releases(**knobs):
-    """`{release name: its built spec}` for the shipped manifest, with *knobs* exported.
-
-    The values that decide where the operator's tree is get popped, so a run from a shell that is
-    carrying `KUBEMENTAT_CONFIG_ROOT` builds the shipped defaults and not somebody's tree. Grafana's
-    admin pair is `requiredEnv`'d by its own block, exactly as an apply does, so its absence would
-    fail the template for a reason that has nothing to do with a knob.
-    """
+    """`{release name: its built spec}` for the shipped manifest, with *knobs* exported."""
     environment = dict(os.environ)
     for name in ("KUBEMENTAT_CONFIG_ROOT", "KUBEMENTAT_ENVIRONMENT", "KUBEMENTAT_TEAM"):
         environment.pop(name, None)
@@ -104,14 +78,8 @@ def built_releases(**knobs):
 
 @helmfile_only
 def test_a_manifest_that_nobody_edited_builds_every_release_at_its_own_default():
-    """The default case, and the one a fresh cluster runs on: every release builds its own default,
-    as booleans -- installed where the block is wound true, not-installed where it ships wound false.
-
-    `is True` and not `== True`, because the point is the field. helmfile resolves an unquoted
-    `true` inside `{{ env ... }}` into its boolean `installed`, and a string that reads `"true"` is
-    not that field -- so a template that quoted the answer would pass an equality assert and fail the
-    apply. The same holds for `false`: the opt-in releases (`concourse` in `group: extra`) must come
-    out the field `False`, not the string `"false"` and not silently `True`.
+    """The default case, and the one a fresh cluster runs on: every release builds its own default, as
+    booleans -- installed where the block is wound true, not-installed where it ships wound false.
     """
     releases = built_releases()
     expected = installed_defaults()

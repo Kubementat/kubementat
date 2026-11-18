@@ -1,26 +1,5 @@
-"""The kubelet read behind `kmt kubernetes pvc-usage`: what answered, from which node, and what did not.
-
-The `kmt kubernetes pvc-usage` command replaces `scripts/utilities/kubernetes/list_pvc_usage.sh`, which
-reached a node's
-`/stats/summary` by starting `kubectl proxy`, `sleep 2`, curling `127.0.0.1:8001` and then
-`pkill -9`ing the proxy. The comparison against that script lived in a parity file and is gone with
-the rest of that family -- the script left the tree, so the only side of the comparison still
-runnable was a record of a bash script nobody runs. What lives here is the shape the replacement has
-to keep, and it is asserted by running the command:
-
-* the node list is read once and each node's summary is asked for by name — the same two questions,
-  with no local server and no program started at all;
-* only a volume entry that carries a `pvcRef` is a claim, so the `emptyDir`s and config maps that
-  share the stats listing stay out of a report about claims;
-* a kubelet that answers nothing, or one that answers without a `pods` half, is a message that
-  names it and says what that leaves out. The rest of the cluster is still answered for;
-* a claim with `capacityBytes: 0` gets no percentage. It is not divided by to find that out, which
-  is the whole reason the row says `n/a`: bash's `jq` died on the same document with `cannot be
-  divided because the divisor is zero` and exited 5;
-* the command prints a table, its plain form is bytes, and `--human` (`-h`) shortens it the way the
-  script's `-h` did — while `--help` is still help.
-
-No configuration key is read on any of these paths, so none of these tests seeds one.
+"""The kubelet read behind `kmt kubernetes pvc-usage`: what answered, from which node, and what did
+not.
 """
 
 import json
@@ -61,11 +40,7 @@ def node(*names):
 
 
 def kubelet_answers(recorded_api, bodies):
-    """Have the node-proxy call answer each node from `bodies`, which is keyed by node name.
-
-    A node missing from `bodies` answers with a connection failure, which is what a kubelet that
-    is not listening looks like to the client (`ApiException`, status 0).
-    """
+    """Have the node-proxy call answer each node from `bodies`, which is keyed by node name."""
     def connect(name=None, path=None, **kwargs):
         if name not in bodies:
             raise ApiException(status=0, reason="Failed to establish a new connection")
@@ -85,11 +60,7 @@ def sizes(rows):
 # ---------------------------------------------------------------------------
 def test_a_two_node_cluster_answers_one_row_per_claim_without_starting_anything(
         recorded_api, monkeypatch):
-    """Two kubelets answering, and the only programs started are none.
-
-    `node-b` reports the claim `node-a` also reports, because that is what a `ReadWriteMany`
-    volume looks like through this read and what the script's flat column hid.
-    """
+    """Two kubelets answering, and the only programs started are none."""
     started = []
     monkeypatch.setattr("kubementat.infrastructure.kubernetes.exec.shell.run",
                         lambda argv, **kwargs: started.append(list(argv)))
@@ -123,12 +94,7 @@ def test_a_two_node_cluster_answers_one_row_per_claim_without_starting_anything(
 
 
 def test_a_kubelet_that_answers_nothing_is_a_message_and_not_a_traceback(recorded_api):
-    """One silent node of two: the other half of the answer still arrives, with its name.
-
-    A `curl` that found nothing to talk to was an empty body the script looped over in silence,
-    so "which nodes did I not tell you about" is a question the old output could not answer at
-    all.
-    """
+    """One silent node of two: the other half of the answer still arrives, with its name."""
     recorded_api.answer("list_node", lambda **kwargs: node("node-a", "node-b"))
     kubelet_answers(recorded_api, {
         "node-a": {"pods": [{"volume": [claim("data-a", GIB, int(0.5 * GIB), int(0.5 * GIB))]}]},
@@ -144,12 +110,7 @@ def test_a_kubelet_that_answers_nothing_is_a_message_and_not_a_traceback(recorde
 
 
 def test_a_kubelet_that_answers_without_a_pod_list_says_which_half_is_missing(recorded_api):
-    """An answer that is a body and not a silence is still not an answer about pods.
-
-    A kubelet serving a `/stats/summary` with no `pods` half is reporting its own numbers and none
-    of its volumes, which is why the message says "there are no volume entries" rather than
-    "nothing answered": the difference between those two sentences is what an operator does next.
-    """
+    """An answer that is a body and not a silence is still not an answer about pods."""
     recorded_api.answer("list_node", lambda **kwargs: node("node-a"))
     kubelet_answers(recorded_api, {"node-a": {"node": {"nodeName": "node-a", "runtime": {}}}})
 
@@ -167,12 +128,7 @@ def test_a_kubelet_that_answers_without_a_pod_list_says_which_half_is_missing(re
 
 
 def test_a_volume_that_lists_no_bytes_still_reads_as_a_claim_with_zeroes(recorded_api):
-    """A `pvcRef` with no figures is a claim the kubelet has not measured, not a missing one.
-
-    bash read those same fields straight out of the entry, so a missing `capacityBytes` reached
-    `jq`'s division as `null`. Here it is 0, and the row that shows it is present so the claim is
-    not silently dropped from a report about claims.
-    """
+    """A `pvcRef` with no figures is a claim the kubelet has not measured, not a missing one."""
     recorded_api.answer("list_node", lambda **kwargs: node("node-a"))
     kubelet_answers(recorded_api, {"node-a": {"pods": [{"volume": [
         {"name": "mount", "pvcRef": {"name": "half-a-answer"}}]}]}})
@@ -195,24 +151,14 @@ def two_node_cluster(recorded_api):
 
 
 def invoking_the_command(two_node_cluster, *arguments):
-    """The command as a user runs it, with its clients reduced to the recorder's answers.
-
-    The streams are kept apart so `result.output` stays what the command's table is, exactly as it
-    was before the resolution report was added — which is on stderr, asserted where it belongs.
-    """
+    """The command as a user runs it, with its clients reduced to the recorder's answers."""
     result = CliRunner(mix_stderr=False).invoke(kubernetes.pvc_usage, list(arguments))
     assert result.exception is None, f"{result.stdout}{result.stderr}\n{result.exception}"
     return result
 
 
 def test_the_human_flag_shortens_the_sizes_and_is_not_help(two_node_cluster):
-    """`-h` is the script's `-h`: human-readable units, not `--help`.
-
-    That is deliberately kept as it was, because the flag is what the script's own usage line
-    offered and a reader who already knows it should not have to relearn it; the help text says so,
-    and `--help` still prints the help. The numbers themselves are the same ones, so the two runs
-    have to agree on every claim.
-    """
+    """`-h` is the script's `-h`: human-readable units, not `--help`."""
     params = {param.name: param for param in kubernetes.pvc_usage.params}
     assert params["human"].opts == ["--human", "-h"]
     assert "help" not in {param.name for param in kubernetes.pvc_usage.params}, (
@@ -229,18 +175,7 @@ def test_the_human_flag_shortens_the_sizes_and_is_not_help(two_node_cluster):
 
 
 def test_the_environment_names_the_read_and_changes_nothing(two_node_cluster, resolvable_environment):
-    """`dev` and `prod` print their own name and address their own cluster.
-
-    The paragraph this replaces said there is no configuration key that routes a PVC read to a
-    cluster and that the command will not invent one. The resolution order invented it on purpose, so
-    the sentence
-    that was true of the script is false of the command, and what is left for this test to hold is
-    the half that did not change: the two runs read through the same primitive and get the same
-    table. What they no longer share is the cluster, which is the assertion that replaced the
-    comment — the invariant that two environments are two clusters, so two environments that printed
-    the same
-    address here would be a collision the check should have refused.
-    """
+    """`dev` and `prod` print their own name and address their own cluster."""
     from cluster_fixture import (
         DEV_SERVER,
         PROD_SERVER,
@@ -278,9 +213,5 @@ def test_a_cluster_with_no_claims_says_so_instead_of_printing_an_empty_table(rec
 
 @pytest.fixture(autouse=True)
 def _an_environment_the_command_can_resolve(resolvable_environment):
-    """`kmt kubernetes pvc-usage` now resolves the cluster it reads, so this module declares one.
-
-    The read itself is per-node and asks no namespace question, so the fixture only has to make
-    `environment: dev` mean something; what the test asserts stays the kubelet's answer.
-    """
+    """`kmt kubernetes pvc-usage` now resolves the cluster it reads, so this module declares one."""
     return resolvable_environment

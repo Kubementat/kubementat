@@ -1,15 +1,4 @@
-"""A cluster target is safe to print, and printing is how it ends up in a log.
-
-The object ends up in `repr` of something else, in a debug log, and in a failure message that a
-human reads over someone else's shoulder. So `__repr__` redacts, and nothing else in the class
-prints: a `ClusterTarget` built from connection material holds credentials until a client is
-actually built, which is why the redaction exists at all — the same reason
-`create-secret-from-json` refuses to echo values.
-
-The tests here hunt for the credential string rather than for the word "redacted", because the
-assertion a reader can trust is "the token is not in there", not "somebody left a comment".
-
-"""
+"""A cluster target is safe to print, and printing is how it ends up in a log."""
 
 from cluster_fixture import checkout, redirect_checkout
 
@@ -35,12 +24,7 @@ def test_the_token_a_connection_target_holds_never_reaches_the_repr(tmp_path, mo
 def test_the_authority_and_the_client_key_a_connection_target_holds_never_reach_the_repr(
     tmp_path, monkeypatch
 ):
-    """Certificate material is the same problem, and it is held for longer.
-
-    A certificate is not a secret the way a token is, but a private key is, and the pair is
-    usually printed together. Neither half of the pair appears, and the authority that signs the
-    cluster appears nowhere either.
-    """
+    """Certificate material is the same problem, and it is held for longer."""
     redirect_checkout(monkeypatch, checkout(tmp_path))
 
     target = ClusterTarget.from_connection(
@@ -54,11 +38,7 @@ def test_the_authority_and_the_client_key_a_connection_target_holds_never_reach_
 
 
 def test_the_repr_names_the_environment_the_context_and_where_the_claim_came_from(tmp_path, monkeypatch):
-    """Redaction cannot afford to lose the debugging value either.
-
-    A repr that drops the address or the source is a repr that cannot answer "which cluster did
-    this command think it was talking to", which is the question the object exists to answer.
-    """
+    """Redaction cannot afford to lose the debugging value either."""
     redirect_checkout(monkeypatch, checkout(tmp_path))
 
     target = ClusterTarget.from_connection("https://lib.example:6443", None, TOKEN, "library")

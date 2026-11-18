@@ -1,38 +1,4 @@
-"""No step clones a repository and then unlocks it, and no step receives a secret GPG key.
-
-Two measured facts and one rule, in that order.
-
-**The product repository has nothing encrypted in it.** `git ls-files .git-crypt .gitattributes` at
-this HEAD returns empty, and that is the owner's ruling: the product ships no encrypted
-files, the root `.gitattributes` was deleted rather than edited, and the git-crypt keystore that
-exists anywhere is the one `config init` creates inside a generated *configuration* directory. So the
-step this file guards used to unlock a repository that had nothing to unlock.
-
-**Doing that in a pod is a silent success and not an error.** Two branches, run against real
-git-crypt 0.7.0 on this machine:
-
-```
-repo with no keystore, empty keyring        → Error: no GPG secret key available…   rc=1
-repo with no keystore, secret key in ring   → (nothing)                             rc=0
-```
-
-The second branch is the pod. `git status` afterwards is clean, `git-crypt status` says
-`not encrypted: <every file>`, no `.git-crypt/` appears — and the step exits 0 having imported a
-private key into the pod's keyring for nothing. A step that reports success while doing nothing is
-the kind of thing that survives a review, so it is removed here rather than annotated.
-
-**The rule outlives the ticket.** Unlocking belongs outside kubementat, and no `kmt` invocation in
-the pipeline execs `git-crypt`. What is *not* refused is a future step that
-pipes `git_crypt_symmetric.key` from a `secretKeyRef` into `git-crypt unlock -`, which is the design
-that was chosen and which needs a configuration repository to unlock — the clone this phase does not
-have yet, per census R. That step would exec `git-crypt`; the thing that cannot come back is *the clone
-step unlocking the repository it just cloned*, and *a GPG private half entering a pod at all*.
-
-Those two are what the guards below assert, and they are deliberately narrower than "no git-crypt
-anywhere in CI", which would fail for the wrong reason the day that step is built. A symmetric key
-and a GPG private key are different files with different blast radii; only the second one is
-prohibited here.
-"""
+"""No step clones a repository and then unlocks it, and no step receives a secret GPG key."""
 
 import yaml
 from asset_paths import tekton_ci_path
@@ -83,27 +49,15 @@ def _task_is_clean(name: str) -> tuple[bool, str]:
 
 
 def test_the_clone_steps_do_not_unlock_what_there_is_nothing_to_unlock():
-    """A clone step that runs `git-crypt unlock` reports success on a repository with no keystore."""
+    """A clone step that runs `git-crypt unlock` reports success on a repository with no keystore.
+    """
     for name in CLONE_TASKS:
         clean, why = _task_is_clean(name)
         assert clean, why
 
 
 def test_no_pipeline_param_can_ask_a_step_to_unlock_on_clone():
-    """A param on the pipeline is a way back in, so the shipped pipelines declare none either.
-
-    Checked as a *param name* and not as a substring of the file. The switch was a param called
-    `git-crypt-unlock`, and the shipped pipelines legitimately have a step called
-    `git-crypt-unlock-configuration` that runs git-crypt after the clone, in the open, and not inside
-    the clone step. A substring test
-    cannot tell those two apart, so it was about to start failing on correct pipelines -- and a guard that
-    fails on correct code is a guard somebody disables.
-
-    The rule this keeps is narrower and truer than the sentence it replaced: nothing may *parameterise*
-    unlocking-on-clone, because the clone step cannot honour it. So every param a pipeline declares, and
-    every param it passes to a step, is collected and checked. A mutation that adds the switch back is
-    caught by name, which is where it would live.
-    """
+    """A param on the pipeline is a way back in, so the shipped pipelines declare none either."""
     for pipeline in sorted(tekton_ci_path("pipelines").rglob("*.yml")):
         doc = yaml.safe_load(pipeline.read_text(encoding="utf-8"))
         spec = doc.get("spec", {}) if isinstance(doc, dict) else {}
@@ -124,7 +78,8 @@ def test_no_pipeline_param_can_ask_a_step_to_unlock_on_clone():
 
 
 def test_the_secret_half_of_a_key_never_enters_a_pod():
-    """The prohibition is on the *private GPG half*, which is a different file from the symmetric key."""
+    """The prohibition is on the *private GPG half*, which is a different file from the symmetric key.
+    """
     for task_file in sorted(tekton_ci_path("tasks").rglob("*.yml")):
         text = task_file.read_text(encoding="utf-8")
         for forbidden in _SECRET_GPG_PROHIBITIONS:

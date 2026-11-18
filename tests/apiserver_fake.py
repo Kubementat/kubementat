@@ -1,32 +1,12 @@
-"""The out-of-process half of the cluster fake.
-
-`tests/shims/` is what a command that runs as its own subprocess talks to: `kubectl` and `helm`
-found through `PATH`, answering from files under `$SHIM_RESPONSE_DIR` and recording into
-`$SHIM_LOG`. Most reads now go through the generated client, which does not go through `PATH`
-at all — so a test that drives the CLI as a process has nothing left to answer it with, and the
-symptom is a connection attempt to whatever kubeconfig the machine has.
-
-This is that missing answer, and it is installed the same way the shims are: by the environment.
-`run_kmt` points `PYTHONPATH` at a directory holding a `sitecustomize.py` that imports this module,
-and `ClusterTarget.client()` then gets a transport that reads the same response files the shims do.
-
-What it deliberately does **not** fake:
-
-* the client. `Configuration` → `ApiClient` → the generated API class → the request line, all of it
-  runs for real. What is replaced is the last hop, the one that would have opened a socket, because
-  the URL the client builds is the thing worth showing.
-* a cluster's behaviour. There is no state here and nothing pretends to reconcile. An answer is
-  whichever file matched first, and no file means the server said 404.
-"""
+"""The out-of-process half of the cluster fake."""
 
 import json
 import os
 import re
 from urllib.parse import urlparse
 
-# One recorded call per request, in the shape the shim log already uses: `apiserver` is the program,
-# and its arguments are the method and the path. A parity test can then read both halves of a run
-# from the same log.
+# One recorded call per request, in the shim log's shape: `apiserver` is the program, and its
+# arguments are the method and the path, so a test reads binaries and client calls from one log.
 PROGRAM = "apiserver"
 
 # The clients this fake has seen, as `(configuration, context, config_file)`. Every recorded
@@ -38,14 +18,7 @@ _CLIENTS = []
 
 
 def _note_clients():
-    """Wrap the kubeconfig client factory so each client's target is known at request time.
-
-    `ClusterTarget.client()` calls `new_client_from_config` with the context and the file it
-    resolved, and nothing else tells the harness what was asked for. Wrapping it notes the pair
-    against the `Configuration` the returned client actually uses — so a request that arrives
-    through a client nobody addressed is *not* guessed at, and stays unattributed for the reducer to
-    raise over.
-    """
+    """Wrap the kubeconfig client factory so each client's target is known at request time."""
     from kubernetes import config as kubernetes_config
 
     if getattr(kubernetes_config.new_client_from_config, "_kmt_noting", False):
@@ -72,12 +45,7 @@ def _configuration_of(client):
 
 
 def _addressing_flags(configuration):
-    """The flags this request's client would have needed, as argv the reducer already reads.
-
-    Same spelling as the `kubectl` side's, so both channels reduce to the same identity string and
-    a divergence between them shows up as the ordinary field-by-field diff `compare` prints. An
-    unattributed request gets nothing and raises downstream, which is the point.
-    """
+    """The flags this request's client would have needed, as argv the reducer already reads."""
     for noted, context, config_file in _CLIENTS:
         if configuration is not None and noted is configuration:
             flags = []
@@ -146,12 +114,7 @@ _ANSWERS = [
 
 
 def _mapped(method, path):
-    """The shim answer files that could reply, most specific first.
-
-    A test writes `respond("kubectl", …, subcommand="get.pods")` when it means "these pods" and
-    `subcommand="get"` when it means "whatever you ask for" — the same two levels of detail the
-    shim's own lookup offers, offered here in the same order.
-    """
+    """The shim answer files that could reply, most specific first."""
     for verb, pattern, key in _ANSWERS:
         if method.upper() == verb.upper() and pattern.match(path):
             head, _sep, _tail = key.rpartition(".")
@@ -167,11 +130,7 @@ def _debug_trace(method, path, outcome):
 
 
 def _answer(method, path):
-    """The file that answers this request, or 404 when nothing claims it.
-
-    Most-specific-first, like the shims: the full path wins, then the path with its trailing name
-    dropped, so a test can answer a whole resource collection with one file.
-    """
+    """The file that answers this request, or 404 when nothing claims it."""
     directory = response_directory()
     mapped = _mapped(method, path)
     for _candidate in mapped:
@@ -212,11 +171,7 @@ def _answer(method, path):
 
 
 class FakeApiServer:
-    """The transport `ApiClient` talks to, answering from files and recording every request.
-
-    Constructed with the same arguments the real one takes and ignores all of them, because the
-    only thing a fake needs from the configuration is the ability to be pointed at nothing.
-    """
+    """The transport `ApiClient` talks to, answering from files and recording every request."""
 
     def __init__(self, configuration=None, **kwargs):
         self.configuration = configuration

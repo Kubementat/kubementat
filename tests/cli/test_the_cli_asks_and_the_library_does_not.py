@@ -1,22 +1,4 @@
-"""The CLI asks, the library decides, and the words in between are pinned here.
-
-Item 7 moved four `isatty()`+`read-a-line` pairs out of `src/kubementat/` and into `src/cli/`. That
-is only a safe change if the sentences survive it, so this file holds the sentences: each one is
-copied out of the code it replaced, and a test that fails on a wording change is the only defence a
-refactoring of this shape has against its own diff.
-
-Two claims are asserted here, and they pull in opposite directions:
-
-* **Nothing the operator sees has moved.** The question, the order of it, the answers it accepts,
-  the sentence printed when the answer is neither, and the way a refusal reads — byte for byte what
-  the library printed before it was asked to stop asking.
-* **The library can no longer ask.** That is asserted with a grep over the tree rather than with a
-  stub, because a stub proves the thing it stubs and nothing else.
-
-The asymmetry the item was really about is in here too: a run at a terminal is asked exactly what it
-used to be, and a run that is not a terminal is refused *earlier* than it used to be, with the same
-words. Where earlier-means-fewer-commands, that is written down as a fact and not left implied.
-"""
+"""The CLI asks, the library decides, and the words in between are pinned here."""
 
 import logging
 from types import SimpleNamespace
@@ -34,12 +16,7 @@ from kubementat.errors import ConfirmationDeclinedError, ConfirmationUnavailable
 
 
 def terminal(monkeypatch, answers, *, tty=True):
-    """A stdin that is a terminal (or is not), fed `answers` one line at a time.
-
-    Two seams, because the ask touches two: `isatty` is read from the module that owns it, and the
-    line itself arrives through `input`. `answers` running out means end-of-input, which is what a
-    pipe that has nothing left to say looks like.
-    """
+    """A stdin that is a terminal (or is not), fed `answers` one line at a time."""
     queue = list(answers)
 
     def answering(prompt="", *_args):
@@ -100,12 +77,7 @@ def test_a_caller_that_supplied_neither_answer_nor_ask_is_refused_and_names_the_
 
 
 def test_install_still_refuses_a_padded_yes_because_it_never_trimmed(monkeypatch, caplog):
-    """` yes ` is not an answer to `kmt install`, and it never was.
-
-    The three other prompts trimmed their answer; this one did not. Normalising it here would be a
-    silent behaviour change wearing a refactoring's face — an answer that used to be refused would
-    start installing a cluster.
-    """
+    """` yes ` is not an answer to `kmt install`, and it never was."""
     caplog.set_level(logging.INFO)
     terminal(monkeypatch, [" yes ", "n"])
     with pytest.raises(SystemExit):
@@ -115,12 +87,7 @@ def test_install_still_refuses_a_padded_yes_because_it_never_trimmed(monkeypatch
 
 
 def test_install_refuses_a_run_with_nobody_to_ask_and_says_it_in_three_lines(monkeypatch, caplog):
-    """The message is what it was, and it lands earlier than it used to.
-
-    Before item 7 this said the same three lines *after* the dependency probes had run, because the
-    library found out about the pipe by standing in it. The item's only observable change is that a
-    doomed run now spends no subprocesses finding out, and this test is where the shape is pinned.
-    """
+    """The message is what it was, and it lands earlier than it used to."""
     terminal(monkeypatch, [], tty=False)
 
     with pytest.raises(SystemExit) as stop:
@@ -146,11 +113,7 @@ def test_install_with_yes_never_reaches_a_question(monkeypatch):
 # ---------------------------------------------------------------------------------------------
 
 def test_uninstall_asks_after_the_plan_and_cancels_in_the_same_words(monkeypatch):
-    """The sentence has to say what was not done and what would have been.
-
-    The bash printed one line and exited; the library gave the CLI a clean `Error:` and the answer
-    still has to be greppable by the lane's `confirmation-rejected-changes-nothing` assert.
-    """
+    """The sentence has to say what was not done and what would have been."""
     terminal(monkeypatch, ["n"])
     consent = uninstall_consent("dev", yes=False)
     assert consent.answer == CONSENT_UNDECIDED
@@ -163,7 +126,7 @@ def test_uninstall_asks_after_the_plan_and_cancels_in_the_same_words(monkeypatch
 
 
 def test_uninstall_with_no_terminal_is_a_usage_error_naming_the_flag(monkeypatch):
-    """`--yes (-y)`: the command's own guard, unchanged since the bash, rc 2 and all."""
+    """`--yes (-y)` without a terminal: the command refuses with exit code 2."""
     import click
 
     terminal(monkeypatch, [], tty=False)
@@ -188,12 +151,7 @@ def test_routing_asks_the_second_controller_question_and_declines_in_the_same_wo
 
 
 def test_routing_names_both_commands_it_could_have_run_instead(monkeypatch):
-    """A refusal that names only `--yes` sends the operator to the one action that writes.
-
-    So the sentence also gives them the read: `kmt routing status dev` answers whose controller it
-    is without applying anything, and `kmt routing install dev --update` is the command that would
-    have asked this question out loud.
-    """
+    """A refusal that names only `--yes` sends the operator to the one action that writes."""
     terminal(monkeypatch, [], tty=False)
     with pytest.raises(ConfirmationUnavailableError) as raised:
         ask(routing_consent("dev", yes=False))

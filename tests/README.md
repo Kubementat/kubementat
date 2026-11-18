@@ -1,55 +1,63 @@
 # Kubementat tests
 
-There is one way to run the suite:
+Two suites, for two questions:
 
 ```bash
-uv run python tests/e2e/suite.py --lane smoke   # ~9 min (541 s measured, 66 asserts)
-uv run python tests/e2e/suite.py --lane full    # ~29 min (1724 s measured, 88 asserts)
+uv run pytest -q                                  # unit suite: no cluster, ~20 s
+uv run python tests/e2e/suite.py --lane smoke     # a throwaway VM: install, verify, uninstall (~9 min)
+uv run python tests/e2e/suite.py --lane full      # every stage, including the reinstall (~29 min)
 ```
 
-Everything lives in [`e2e/`](e2e/README.md). The legacy `tests/*.sh` scripts
-(`test_installation.sh`, `uninstall.sh`, `reset_configuration.sh`) are deleted: they
-prompted on stdin, gated on `kubectl config current-context`, and hand-deleted three
-PVCs by hardcoded name. Their replacement proves the same lifecycle on a real
-throwaway VM.
+The unit suite is the CI gate. The e2e suite runs when a person decides to run it; its
+`result.json` names the git SHA it tested. What belongs in which is in
+[docs/README_E2E_TESTS.md](../docs/README_E2E_TESTS.md), and the lanes themselves in
+[`e2e/`](e2e/).
 
-## Unit tests: `tests/test_*.py`
+## Layout
 
-Everything directly under `tests/` is pytest and needs no cluster:
+One directory per product area. Each file is named for the behaviour its cases prove.
 
-```bash
-uv run pytest -q
-```
+| Directory | What it covers |
+|---|---|
+| `config_root_and_layers/` | naming the configuration root (`--config-dir` over the variable), the layers and which answers a key, locked files, `config show` |
+| `config_init/` | `config init`, `config set/unset`, adding layers, `config validate`, the stamp, the deployer keypair |
+| `cluster_identity/` | resolving the one cluster an environment declares, kubeconfigs, the one-cluster-per-environment check |
+| `cli/` | the command surface, consent, refusals for a missing environment or team, `shell.run`, the version |
+| `install/` | helmfile apply, the manifest and values layers, release knobs, component install, version warnings |
+| `uninstall/` | the uninstall sweep, what it reports as residue, component uninstall |
+| `routing/` | routing install and status, and how kubementat tells its Traefik from someone else's |
+| `tekton/` | the Tekton install and preflight, generated pipelines and triggers, pipeline runs, the cleanup job |
+| `accounts/` | team accounts, their tokens, kubeconfigs and roles, Grafana accounts |
+| `kubernetes/` | secrets, applying a directory, diagnostics, PVC usage |
+| `shipped_manifests/` | facts about the shipped Tekton tasks, helmfile manifest and values files |
 
-Each file covers one contract of the code it is named after — running scripts out of the
-checkout, the `--team` option, loading a config that is missing, the command-execution
-primitive and the rule that only that primitive starts programs.
+## How a test reaches no cluster
 
-**What is not asserted.** No case here greps this repository's own source for its own sake — not
-"the lane must not write configuration with jq", not "this module must not declare that constant",
-not "the docs agree with the code". A test may assert what a stage proved about the product, and it
-may read the argv a capability row resolves to; if what it reads is an artefact the product resolves
-(a release index, a packaged template, a Task's declared params) that is a fact about the product, and
-if what it reads is a sentence in a file it is a self-audit. The parity family, the bash-deletion
-guards and the AST sweeps over `src/` were removed on that rule, on
-2026-11-15; the behaviour they were standing in for is asserted by running the command, and the
-agreement literals they carried are derived from `constants.py` and the release index.
+`conftest.py` makes every test start from a machine that names no configuration root, no
+environment and no cluster, and refuses any connection the Kubernetes client tries to make. Two
+seams stand in for the cluster:
 
-**Naming.** Say what the test proves, not which ticket asked for it. A file and a case
-name must be readable by someone who has never seen the plan that motivated the change:
-`test_relative_script_path_is_resolved_against_the_checkout`, not
-`test_run_script_fin46_relative_path`. Plan and ticket ids belong in the *body* of a
-docstring, where they point at evidence, never in the name. Same rule for parametrized
-ids — if a test runs against five commands, the ids are the command names, not
-`command0`…`command4`.
+- **`recorded_api`** replaces every client kubementat builds with a recorder bound to the cluster
+  it was built for. `cluster_state` and `cluster_deletes` say what the cluster holds and how it
+  answers; `recorded_operations` reduces the log to operations a test can compare.
+- **`fake_binaries`** puts recorder programs named `helm`, `helmfile`, `kubectl`, `git-crypt` and
+  `tkn` first on `PATH` (`shims/`), so a test reads the argv a command ran and decides what it
+  printed.
 
-For what belongs in the VM suite rather than here, see
-[docs/README_E2E_TESTS.md](../docs/README_E2E_TESTS.md).
+`fixture_repo` writes a small configuration tree that answers every read, and `dry_run_env`
+points a `kmt` run at it. `run_kmt` runs `kmt` as its own process, with `apiserver_fake` as its
+cluster.
 
-## What this suite proves
+## Rules
 
-`create VM -> provision single-node k3s -> install kubementat -> exercise the main
-features -> re-run (full) -> uninstall -> assert absence -> destroy VM`, in a VM that
-the run creates and destroys on your own machine. It is not a CI gate: it runs when a
-human decides to run it, and its `result.json` (which names the git SHA it tested) is
-what you cite on a ticket.
+- **A case asserts kubementat's behaviour, and nothing else.** No case reads this repository's
+  source, checks the docs against the code, guards that something deleted stays deleted, or tests
+  the e2e harness. Reading a shipped artefact (a Tekton task, the helmfile manifest, a values file)
+  is a fact about the product and belongs in `shipped_manifests/`.
+- **One case per behaviour.** A new case earns its place by asserting something no other case
+  asserts: a refusal, an order, a precedence, what is left untouched. A case that reaches the same
+  lines to assert the same thing is a duplicate.
+- **Names describe behaviour, never a ticket.** `test_relative_script_path_is_resolved_against_the_checkout`,
+  not `test_run_script_fin46_relative_path`. Parametrized ids are the values' names, not
+  `command0`…`command4`. `test_test_name_conventions.py` enforces the tracker-id part.
+- **Docstrings are one line**, saying what the case proves.

@@ -1,26 +1,4 @@
-"""Which root one command reads, when two dials disagree — and only one of them is typed now.
-
-The plumbing: `--config-dir` arrives on every command that carries `@kmt_context`, beside
-`--context`/`--kubeconfig`, and its one job is to reach `Config(platform_config_dir=...)`. The
-precedence it lands in is `paths.py`'s, unchanged — and it is spelled **once**, in
-`paths.resolve_platform_config_dir`, which `kmt environments list` calls too:
-
-```
-1. --config-dir                       this ticket's addition, so it is the operator speaking now
-2. KUBEMENTAT_PLATFORM_CONFIG_DIR     what CI and a container already say
-3. nothing                            a root is named and never located, so a run that
-                                      named nothing gets one sentence and no cluster
-```
-
-Two properties are worth more than the flag's help text:
-
-* **The flag must not be decoration.** Both tests below set the variable to a *decoy* tree on
-  purpose, so an inverted precedence — or a root that stopped at the CLI's argument and never
-  reached `Config` — answers with the decoy's cluster instead of the flag's.
-* **And it must not replace the rule.** The variable and the default still answer every run that
-  passes no flag, which is why the control case is in this file and not left to the `Config` tests:
-  a flag wired as an early return would pass the first test and break this one.
-"""
+"""Which root one command reads, when two dials disagree — and only one of them is typed now."""
 
 import pytest
 from click.testing import CliRunner
@@ -42,12 +20,7 @@ PLATFORM_CONFIG_VARIABLE = "KUBEMENTAT_PLATFORM_CONFIG_DIR"
 
 
 def two_roots(tmp_path, monkeypatch, *, environment, servers):
-    """Two roots, both declaring *environment*, pointing at different clusters.
-
-    `servers` maps which root says what: `variable` is the tree the process's own environment
-    names, `flag` is the tree a command can only be told about on the command line. Same shape on
-    both sides — that is what makes this a precedence test and not a missing-file test.
-    """
+    """Two roots, both declaring *environment*, pointing at different clusters."""
     roots = {}
     for which, server in servers.items():
         root = tmp_path / f"root-the-{which}-names"
@@ -72,22 +45,7 @@ def platform_of(root):
 
 def test_the_listing_and_a_command_answer_one_root_because_they_read_one_rule(tmp_path,
                                                                               monkeypatch):
-    """Two readers of one root, on every layer, because the rule has one owner now.
-
-    `kmt environments list` used to spell the precedence beside its own `EnvironmentRegistry`:
-    `default_platform_config_dir() if config_dir is None else Path(config_dir).resolve()`. That
-    agreed with `Config`, so nothing failed and the duplication had no symptom — which is exactly
-    the shape two owners of one rule take: they are correct right up until one of them is edited.
-    One consolidation moved the spelling into `paths.resolve_platform_config_dir` and had both call
-    it, so the
-    check here is not "do they agree today" (they always did) but *how* they agree: the same value
-    on the two dials, and — the tell of a shared owner — byte-identical sentences on the layer
-    where neither names anything.
-
-    The printed row is asserted against the `Config`'s own root rather than against a literal, so
-    a change that moved what the listing prints fails here even when it keeps printing something
-    plausible.
-    """
+    """Two readers of one root, on every layer, because the rule has one owner now."""
     roots = two_roots(tmp_path, monkeypatch, environment="dev",
                       servers={"variable": DEV_SERVER, "flag": PROD_SERVER})
 

@@ -1,23 +1,4 @@
-"""The address comes first, and nothing about this command is decided by a guess.
-
-`kmt users create-grafana-accounts` and `kmt users create-grafana-read-only-account` are the
-callers the client was waiting for. Two things are being checked here, and they are the two
-things that made the capability row vacuous:
-
-* **Where grafana is.** `--grafana-url` first, then the service's ClusterIP read through the
-  config's own selector, then a failure that names both. What is *not* in the precedence is a
-  default — `http://127.0.0.1:31827` was the scripts' answer, and a port nobody opens answers
-  nothing, which is how a create that created nothing printed a success.
-* **Whether an operation happened.** Every body is read as an answer or as a failure, so
-  "grafana did not respond" and "grafana says that account is already there" are different
-  outcomes with different exit codes. The bash could not tell them apart, and told them the same.
-
-The rest is parity, not correctness: `org_role=None` is what the deleted script sent, which is
-nothing. Keeping it is a recorded question, not a decision that "read only" means something.
-
-Nothing here opens a socket. `requests.Session` is replaced with a recorder in every case, and
-the cluster is asked for a service by a fake that answers with one string.
-"""
+"""The address comes first, and nothing about this command is decided by a guess."""
 
 import json
 
@@ -39,12 +20,7 @@ USER_ID = 12
 
 
 class RecordingSession:
-    """Answers like grafana, and remembers every request that reached it.
-
-    `responses` is keyed by `"<METHOD> <path>"` so a test can say what the search said and what
-    the create said, and a test that asks for something unkeyed fails instead of getting an
-    empty body — which is the one class of bug this whole flow is about.
-    """
+    """Answers like grafana, and remembers every request that reached it."""
 
     def __init__(self, **responses):
         self.requests = []
@@ -67,13 +43,7 @@ class RecordingSession:
         return self.responses[key]
 
     def then(self, key, *answers):
-        """Answer one endpoint differently the *n*th time, in order.
-
-        A 412 that says "already exists" is only half the story: the client then asks who. A
-        session that answers both times with the same body cannot express that, and a test that
-        cannot express it cannot tell "found the account that was in the way" from "got nothing,"
-        which is the exact pair the bash could not tell apart.
-        """
+        """Answer one endpoint differently the *n*th time, in order."""
         self.sequences[key] = list(answers)
         return self
 
@@ -109,12 +79,7 @@ def exists_already(**kwargs):
 
 
 def cluster_answering(endpoint):
-    """The cluster side of the address resolution: one service, or none.
-
-    Patched on `grafana_accounts` and not on the command that used to hand a client down: the
-    `Context` conversion moved the construction site into the module that uses the answer, so the
-    seam is where the client is built and not where it is passed through.
-    """
+    """The cluster side of the address resolution: one service, or none."""
 
     class Utils:
         def __init__(self, *args, **kwargs):
@@ -130,7 +95,8 @@ def cluster_answering(endpoint):
 
 @pytest.fixture
 def checkout(fixture_repo, monkeypatch):
-    """A checkout whose config declares two grafana accounts, and no token to distract from the pair."""
+    """A checkout whose config declares two grafana accounts, and no token to distract from the pair.
+    """
     monkeypatch.setenv("KUBEMENTAT_HOME", str(fixture_repo.root))
     # The configuration root is named, not located: clearing the variable here would leave
     # this fixture with no root at all, and the refusal would arrive instead of the behaviour the
@@ -174,12 +140,7 @@ def invoke(argv):
 
 def test_an_unresolved_address_fails_and_names_the_flag_and_the_selector(checkout, driven,
                                                                          monkeypatch):
-    """Where both sources come up empty, the command stops. That is the fix, stated as an assert.
-
-    The scripts' shape of this moment was `http://127.0.0.1:31827` and exit 0. The only thing
-    worse than no grafana is no grafana and a green row, so what is asserted here is the exit
-    code plus the two names that let a person act on it, plus that not one request was sent.
-    """
+    """Where both sources come up empty, the command stops. That is the fix, stated as an assert."""
     monkeypatch.setattr(grafana_accounts, "KubernetesUtils", cluster_answering(NO_ADDRESS))
 
     result = invoke(["create-grafana-accounts", checkout.environment, "--yes"])
@@ -196,12 +157,7 @@ def test_an_unresolved_address_fails_and_names_the_flag_and_the_selector(checkou
 
 def test_a_412_that_says_the_account_exists_is_not_reported_as_a_creation(
         checkout, driven, monkeypatch):
-    """`created=False` is the whole point of the row, and grafana's 412 is what says it.
-
-    The old skip guard fired on an empty search result, which is why it lied. Here it fires on
-    grafana's own duplicate answer, and the run reports the account as confirmed rather than
-    made -- including the user id, which a `jq '.users[0]'` on nothing never had.
-    """
+    """`created=False` is the whole point of the row, and grafana's 412 is what says it."""
     monkeypatch.setattr(grafana_accounts, "KubernetesUtils", cluster_answering(CLUSTER_IP_URL))
     (checkout.platform_config / checkout.environment / "static.encrypted.json").write_text(
         json.dumps({"GRAFANA_ADMIN_USER": "grafadmin", "GRAFANA_ADMIN_PASSWORD": "not-a-password",
@@ -218,18 +174,9 @@ def test_a_412_that_says_the_account_exists_is_not_reported_as_a_creation(
     assert "user 4" in result.output
 
 
-# ------------------------------------------------------------------ parity, recorded
-
-
 def test_a_run_says_which_accounts_it_made_and_names_no_password_it_never_set(
         checkout, driven, monkeypatch):
-    """The difference between making an account and confirming one, printed.
-
-    `create_new_user_for_team` printed one sentence for both. Here a created account reports the
-    password this run generated, because nothing stores it and the operator has to write it down,
-    and an account that already existed reports *no* password: what it is on is not this run's
-    business, and a config that stored the candidate would store a value that was never true.
-    """
+    """The difference between making an account and confirming one, printed."""
     monkeypatch.setattr(grafana_accounts, "KubernetesUtils", cluster_answering(CLUSTER_IP_URL))
     driven.responses.update({
         "GET /api/users/search": no_such_user(),
@@ -269,11 +216,7 @@ def test_the_read_only_command_reports_what_it_made_and_what_it_did_not_decide(
 
 
 def test_a_row_that_names_no_email_stops_the_flow_before_the_first_request(checkout, monkeypatch):
-    """A create with no address is not an account missing a field, and no request is sent.
-
-    Half a list is the worst outcome this flow can produce: everything before the bad row is
-    created, and the operator is left to find which accounts are on the cluster.
-    """
+    """A create with no address is not an account missing a field, and no request is sent."""
     (checkout.platform_config / checkout.environment / "static.encrypted.json").write_text(
         json.dumps({"GRAFANA_ADMIN_USER": "grafadmin", "GRAFANA_ADMIN_PASSWORD": "not-a-password",
                     "GRAFANA_USERS": [{"name": "No Address"}]}))
@@ -288,11 +231,7 @@ def test_a_row_that_names_no_email_stops_the_flow_before_the_first_request(check
 
 
 def test_an_environment_that_declares_no_accounts_says_so_loudly(checkout, monkeypatch):
-    """Nothing to create is a true answer, but not one a green row may whisper.
-
-    A `GRAFANA_USERS` of `[]` is exactly as vacuous as the default address was, so it is reported
-    rather than skipped: the row is only as honest as the config driving it.
-    """
+    """Nothing to create is a true answer, but not one a green row may whisper."""
     fixture_repo = checkout
     fixture_repo.environment_static_encrypted(**{"GRAFANA_USERS": []})
     monkeypatch.setattr(grafana_client.requests, "Session",
@@ -307,12 +246,7 @@ def test_an_environment_that_declares_no_accounts_says_so_loudly(checkout, monke
 
 def test_the_credential_is_the_ones_the_file_names_and_no_shell_export_is_consulted(
         checkout, driven, monkeypatch):
-    """`static.encrypted.json` is the authority, and an operator's shell is not a second one.
-
-    The pair the fixture file names is what reaches the request, even when the machine's own
-    environment exports a different one -- the same contract `infrastructure/helm.py` and the lane's probe
-    both read.
-    """
+    """`static.encrypted.json` is the authority, and an operator's shell is not a second one."""
     monkeypatch.setenv("GRAFANA_ADMIN_USER", "an-exported-user")
     monkeypatch.setenv("GRAFANA_ADMIN_PASSWORD", "an-exported-password")
     monkeypatch.setattr(grafana_accounts, "KubernetesUtils", cluster_answering(CLUSTER_IP_URL))
@@ -331,11 +265,7 @@ def test_the_credential_is_the_ones_the_file_names_and_no_shell_export_is_consul
 
 
 def test_the_command_refuses_a_run_that_cannot_confirm_itself(checkout, monkeypatch):
-    """Same contract as `kmt uninstall` and the team accounts: no terminal, nothing created.
-
-    `run-script` passed the question to a script that answered itself with EOF. A command is
-    supposed to own that answer.
-    """
+    """Same contract as `kmt uninstall` and the team accounts: no terminal, nothing created."""
     monkeypatch.setattr("sys.stdin", open("/dev/null"))
 
     result = invoke(["create-grafana-accounts", checkout.environment])

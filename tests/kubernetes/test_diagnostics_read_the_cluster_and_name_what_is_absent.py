@@ -1,22 +1,4 @@
-"""The cluster diagnostics: pods, images, and capacity, read the way the scripts read them.
-
-`kmt kubernetes analyze-deployment`, `kmt kubernetes pod-images` and `kmt kubernetes cluster-capacity` replace three bash
-scripts. Those scripts are deleted, and the parity file that compared them is gone with the rest of
-that family, so every claim below is made by running the command against the recorded API and
-asserting what it asked the cluster. What the scripts did with `kubectl` piped through `jq` these do
-through the client,
-and the part that makes the swap safe lives here:
-
-* a namespace that was never created gets its name in a message, not an `ApiException`;
-* a deployment that is not installed is reported in the result, because showing the operator
-  the namespace's other pods is the useful answer;
-* metrics-server is a service a cluster need not have, and its absence is a sentence in the
-  capacity report rather than a traceback.
-
-Fixture values echo the recorded scripts where it matters: the same 800m/600Mi pod requests
-`cluster_capacity.sh` read out of `kubectl describe node`, so the two files can be read
-against one cluster.
-"""
+"""The cluster diagnostics: pods, images, and capacity, read the way the scripts read them."""
 
 from types import SimpleNamespace
 
@@ -47,11 +29,7 @@ def api_error(status, reason="not found"):
 
 def pod(name, namespace=NAMESPACE, phase="Running", node="node-a", image="example.test/web:1.0",
         instance=None, requests=None, init_image=None):
-    """One pod, whole enough for every read in this file.
-
-    `instance` is what the deployment selector matches, `requests` goes onto the first
-    container, and the labels exist because the selector is answered by them on a real cluster.
-    """
+    """One pod, whole enough for every read in this file."""
     labels = {"app.kubernetes.io/instance": instance} if instance is not None else {}
     labels.setdefault("app.kubernetes.io/name", instance or name)
     resources = (V1ResourceRequirements(requests=requests) if requests else None)
@@ -77,12 +55,7 @@ def node_list(*nodes):
 
 
 def test_analyzing_reports_a_deployment_that_is_not_installed_without_failing_the_read(recorded_api):
-    """The namespace still answers, so a missing deployment is a sentence and not an exception.
-
-    A typo in the deployment name is the common case. The pods of the namespace still come
-    back — they are the evidence that the namespace is the right one — and the message says
-    which of the two answers did not arrive.
-    """
+    """The namespace still answers, so a missing deployment is a sentence and not an exception."""
     recorder = recorded_api
     recorder.answer("list_namespaced_pod", lambda **kwargs:
                     pod_list() if kwargs.get("label_selector")
@@ -97,11 +70,7 @@ def test_analyzing_reports_a_deployment_that_is_not_installed_without_failing_th
 
 
 def test_analyzing_names_the_namespace_that_was_never_created(recorded_api):
-    """A namespace that does not exist is the operator's typo, and the error says so.
-
-    The old bash printed kubectl's raw `ApiException` text; the replacement names the
-    namespace it looked for, because that is the part of the message an act on.
-    """
+    """A namespace that does not exist is the operator's typo, and the error says so."""
     recorded_api.answer("list_namespaced_pod", api_error(404))
 
     with pytest.raises(NamespaceNotFoundError) as error:
@@ -111,11 +80,7 @@ def test_analyzing_names_the_namespace_that_was_never_created(recorded_api):
 
 
 def test_a_pod_that_is_gone_while_logs_are_read_is_reported_and_not_an_error(recorded_api):
-    """A pod that vanishes between listing and log-reading is a race, not an error.
-
-    CrashLooping pods reschedule while this command reads them. The report must not fall
-    over halfway through for one pod that is no longer there.
-    """
+    """A pod that vanishes between listing and log-reading is a race, not an error."""
     recorder = recorded_api
     recorder.answer("list_namespaced_pod", lambda **kwargs: pod_list(pod("web-1", instance=DEPLOYMENT)))
     recorder.answer("read_namespaced_pod_log", api_error(404))
@@ -129,12 +94,7 @@ def test_a_pod_that_is_gone_while_logs_are_read_is_reported_and_not_an_error(rec
 # pod-images
 # ---------------------------------------------------------------------------
 def test_pod_images_answers_each_image_once_across_the_namespace(recorded_api):
-    """`kubectl get pods -o json | jq .images` is the script; this is the same two answers.
-
-    Rollouts leave pods of two tags of the same image side by side, and an init container
-    pulls from the registry too, so the set is what "used images" means — a list with
-    duplicates would read as three problems where there are two.
-    """
+    """`kubectl get pods -o json | jq .images` is the script; this is the same two answers."""
     recorder = recorded_api
     recorder.answer("list_namespaced_pod", lambda **kwargs: pod_list(
         pod("web-1", image="example.test/web:1.0", init_image="example.test/init:0.9"),
@@ -165,13 +125,7 @@ def metrics_absent():
 
 
 def test_capacity_reports_requested_against_allocatable_for_every_node(recorded_api):
-    """800m requested on a 2-CPU node is 40% — the same number `kubectl describe node` prints.
-
-    Memory is read as a quantity, not a string: 600Mi against 6Gi is 9.8%, the same number
-    `kubectl describe node` prints. The finished pods are not counted (the script's own
-    source is describe-node's Requests section, which counts only what is running), and the
-    average is across nodes, not across pods.
-    """
+    """800m requested on a 2-CPU node is 40% — the same number `kubectl describe node` prints."""
     recorder = recorded_api
     recorder.answer("list_node", lambda **kwargs: node_list(
         node("node-a"), node("node-b", cpu="1", memory="2Gi")))
@@ -199,12 +153,7 @@ def test_capacity_reports_requested_against_allocatable_for_every_node(recorded_
 
 
 def test_capacity_explains_that_metrics_server_is_absent_and_still_answers(recorded_api):
-    """A cluster without metrics-server is an ordinary cluster, not a traceback.
-
-    The metrics API answers 404 when no service is mapped for it, and the script it replaces
-    never asked at all — so its absence may not sink the node list. The message must say
-    what is missing and what is still being reported.
-    """
+    """A cluster without metrics-server is an ordinary cluster, not a traceback."""
     recorder = recorded_api
     recorder.answer("list_node", lambda **kwargs: node_list(node("node-a")))
     recorder.answer("list_pod_for_all_namespaces", lambda **kwargs: pod_list(
@@ -221,11 +170,7 @@ def test_capacity_explains_that_metrics_server_is_absent_and_still_answers(recor
 
 
 def test_a_failing_metrics_endpoint_is_not_reported_as_an_absent_one(recorded_api):
-    """404 is "not installed". Anything else from that endpoint is a real cluster failure.
-
-    Swallowing a 500 the way a 404 is swallowed would make the report lie about why usage
-    is missing, so only the absence statuses are graceful.
-    """
+    """404 is "not installed". Anything else from that endpoint is a real cluster failure."""
     recorder = recorded_api
     recorder.answer("list_node", lambda **kwargs: node_list(node("node-a")))
     recorder.answer("list_pod_for_all_namespaces", lambda **kwargs: pod_list())

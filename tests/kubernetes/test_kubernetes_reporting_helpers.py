@@ -1,19 +1,4 @@
-"""Tests for the reporting and debugging helpers: exec, logs, pods, nodes, api-resources.
-
-`kmt kubernetes deployment-ssh`, `kmt kubernetes deployment-logs`, `kmt kubernetes pvc-usage` and the uninstall's "here is the
-cluster you are about to wipe" prompt all read through these, so what they replace is a
-hand-written `kubectl` command line per script. The contract that makes that safe is the
-one these tests pin:
-
-* the command line is argv, with a pod name or a label selector that could contain a space
-  arriving as one argument;
-* something that streams, streams (`capture=False`) — capturing `logs -f` or an
-  interactive shell is what made the old tunnel look frozen;
-* a helper that only needs a verdict from the API goes through the client, not a shell.
-
-The `kubectl` boundary is recorded where it is called. That nothing else in `src/` starts a
-program is asserted by `test_command_execution_policy.py`.
-"""
+"""Tests for the reporting and debugging helpers: exec, logs, pods, nodes, api-resources."""
 
 from types import SimpleNamespace
 
@@ -42,13 +27,7 @@ class RecordedRun:
 
 
 def make_utils(monkeypatch, **replacements):
-    """A `KubernetesUtils` with no cluster: no kubeconfig, no real `kubectl`, no API.
-
-    `replacements` maps `shell.run` (to a `RecordedRun`) and the API attributes to fakes. There is
-    nothing left to neutralise here: building the object against `TARGET_DEV` reads nothing,
-    because the clients are built when they are asked for and every one of them is being replaced
-    below before anything asks.
-    """
+    """A `KubernetesUtils` with no cluster: no kubeconfig, no real `kubectl`, no API."""
     utils = KubernetesUtils(TARGET_DEV)
     if "run" in replacements:
         monkeypatch.setattr("kubementat.infrastructure.kubernetes.exec.shell.run", replacements["run"])
@@ -131,13 +110,7 @@ def test_pods_are_selected_by_their_labels_and_come_back_empty_when_nothing_matc
 
 
 def test_the_resource_types_a_cluster_serves_come_back_parsed(monkeypatch):
-    """This was converted to discovery, and the table it returns is unchanged.
-
-    `DynamicClient.resources` is keyed by `(group, version)` and then by resource name, and the
-    old `kubectl api-resources --output=json` table was assembled from exactly that. So the read
-    moves and the answer's shape does not: one entry per resource type, ordered by name, with
-    `name` carrying the group suffix and `verbs` the verbs discovery reported.
-    """
+    """This was converted to discovery, and the table it returns is unchanged."""
     discovery = SimpleNamespace(resources={
         ("tekton.dev", "v1beta1"): {"pipelines": {
             "singularName": "pipeline", "namespaced": True, "kind": "Pipeline", "verbs": ["*"]}},

@@ -1,18 +1,4 @@
-"""Tests for loading a team config that is missing: an error message, not a crash.
-
-The defect: `Config._load_config()` only bound `team_static` / `team_static_encrypted`
-inside `if os.path.exists(...)` branches, so a team with no team-level config returned a
-value and `return { 'team_static': team_static, ... }` blew up with
-`UnboundLocalError: local variable 'team_static' referenced before assignment`. That is what
-a full lane saw for `cap:helmfile-apply:routing`, and it is the reason a missing config file
-has to name the path it expected and produce no traceback: the reader has one fact to act
-on, and a Python error that names nothing is not that fact.
-
-This is also where the claim that a lane row used to make lives now. No verb the lane can run
-makes a single layer file go missing -- `config unset` clears a pair, not one -- so a lane
-cannot reach this state, and the row that tried went red against a tree that was correct.
-The behaviour is asserted here, against the door that implements it.
-"""
+"""Tests for loading a team config that is missing: an error message, not a crash."""
 
 import json
 

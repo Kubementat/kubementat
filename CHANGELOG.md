@@ -1,4 +1,19 @@
 # Unreleased
+- **The unit suite tests kubementat's behaviour and nothing else, one case per behaviour: 774 cases
+  in eleven area directories under `tests/`, down from 1722 in 180 files, with the same statements
+  of `src/` covered.**
+  - **Removed.** The unit tests of the e2e harness (the e2e suite itself is unchanged), the checks
+    that parse `src/` or compare the docs with the code, and the guards that a deleted script, verb
+    or file stays deleted. `cluster_parity.py`, which compared the bash scripts with their Python
+    replacements, shrank to `recorded_operations.py`, the reducer the client-call assertions use.
+  - **Kept.** A minimal set of cases that reaches every covered statement, every case that asserts a
+    refusal before a write, an order, a precedence, idempotence or a credential staying out of
+    output, and the facts about the shipped Tekton tasks, helmfile manifest and values files.
+  - **Isolated.** Every case now starts with `KUBEMENTAT_HOME`, `KUBEMENTAT_PLATFORM_CONFIG_DIR`,
+    `KUBECONFIG`, `ENVIRONMENT`, `TEAM` and both `CLUSTER_*` variables cleared, so a developer's
+    exported root no longer turns a refusal test red.
+  - Docstrings are one line and name no plan, ticket or row. The suite runs in about 20 s;
+    `tests/README.md` describes the layout and the two cluster seams.
 - **A Renovate integration scans the tree for newer versions of everything it pins, and runs from
   one command: `tools/renovate/run-renovate-scan.sh`.** Adds `renovate.json` at the repo root and
   the runner under `tools/renovate/`; documentation in

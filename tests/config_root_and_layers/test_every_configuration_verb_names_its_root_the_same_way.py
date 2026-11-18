@@ -1,27 +1,4 @@
-"""Every `kmt config` verb names the root it works on, and none of them locates one.
-
-The surface used to have one exception: the seven verbs under `kmt config` took the directory as a
-positional and answered to neither of the two spellings every other kmt command honours. So a
-container that had already configured its root could run `kmt install` against it and could not run
-`kmt config set` against it — the same tree, two ways of saying which one, and only one of the two
-routes worked where the operator had written the path down once. This file is the guard against that
-exception coming back for one verb and not for the others.
-
-Two claims, and the second is the one that pays.
-
-* **The census.** A verb that silently dropped the flag would still work for anyone typing a path as
-  a positional, so `kmt --help` would not notice and a script that set the variable would. The exact
-  parameter set is what notices, verb by verb.
-* **The precedence.** `--config-dir` beats `$KUBEMENTAT_PLATFORM_CONFIG_DIR` and with neither the run
-  refuses; all three branches have to hold for every verb, because a rule that is true of six of
-  seven commands is a rule with a hole in it and not a rule. The branch that used to be missing is
-  the middle one: nothing but the variable.
-
-The verbs that resolve a cluster are not here — `cli/context.py` gives them the same option through
-`@kmt_context`, so a hole would show up as a failing cluster test rather than as this file's
-assertions — and `kmt environments list` carries the same flag for the same reason, which the surface
-check in `test_cli_surface.py` pins.
-"""
+"""Every `kmt config` verb names the root it works on, and none of them locates one."""
 
 import json
 from pathlib import Path
@@ -48,12 +25,7 @@ def prepared_tree(workspace: Path) -> Path:
 
 
 def untouched_root(workspace: Path) -> Path:
-    """A root that does not exist yet, which is what `init` is pointed at and nothing else is.
-
-    A prepared tree is the wrong thing to hand the tree-creating verb: its answers are already
-    answered by hand and `init` refuses a file that differs from what it would write, so a run that
-    looked like a root problem would be a file-content problem wearing it.
-    """
+    """A root that does not exist yet, which is what `init` is pointed at and nothing else is."""
     return workspace / "platform_config"
 
 
@@ -81,17 +53,14 @@ READS_THE_ROOT = {
 
 @pytest.fixture
 def clean_environment(monkeypatch):
-    """Neither spelling of a root, and no `KUBEMENTAT_HOME` either, so a located root is impossible."""
+    """Neither spelling of a root, and no `KUBEMENTAT_HOME` either, so a located root is impossible.
+    """
     monkeypatch.delenv(ROOT_VARIABLE, raising=False)
     monkeypatch.delenv("KUBEMENTAT_HOME", raising=False)
 
 
 def tree(tmp_path) -> Path:
-    """A prepared tree with both layers answered, built by the verbs the surface has.
-
-    Built with `init_configuration` / `add_team` / `set_answer` and not copied, because a fixture that
-    `cp -a`'s a directory is a fixture that believes in a tree no product verb wrote.
-    """
+    """A prepared tree with both layers answered, built by the verbs the surface has."""
     root = tmp_path / "platform_config"
     config_init.init_configuration(root=root, environment=ENVIRONMENT)
     config_init.add_team(root=root, environment=ENVIRONMENT, team=TEAM)
@@ -100,12 +69,7 @@ def tree(tmp_path) -> Path:
 
 
 def run(*argv):
-    """`kmt config …`, through the group so the verb's own name is exercised.
-
-    A bug inside the command re-raises instead of hiding in an exit code; a named refusal is allowed
-    to stand, because "I will not run" is an answer and not a crash. It is rendered on its way out by
-    the root group, which is why this helper dispatches through it.
-    """
+    """`kmt config …`, through the group so the verb's own name is exercised."""
     from cli.kmt import KmtGroup
 
     root_group = KmtGroup(name="kmt")
@@ -121,23 +85,13 @@ def said(result) -> str:
 
 
 def answered(root: Path) -> object:
-    """What the environment layer answers for this file's key, read back out of the tree.
-
-    Read from the file and not from `kmt config show`, because the assertion is about *which root* a
-    run wrote and a read that resolves the root itself would hide the answer behind the same rule it
-    is meant to be testing.
-    """
+    """What the environment layer answers for this file's key, read back out of the tree."""
     path = root / ENVIRONMENT / "static.json"
     return json.loads(path.read_text(encoding="utf-8")).get("ROOTVERB")
 
 
 def test_no_configuration_verb_takes_a_root_as_a_positional():
-    """The census: seven verbs, each carrying `config_dir` and none carrying `directory`.
-
-    The two sets are checked separately because each catches a different drift. Dropping the flag is
-    what a "cleanup" does to one verb, and putting the directory back is what a revert does to the
-    group's help text; either one leaves every other assertion in the tree green.
-    """
+    """The census: seven verbs, each carrying `config_dir` and none carrying `directory`."""
     assert set(config_module.config.commands) == VERBS, \
         "the config group changed shape; this file's tables need the same change"
 
@@ -156,12 +110,6 @@ def test_the_variable_names_the_root_for_every_verb_and_the_flag_outranks_it(tmp
                                                                              tools,
                                                                              monkeypatch):
     """The branch that used to be missing: nothing on the command line, and the variable still read.
-
-    Two halves, because one is a rule with a hole in it. The first says the variable is honoured,
-    which is what a container or a scheduled run actually relies on. The second says the flag beats
-    it, because a rule with two spellings needs exactly one of them to win, and that precedence has
-    one owner — `paths.resolve_platform_config_dir` — which is why a decoy named by the variable
-    while a root was handed to the command stays empty.
     """
     for name, (seed, arguments, proved) in sorted(READS_THE_ROOT.items()):
         workspace = tmp_path / name
@@ -194,10 +142,6 @@ def test_the_variable_names_the_root_for_every_verb_and_the_flag_outranks_it(tmp
 
 def test_the_variable_set_to_nothing_is_refused_and_not_located(tmp_path, monkeypatch):
     """An empty variable is not an unset one, so the refusal names the variable and not a default.
-
-    Falling back to a default here would read configuration out of wherever the wheel was installed
-    while saying nothing about it, which is the same defect one layer down. So the empty case is
-    refused in the same place the unset case is, and the six reading verbs say so identically.
     """
     monkeypatch.setenv(ROOT_VARIABLE, "   ")
 

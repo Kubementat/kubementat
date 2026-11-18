@@ -1,41 +1,4 @@
-"""`config validate` gives the tree a verdict, not an argument.
-
-The claim this file exists to keep is one sentence: **every fault the tree warrants is named in one
-run, warnings cannot fail the run, and the exit code is the only verdict.** No CLI command collected
-findings and *then* chose an exit code before this verb (census Q3 said so plainly), so the
-convention has to be asserted rather than inherited: warnings print with `err=True` and exit 0,
-and errors come back as one `ClickException` that lists all of them rather than the first — the
-library's own `HelmUtils.uninstall_release` idiom, now spelled on the surface.
-
-Six claims, and which half of each is load-bearing:
-
-1. **A tree `config init` laid down is clean.** Zero errors, and the printed line names the
-   environment and the warning count. What that count is is a fact about a fresh tree: the
-   cluster key is null and that is the single thing validate says about it, so the row asserts
-   the *count* and not the shape of the one warning.
-2. **Every error code is reachable from a tree with that one fault in it.** One row per code, each
-   edited into an otherwise-clean tree, so a code that fires for an unrelated reason fails its row.
-   A check that cannot be planted cannot be trusted to fire.
-3. **Warnings cannot fail the run** — and printing them is not optional. An absolute kubeconfig path
-   and an unaddressed cluster both exit 0 *and* say so.
-4. **A finding is (kind, code, message, path)** and never prose alone; three faults come back as
-   three lines inside one exception, so nothing silently reports the first fault and stops.
-5. **Validate is read-only and addresses no cluster.** Byte-identical tree after the run, and
-   `kubectl`/`helm`'s only paths into the world patched to raise.
-6. **The root-wide half is not hidden by naming one environment.** A fault two directories over
-   still fails the run, because "validate my environment" must not read as "validate my blind spot".
-
-Falsifications that made these rows mean something (all four make exactly one row fail, which is
-what "the test is about that rule" means): removing the second-manifest check kills row 2's
-`duplicate-manifest` row alone; turning the absolute path into an error kills row 2's warning row
-alone; raising on the first error instead of listing them kills row 4 alone; making validate create
-a directory or rewrite a file kills row 5.
-
-What this file keeps: manifest keys stay in the one manifest and no product shape lands in the tree,
-the machine and not the configuration says how to reach the cluster, the layout is enumerated rather
-than guessed, the verb's shape is a verdict and not an argument, and a tree that addresses no cluster
-is warned about and not failed.
-"""
+"""`config validate` gives the tree a verdict, not an argument."""
 
 import hashlib
 import json
@@ -69,7 +32,8 @@ SHARED_SERVER = "https://10.0.1.9:6443"
 
 
 def a_tree(tmp_path, team=TEAM) -> Path:
-    """One initialized environment — manifest, both environment files, both team files, no answers."""
+    """One initialized environment — manifest, both environment files, both team files, no answers.
+    """
     root = tmp_path / "config"
     init_configuration(root=root, environment=ENVIRONMENT)
     if team is not None:
@@ -100,10 +64,6 @@ def plant(root: Path, document: dict, layer=None) -> None:
 
 def digest(root: Path) -> dict:
     """Every path under the root — directory or file — with the file's bytes. The read-only claim.
-
-    Directories are in the snapshot on purpose: a validate that mkdirs a `.kubementat-*` marker would
-    be invisible to a file-only digest, and "it wrote nothing" has to mean nothing, not merely
-    "nothing readable changed".
     """
     state = {}
     for path in sorted(root.rglob("*")):
@@ -149,7 +109,7 @@ ERROR_ROWS = [
     ("team-named-like-layer-directory",
      lambda root: ((root / ENVIRONMENT / "values").mkdir(),
                    (root / ENVIRONMENT / "values" / "static.json").write_text("{}", encoding="utf-8"))),
-    # The gap `_load_json_file` leaves open (`core/config/config.py:903` checks no shape): an array is JSON,
+    # Loading a layer checks only that it parses: an array is JSON,
     # and kubementat reads a layer as a mapping, so nothing in the file is ever asked for.
     ("layer-file-not-an-object",
      lambda root: (root / ENVIRONMENT / TEAM / "static.json").write_text("[1, 2]", encoding="utf-8")),
@@ -175,13 +135,7 @@ def test_an_edited_tree_is_refused_by_the_one_code_that_describes_it(tmp_path, c
 
 
 def test_two_environments_in_one_root_are_refused_by_the_collision_sentence(tmp_path):
-    """The decision is the registry's and the report carries its text, not validate's own words.
-
-    Both environments address one server, spelled as the same server string twice, and the sentence
-    that comes back is `Context._collision`'s — the one that already tells the operator to run
-    `kmt environments list`. Validate paraphrases nothing here, which is the difference between
-    reporting an owner's decision and restating it (census Q1).
-    """
+    """The decision is the registry's and the report carries its text, not validate's own words."""
     root = a_tree(tmp_path, team=None)
     init_configuration(root=root, environment="dev")
     kubeconfig = tmp_path / "shared.kubeconfig"
@@ -220,15 +174,7 @@ def test_two_environments_in_one_root_are_refused_by_the_collision_sentence(tmp_
 
 
 def test_a_layer_whose_pair_is_both_absent_is_one_fault_and_not_two(tmp_path):
-    """One layer, one fault — even when both of its files are gone.
-
-    A layer is its pair, and `_require_answerable_layer` says so in one sentence naming the missing
-    half. Probing that pair once per *file label* instead of once per *layer* printed the same fault
-    twice and handed the second finding a sentence about the file the first had just named: a report
-    that says "2 faults" and shows the same sentence twice is worse than a silent one, because the
-    operator starts counting instead of editing. This is the live run the parametrized row cannot see
-    — that row deletes one file of the pair, so the duplicate never appears there.
-    """
+    """One layer, one fault — even when both of its files are gone."""
     root = a_tree(tmp_path)
     (root / ENVIRONMENT / "static.json").unlink()
     (root / ENVIRONMENT / "static.encrypted.json").unlink()

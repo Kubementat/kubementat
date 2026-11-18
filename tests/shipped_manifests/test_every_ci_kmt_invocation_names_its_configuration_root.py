@@ -1,39 +1,5 @@
 """A `kmt` command that names no configuration root dies at the first step, in CI like anywhere else.
-
-The defect is measured and not inferred. A root is *named, never located*:
-`default_platform_config_dir()` (`kubementat/core/config/paths.py`) reads `KUBEMENTAT_PLATFORM_CONFIG_DIR` and
-nothing else, and raises when it is unset. `KUBEMENTAT_HOME` is not the other spelling — it names the
-tree a checkout hangs its *output* off, which is why both shipped Tasks can set it and still hand their
-command no root. Measured on this checkout:
-
-    env -u KUBEMENTAT_PLATFORM_CONFIG_DIR uv run kmt kubernetes create-secret-from-json dev ns sec /tmp/nope.json
-    → Error: no configuration root is named. … it has no default root to fall back to.
-
-So the CI lane's own `kmt` step could not run: `KUBEMENTAT_PLATFORM_CONFIG_DIR` appears in zero places
-under `src/kubementat/core/assets/`, and neither `run-tekton-pipeline` nor `create-secret-from-json` passed
-`--config-dir`. This file says that *every* `kmt` invocation in a TaskRun names its root, enforced where
-the rule belongs: in the shipped YAML, read off the tree by a test.
-
-The layer it is enforced in matters. Most of this suite's trees are fixtures and not prepared
-directories, so a rule phrased as "a tree must have a `platform_config`" and implemented in `Config`
-breaks 227 unrelated tests — that is how this epic lost hours before, and it is why nothing here or in
-the Task files touches `core/config/config.py`, `kubementat/config/init.py`, `ClusterTarget`, or any Python read
-path. A
-refusal that gets *nicer* is a silent default wearing a better sentence, which is what the rule that
-named roots never locate deletes. The same is true of a `KUBEMENTAT_PLATFORM_CONFIG_DIR` step env entry
-added to rescue the step: the noun is `--config-dir`, and an env default is the behaviour that rule
-removed.
-
-Two conventions for the value coexist, deliberately. Inside the **code** checkout the root is
-`<checkout>/platform_config`, which is the shape the Tasks that read configuration by path still spell
-(`deploy-local-helm-chart.yml:128`, `execute-mysql-file.yml:70`, `create-mysql-database.yml:59`).
-The Tasks that run `kmt` spell it a second way: a `configuration-root` param that defaults to
-`/workspace/configuration`, the directory the configuration clone is fetched into, plus
-`/platform_config` on the command line. The workspace-clone shape mounts both clones into the *same*
-workspace at *different* paths, which is why the param is a path and not a second
-workspace mount: fewer moving parts in a pipeline that is already made of Tasks. One reason the derivation
-stays on the step's own line instead of becoming a default is that a flip is one line only if the value is
-one line now, and `configuration-root` is that line."""
+"""
 
 import re
 
@@ -81,14 +47,7 @@ def _mounts(manifest):
 
 
 def _resolve(value, manifest):
-    """A Tekton variable reference down to the concrete path the step would get.
-
-    `$(workspaces.<name>.path)` becomes that workspace's `mountPath` and `$(params.<name>)` becomes
-    the param's default. A param with no default resolves to the empty string, which is honest: the
-    Task says "this part comes from the caller". What is checked is the *shape* — that the value is
-    built out of references the Task declares and that it lands under a mount the Task declares —
-    and not a fabricated absolute path.
-    """
+    """A Tekton variable reference down to the concrete path the step would get."""
     text = str(value)
     for _ in range(8):  # nesting is one level deep in this tree; this is the guard against a loop
         if not PARAM_REF.search(text) and not WORKSPACE_REF.search(text):
@@ -111,11 +70,7 @@ def _inside_a_mounted_workspace(path, manifest):
 
 
 def _uv_kmt_steps():
-    """Every `uv run … kmt` step in `tekton_ci/tasks/`, with its manifest.
-
-    Walks the whole directory and not the two files anyone named, so a third Task that picks this up
-    is covered by the same rule instead of having to be remembered.
-    """
+    """Every `uv run … kmt` step in `tekton_ci/tasks/`, with its manifest."""
     found = []
     for path in sorted(TASKS.glob("*.yml")):
         manifest = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -128,13 +83,7 @@ def _uv_kmt_steps():
 
 
 def _command_text(step):
-    """The step's executable text, with the comments a shell would never run taken out.
-
-    Both extractions below read this and not `_step_text`, so the counts are measured on one text and
-    a prose "--config-dir" in an explanatory comment cannot be mistaken for a flag. A flag that only
-    exists in a comment is exactly the bug this file is here for, so it is worth saying which text a
-    guard reads.
-    """
+    """The step's executable text, with the comments a shell would never run taken out."""
     return "\n".join(line for line in _step_text(step).splitlines()
                      if not line.lstrip().startswith("#"))
 
@@ -145,14 +94,7 @@ def _config_dir_values(step):
 
 
 def test_every_kmt_step_in_a_shipped_task_names_its_configuration_root():
-    """The rule: where a step runs `uv run … kmt`, that same line says which root it reads.
-
-    Both halves get checked. One `--config-dir` per `kmt` invocation is what stops the flag landing
-    on a line the command never reaches, and the resolved value sitting under a workspace the Task
-    mounts is what stops a root that is a literal path to one cluster's filesystem — the failure the
-    sibling guard checks for `workingDir`, applied to the directory the command *reads* instead of
-    the one `uv` walks up from.
-    """
+    """The rule: where a step runs `uv run … kmt`, that same line says which root it reads."""
     for name, manifest, step in _uv_kmt_steps():
         text = _command_text(step)
         invocations = len(UV_KMT.findall(text))
@@ -174,15 +116,7 @@ def test_every_kmt_step_in_a_shipped_task_names_its_configuration_root():
 
 
 def test_a_configuration_root_is_never_rescued_by_a_default_or_a_variable_the_step_sets():
-    """Neither Task may fix the missing root with something that answers when nothing was named.
-
-    `KUBEMENTAT_HOME` is a step env entry in both Tasks, and it is a *different* noun — it puts the
-    step inside the project. The other spelling, `KUBEMENTAT_PLATFORM_CONFIG_DIR`, is a container-level
-    default of exactly the kind the no-default rule deleted, and this repo declares it nowhere on purpose
-    (`grep -rn KUBEMENTAT_PLATFORM_CONFIG_DIR src/kubementat/core/assets/` is empty). If it appeared on a
-    step's env it would mean a Task that "passes" while its `--config-dir` is doing nothing, and the
-    flag's whole meaning is that the operator/TaskRun named this run's root.
-    """
+    """Neither Task may fix the missing root with something that answers when nothing was named."""
     for name, manifest, step in _uv_kmt_steps():
         env_names = {entry["name"] for entry in step.get("env") or []}
         assert "KUBEMENTAT_PLATFORM_CONFIG_DIR" not in env_names, \

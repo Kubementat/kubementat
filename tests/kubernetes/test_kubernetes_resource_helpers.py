@@ -1,19 +1,4 @@
-"""Tests for the Kubernetes resource helpers: create-or-replace, delete, and lookups.
-
-These are the primitives the install and uninstall commands run on, so the branches that
-matter are the boring ones. Two defects are what the file exists to keep closed:
-
-* **D4** — `create_or_replace_role` logged and replaced using a `name` that was never bound
-  in that scope, so running a role-creating command a second time against a cluster that
-  already had the role died with a `NameError` on the 409 path. The name is now an argument,
-  so the 409 branch has something to say.
-* **D5** — `get_role_binding` was defined twice and the second definition shadowed the
-  first, which made the documented `-> V1RoleBinding` contract a fiction and quietly turned
-  a missing binding into `None`. One definition now.
-
-The fake clients below record what they were asked for and answer with whatever the test
-configured, including a status that forces the branch under test.
-"""
+"""Tests for the Kubernetes resource helpers: create-or-replace, delete, and lookups."""
 
 
 import pytest
@@ -28,12 +13,7 @@ UNEXPECTED_STATUS = 500
 
 
 class FakeApi:
-    """Stand-in for a generated kubernetes client.
-
-    Every call records its keyword arguments, raises the status configured for its method
-    (if any), and otherwise returns what `returns` says. That is enough to exercise the
-    three outcomes a real API gives: created, already there, not there.
-    """
+    """Stand-in for a generated kubernetes client."""
 
     def __init__(self, raises=None, returns=None):
         self.calls = []
@@ -61,12 +41,7 @@ class FakeApi:
 
 
 def make_utils(monkeypatch, **apis):
-    """A `KubernetesUtils` with no cluster, and its API clients swapped for fakes.
-
-    Nothing in the constructor reads a kubeconfig any more, so `apis` — the attribute names
-    (`core_api`, `rbac_api`, …) mapped to a `FakeApi` — is all there is to do: the clients those fakes
-    replace are never built.
-    """
+    """A `KubernetesUtils` with no cluster, and its API clients swapped for fakes."""
     utils = KubernetesUtils(TARGET_DEV)
     for attribute, api in apis.items():
         setattr(utils, attribute, api)

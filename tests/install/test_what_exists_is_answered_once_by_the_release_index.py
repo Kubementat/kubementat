@@ -1,30 +1,4 @@
-"""What exists, and in what namespace, is answered once — from the release index.
-
-Two questions used to be answered in two places, and this file is the claim that they no longer
-are. `cli/commands/component.py` used to decide "is this a kubementat component" from
-`constants.DEFAULT_NAMESPACES` while `core/config/release_index.py` decided "does this release
-exist" from the labels the shipped manifest carries. Both were internally correct; the sentence a
-refusal produced was not. Measured on the shipped tree, the CLI used to tell an operator that
-`alloy` was "not a kubementat component" in the same breath as the manifest it was about to apply
-named a release `component_name=alloy`.
-
-So every test below is a **set equation between the two reads**, asked for every shipped release,
-and none of them is a count. A count is what the last version of this rule looked like ("ten
-labels, thirteen namespace keys") and it rots the day a block is commented in.
-
-* **(a) the derived answer equals the file.** `core.components` is checked against an independent
-  parse of the manifest — not against `read_release_index`, because comparing a function with
-  itself proves nothing.
-* **(b) the two mismatch directions are derived, not typed.** The labels no namespace key names,
-  and the keys no release backs, are both computed.
-* **(c) a refusal says which case it is in.** A shipped release is never refused as a typo, and a
-  typo is never refused as a release.
-* **(d) the CRD sweep's set is set-equal to what the tables produce**, for every component the
-  manifest ships. This is the highest-consequence line in the file: a wrong derivation here either
-  leaves cluster-scoped definitions behind or deletes somebody else's.
-* **(e) one read per command.** A verb that asks the manifest twice can give itself two answers,
-  so the universe is read once and every question is answered off it.
-"""
+"""What exists, and in what namespace, is answered once — from the release index."""
 
 import re
 from pathlib import Path
@@ -43,13 +17,7 @@ LIVE_HELMFILE = values_path("helmfile.yaml.gotmpl")
 
 
 def read_the_manifest_yourself(path: Path) -> dict:
-    """The shipped manifest, parsed here rather than through the parser under test.
-
-    Deliberately the long way: a comment-skipping regex, and a `repositories:` entry that shares
-    the shape of a release header. The test's parser and the product's parser agreeing is the
-    check that the derivation follows the file; agreeing with `read_release_index` would be an
-    echo.
-    """
+    """The shipped manifest, parsed here rather than through the parser under test."""
     releases = {}
     current = None
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -77,11 +45,7 @@ def shipped_universe() -> components.ComponentUniverse:
 
 
 def test_every_release_the_manifest_names_is_in_the_answer_and_nothing_else_is():
-    """`released()` equals the manifest, read independently.
-
-    A label that only the manifest carries, a label that only the code carries: both are bugs this
-    equation catches, and neither is caught by counting.
-    """
+    """`released()` equals the manifest, read independently."""
     universe = shipped_universe()
     from_file = read_the_manifest_yourself(LIVE_HELMFILE)
 
@@ -90,12 +54,7 @@ def test_every_release_the_manifest_names_is_in_the_answer_and_nothing_else_is()
 
 
 def test_the_namespace_table_and_the_release_index_agree_for_every_name_either_one_names():
-    """Three set equations, and they are the whole of "the two oracles answer identically".
-
-    (1) what the verbs accept is exactly what the namespace table keys, (2) the labels with no key
-    are exactly the ones the manifest carries and the table does not, (3) the namespace-only names
-    are exactly the keys the manifest does not back. Nothing here is a size.
-    """
+    """Three set equations, and they are the whole of "the two oracles answer identically"."""
     universe = shipped_universe()
     from_file = read_the_manifest_yourself(LIVE_HELMFILE)
 
@@ -120,12 +79,7 @@ def _manifest(tmp_path) -> Path:
 
 
 def seeded_config(tmp_path, environment: str = "dev") -> Config:
-    """A `Config` over a real prepared tree, for the questions that read a namespace.
-
-    `UNREAD_ROOT` is the right root for a question that only reads the manifest, and the wrong one
-    for a question that asks `component_namespace`: that read consults `static.json`, and the root
-    is named precisely so it cannot exist. The rename guard asks it, so that test gets a tree.
-    """
+    """A `Config` over a real prepared tree, for the questions that read a namespace."""
     from cluster_fixture import stamp_tree, write_environment
 
     root = tmp_path / "seeded"
@@ -141,13 +95,7 @@ def seeded_config(tmp_path, environment: str = "dev") -> Config:
 
 
 def test_a_release_with_no_component_of_its_own_is_not_refused_as_a_typo():
-    """The exact lie, on the live tree, in the live command's own words.
-
-    Two assertions and they are the item: the sentence must not claim the name is unknown, and it
-    must name the verb that does reach the release. The accepted-name set is unchanged by this
-    item, so the refusal is still a refusal -- only the reason is now read from the same file the
-    apply is about to use.
-    """
+    """The exact lie, on the live tree, in the live command's own words."""
     universe = shipped_universe()
     unaddressed = universe.releases_without_a_component()
     assert unaddressed, \
@@ -170,12 +118,7 @@ def test_a_release_with_no_component_of_its_own_is_not_refused_as_a_typo():
 
 
 def test_the_crd_sweep_says_so_when_it_cannot_read_its_own_manifest(tmp_path, monkeypatch):
-    """An unreadable manifest deletes *more*, and says so.
-
-    The alternative is a `kmt uninstall` that reports a clean teardown while cert-manager's
-    definitions are still serving, which is the failure this file keeps having to describe. So a
-    missing manifest is answered with the whole table and a warning, not with the empty set.
-    """
+    """An unreadable manifest deletes *more*, and says so."""
     config = Config("dev", "dev1", platform_config_dir=UNREAD_ROOT, preload_configs=False)
     missing = tmp_path / "not-here.yaml"
     warned = []
@@ -204,13 +147,7 @@ def test_the_crd_sweep_says_so_when_it_cannot_read_its_own_manifest(tmp_path, mo
 
 
 def test_a_command_reads_the_manifest_once_and_answers_every_question_off_it(tmp_path, monkeypatch):
-    """`ComponentUniverse.read` is the only read a verb makes.
-
-    Counted, not asserted: the manifest is parsed once per `read`, and then `kind`,
-    `releases_for`, `releases_without_a_component` and `accepted_names` are all asked of that
-    object. Four reads of one file by one command is the shape that lets a command give itself
-    four answers, so the count is the claim.
-    """
+    """`ComponentUniverse.read` is the only read a verb makes."""
     config = Config("dev", "dev1", platform_config_dir=UNREAD_ROOT, preload_configs=False)
     parser = components.release_index
     reads = []
@@ -232,18 +169,7 @@ def test_a_command_reads_the_manifest_once_and_answers_every_question_off_it(tmp
 
 
 def test_helm_and_the_cli_ask_the_same_module_the_same_question(tmp_path, monkeypatch):
-    """The wiring, not the intention.
-
-    `helm.py`'s rename guard skips a component kubementat does not address. It used to ask that of
-    `constants` directly -- the same *value* as the CLI's answer and a different *source*, which is
-    how two files agree right up until the day they do not. Both now call
-    `components.components_kubementat_addresses`, and the guard's own answer for the shipped tree is
-    what is asserted: asked about a cluster that holds every release the manifest names, all of them
-    in one namespace kubementat addresses, the conflicts that come back are exactly the names that
-    are both addressed and released. The labels with no namespace key are absent, and that absence
-    is the guard saying "I have no configured answer for this release" -- which is now, literally,
-    the same answer `kmt component install` gives about those same names.
-    """
+    """The wiring, not the intention."""
     import json
 
     from kubementat.core.config import release_index

@@ -1,12 +1,4 @@
-"""Tests for a service account's token: how it is requested, and how it is read back.
-
-A service account does not carry credentials. The token controller fills one in only for a
-Secret that declares which service account it belongs to, and clusters since 1.24 do not
-create that Secret on their own — so a login command, a kubeconfig, or a `kubectl`-as-a-user
-flow has to ask for it first. The old shell path guessed by grepping `kubectl get secret`
-for a name ending in `-token`; the name is a convention and the annotation is the fact, so
-these tests pin the annotation-based rule and the two states an operator can act on.
-"""
+"""Tests for a service account's token: how it is requested, and how it is read back."""
 
 import base64
 

@@ -1,12 +1,4 @@
-"""`--team` carries no default: the team a command runs against is a choice.
-
-`helmfile-apply` and the tunnels used to pass the literal `'dev1'`, and D9's answer was an option
-*with that literal as its default* — so an invocation that typed nothing kept reading `dev1` and the
-bug class survived the fix. Deleting the default takes it out, which leaves `--team`/`TEAM` as the only two
-ways a command learns its team, and `Context.require_team` as the sentence that says what a command
-with neither cannot do. The tests below are the two halves of that: the value a run does give
-arrives, and the value a run does not give is refused rather than remembered.
-"""
+"""`--team` carries no default: the team a command runs against is a choice."""
 
 
 import pytest
@@ -15,7 +7,7 @@ from click.testing import CliRunner
 from cli import helpers
 from cli.commands import component, helm, kubernetes, routing, tekton, tunnels, users
 
-# The run path's verbs are module functions now (P4-3), so this is the seam to intercept.
+# The run path's verbs are module functions, so this is the seam to intercept.
 from kubementat.infrastructure.tekton import runs
 
 TEAM = "smoke"
@@ -70,15 +62,7 @@ TUNNEL_FUNCTIONS = ("open_tunnel_grafana", "open_tunnel_tekton_dashboard", "open
 
 
 class RecordingVerb:
-    """The run path's verb, recorded instead of run.
-
-    `setup_cleanup_job` is a function on `infrastructure.tekton.runs` (P4-3), so a recorder
-    attached to a class would let the command run the real thing against a cluster this test was
-    never given. It records the `(environment, team)` pair off the `Context` the command handed
-    over, which is the claim these tests made off the constructor until P4-6 deleted it — and since
-    the class is what used to make that claim, the recorder now reads the pair from the one object
-    that carries it, so a flag that never reaches the `Context` still fails here.
-    """
+    """The run path's verb, recorded instead of run."""
 
     def __init__(self, calls):
         self.calls = calls
@@ -89,13 +73,7 @@ class RecordingVerb:
 
 
 class RecordingTunnels:
-    """One of the three tunnel entry points, recorded instead of run.
-
-    The tunnels used to be reached through an `Automation`, so a recorder that replaced the class
-    covered all three. They are now names on the command module, called as
-    `function(ctx, local_port, remote_port, host)`, so this records the pair the `Context` carries
-    and returns nothing -- which is what `open_tunnel` reads as a tunnel that opened.
-    """
+    """One of the three tunnel entry points, recorded instead of run."""
 
     def __init__(self, calls):
         self.calls = calls
@@ -108,9 +86,8 @@ class RecordingTunnels:
 @pytest.fixture
 def recorder(monkeypatch):
     calls = []
-    # The `TektonUtils` seam is gone with the class (P4-6), and the run-path verb carries the pair
-    # the commands used to read off it, so intercepting the verb is both the recorder and the
-    # assertion. A patch that only covered a name the command never looks up would keep this file
+    # The run-path verb receives the environment and team the command resolved, so intercepting it
+    # records what the command passed. A patch that only covered a name the command never looks up would keep this file
     # green while saying nothing, which is why the assertion below compares what the recorder saw.
     monkeypatch.setattr(runs, "setup_cleanup_job", RecordingVerb(calls))
     for name in TUNNEL_FUNCTIONS:
@@ -119,24 +96,12 @@ def recorder(monkeypatch):
 
 
 def invoke(command, args, **runner_kwargs):
-    """The command as an operator runs it, with no context object handed in.
-
-    There is nothing to hand any more: `cli.kmt.Config` was a context object one field wide that
-    every command ignored, and what a command receives now is built by `@kmt_context` out of
-    the arguments it was given. So this passes arguments and nothing else, which is also the point
-    the tests below are about.
-    """
+    """The command as an operator runs it, with no context object handed in."""
     return CliRunner().invoke(command, args, **runner_kwargs)
 
 
 def test_the_option_offers_no_default_of_any_kind():
-    """`--team` has no default, and the module that offered one no longer holds it.
-
-    Asserted from both sides because the two failure modes are different: a `default=` put back on
-    the option is a guess the operator cannot see, and a constant left behind in `helpers` is a
-    guess the next command can import. `test_no_dead_code_ships_in_the_tree` covers the second one
-    as dead code; this one covers it as a value that could still be handed to Click.
-    """
+    """`--team` has no default, and the module that offered one no longer holds it."""
     assert not hasattr(helpers, "DEFAULT_TEAM"), \
         "the deleted default-team constant is back, so an import can still reach it"
 
@@ -151,16 +116,7 @@ def test_the_option_offers_no_default_of_any_kind():
 def test_a_command_that_reads_team_config_refuses_a_run_that_named_none(command, args,
                                                                         resolvable_environment,
                                                                         monkeypatch):
-    """No `--team`, no `TEAM`, and three commands that all say the same thing about it.
-
-    The refusal is `require_team`'s, which is where it belongs: the sentence names the
-    environment, the directory the value belongs in, and the flag that would have answered it. It
-    arrives as the command's own answer and not as a stack trace — `TeamNotSuppliedError` is wrapped
-    as a `ClickException` by `@kmt_context`, the same treatment `ClusterResolutionError` gets, so an
-    operator who types nothing is told what is missing instead of being handed a bug report. The
-    exit code is the named refusal's (1, not a crash's) and the traceback stays out of the output,
-    which is the whole assertion of the ticket that made this true.
-    """
+    """No `--team`, no `TEAM`, and three commands that all say the same thing about it."""
     monkeypatch.delenv("TEAM", raising=False)
 
     result = invoke(command, list(args))
@@ -186,13 +142,7 @@ def test_a_command_that_cannot_act_on_a_team_says_the_flag_is_not_its_option(com
                                                                              recorder,
                                                                              resolvable_environment,
                                                                              monkeypatch):
-    """The other half of the rule: a command with no team semantics does not accept `--team`.
-
-    Deleting the option is what makes the flag's absence an answer rather than a question, so the
-    assertion is what typing `--team` now costs: `No such option: --team`, exit 2, and no `TEAM:`
-    line printed at nothing. An option that resolves to nothing is how the old tunnels read `dev1`,
-    so this is the same rule with the opposite symptom checked.
-    """
+    """The other half of the rule: a command with no team semantics does not accept `--team`."""
     monkeypatch.delenv("TEAM", raising=False)
 
     refused = invoke(command, list(args) + ["--team", "ops"])
@@ -233,10 +183,5 @@ TUNNEL_COMMANDS = {tunnels.tunnel_grafana, tunnels.tunnel_tekton, tunnels.tunnel
 
 @pytest.fixture(autouse=True)
 def _an_environment_the_command_resolves(resolvable_environment):
-    """Every command here resolves a cluster before it runs, so this module declares one.
-
-    The services are recorded rather than called, so the fixture's job ends at resolution: it says
-    which cluster the command did *not* reach, and nothing else about the run changes. The team is
-    what these tests are about, and it comes from `--team`/`TEAM` exactly as the flag said it would.
-    """
+    """Every command here resolves a cluster before it runs, so this module declares one."""
     return resolvable_environment

@@ -1,21 +1,4 @@
 """The last layer of the resolution order, and the rule that keeps it from blocking its own cluster.
-
-Two claims live here, and they look like opposites:
-
-* **In-cluster resolution is last, and it is never a silent winner.** A process running inside a
-  cluster can answer "which cluster" from the material the kubelet mounts, but only when layers 1-3
-  said nothing. An environment that declares `CLUSTER_KUBE_CONTEXT` uses what it declared, and a
-  `--context` beats the pod the command line happens to be standing in.
-* **In-cluster is the only resolution path where the target is the cluster the code is running on.**
-  Combined with the hard block that refuses a collision, a check that compares against that
-  environment is comparing
-  against itself, so it would refuse kubementat's own install. The rule: the running cluster is
-  excluded from the comparison, *and the report says so* — the "not verified: <reason>" shape,
-  never the word "verified", and never a subtraction that leaves no trace.
-
-A test that only sets `KUBERNETES_SERVICE_HOST` proves nothing about this path: the constructor's
-answer comes from the mounted files, so every test here fabricates them under `tmp_path`.
-
 """
 
 import pytest
@@ -51,13 +34,7 @@ POD_SERVER = "https://10.96.0.1:6443"
 
 
 def pod_root(tmp_path, monkeypatch, *, host="10.96.0.1"):
-    """A checkout whose `dev` declares nothing, and a kubeconfig with four contexts in it.
-
-    `dev` is left undeclared because both halves of this rule start there: the layer that resolves it is
-    the one under test. The four contexts are there so a layer above the one under test always has
-    something it *could* have said — an inverted order then shows up as a wrong address instead of
-    a passing test.
-    """
+    """A checkout whose `dev` declares nothing, and a kubeconfig with four contexts in it."""
     root = checkout(tmp_path)
     redirect_checkout(monkeypatch, root)
     kubeconfig = write_kubeconfig(
@@ -80,12 +57,7 @@ def pod_root(tmp_path, monkeypatch, *, host="10.96.0.1"):
 def test_the_cluster_this_process_is_running_on_answers_when_nothing_above_it_declared_one(
     tmp_path, monkeypatch
 ):
-    """Layer 5, on its own terms: no declaration anywhere, a real mount, and a named address.
-
-    The fixture kubeconfig has a perfectly usable `current-context` and a `dev-cluster` context in
-    it, so the answer must come from neither — the mount is the only source that speaks here, and it
-    says which one it was.
-    """
+    """Layer 5, on its own terms: no declaration anywhere, a real mount, and a named address."""
     root = checkout(tmp_path)
     redirect_checkout(monkeypatch, root)
     write_environment(root, "dev", context=None)
@@ -104,12 +76,7 @@ def test_the_cluster_this_process_is_running_on_answers_when_nothing_above_it_de
 def test_a_context_a_command_or_the_environment_declared_outranks_the_pod_its_running_in(
     tmp_path, monkeypatch
 ):
-    """Layers 1 and 2, against layer 5. The flag wins over the mount, and so does the variable.
-
-    The whole point of placing in-cluster last is that a command can be told where to go. Nothing
-    here is a fallback that quietly wins because nobody was looking: the flag's file and the
-    process's own declaration both beat a complete mount, and the report says which answered.
-    """
+    """Layers 1 and 2, against layer 5. The flag wins over the mount, and so does the variable."""
     root = checkout(tmp_path)
     redirect_checkout(monkeypatch, root)
     write_environment(root, "dev", context=None)
@@ -131,14 +98,7 @@ def test_a_context_a_command_or_the_environment_declared_outranks_the_pod_its_ru
 def test_the_environment_configuration_beats_the_cluster_the_process_is_standing_on(
     tmp_path, monkeypatch
 ):
-    """Layer 3, the case that decides whether in-cluster is a fallback or a default.
-
-    `dev` declares a context, the mount is complete, and the two disagree about which cluster. If
-    the mount ever won from here, an environment that says `dev` would install into whatever pod
-    ran the command — which is the failure class of a valid-looking credential that answers for the
-    wrong machine. The
-    address and the `source` both say the declaration did, and the mount never entered the answer.
-    """
+    """Layer 3, the case that decides whether in-cluster is a fallback or a default."""
     root, kubeconfig = pod_root(tmp_path, monkeypatch)
     write_environment(root, "dev", context="dev-cluster", kubeconfig_path=kubeconfig)
     mounted_service_account(monkeypatch, root, host="10.96.0.1")
@@ -157,13 +117,7 @@ def test_the_environment_configuration_beats_the_cluster_the_process_is_standing
 def test_an_environment_that_is_the_running_cluster_is_excluded_and_the_report_says_so(
     tmp_path, monkeypatch
 ):
-    """The sharp edge, turned into the line an operator reads.
-
-    `dev` has no declaration, so it resolves in-cluster; `prod` declares the very same address. One
-    cluster, two names, and the check that protects operators from the wrong cluster would have
-    refused to install at all — comparing an environment against the cluster standing underneath
-    it. The pair is not compared, and the line says why instead of pretending it checked.
-    """
+    """The sharp edge, turned into the line an operator reads."""
     root, kubeconfig = pod_root(tmp_path, monkeypatch, host="10.0.5.1")
     write_environment(root, "prod", context="prod-cluster", kubeconfig_path=kubeconfig)
     mounted_service_account(monkeypatch, root, host="10.0.5.1")
@@ -180,12 +134,6 @@ def test_the_same_address_does_not_make_a_self_collision_when_the_pod_is_on_anot
     tmp_path, monkeypatch
 ):
     """The exclusion is keyed to the running cluster's address, not to the fact of being in a pod.
-
-    One lever changes from the test above: the process is inside a cluster, but a *different* one.
-    Now nothing is the running cluster, so the two declarations that address one cluster collide
-    exactly as they did before this exclusion existed. A rule that excluded whenever a mount
-    happened to be present would pass both tests, and it would be a way to install into someone
-    else's cluster.
     """
     root, kubeconfig = pod_root(tmp_path, monkeypatch, host="10.96.0.1")
     write_environment(root, "dev", context="dev-cluster", kubeconfig_path=kubeconfig)
@@ -208,11 +156,7 @@ def test_the_same_address_does_not_make_a_self_collision_when_the_pod_is_on_anot
 def test_a_mounted_token_that_is_empty_authenticates_nothing_and_is_named_as_the_failure(
     tmp_path, monkeypatch
 ):
-    """A half-mounted pod, which is a different failure and gets its own sentence.
-
-    A zero-length token is not "no token"; it is a rotated Secret that has not been rewritten yet,
-    and an error that said "the file is missing" would send someone looking for a volume mount.
-    """
+    """A half-mounted pod, which is a different failure and gets its own sentence."""
     root = checkout(tmp_path)
     redirect_checkout(monkeypatch, root)
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "10.96.0.1")
@@ -230,11 +174,6 @@ def test_a_target_built_from_the_mount_carries_the_token_to_a_client_and_nowhere
     tmp_path, monkeypatch
 ):
     """The only behaviour this object is allowed to own, exercised on the material a pod is handed.
-
-    `client()` is what makes the mount useful, and the two things it must carry out of it are the
-    server and the authority: the token authenticates, the mounted `ca.crt` is what makes the
-    connection trustworthy, and both come from this target and nothing else. The address is not
-    reachable by construction, so a green test here proves nothing was dialled.
     """
     from kubernetes import client as kubernetes_client
 
@@ -254,12 +193,7 @@ def test_a_target_built_from_the_mount_carries_the_token_to_a_client_and_nowhere
 
 
 def test_the_mounted_token_never_reaches_the_repr_of_the_target_it_was_read_for(tmp_path, monkeypatch):
-    """The redaction discipline, applied to a constructor that reads the credential from disk.
-
-    A `ClusterTarget` ends up in log lines and in failure messages. This one holds a bearer token
-    read straight out of the pod's own file, so the assertion is about the string: it appears
-    nowhere in what the object prints, while the address and the provenance that make it useful do.
-    """
+    """The redaction discipline, applied to a constructor that reads the credential from disk."""
     root = checkout(tmp_path)
     redirect_checkout(monkeypatch, root)
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "10.96.0.1")

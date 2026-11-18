@@ -1,21 +1,4 @@
 """Exactly one base64 layer sits between `git_crypt_symmetric.key` and the step that unlocks with it.
-
-This file exists because a guard that looks for the tokens `string_data` and `_base64_encode_file` cannot
-tell one layer from two. A double encoding keeps both tokens present and produces a Secret that is
-indistinguishable from a wrong key at the point of failure: git-crypt says `not a valid git-crypt key
-file`, which reads like someone's key is bad when what actually happened is that our side wrapped it
-twice.
-
-So both numbers here are measured against the real git-crypt binary rather than argued:
-
-* one layer, decoded once by the step -> unlock succeeds, the encrypted file becomes plaintext;
-* two layers, decoded once -> `Error: -: not a valid git-crypt key file`, nothing unlocks, exit non-zero.
-
-The second assertion is what makes the first one not vacuous: without it, "the shipped thing works" proves
-nothing about which shipped thing would work.
-
-kubementat reads and never unlocks, so nothing in here unlocks from product code: the unlock
-happens in a subprocess the way the pipeline would run it, against a repository this test creates.
 """
 import os
 import re
@@ -38,11 +21,7 @@ def _git(args, where):
 
 
 def _locked_repository(root: Path) -> Path:
-    """A git-crypt repository with one encrypted file, plus the key that opens it.
-
-    `git-crypt init` before the commit is what makes the committed bytes ciphertext, which is the whole
-    premise: a clone of this repository arrives unreadable, exactly like `git-clone-configuration`.
-    """
+    """A git-crypt repository with one encrypted file, plus the key that opens it."""
     origin = root / "origin"
     origin.mkdir(parents=True)
     _git(["init", "-q"], origin)
@@ -68,12 +47,8 @@ def _fresh_clone(root: Path, origin: Path, name: str) -> Path:
 
 
 def test_the_product_builds_that_one_layer_and_not_another():
-    """The empirical half proves one layer is the right transport; this half proves the product uses it.
-
-    Reading `_base64_encode_file` directly would not catch a change inside `setup_pipelines`, so this goes
-    at the call itself and counts the encodings that touch the value. A `base64.b64encode(...)` wrapped
-    around `_base64_encode_file(...)` is the mutation that motivated the file, and a token-presence check
-    would happily pass it.
+    """The empirical half proves one layer is the right transport; this half proves the product uses
+    it.
     """
     automation = Path("src/kubementat/automations/install/pipelines.py").read_text(encoding="utf-8")
     call = re.search(r"create_or_replace_secret\(\s*namespace=pipeline_ns,\s*secret_name="
@@ -94,11 +69,7 @@ def test_the_product_builds_that_one_layer_and_not_another():
         "ours and the step decodes something other than what we wrote"
 
 def _plaintext_repository(root: Path) -> Path:
-    """A repository that never used git-crypt: no `.gitattributes`, nothing encrypted.
-
-    This is the tree `kmt install` gets no Secret for, and the shape the unlock step must let through
-    instead of failing on a key that is correctly absent.
-    """
+    """A repository that never used git-crypt: no `.gitattributes`, nothing encrypted."""
     origin = root / "plain-origin"
     origin.mkdir(parents=True)
     _git(["init", "-q"], origin)
@@ -112,9 +83,6 @@ def _plaintext_repository(root: Path) -> Path:
 
 def _step_script() -> str:
     """The shipped step's own script, with its two Secret params resolved to their declared defaults.
-
-    Run verbatim rather than re-expressed, because what needs proving is that *the text in the manifest*
-    does the right thing and not that a test's transcription of it does.
     """
     task = yaml.safe_load((TASKS / f"{UNLOCK_TASK}.yml").read_text(encoding="utf-8"))
     defaults = {p["name"]: p.get("default", "") for p in task["spec"].get("params") or []}
@@ -137,17 +105,6 @@ def _run_step(clone: Path, key_env: str):
 
 def test_the_step_says_which_kind_of_missing_key_this_is(tmp_path):
     """An absent key has two meanings and the step has to tell them apart, measured on both shapes.
-
-    A configuration that never used git-crypt gets no Secret, so the step's key is absent by design and
-    the right answer is to move on. A configuration that *did* declare the filter and got no key is
-    broken, and the right answer is to stop. Running `git-crypt unlock` cannot tell the two: measured, a
-    valid key on a repository that never used git-crypt exits 0 and prints nothing, so a step that always
-    ran it would be silent-green about a broken encrypted clone.
-
-    The marker is `.gitattributes` naming the filter, because it is the git-crypt fact that a clone
-    carries -- the keystore under `.git/` is not cloned and `git_crypt_symmetric.key` is gitignored. It is
-    the same marker `uses_git_crypt` reads in the product, and that is why install's decision and the
-    step's decision cannot disagree.
     """
     if not shutil.which("git-crypt") or not shutil.which("git"):
         raise AssertionError("git-crypt and git are required on any machine that ships this product")

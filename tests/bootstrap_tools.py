@@ -1,33 +1,4 @@
 """The fixtures a *prepared* configuration tree is measured with, shared by the library and the verb.
-
-Two files ask the same question about the same machinery: what does `kubementat` do, in what order,
-to make a configuration directory ready to install from? One asks it of
-`config_bootstrap.prepare_configuration_directory` directly; the other asks it of
-`kmt config init`, which is that call plus a print and a closing instruction. The answer needs the
-same four things, and the reason they live here rather than being typed twice is that a fixture kept
-in two files is a fixture that can disagree: the library version of the fake `git-crypt` would keep
-writing the keystore file while the verb's version had drifted to writing only one of the three
-effects, and the idempotence test would then be measuring the fake.
-
-So there is one way in, and it is `tests/asset_paths.py`'s way — a helper module that hands the
-thing over rather than each file building its own. What it hands over:
-
-* `tools` — the recorded binaries. `git` is real and `git-crypt` is not, and each is a shim that
-  writes its argv to a log before running (or, for git-crypt, performs the three filesystem effects
-  the idempotence checks read). Log-reading goes through `argv` / `since_last_run` / `crypt_calls*`.
-* `root` — the directory being prepared, deliberately *not created*, because a verb that is claimed
-  to prepare a directory is also claiming that it makes the directory.
-* the `CryptoUtils` generators and the one keyring question step 7 asks, both patched here so no
-  test in the suite puts a key into the keyring of whoever is running it.
-
-Two things are deliberately not shared. The verb's own `run_init` / `reported` / `snapshot` helpers
-are about Click's two streams and not about the machinery, and the library file's ordering spy patches
-`init_configuration` for a claim the verb does not make.
-
-The fingerprint in `FINGERPRINT` is a fixture fact and not a real key. What `config_bootstrap` reads
-that fingerprint from is a question about its own key-file read, patched here for every test that uses
-this module; the generation and the import that feed it are `config_keys`' own claims against a real
-gpg. What is measured is the argv kubementat passes and what lands where.
 """
 
 import os
@@ -85,18 +56,7 @@ exit 0
 
 @pytest.fixture
 def tools(tmp_path, monkeypatch):
-    """The two recorded binaries, with their own absolute paths baked into the scripts.
-
-    `git` is real, because a repository that is not a repository would make every claim about the
-    first commit vacuous. `git-crypt` is not real, because nothing asserted here is git-crypt's
-    behaviour and the lane is the place that runs it for real.
-
-    `CryptoUtils`' two generators are replaced so a per-test run does not put 4096 bits of RSA into
-    whoever's keyring owns this checkout — a side effect `config_keys`' own docstring already owns
-    and tests. HOME is replaced too: the committer identity git finds before a first commit belongs to
-    whoever is running the suite, and a recorded argv that depends on whose is a list that passes on a
-    configured box and fails on a machine that was just created.
-    """
+    """The two recorded binaries, with their own absolute paths baked into the scripts."""
     directory = tmp_path / "fake-tools"
     directory.mkdir()
     log = tmp_path / "tool.log"
@@ -166,29 +126,13 @@ def tools(tmp_path, monkeypatch):
 
 @pytest.fixture
 def root(tmp_path):
-    """The directory being prepared. Absent, the way `config init` names it.
-
-    Neither fixture creates it, which is half of the point: preparing a directory is claimed to
-    include making the directory, and a fixture that made it first would keep that claim from being
-    tested. Nothing points at this checkout either — a configuration root has no
-    default, and a test that inherited one would be measuring the machine it runs on.
-    """
+    """The directory being prepared. Absent, the way `config init` names it."""
     return tmp_path / "configuration"
 
 
 @pytest.fixture(scope="module")
 def deployer_secret_key(tmp_path_factory):
     """One real armored secret key, made once per module, standing where an operator would have it.
-
-    It has to be real armor, not the header-sniffing bytes the other fixtures write: what `--gpg-key`
-    asks of gpg is an import, and a file that does not import is refused. Making one is a 2048-bit
-    RSA keygen in a keyring that survives only for the length of the call, so the fixture is scoped
-    to the module — the key is only ever read here, never signed with, and nothing in the suite needs
-    two of them.
-
-    This is the shape `test_the_deployer_keypair_is_a_property_of_the_configuration_directory.py`
-    builds for the same file, and for the same reason; it is here because both a `config_keys`-level
-    test and a `kmt config init`-level test need to hand one over.
     """
     home = tmp_path_factory.mktemp("deployer-keyring")
     os.chmod(home, 0o700)
@@ -208,12 +152,7 @@ def argv(tools):
 
 
 def since_last_run(tools):
-    """The calls made since this was last called, and an empty log behind them.
-
-    Two runs write one log and the idempotence test needs the calls belonging to the second one.
-    Truncating is the whole separation and the only kind this suite needs, because nothing here is
-    concurrent.
-    """
+    """The calls made since this was last called, and an empty log behind them."""
     recorded = argv(tools)
     tools["log"].write_text("")
     return recorded
@@ -233,12 +172,7 @@ def actions(steps):
 
 
 def tree_bytes(root):
-    """Every byte outside `.git`, for the before/after compare idempotence needs.
-
-    The repository's own directory is out and not because it does not count: a second run that makes
-    no commit still lets `git diff --quiet` refresh the index, so comparing `.git` would report a
-    write where the claim is about the tree.
-    """
+    """Every byte outside `.git`, for the before/after compare idempotence needs."""
     root = Path(root)
     return {path.relative_to(root).as_posix(): path.read_bytes()
             for path in sorted(root.rglob("*"))
@@ -256,5 +190,6 @@ def crypt_calls(tools, verb):
 
 
 def crypt_calls_on(calls, verb):
-    """The same reduction over an explicit list of calls, which is what the second-run claims need."""
+    """The same reduction over an explicit list of calls, which is what the second-run claims need.
+    """
     return [call for call in calls if call and call[0] == "git-crypt" and verb in call]

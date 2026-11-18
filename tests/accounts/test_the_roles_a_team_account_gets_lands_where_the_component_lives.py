@@ -1,25 +1,4 @@
-"""Which Role a team account is given, where it is written, and in what order.
-
-A team account is not one object. It is a ServiceAccount, a token Secret, two namespace
-Roles, up to three tunneling Roles, and a RoleBinding for each of them — written in that
-order, into namespaces that belong to different owners. The bash kept that knowledge in two
-96-line scripts that differed by the words `namespace-admin` and `namespace-readonly`, plus
-one `*_NAMESPACE="..."` line per tunneled component, which is how a fix to one copy left the
-other broken and how a renamed namespace left the tunnel pointing at nothing.
-
-What the Python path owes, and what this file measures:
-
-* the Role that governs the team's own work lands in both namespaces the team's configuration
-  declares, and the tunneling Roles land where the component it tunnels is installed;
-* the namespace for a tunneled component is `Config.component_namespace`, never a string —
-  the tree-wide "no namespace literal in `src/`" check in
-  `test_component_namespaces_come_from_configuration.py` covers the spelling, so this covers
-  the behaviour: rename it and the Role moves;
-* a component that is not installed gets no Role, because a Role cannot be created in a
-  namespace that is not there and that used to make the whole command fail;
-* Roles exist before the Bindings that point at them, and each Binding is read back before
-  the command says it is finished.
-"""
+"""Which Role a team account is given, where it is written, and in what order."""
 
 import base64
 import json
@@ -55,11 +34,7 @@ def cluster_holding(recorded_api, namespaces):
 
 
 def token_secret_present(recorded_api, token=ACCOUNT_TOKEN):
-    """The token Secret the flow asked for, filled in, exactly as the controller writes it.
-
-    The Secret carries the token base64-encoded, as every Secret does, and the reader decodes
-    it; handing it over unencoded would test a state no cluster is ever in.
-    """
+    """The token Secret the flow asked for, filled in, exactly as the controller writes it."""
     def answer(namespace=None, **kwargs):
         return type("SecretList", (), {"items": [type("Secret", (), {
             "type": "kubernetes.io/service-account-token",
@@ -75,12 +50,7 @@ def token_secret_present(recorded_api, token=ACCOUNT_TOKEN):
 @pytest.fixture
 def cluster_where_the_team_account_flow_runs(fixture_repo, dry_run_env, fake_binaries,
                                              recorded_api):
-    """The flow's cluster: every verb granted, a token ready, and everything else empty.
-
-    The shims answer the ten `kubectl auth can-i` checks the flow makes, and `kubectl config
-    view` with an address that appears nowhere in this repository, so the kubeconfig printed
-    at the end can only have come from what the cluster was told.
-    """
+    """The flow's cluster: every verb granted, a token ready, and everything else empty."""
     for verb, resource in user_management.CLUSTER_ACCESS_CHECKS:
         fake_binaries.respond("kubectl", "yes\n", subcommand=f"auth.can-i.{verb}.{resource}")
     fake_binaries.respond("kubectl", json.dumps({"clusters": [{
@@ -111,12 +81,7 @@ def bindings_created(recorded_api):
 
 def test_the_account_and_its_token_secret_are_created_before_anything_is_bound_to_them(
         account, recorded_api):
-    """A Binding that names a ServiceAccount which does not exist yet is a binding to nothing.
-
-    The order is the bash's, and the order is the evidence: namespaces, account, token Secret,
-    Roles, Bindings. Asserting it on the recorded calls is what stops the flow reordering
-    itself into something that reads fine and writes a dangling subject.
-    """
+    """A Binding that names a ServiceAccount which does not exist yet is a binding to nothing."""
     create_team_account(account, "ops-account", consent=Consent.assumed())
 
     called = [method for method, _kwargs in recorded_api.calls]
@@ -129,13 +94,7 @@ def test_the_account_and_its_token_secret_are_created_before_anything_is_bound_t
 
 
 def test_the_state_the_command_prints_is_read_back_from_the_cluster(account, recorded_api, caplog):
-    """After the writes, the operator is shown what the namespaces now hold.
-
-    This is the step that reads, rather than writes, and it is where the flow used to die: the
-    role-binding list was returned as a model object instead of its items, so the loop over it
-    raised after every Role and Binding had been written. A printed summary that comes from the
-    cluster is also the only proof of the writes a person at a terminal gets.
-    """
+    """After the writes, the operator is shown what the namespaces now hold."""
     def one(name):
         return lambda **kwargs: type("List", (), {"items": [
             type("Item", (), {"metadata": type("M", (), {"name": name})})()]})()
@@ -156,15 +115,7 @@ def test_the_state_the_command_prints_is_read_back_from_the_cluster(account, rec
 
 def test_a_second_run_over_a_cluster_that_already_holds_the_account_replaces_rather_than_fails(
         account, recorded_api):
-    """Idempotence, because the lane installs, re-runs, and asserts nothing changed.
-
-    Every object here is written through a create-or-replace primitive, so a cluster that
-    already has the account is a normal state rather than an error. The 409 branch is the one a
-    single-pass cluster never shows, so the conflict is answered deliberately: if any of these
-    primitives treated "already there" as a failure, a re-run would leave the account
-    half-written and the lane's `idempotent` asserts would be measuring a different cluster than
-    the install left behind.
-    """
+    """Idempotence, because the lane installs, re-runs, and asserts nothing changed."""
     def already_there(**kwargs):
         raise client.exceptions.ApiException(status=409, reason="AlreadyExists")
 

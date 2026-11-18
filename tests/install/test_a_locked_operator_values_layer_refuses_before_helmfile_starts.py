@@ -1,20 +1,4 @@
-"""A locked operator values layer is refused before helmfile starts, by name.
-
-The component layer an operator writes is named `<component>.encrypted.yaml` because that is what
-puts it under git-crypt's `*.encrypted.*` declaration — an unlocked checkout therefore leaves it
-ciphertext exactly where helmfile's `isFile` guard asks for text. helmfile cannot tell the two
-apart (ciphertext is bytes either way) and helm opens the document, so the failure would arrive as
-apply output that never says the word "unlock" — the same class of false sentence the read seam
-exists to end, wearing a different file.
-
-So `helmfile_apply` reads each layer that exists through `read_decrypted` before the child starts.
-These three tests state the rule from its three sides:
-
-1. a locked layer raises `LockedConfigFileError`, naming the file, and helmfile was never asked;
-2. a plain-text layer is only walked past, and the apply runs;
-3. no layer is read when the directory is not there, because absence is what most trees look like
-   and a read of nothing must not become a new failure mode.
-"""
+"""A locked operator values layer is refused before helmfile starts, by name."""
 
 import json
 
@@ -70,11 +54,7 @@ def apply(utils, monkeypatch, recorder):
 
 
 def test_a_locked_layer_refuses_the_apply_before_a_child_ever_starts(tmp_path, monkeypatch):
-    """The refusal is `LockedConfigFileError` and it names the file; no helmfile line was run.
-
-    The order is the assertion: a refusal that arrives after the spawn is helm's output wearing
-    our sentence, which is exactly the false shape this guard replaces.
-    """
+    """The refusal is `LockedConfigFileError` and it names the file; no helmfile line was run."""
     config, root = seeded_tree(tmp_path, monkeypatch)
     written = layer(root, "grafana", b"\xc3\x28not-utf8\x00-ciphertext")
     recorder = RecordingShell()
@@ -90,12 +70,7 @@ def test_a_locked_layer_refuses_the_apply_before_a_child_ever_starts(tmp_path, m
 
 
 def test_an_absent_layer_directory_costs_the_apply_nothing(tmp_path, monkeypatch):
-    """The tree that declares no values has no directory at all, and the guard must not notice.
-
-    A guard that globbed a directory that is not there and raised its own `FileNotFoundError`
-    would turn the most common tree in the product into a failure — presence is the guard's whole
-    decision, stated first.
-    """
+    """The tree that declares no values has no directory at all, and the guard must not notice."""
     config, root = seeded_tree(tmp_path, monkeypatch)
     assert not (root / ENVIRONMENT / "values").exists()
     recorder = RecordingShell()

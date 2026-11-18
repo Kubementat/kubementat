@@ -1,19 +1,4 @@
 """The directory-to-cluster primitive: `kubementat.infrastructure.kubernetes.apply.apply_resources()`.
-
-Everything Wave 1 and Wave 2 apply from a directory goes through this function — today the global
-Tasks and Pipelines under `tekton_ci/` and the team's own two directories, tomorrow the generated
-trigger configs `setup_triggers` reads out of `platform_config/{env}/{team}/tekton/triggers/`. So its
-three blind spots were not three bugs in one function; they were three ways a resource somebody
-wrote silently did not exist as far as kubementat was concerned:
-
-1. `*.yaml` was not a resource file, and a `.yaml` was skipped.
-2. Nothing below the given directory was scanned, so `tasks/ci/thing.yml` was skipped.
-3. `metadata['name']` was dereferenced for the log line, so a manifest that was missing it crashed
-   with a `KeyError` that named a Python internal instead of the file the operator has to edit.
-
-The rules this file holds are the ones that replaced them, plus the one exclusion that keeps the
-walk from being a regression: `templates/` is where generator inputs live, and a generator template
-applied is a resource named after a placeholder.
 """
 
 import logging
@@ -66,11 +51,7 @@ def write(path, text):
 
 
 def test_every_resource_file_is_applied_once_and_in_a_stable_order(tmp_path):
-    """Two runs of the same command have to do the same thing in the same order.
-
-    A `set` or an unsorted directory scan makes a rerun's log incomparable with itself, and that is
-    the difference between a reproducible install and one you read the failures out of.
-    """
+    """Two runs of the same command have to do the same thing in the same order."""
     for name in ("delta", "alpha", "charlie", "bravo"):
         write(tmp_path / f"{name}.yml", TASK.format(name=name))
 
@@ -81,11 +62,7 @@ def test_every_resource_file_is_applied_once_and_in_a_stable_order(tmp_path):
 
 
 def test_an_empty_document_is_skipped_and_not_an_error(tmp_path, caplog):
-    """A trailing `---` or a file that is only comments is empty, not broken.
-
-    Skipping is not the same as ignoring: the log says so, because the other half of the failure
-    this file is about was a resource that went missing with no trace of any kind.
-    """
+    """A trailing `---` or a file that is only comments is empty, not broken."""
     write(tmp_path / "trailing.yml", "---\n\n# nothing here, just a note\n---\n")
 
     with caplog.at_level(logging.INFO):
@@ -94,11 +71,7 @@ def test_an_empty_document_is_skipped_and_not_an_error(tmp_path, caplog):
 
 
 def test_a_list_document_is_skipped_rather_than_assumed_to_be_a_resource(tmp_path):
-    """`- kind: Task` at the top level is not a manifest kubementat can name.
-
-    It gets a warning and no crash; `KeyError` on `metadata` was the old answer, and it arrived as
-    an exception on a file that could have been a comment block.
-    """
+    """`- kind: Task` at the top level is not a manifest kubementat can name."""
     write(tmp_path / "wrong.yml", "- kind: Task\n  name: not-a-document\n")
 
     assert an_apply(tmp_path).applied == []
@@ -108,11 +81,7 @@ def test_a_list_document_is_skipped_rather_than_assumed_to_be_a_resource(tmp_pat
 # the branch that used to be a KeyError
 # ---------------------------------------------------------------------------
 def test_a_resource_without_a_name_names_the_file_and_not_the_internals(tmp_path):
-    """`metadata['name']` is not a lookup that may fail, it is what makes the object addressable.
-
-    The old crash was a `KeyError: 'name'` from a log line. The message below says which file,
-    which document, and which kind, which is everything a reader needs before they open the file.
-    """
+    """`metadata['name']` is not a lookup that may fail, it is what makes the object addressable."""
     write(tmp_path / "nameless.yml", "apiVersion: tekton.dev/v1\nkind: Task\nspec: {}\n")
 
     with pytest.raises(ResourceWithoutNameError) as error:
@@ -125,12 +94,7 @@ def test_a_resource_without_a_name_names_the_file_and_not_the_internals(tmp_path
 
 
 def test_a_resource_directory_that_is_not_there_says_so(tmp_path):
-    """A path built out of configuration is not the same as a directory that is empty.
-
-    The old `os.listdir` raised its own `FileNotFoundError`; now it is a message that quotes the
-    path kubementat constructed, which is the half an operator cannot see when a team directory is
-    named by a configuration value.
-    """
+    """A path built out of configuration is not the same as a directory that is empty."""
     missing = tmp_path / "platform_config" / "dev" / "ghost" / "tekton" / "tasks"
 
     with pytest.raises(FileNotFoundError) as error:
@@ -140,12 +104,7 @@ def test_a_resource_directory_that_is_not_there_says_so(tmp_path):
 
 
 def test_a_resource_applied_twice_is_a_replacement_and_not_an_error(tmp_path):
-    """The 409 branch of this primitive, which is the same branch the install path has.
-
-    `apply_resources` asks for create-or-replace, so running `kmt tekton setup-pipelines` twice is
-    not two errors. This asserts the primitive's half — the same file, twice, no exception — and
-    the API's own 409 handling is `test_kubernetes_resource_helpers.py`.
-    """
+    """The 409 branch of this primitive, which is the same branch the install path has."""
     write(tmp_path / "task.yml", TASK.format(name="once"))
     recorder = RecordingKubernetesUtils()
 

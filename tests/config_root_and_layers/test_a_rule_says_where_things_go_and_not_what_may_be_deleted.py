@@ -1,18 +1,4 @@
-"""A rule says where things go. Deleting needs a file that said it.
-
-Five answers are consequences of a team's name, and the owner ruled on 2026-11-03 which half of
-that is allowed to reach the cluster: **derive for placement, delete only what a file named.** It is the
-kind of ruling that is easy to satisfy by accident and easy to lose later, because both halves read the
-same `Config` and only the verb in front of them differs — installing into `pandas` and deleting the
-namespace called `pandas` are one method call apart. So this file states the difference at every layer
-that could otherwise blur it: the two accessors, the entry a teardown builds from them, and the call that
-removes a namespace.
-
-The failure this is written against is concrete. `Config.get('team_static').get('PIPELINE_NAMESPACE')`
-now answers `pandas-pipelines` for a directory that never wrote it down. That is right, and the same
-answer handed to `delete_namespace` is not: this cluster may already hold a namespace by that name that
-kubementat never created, and a name a rule produced is an address rather than a deed.
-"""
+"""A rule says where things go. Deleting needs a file that said it."""
 
 import json
 from types import SimpleNamespace
@@ -31,11 +17,7 @@ TEAM = "pandas"
 
 @pytest.fixture
 def tree(tmp_path):
-    """A configuration root that answers nothing about namespaces.
-
-    Deliberately not a complete tree: every test here is about the difference between "answered" and
-    "written down", and a fixture that declared both namespaces would make that difference invisible.
-    """
+    """A configuration root that answers nothing about namespaces."""
     root = tmp_path / "config"
     (root / ENVIRONMENT).mkdir(parents=True)
     (root / ENVIRONMENT / "static.json").write_text(json.dumps({"ENVIRONMENT": ENVIRONMENT}),
@@ -49,11 +31,7 @@ def tree(tmp_path):
 
 
 def test_the_two_doors_fail_the_same_way_and_not_in_two_pieces(tree):
-    """One problem, one failure. `get` and `declared` may answer differently and must not.
-
-    A team-less read of either is the same mistake, and two different messages for it is the pattern
-    this tree keeps having to remove. Same for the missing file.
-    """
+    """One problem, one failure. `get` and `declared` may answer differently and must not."""
     root, _ = tree
     no_team = Config(ENVIRONMENT, None, platform_config_dir=root)
     for reader in (no_team.get, no_team.declared):
@@ -76,10 +54,6 @@ def test_the_two_doors_fail_the_same_way_and_not_in_two_pieces(tree):
 
 def test_removing_a_teams_pipelines_refuses_when_only_the_rule_knows_the_namespace(tree, monkeypatch):
     """The one call that deletes a namespace on a team's word, and what it does with nothing to go on.
-
-    The assertion is not "it deleted nothing" — it is that it said why. A silent no-op here is how a
-    teardown becomes a claim about a cluster nobody looked at, and the message has to carry the
-    distinction, not just the refusal.
     """
     root, config = tree
     deleted = []

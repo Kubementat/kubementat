@@ -1,33 +1,4 @@
-"""helmfile apply is one argv assembled in Python, and the script that assembled it stays gone.
-
-`scripts/automation/components/helmfile_apply.sh` is deleted. It is not a migration, because it
-was never called: it `pushd`ed into `platform_config/{environment}/kubementat_components`, read
-the Grafana pair out of `static.encrypted.json` with `jq`, and ran
-
-    helmfile apply --color -f helmfile.yaml.gotmpl -l "$HELMFILE_LABEL_FILTER"
-
-all of which `HelmUtils.helmfile_apply` (`src/kubementat/infrastructure/helm.py:31`) already does for
-every path that could have reached the script:
-
-* `kmt install` -- `install_kubementat` (`src/kubementat/automations/install/kubementat.py:115`)
-* `kmt routing install` -- `install_routing` (`src/kubementat/automations/routing/routing.py:246`)
-* `kmt helm apply` -- the CLI command (`helmfile_apply` in `src/cli/commands/helm.py`)
-
-So the script's only remaining role was documentation of an argv, and a script that documents an
-argv while a library assembles it is a second way to be wrong about the same `helmfile`. Two of
-the script's own habits were already stale: it exported `GRAFANA_ADMIN_*` from the config with
-`jq` while the library had moved to `Config`'s own accessors, and its `--interactive` came from a
-bare `true`/`false` third argument while the CLI answers that question from `sys.stdin.isatty()`.
-
-The old ledger row for this file said "still sourced by `install_routing.sh:32`,
-`install_kubernetes_dashboard.sh:36` -> delete once those two are gone". Both of those scripts are gone:
-`install_routing.sh` with the routing work that landed `kmt routing install`, and the dashboard
-installer with the chart the upstream retired. That is the condition that row was waiting for.
-
-The guards below are the two halves of that claim: the file is not in the tree and nothing that
-could run it names it, and the argv the script was a record of is what `HelmUtils` hands
-`shell.run` -- one entry per token, no shell, no `.sh` anywhere on the way to helmfile.
-"""
+"""helmfile apply is one argv assembled in Python, and the script that assembled it stays gone."""
 
 import json
 from pathlib import Path
@@ -41,8 +12,6 @@ from kubementat.infrastructure.helm import HelmUtils
 
 SCRIPT = "scripts/automation/components/helmfile_apply.sh"
 
-# The code roots a caller would have to live in. `docs/plans/**` and the READMEs are excluded on
-# purpose: a sentence naming a deleted script is history, and this file is one of them.
 CALLER_ROOTS = ("src", "tekton_ci", "examples")  # "templates" is gone from this tuple: templates/ moved inside the package, so "src" sweeps it and listing the old root would sweep nothing.
 
 ENVIRONMENT = "dev"
@@ -50,12 +19,7 @@ TEAM = "dev1"
 
 
 class RecordingShell:
-    """`shell.run` replaced by what it records: the argv, and nothing else.
-
-    Recording the argv *and* the keyword arguments is the point. A call that passed a string, or
-    `shell=True`, or `os.chdir` in front of it, would show up here as a shape this file does not
-    recognise.
-    """
+    """`shell.run` replaced by what it records: the argv, and nothing else."""
 
     def __init__(self):
         self.calls = []
@@ -101,20 +65,14 @@ def apply_helmfile(tmp_path, monkeypatch, label_filter="group=standard", **kwarg
 
 
 def _is_packaging_leftover(path):
-    """Build droppings only. `__pycache__` and `*.egg-info` are copies of this checkout, not callers."""
+    """Build droppings only. `__pycache__` and `*.egg-info` are copies of this checkout, not callers.
+    """
     parts = [part.lower() for part in path.parts]
     return any(part == "__pycache__" or part.endswith(".egg-info") for part in parts)
 
 
 def test_the_helmfile_file_the_argv_carries_is_the_one_the_call_names(tmp_path, monkeypatch):
-    """`-f` is a *path*, assembled by `helm_utils`, and a caller can hand it a different one.
-
-    The script had `HELMFILE_FILENAME="helmfile.yaml.gotmpl"` hardcoded and applied it from inside
-    the components directory. `helmfile_apply` takes `helmfile_path` and resolves both it and the
-    working directory to absolute paths first, because it is about to hand them to a child process
-    and set `cwd` in the same call. That is the part of the argv the script never had: a caller
-    that points helmfile somewhere else is not editing a constant.
-    """
+    """`-f` is a *path*, assembled by `helm_utils`, and a caller can hand it a different one."""
     (default_argv, _), components = apply_helmfile(tmp_path, monkeypatch)
     assert default_argv[default_argv.index("-f") + 1] == str(components / "helmfile.yaml.gotmpl")
 

@@ -1,11 +1,4 @@
-"""Recorded Kubernetes client calls, reduced to the operations a test asserts on.
-
-`ApiRecorder` in `conftest.py` logs every generated-client call as `(method, kwargs, cluster)`.
-This module turns that log into `ClusterOperation`s: a create, replace or patch becomes `ensure`, a
-read stays a read, and the object's salient facts (data keys, RBAC rules, registry endpoints) are
-kept so a test can say what was written without depending on which client method wrote it. A call
-that names no cluster raises, so a passing comparison always says which cluster it was about.
-"""
+"""Recorded Kubernetes client calls, reduced to the operations a test asserts on."""
 import base64
 import json
 import re
@@ -22,11 +15,7 @@ API_PROGRAM = "apiserver"
 
 
 def _flagged(value):
-    """A cluster flag's value, or nothing when the flag arrived alone.
-
-    `--context` with nothing after it says "someone meant to name one" and nothing else, and that
-    is not a target. The shims record a bare flag as the literal `true`.
-    """
+    """A cluster flag's value, or nothing when the flag arrived alone."""
     if value is None:
         return None
     text = str(value).strip()
@@ -36,12 +25,7 @@ def _flagged(value):
 
 
 def cluster_named(*, context=None, kubeconfig=None):
-    """A cluster spelled the way the record spells one, from the parts that name it.
-
-    This is the spelling every *declared* cluster has to use, so a test cannot invent a private one
-    that quietly matches nothing. Prefer it, or `cluster_fixture.target_cluster`, to typing the
-    string by hand: the format belongs to the harness and not to the test that uses it.
-    """
+    """A cluster spelled the way the record spells one, from the parts that name it."""
     named = _flagged(context)
     if named:
         return f"context {named}"
@@ -54,9 +38,7 @@ def cluster_named(*, context=None, kubeconfig=None):
 _PLURALS = {
     "secrets": "secret",
     "namespaces": "namespace",
-    # `kubectl get ns` is how bash asks, and `list_namespace` is how the client asks. Reduced
-    # without this entry, `ns` becomes `n` and a read that both sides performed looks like a
-    # difference. Same class of bug as the binding rule: the harness had no name for it.
+    # `ns` is kubectl's short name; without this entry it would singularise to `n`.
     "ns": "namespace",
     "serviceaccounts": "serviceaccount",
     "roles": "role",
@@ -89,15 +71,7 @@ def _singular(kind):
 
 
 def _selector(text):
-    """A label selector, so key order does not count as a difference.
-
-    The scripts and `constants.py` have listed `app.kubernetes.io/name=…` and
-    `app.kubernetes.io/instance=…` in the opposite order for at least one component — `vault` did,
-    for as long as the scripts and the code disagreed about which of the two came first. That is not
-    two selectors, so it is not a difference. `openbao` is written in the order its chart writes,
-    so there is no disagreement to fold today, but the fold stays: the rule is that a selector is a
-    set, and a rename that reorders one must not read as a product change.
-    """
+    """A label selector, so key order does not count as a difference."""
     return ",".join(sorted(term.strip() for term in str(text).split(",") if term.strip()))
 
 
@@ -129,12 +103,7 @@ def _body_to_dict(body):
 
 
 def _registry_endpoints(dockerconfigjson):
-    """The registry URLs a docker-registry Secret is *for*.
-
-    In bash they come from `--docker-server=…`; in Python they are written into
-    `.dockerconfigjson`. Comparing the flag against nothing would be worse than useless: the
-    URL is the only fact the whole operation exists to carry.
-    """
+    """The registry URLs a docker-registry Secret is *for*."""
     if not dockerconfigjson:
         return ()
     try:
@@ -146,12 +115,7 @@ def _registry_endpoints(dockerconfigjson):
 
 
 def _rule_triple(rule):
-    """One RBAC rule, spelled one way, whatever client wrote it.
-
-    A manifest says `apiGroups`; a client model's `to_dict()` says `api_groups`. They are the same
-    rule, and a ClusterRole whose rules are compared as free-form JSON would fail for that reason
-    alone — which is how a parity test ends up declaring a difference that is not a difference.
-    """
+    """One RBAC rule, spelled one way, whatever client wrote it."""
     if not isinstance(rule, dict):
         rule = rule.to_dict() if hasattr(rule, "to_dict") else dict(rule)
     return (tuple(rule.get("apiGroups") or rule.get("api_groups") or ()),
@@ -160,11 +124,7 @@ def _rule_triple(rule):
 
 
 def payload_facts(kind, body):
-    """The fields an operation is about, for each kind it appears for.
-
-    One function, so the two sides cannot disagree about what matters: the bash side hands it
-    the manifest it applied, the Python side hands it the body it sent.
-    """
+    """The fields an operation is about, for each kind it appears for."""
     document = _body_to_dict(body)
     if document is None:
         return () if body is None else (("body", _model(body)),)
@@ -219,12 +179,7 @@ def payload_facts(kind, body):
 
 
 def _without_generated_name(document):
-    """Drop the field a run name makes random, keep everything the substitution wrote.
-
-    `run_pipeline` rewrites `metadata.name` with a random postfix so two runs do not collide.
-    Everything else in the manifest is what the script decided, so that is what gets compared
-    in full.
-    """
+    """Drop the field a run name makes random, keep everything the substitution wrote."""
     clone = json.loads(json.dumps(_prune(document)))
     metadata = clone.get("metadata")
     if isinstance(metadata, dict):
@@ -233,13 +188,7 @@ def _without_generated_name(document):
 
 
 class ClusterOperation:
-    """One operation on the cluster, reduced to the claim it makes.
-
-    `cluster` is the sixth field and the one added last: which cluster was asked, in the
-    harness's own spelling (see `cluster_identity`). It is part of the identity for reads as well
-    as writes -- `compare_key` keeps it -- because "the same read, the same namespace, a different
-    cluster" is the sentence this record exists to be able to tell apart.
-    """
+    """One operation on the cluster, reduced to the claim it makes."""
 
     def __init__(self, verb, kind, namespace=None, name=None, facts=(), cluster=None):
         self.verb = verb
@@ -288,7 +237,7 @@ def render(operations):
 
 
 # ---------------------------------------------------------------------------
-# the Python side: recorded client calls, same shape
+# recorded client calls
 # ---------------------------------------------------------------------------
 
 ENSURE_VERBS = {"apply", "create", "replace", "update", "ensure"}
@@ -301,17 +250,7 @@ PROBE_METHODS = {"create_self_subject_access_review", "create_self_subject_rules
 
 
 def operations_from_api_calls(calls):
-    """Recorded generated-client calls into operations.
-
-    `calls` is a list of `(method_name, kwargs)` — what a recording fake client leaves — or of
-    `(method_name, kwargs, cluster)`, which is what `ApiRecorder` leaves now that the recorder knows
-    the `ClusterTarget` its client was built for. The order is the order they were called.
-
-    An entry with no third element is an operation whose target the harness cannot see, and it
-    raises. That is the rule of this module turned on the Python half: the recorder that cannot say
-    which cluster it addressed is the same recorder that used to answer for "this process", and a
-    comparison built from it would pass no matter which cluster the code had picked.
-    """
+    """Recorded generated-client calls into operations."""
     operations = []
     for entry in calls:
         method, kwargs, cluster = (entry[0], entry[1],
@@ -341,8 +280,7 @@ def _api_operation(method, kwargs, cluster=None):
     if method == "connect_get_node_proxy_with_path":
         # The client's way into a kubelet: the call renders `/api/v1/nodes/{name}/proxy/{path}`,
         # so it is a read of the node and the path is the fact that tells it apart from a node
-        # list. It is asked once per node, which is why a parity test against a script that looped
-        # the nodes declares one of these per node it read.
+        # list.
         return ClusterOperation("read", "node", None, kwargs.get("name"),
                                 (("path", kwargs.get("path")),), cluster)
     if method in PROBE_METHODS:
@@ -374,9 +312,7 @@ def _api_operation(method, kwargs, cluster=None):
         kind = _singular(str((body or {}).get("kind", kwargs.get("plural", ""))))
     if kind == "namespace":
         name = kwargs.get("name") or namespace or _name_of(body)
-    # A list carries its selector, and the script side states it (`-l`), so the client side has to
-    # as well or a read both sides performed looks like one Python did alone. It is asked of the
-    # method and not of the reduced verb, which is decided below.
+    # A list keeps its selector: two lists of one kind with different selectors are different reads.
     selector = kwargs.get("label_selector") or kwargs.get("field_selector")
     facts = ([("selector", _selector(selector))] if method.startswith("list") and selector else []) \
         + list(payload_facts(kind, body))
@@ -389,13 +325,7 @@ def _api_operation(method, kwargs, cluster=None):
 
 
 def review_attributes(body):
-    """The verb and resource a subject access review asked about, model or dict.
-
-    The body is built by `KubernetesUtils.self_can` as a real `V1SelfSubjectAccessReview`, so the
-    reducer reads attributes; a test that hands a recorder a plain dictionary is equally legal, so
-    both shapes are read. A `None` in is not an error — the review asked about the verb it was
-    given, and an empty one is reported as such rather than raised over.
-    """
+    """The verb and resource a subject access review asked about, model or dict."""
     def field(owner, key):
         if owner is None:
             return None

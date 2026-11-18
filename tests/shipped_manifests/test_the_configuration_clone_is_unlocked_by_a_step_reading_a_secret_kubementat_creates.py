@@ -1,33 +1,4 @@
-"""A step after the clone unlocks the configuration, from a Secret kubementat creates.
-
-Two halves, and each one is only true if the two ends of it agree:
-
-*1. kubementat creates the Secret.* `setup_pipelines` writes `git-crypt-configuration-key` out of
-   `<configuration root>/git_crypt_symmetric.key`. That file is gitignored and is never read back
-   into the repository, which is the whole reason a clone arrives locked and the reason this Secret has to
-   exist at all — the key cannot travel inside the repository it opens.
-
-*2. a step reads it.* `git-crypt-unlock.yml` takes the key by `secretKeyRef` and pipes it into
-   `git-crypt unlock -`, inside the clone. kubementat reads and never unlocks, and census K
-   measured that nothing under `src/` runs `git-crypt unlock`. That rule is about the product; this is a
-   Tekton Task, which is why the ruling put the unlock here and not in `kmt`.
-
-The failure this guards is the quiet one. If the step is missing, or is not ordered ahead of the steps that
-read configuration, the clone succeeds, the unlock step succeeds or never exists, the reader gets
-ciphertext, and what it reads is the *shape* of YAML without the values in it. Nothing errors. That is why
-the ordering assertions below are about graph position and not about names, and why the Secret's name is
-checked on both sides of a file boundary where a rename on one half is invisible to the other.
-
-Measured against git-crypt 0.7.0 on this machine, and used rather than assumed:
-* `git-crypt unlock -` reads a key from stdin and exits 0, after which the file is plaintext;
-* unlocking an already-open repository exits 0 and prints nothing, so a green step proves only that the
-  tree is readable from there onward;
-* a key from a different repository exits 1 and says `encrypted file has been tampered with!`, then fails
-  the smudge filter and leaves the repository configured but undecrypted.
-
-Nothing here enforces a tree shape in `Config` or the read paths: most trees in this suite are fixtures
-and not prepared directories, and that kind of rule once broke 227 unrelated tests.
-"""
+"""A step after the clone unlocks the configuration, from a Secret kubementat creates."""
 import re
 from pathlib import Path
 
@@ -89,11 +60,7 @@ def _env_ref(env: dict) -> str:
 # ---------------------------------------------------------------------------------------------
 
 def test_a_clone_of_the_configuration_is_unlocked_by_a_step_and_not_by_the_clone():
-    """The first half of the unlock rule: *a step after* `git-clone` unlocks it.
-
-    The mutation this catches is folding the unlock into the clone task, which the rule explicitly rules out
-    because it makes "did we fetch it" and "can we read it" one answer again.
-    """
+    """The first half of the unlock rule: *a step after* `git-clone` unlocks it."""
     for path in CLONING_PIPELINES:
         if not path.exists():
             continue
@@ -120,15 +87,7 @@ def test_a_clone_of_the_configuration_is_unlocked_by_a_step_and_not_by_the_clone
 
 
 def test_the_unlock_runs_after_the_clone_and_before_what_reads_configuration():
-    """Ordering, asserted on the graph rather than on names.
-
-    The step must run *after* the clone (nothing to open before there is a tree) and *before* anything that
-    reads configuration out of that tree (otherwise it reads ciphertext, which is the silent half of this
-    bug: the read succeeds and returns the shape of YAML without the values).
-
-    This is the assertion that fails if someone re-adds `- git-clone-configuration` to a step that waits
-    for the unlock, because "waits for the clone" is the shape that was shipped and it is wrong.
-    """
+    """Ordering, asserted on the graph rather than on names."""
     for path in CLONING_PIPELINES:
         if not path.exists():
             continue
@@ -171,12 +130,7 @@ def _reaches(step: dict, wanted: str, steps: dict, seen=None) -> bool:
 
 
 def _reads_configuration(step: dict, pipeline: dict) -> bool:
-    """Does this task touch configuration? Answered from what it passes and what its Task reads.
-
-    Deliberately conservative: a step that names a config param, or that calls a Task whose params name a
-    configuration root, counts. Missing a reader is the worse error, since the whole point of the file is
-    that a missed reader is silent.
-    """
+    """Does this task touch configuration? Answered from what it passes and what its Task reads."""
     text = yaml.safe_dump(step)
     if "configuration-root" in text or "path-to-configuration" in text:
         return True
@@ -195,12 +149,7 @@ def _reads_configuration(step: dict, pipeline: dict) -> bool:
 # ---------------------------------------------------------------------------------------------
 
 def test_kubementat_creates_the_secret_the_unlock_step_reads():
-    """The name of the Secret is a contract across two files, and both ends are asserted.
-
-    `setup_pipelines` in `src/kubementat/automations/install/pipelines.py` creates it; `git-crypt-unlock.yml` reads it by
-    `secretKeyRef`. A rename on one side is a step that unlocks nothing, and neither file read alone shows
-    it, so this reads the constant out of the source and compares it against the YAML.
-    """
+    """The name of the Secret is a contract across two files, and both ends are asserted."""
     automation = Path("src/kubementat/automations/install/pipelines.py").read_text(encoding="utf-8")
     assert CONFIGURATION_KEY_SECRET in automation, \
         f"nothing in pipelines.py creates {CONFIGURATION_KEY_SECRET}, so the unlock step's Secret is " \
@@ -243,10 +192,6 @@ def test_kubementat_creates_the_secret_the_unlock_step_reads():
 
 def test_the_secret_is_built_from_the_file_that_a_clone_cannot_carry():
     """What goes into the Secret is `git_crypt_symmetric.key`, read from the configuration directory.
-
-    The file is gitignored, so a clone cannot contain it. That is the premise of the whole ticket, and an
-    implementation that reads the key from somewhere inside a checkout would work on one machine and fail
-    in every pod.
     """
     bootstrap = Path("src/kubementat/config/bootstrap.py").read_text(encoding="utf-8")
     assert "def require_symmetric_key" in bootstrap, \
@@ -271,10 +216,6 @@ def test_the_secret_is_built_from_the_file_that_a_clone_cannot_carry():
 
 def test_the_unlock_task_needs_no_key_on_a_host():
     """A pod has no filesystem to find a key on, so the key may arrive only through `secretKeyRef`.
-
-    The distinction is between a path that gets opened and a filename named in a sentence. This step's
-    error message says `git_crypt_symmetric.key` on purpose -- it is telling the operator what kmt install
-    reads -- so banning the word would ban the fix. Look for the things that actually touch a filesystem.
     """
     task = _load(TASKS / f"{UNLOCK_TASK}.yml")
     text = _script(task)
@@ -291,13 +232,7 @@ def test_the_unlock_task_needs_no_key_on_a_host():
 
 
 def test_the_task_passes_only_params_it_declares():
-    """A pipeline may not hand a Task a param the Task does not declare.
-
-    The same rule the older tasks measured once; the new step is new surface for the same mistake.
-    Where that measurement went, and why the failure is still caught, is written in
-    `tests/test_every_ci_kmt_invocation_states_its_cluster.py`, where every shipped step's params are
-    read against the Task they call.
-    """
+    """A pipeline may not hand a Task a param the Task does not declare."""
     declared = {p["name"] for p in _load(TASKS / f"{UNLOCK_TASK}.yml")["spec"].get("params") or []}
     for path in CLONING_PIPELINES:
         if not path.exists():

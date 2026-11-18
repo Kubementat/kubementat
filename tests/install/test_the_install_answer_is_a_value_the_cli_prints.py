@@ -1,27 +1,4 @@
-"""What `kmt install` did is a value now, and this file pins both halves of that sentence.
-
-`install_kubementat` used to return `None` and describe itself in 113 `logging.` calls. That is not
-a report, it is a transcript: whoever ran the command could scroll it, and whoever called the
-function had nothing to branch on, print, or hand to a test. The shape being copied is
-`automations/routing/routing.py`'s `RoutingInstallResult` — a frozen dataclass with a `summary()`
-the command layer prints and a `command()` that spells the fix — and what this file holds is the
-contract that copy created:
-
-* **the def answers with a value** (`InstallResult`, and the annotation says so, so a reverter is a
-  `TypeError` at the call and not a quieter thing);
-* **the CLI prints it** — and specifically prints *the rendered output*, which is asserted from the
-  real `kmt install` command line and not from a stub that returns a prepared object, because a
-  command that echoes its own argument instead of the library's answer would pass a test built the
-  other way;
-* **the operator's exit code and the log did not move.** The finish message, the two option lines
-  `kmt install` has always printed before it calls anything, and the refusal sentences are all
-  still here, because the rule is that logs may be demoted and never removed. A test that only checks
-  the new lines is a test that would let the old ones be deleted.
-
-The stubs are the ones every install-order test in this tree uses: the steps are module functions
-now, so the module the code calls them through is the seam, and replacing them is what makes the
-install runnable without a cluster.
-"""
+"""What `kmt install` did is a value now, and this file pins both halves of that sentence."""
 
 import inspect
 import logging
@@ -36,14 +13,7 @@ from kubementat.consent import Consent
 
 
 def _an_install_that_writes_everything(monkeypatch, journal, *, keep_the_finish_message=False):
-    """Every step of the install replaced by one journal line, so only its answer is observable.
-
-    Nothing here stands in for a *decision* — the gates, the writes and the skip branch are the
-    code's own, and each appends its name as it runs. The finish message is silenced by default
-    because it is twelve `logging.info` lines of next steps and no test here reads them; pass
-    `keep_the_finish_message=True` when the claim under test is about the log stream, which is the
-    one claim a silenced message would pass vacuously.
-    """
+    """Every step of the install replaced by one journal line, so only its answer is observable."""
     finish = install_slice._print_install_finish_message
     monkeypatch.setattr(install_slice, "check_dependencies_are_installed",
                         lambda dependencies: None)
@@ -74,10 +44,6 @@ def _an_install_that_writes_everything(monkeypatch, journal, *, keep_the_finish_
 
 def test_the_install_returns_an_answer_and_not_none(fixture_repo, monkeypatch, dry_run_env):
     """The Done-when's first line: the def's signature is a dataclass, and the value is populated.
-
-    The annotation is asserted as well as the instance, because a `None`-returning body wearing a
-    dataclass annotation is a defect a caller cannot see until it is a `AttributeError` two frames
-    up in someone else's code.
     """
     journal = []
     _an_install_that_writes_everything(monkeypatch, journal)
@@ -108,11 +74,6 @@ def test_the_install_returns_an_answer_and_not_none(fixture_repo, monkeypatch, d
 
 def test_the_two_gates_answer_with_the_fact_and_not_with_their_exit():
     """`validate_cluster` and `check_cluster_permissions` return True because everything else leaves.
-
-    Each has exactly one way out that is not a value — `exit(1)` for an unreachable cluster, a named
-    refusal for a denied verb — and a caller that reaches the return value wants the fact that the
-    read happened. Pinned here rather than only at the call site so a future gate that "returns
-    None as before" fails where it is defined.
     """
     returned = inspect.signature(install_slice.validate_cluster).return_annotation
     assert returned is bool, returned
@@ -127,9 +88,6 @@ def test_the_two_gates_answer_with_the_fact_and_not_with_their_exit():
 def test_the_skipped_half_is_printed_as_a_skip_by_the_command_too(monkeypatch,
                                                                   resolvable_environment):
     """The other branch, through the same door: the flag the operator typed is what they read back.
-
-    Both branches are asserted because both branches get read — a summary that said "installed" for
-    a run that wrote a quarter of it would be the worse of the two ways to be wrong.
     """
     _an_install_that_writes_everything(monkeypatch, [])
 
@@ -144,13 +102,7 @@ def test_the_skipped_half_is_printed_as_a_skip_by_the_command_too(monkeypatch,
 
 def test_the_log_still_carries_the_finish_message_and_the_next_steps(
         fixture_repo, monkeypatch, dry_run_env, caplog):
-    """The preserve half of the change-vs-preserve rule, stated as an assertion.
-
-    Nothing was deleted to make room for the value: the install's finish message — which is where
-    the next-steps sentences have lived since this was a bash script — is still written, still at
-    INFO, and still says the words. The value prints what was written; the log keeps saying what to
-    do next, and both claims are only honest if neither one moves.
-    """
+    """The preserve half of the change-vs-preserve rule, stated as an assertion."""
     _an_install_that_writes_everything(monkeypatch, [], keep_the_finish_message=True)
     context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
 

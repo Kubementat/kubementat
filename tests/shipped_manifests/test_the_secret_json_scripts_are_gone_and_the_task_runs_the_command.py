@@ -1,25 +1,4 @@
-"""The two scripts under `scripts/secret_management/` that a json file needed stay deleted.
-
-`kmt kubernetes create-secret-from-json` replaced the behaviour of
-`create_secret_from_json.sh`, whose only caller in the whole checkout was the Tekton Task
-`tekton_ci/tasks/create-secret-from-json.yml`. That is the reason the pair is deletable now and was
-not before: the script was the only thing the library `base64_library.sh` had left — the other
-script that sourced it, `generate_ssh_key.sh`, went earlier — and the library's one function,
-`base64_encode`, was never called by either of them, so it is verified rather than assumed that
-deleting the script orphaned the library and not the reverse:
-
-    git show HEAD^:scripts/secret_management/create_secret_from_json.sh
-
-sources the library and calls no function from it, which is the whole of what "the library stays
-because two scripts source it" was resting on. The Task is repointed at the command in the same
-commit, so nothing in the tree can still run either file.
-
-The claim this started on was that the library "leaves
-when they do". It did, so it did. What is asserted below is the two halves of
-that claim that could rot: the files are not in the tree, no program carries a path that could run
-them, and the Task — which is customer contract, so its params are checked as a set and not
-reformatted on trust — now runs a command instead of a filename.
-"""
+"""The two scripts under `scripts/secret_management/` that a json file needed stay deleted."""
 
 import re
 
@@ -53,13 +32,7 @@ CALLER_ROOTS = ("src", "scripts", "tekton_ci", "examples", "tools")  # "template
 
 
 def test_the_task_still_declares_the_params_the_customer_pipeline_passes():
-    """The params block is customer contract, so it is checked as a set and not as a feeling.
-
-    One live pipeline pair calls this Task by name and passes these. A param renamed or folded into a
-    workspace would fail in someone else's pipeline run and not in this repository, which is the only
-    reason the set is asserted here instead of trusted from the diff. The additions this file's tickets
-    made are additions and not renames: nothing the pair passed before changed its name.
-    """
+    """The params block is customer contract, so it is checked as a set and not as a feeling."""
     import yaml
 
     document = yaml.safe_load(TASK.read_text(encoding="utf-8"))
@@ -74,17 +47,7 @@ def test_the_task_still_declares_the_params_the_customer_pipeline_passes():
 
 
 def test_the_task_runs_the_command_on_four_positionals():
-    """The step's own line, read out of the manifest rather than remembered.
-
-    Four substitutions for the four arguments the command takes, in the order the command takes
-    them, and no `cat` of the json file in the step: the file's contents used to be passed as one
-    argument, which put the whole document in the step's argv and made `jq` decide what a nested
-    value looked like.
-
-    The first substitution is the environment and that ordering is the point — a Task that passes
-    the namespace first is a Task that cannot say which cluster the Secret is written into. The
-    check below is positional and not a membership test for exactly that reason.
-    """
+    """The step's own line, read out of the manifest rather than remembered."""
     text = TASK.read_text(encoding="utf-8")
 
     assert "kmt kubernetes create-secret-from-json" in text
@@ -102,22 +65,14 @@ def test_the_task_runs_the_command_on_four_positionals():
         f"is the environment: {sent}")
     assert "--config-dir" in argv, (
         "the step names no configuration root, so `kmt` resolves none and refuses before it writes "
-        "the Secret — see tests/test_every_ci_kmt_invocation_names_its_configuration_root.py")
+        "the Secret — see tests/shipped_manifests/test_every_ci_kmt_invocation_names_its_configuration_root.py")
     for param in ("environment", "target-namespace", "secret-name", "json-file-location"):
         assert f'$(params.{param})' in text, f"the step no longer passes $(params.{param})"
     assert "cat $JSON_FILE_LOCATION" not in text
 
 
 def test_the_command_the_task_calls_is_the_one_that_takes_those_four_arguments():
-    """The other side of the repoint: the name in the Task resolves to the command it means.
-
-    The Task is a string, and a command is Python, so the only check that means anything is that the
-    command the registration answers to exists and is addressed by exactly four positionals —
-    environment first, then the three the script took.
-
-    The pair is checked together rather than in two tickets: a Task that gains a param and a command
-    that gains a positional are one change, because the other order is the bug.
-    """
+    """The other side of the repoint: the name in the Task resolves to the command it means."""
     from click.core import Argument, Option
 
     from cli.commands import kubernetes

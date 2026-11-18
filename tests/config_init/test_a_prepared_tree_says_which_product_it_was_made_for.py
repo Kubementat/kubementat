@@ -1,20 +1,4 @@
 """A prepared tree says which product it was made for, and kubementat asks before it trusts the answer.
-
-`config init` has stamped two keys into `<root>/kubementat.yaml` since it became the way a directory
-is prepared, and until now nothing read them. That is worse than having no stamp: a person skimming
-this tree finds a version gate and assumes it gates, while in fact every tree in existence was being
-trusted regardless of what it said. The reader landed, so here is what it refuses and what it merely
-says something about.
-
-The two checks have different severities because the two rules behind them do. A **version string** outside the
-range warns once and continues — a running cluster must not be bricked by a range drifting. A **schema
-version** two or more steps behind refuses, because then every answer this tree gives that is not
-named in its own layer is coming from a built-in default, so the cluster is configured by kubementat's
-assumptions and not by the operator's. Same function, two outcomes, and the split is the requirement.
-
-One thing this guards that is easy to get wrong from the description: the refusal has to land **before**
-the cluster is reached. `check_configuration_stamp` does one file read for that reason, and
-`test_the_stamp_is_asked_before_a_verb_reaches_a_cluster` pins the ordering rather than the message.
 """
 
 import json
@@ -148,9 +132,6 @@ def test_an_unsupported_operator_is_refused_and_not_read_as_a_pass():
 
 def test_the_stamp_is_asked_before_a_verb_reaches_a_cluster(tmp_path, monkeypatch):
     """`kmt routing status` reads a cluster. The refusal must come first, and it must not read one.
-
-    The ordering is the requirement and not a detail: a gate that runs after resolution has already
-    let the verb do the thing it was supposed to stop.
     """
     root = tmp_path / "checkout"
     root.mkdir(parents=True, exist_ok=True)

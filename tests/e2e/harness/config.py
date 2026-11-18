@@ -473,8 +473,7 @@ TEAM_ACCOUNT = "kmt-e2e-user"
 TEAM_ACCOUNT_READ_ONLY = "kmt-e2e-readonly"
 
 # Placeholders `argv_for` can resolve from the lane identity alone. A stage adds the
-# per-call ones (see STAGE_PLACEHOLDERS) on top of this, so a typo in a capability's argv
-# has exactly one place to show up: tests/test_harness_capability_argv.py.
+# per-call ones (see STAGE_PLACEHOLDERS) on top of this.
 LANE_PLACEHOLDERS = {
     "env": ENVIRONMENT,
     "team": TEAM,

@@ -1,34 +1,5 @@
-"""A run that states a cluster and an environment that declares one
-have to agree, and when they do not, kubementat refuses instead of choosing.
-
-The defect is a Tekton pod's, and it is worth spelling out because it is what makes this a rule
-about *claims* and not about files. A pipeline pod clones the configuration repository and runs
-`kmt` inside the cluster it was scheduled onto. The clone declares `CLUSTER_KUBE_CONTEXT`, and —
-an absolute `CLUSTER_KUBECONFIG_PATH` in a shared tree being a mistake — that context
-names a file that exists on somebody's laptop and not in the pod. Meanwhile the pod's own mounted
-service account would answer for the cluster it is standing on. v2's ordering puts the clone's
-declaration (layer 3) **ahead** of that service account (layer 4), so a pod that says nothing
-errors out on a dead reference instead of quietly installing into the cluster it is running on.
-
-The fix is not "teach layer 3 to fall through when its file is unreadable" — the spec refuses that
-in as many words, on the ground that a configuration which cannot find the cluster it declares does
-not get to go and discover a different one. The fix is a comparison, asked before anything resolves:
-
-* the pipeline **states** its cluster with the dials above the file (`--kubeconfig`, `--context`,
-  `CLUSTER_KUBECONFIG_PATH`), so the file that gets opened is the pipeline's and the answer that
-  wins is the one the pipeline declared, and
-* the clone's declaration is then checked against that statement, and a disagreement is a refusal
-  that names both claims and the flag, variable, or file that wrote each of them.
-
-The reasoning for the refusal is the sentence that matters, and it is in the message: the
-configuration's claim is about **which environment** the work is for, the run's claim is about
-**where the work runs**, and when those two disagree kubementat is not the thing that decides.
-
-The resolution order is untouched by all of this, and these tests are written so that stays true:
-nothing here reorders the layers, nothing here makes a failed read fall through, and a run that
-states a cluster for an environment that declared nothing resolves exactly the way it did before.
-What changed is only that a statement above the file may *answer for* an environment and may not
-contradict it.
+"""A run that states a cluster and an environment that declares one have to agree, and when they do
+not, kubementat refuses instead of choosing.
 """
 
 import pytest
@@ -53,13 +24,7 @@ CI_CONTEXT = "ci-cluster"
 
 def test_a_stated_kubeconfig_that_does_not_have_the_declared_context_is_refused(
         tmp_path, monkeypatch):
-    """A file is a claim about the cluster too, and here it is the *run* making it.
-
-    The stated kubeconfig has one context; the environment declares another. The ordering would open
-    the run's file and read the declared name out of it, fail, and report a context that is not in
-    one file while the other file's own claim goes unmentioned. So the comparison is made against
-    the contexts the stated file actually has.
-    """
+    """A file is a claim about the cluster too, and here it is the *run* making it."""
     root = checkout(tmp_path)
     redirect_checkout(monkeypatch, root)
     clone_kubeconfig = write_kubeconfig(root / "kubeconfig", {CI_CONTEXT: DECLARED_SERVER})
@@ -77,12 +42,7 @@ def test_a_stated_kubeconfig_that_does_not_have_the_declared_context_is_refused(
 
 
 def test_the_process_variable_stating_a_cluster_is_compared_like_a_flag(tmp_path, monkeypatch):
-    """`CLUSTER_KUBECONFIG_PATH` is a dial the pipeline states with, not a hint.
-
-    The list of layer-1 dials names the variable beside the flags, and the CI step that exports
-    it is the same claim a `--kubeconfig` makes. This states it through the variable and gets the
-    same refusal, with the variable — and not a file — named as its source.
-    """
+    """`CLUSTER_KUBECONFIG_PATH` is a dial the pipeline states with, not a hint."""
     root = checkout(tmp_path)
     redirect_checkout(monkeypatch, root)
     clone_kubeconfig = write_kubeconfig(root / "kubeconfig", {CI_CONTEXT: DECLARED_SERVER})
@@ -95,11 +55,7 @@ def test_the_process_variable_stating_a_cluster_is_compared_like_a_flag(tmp_path
 
 
 def test_a_run_that_states_nothing_leaves_the_answer_to_the_environment(tmp_path, monkeypatch):
-    """Nothing stated, nothing compared: the ordinary laptop case is untouched.
-
-    The check is a guard and not a mode. A run that carries no dials resolves the way it always did
-    and the report says which file answered.
-    """
+    """Nothing stated, nothing compared: the ordinary laptop case is untouched."""
     root = checkout(tmp_path)
     redirect_checkout(monkeypatch, root)
     kubeconfig = write_kubeconfig(root / "kubeconfig", {CI_CONTEXT: DEV_SERVER})
@@ -113,13 +69,7 @@ def test_a_run_that_states_nothing_leaves_the_answer_to_the_environment(tmp_path
 
 def test_an_environment_that_declares_nothing_can_be_stated_by_a_run_without_argument(
         tmp_path, monkeypatch):
-    """Layer 1 keeps its one real job: answering for an environment that has no claim yet.
-
-    The comparison is only between two claims, and here there is one. This is also the bootstrap
-    case — a freshly prepared tree that has not named its cluster yet is still installable from the
-    command line — so a refusal that ignored the declaration's emptiness would be the strictest
-    command in the product for no reason.
-    """
+    """Layer 1 keeps its one real job: answering for an environment that has no claim yet."""
     root = checkout(tmp_path)
     redirect_checkout(monkeypatch, root)
     kubeconfig = write_kubeconfig(root / "kubeconfig", {CI_CONTEXT: DEV_SERVER})
@@ -132,13 +82,7 @@ def test_an_environment_that_declares_nothing_can_be_stated_by_a_run_without_arg
 
 def test_the_check_does_not_rescue_a_dead_declaration_by_finding_a_different_cluster(
         tmp_path, monkeypatch):
-    """The rule this replaces, measured so it stays replaced.
-
-    Agreement does not make a dead path readable, and the spec is explicit that a configuration
-    which cannot find the cluster it declares does not get to discover a different one. So a run
-    that states the declared context and says nothing about the file still dies on the file — with
-    the file's name, and with the ordering intact.
-    """
+    """The rule this replaces, measured so it stays replaced."""
     root = checkout(tmp_path)
     redirect_checkout(monkeypatch, root)
     dead_path = root / "kubeconfig-on-the-operators-laptop"

@@ -56,9 +56,7 @@ BINARY_VERSION_ARGV = {
 # was. What answers the surface is Python, and it needs no parser on the way out: the node
 # addresses are `KubernetesUtils.get_nodes()`, whose `status.addresses` arrive as
 # `V1NodeAddress` objects and never as JSON text, and the cluster's resource list is
-# `KubernetesUtils.get_api_resources()`. Pinned both ways by
-# `tests/test_the_declared_dependencies_are_what_the_tree_needs.py`, which re-derives this list
-# from the tree and fails if a future script re-introduces a tool the check does not name.
+# `KubernetesUtils.get_api_resources()`.
 KUBEMENTAT_DEPENDENCIES = [
     "kubectl",
     "helm",

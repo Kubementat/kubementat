@@ -1,18 +1,4 @@
-"""Where a component's namespace comes from, and what happens when nothing says.
-
-The answer used to be spread over the code: four `namespace = '...'` lines in
-`automation.py`, one `# TODO: make this a config` each, and a list of fifteen in
-`uninstall_kubementat.sh`. Renaming one namespace meant finding all of them, and the only
-live evidence was a lane assert that came back red with an empty list rather than a
-"wrong namespace" message. So the rule this file holds: `static.json` answers, `constants`
-falls back, and nothing else gets an opinion.
-
-The branch that used to be broken is the missing key: the code had no missing branch,
-because the value was never a variable. Reading it means choosing what happens when the
-config is silent, and the choice on purpose is *say so, then use the default* — a config
-tree initialized before these keys existed must keep working, and a default that arrives
-quietly is how a rename stops being visible.
-"""
+"""Where a component's namespace comes from, and what happens when nothing says."""
 
 import json
 import logging
@@ -35,10 +21,7 @@ TEAM = "testteam"
 
 
 
-# The component every tunnel command resolves, and what it expected before the
-# namespace was a config value. (`polaris` is off this list since row 25 retired its tunnel
-# command; the namespace and selector it used are still configuration, still read by the
-# team-account roles that keep them.)
+# The component every tunnel command resolves, and the namespace it defaults to.
 TUNNEL_COMPONENTS = [
     ("open_tunnel_grafana", "grafana", "grafana"),
     ("open_tunnel_tekton_dashboard", "tekton", "tekton-pipelines"),
@@ -81,11 +64,7 @@ class RecordingKubernetesUtils:
 
 
 def tunnel_automation(root, env_static, monkeypatch):
-    """A `Context` whose only cluster collaborator is a recording client.
-
-    The tunnels build the client from the name the slice imported, which is the seam there is no
-    longer a `self.kubernetes_utils` to hand over.
-    """
+    """A `Context` whose only cluster collaborator is a recording client."""
     context = types.SimpleNamespace(environment=ENVIRONMENT, team=TEAM,
                                     config=environment_config(root, env_static))
     context.kubernetes_utils = RecordingKubernetesUtils()
@@ -97,7 +76,7 @@ def tunnel_automation(root, env_static, monkeypatch):
 
 
 def test_the_configured_namespace_wins_over_the_default(tmp_path, caplog):
-    """The whole ticket in one assertion: config answers, code does not."""
+    """The namespace a tunnel uses is the one the configuration names."""
     with caplog.at_level(logging.WARNING):
         config = environment_config(tmp_path, {"GRAFANA_DEPLOYMENT_NAMESPACE": "observability"})
 
@@ -118,11 +97,7 @@ def test_the_default_is_reported_once_per_config_not_per_read(tmp_path, caplog):
 
 
 def test_an_empty_value_does_not_count_as_an_answer(tmp_path, caplog):
-    """`{"GRAFANA_DEPLOYMENT_NAMESPACE": ""}` is a half-typed edit, not a decision.
-
-    Handing `""` to the Kubernetes client would fail as a namespace error somewhere else;
-    the file that needs the value has to be named here.
-    """
+    """`{"GRAFANA_DEPLOYMENT_NAMESPACE": ""}` is a half-typed edit, not a decision."""
     config = environment_config(tmp_path, {"GRAFANA_DEPLOYMENT_NAMESPACE": "   "})
 
     with caplog.at_level(logging.WARNING):
@@ -137,11 +112,7 @@ def test_an_empty_value_does_not_count_as_an_answer(tmp_path, caplog):
 @pytest.mark.parametrize("function,component,default_namespace", TUNNEL_COMPONENTS)
 def test_a_tunnel_uses_the_namespace_the_config_names(tmp_path, monkeypatch, function, component,
                                                       default_namespace):
-    """The tunnel commands used to carry their own namespace, so they kept using 'grafana'.
-
-    The lane's rename feature is what caught this, and all it could report was "the tunnel did not
-    follow the config", because there was no config to follow.
-    """
+    """The tunnel commands used to carry their own namespace, so they kept using 'grafana'."""
     configured = "kmt-e2e-renamed"
     automation = tunnel_automation(tmp_path, {
         component_config_key(component, "DEPLOYMENT_NAMESPACE"): configured,
@@ -184,11 +155,7 @@ def component_for_key(key):
 
 
 def template_release_namespaces():
-    """`{release name: the namespace line}` for every release the template actually declares.
-
-    Commented releases are not releases, so a commented `namespace:` line is a note about a chart
-    nobody installs and must not be read as one.
-    """
+    """`{release name: the namespace line}` for every release the template actually declares."""
     releases, current = {}, None
     for line in HELMFILE_TEMPLATE.read_text(encoding="utf-8").splitlines():
         if line.lstrip().startswith("#"):
@@ -204,21 +171,7 @@ def template_release_namespaces():
 
 
 class RecordingHelmfile:
-    """`shell.run` for helmfile: records argv *and* the environment the child was handed.
-
-    What the child is given is the only thing that reaches a template, so that is what is recorded.
-    The recorder used to read `os.environ` inside `run`, which was the same fact while the apply
-    wrote its exports into the process -- and is a fact about the test's own interpreter the moment
-    the exports travel as an argument. Reading `kwargs["env"]` keeps the ordering claim intact: a
-    value that is not in the mapping was not in the child either, no matter when it was decided.
-
-    The cluster reads an apply makes on the way to the apply answer as a clean cluster, and that
-    is not a shortcut: until the shipped manifest existed on the fixture's tree, nothing there asked
-    the cluster. Now that the manifest is the shipped one, the release index reads and `helm list` is
-    one of the calls this recorder stands in for -- and a cluster with no
-    releases is the same state the fixture was in, so it is the honest answer rather than a new
-    assumption. A test that wants a release on the cluster writes its own recorder.
-    """
+    """`shell.run` for helmfile: records argv *and* the environment the child was handed."""
 
     def __init__(self):
         self.calls = []
@@ -238,11 +191,7 @@ class RecordingHelmfile:
 
 
 def helmfile_over(tmp_path, env_static, monkeypatch):
-    """`HelmUtils` over a seeded `platform_config`, with helmfile replaced by a recorder.
-
-    The same seeded tree the tunnel asserts use, so the namespace is read from
-    `platform_config/{environment}/static.json` here exactly where a tunnel reads it.
-    """
+    """`HelmUtils` over a seeded `platform_config`, with helmfile replaced by a recorder."""
     config_root = tmp_path / "platform_config"
     write_json(config_root / ENVIRONMENT / "static.json", env_static)
     # HelmUtils hands the Grafana pair to helmfile the same way it hands the namespaces, and
@@ -269,11 +218,6 @@ def helmfile_over(tmp_path, env_static, monkeypatch):
 
 def test_a_namespace_key_the_config_does_not_declare_costs_nothing(tmp_path, monkeypatch):
     """The rule that decides the mechanism: helmfile gets the key it is handed, absence breaks nothing.
-
-    `requiredEnv` would have failed `helmfile apply` on any tree written before a key existed --
-    and on every run that does not go through `HelmUtils`, including `helmfile` by hand. So a
-    key that is not there is exported at its default instead of being absent, and the template
-    carries the same default a second time for that hand-run case.
     """
     utils, journal = helmfile_over(tmp_path, {"ENVIRONMENT": ENVIRONMENT}, monkeypatch)
 
@@ -286,12 +230,7 @@ def test_a_namespace_key_the_config_does_not_declare_costs_nothing(tmp_path, mon
 
 
 def test_the_default_written_into_the_template_is_the_default_the_code_holds():
-    """Two copies of a fallback, agreeing: the template's is only there for helmfile run by hand.
-
-    The template is evaluated without `HelmUtils` when `helmfile` is invoked directly, and then
-    its own default is the only thing standing between a missing key and nothing. If the two
-    defaults disagree, the same config answers two different questions depending on who ran it.
-    """
+    """Two copies of a fallback, agreeing: the template's is only there for helmfile run by hand."""
     disagreeing = {}
     for release, line in template_release_namespaces().items():
         declared = NAMESPACE_FROM_THE_ENVIRONMENT.match(line)
@@ -305,13 +244,7 @@ def test_the_default_written_into_the_template_is_the_default_the_code_holds():
 
 
 def test_a_release_namespace_can_never_be_the_reason_an_apply_stops():
-    """`requiredEnv` is the one shape that turns a missing key into a failed install.
-
-    The template does use it, for the Grafana pair, because a release without an admin password
-    is not a thing kubementat should deploy. No namespace is allowed to work that way: eleven
-    releases, eight of them reading one of the fifteen keys the export writes, and a config tree
-    that predates any of them must still install.
-    """
+    """`requiredEnv` is the one shape that turns a missing key into a failed install."""
     asked_required = sorted(
         line for line in HELMFILE_TEMPLATE.read_text(encoding="utf-8").splitlines()
         if "requiredEnv" in line)

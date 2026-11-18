@@ -200,9 +200,7 @@ def setup_pipelines(ctx):
     #
     # Nothing here deletes. kubementat applies what it ships and what the layers declare, and an
     # object that stopped being shipped stays on the cluster until the operator removes it —
-    # pruning is `uninstall`'s job, never setup's. Asserted structurally by
-    # `test_no_setup_path_prunes_a_manifest_a_layer_stopped_shipping` in
-    # `tests/test_the_manifest_layers_apply_product_then_environment_then_team.py`.
+    # pruning is `uninstall`'s job, never setup's.
     _apply_manifest_layer(ctx, "product", config.tekton_task_asset_dir, pipeline_ns,
                                kind="Task", group=config.TEKTON_API_GROUP,
                                version=config.TEKTON_API_VERSION)

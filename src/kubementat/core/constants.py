@@ -240,8 +240,7 @@ def binary_majors_served_label(binary: str) -> str:
 # reads the variable and nothing else, and `export_ingress_class` in `infrastructure/helm.py` puts this
 # table's answer — or the layer that outranks it — into that variable on every apply. The export does
 # not skip keys no layer declared for the same reason: L0 answers the key, so a tree that wrote nothing
-# still has an answer to be handed over. See
-# `tests/test_the_ingress_class_the_manifest_names_is_the_one_the_configuration_answers.py`.
+# still has an answer to be handed over.
 # ---------------------------------------------------------------------------------------------
 DEFAULT_STATIC_ANSWERS = {
     # Which Tekton Pipelines release `kmt install` applies, and therefore which API versions the
@@ -297,10 +296,7 @@ COMPONENT = "traefik"
 # importing it back is the cycle. Spelling the key is `constants.py`'s own idiom rather than a
 # workaround, and every key in `DEFAULT_STATIC_ANSWERS` above is spelled exactly this way; this table
 # indexes one key and states which one. The invariant it protects — that one place states the value —
-# holds just as well when the index is written here, and the agreement between the two spellings is
-# pinned by a test in
-# `tests/test_the_defaults_initialize_seeded_have_a_single_owner.py` rather than left to whoever
-# remembers to edit both.
+# holds just as well when the index is written here.
 #
 # Indexing the table rather than calling `static_answer` is deliberate too: a missing entry is a
 # `KeyError` on import and not a `None` that reaches `spec.ingressClassName` months later.

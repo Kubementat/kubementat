@@ -1,33 +1,4 @@
-"""One component goes on the cluster — through the label the environment puts on its release.
-
-The gap this closes is an asymmetry, not a missing method. kubementat could add the platform (`kmt
-install`), add a group (`kmt install --helmfile-installation-group`), and take one component off
-(the uninstall command). It could not add one component, so putting grafana back after taking it off
-meant applying a group and everything in it.
-
-Two rules decided the shape here, and they are what these tests are for.
-
-**The install path is helmfile with a label filter, and nothing else.** `HelmUtils.helmfile_apply`
-(`infrastructure/helm.py`)
-takes the filter as a mandatory positional argument, `kmt install` passes `group=standard`, and `kmt
-routing install` passes `group=routing` (`routing.py:69`). A per-component `helm upgrade` written
-beside that would be a second install path, which is the thing this whole migration is against. So
-the argv asserted below is helmfile's, and the only difference is the selector.
-
-**What the command can install is read, not written.** A component name is a key in
-`constants.DEFAULT_NAMESPACES` — that is what "is this a kubementat component?" means — and the
-release it applies is whatever the environment's helmfile labels `component_name=<name>`. The
-intersection is the installable set, and it is derived in both directions: a component added to the
-constants is accepted, a release added to the manifest becomes installable, and a release commented
-out of the manifest stops being so. That is what the two guards at the bottom of this file are for;
-a component list typed into the CLI would pass everything above them and fail both.
-
-The other tests are the safety claims, not the plumbing: a component that is only a namespace is
-refused rather than applied (with what to run instead), two releases under one label is a manifest
-finding rather than a choice, and Traefik is asked routing's question — *mine, foreign, or absent* —
-before it is applied, because installing a second controller is not a thing a command named `install`
-gets to decide by itself.
-"""
+"""One component goes on the cluster — through the label the environment puts on its release."""
 
 
 import pytest
@@ -115,39 +86,17 @@ releases:
 
 @pytest.fixture(autouse=True)
 def _template_half_is_writable(fixture_repo, monkeypatch):
-    """Move the asset root into the fixture, so the manifest is a file this run can write.
-
-    The shipped manifest is package data and a test cannot edit package data. That used to
-    be a problem precisely because this file's subject was two copies saying different things: the
-    disagreement could only be arranged in the half a test controlled. There is one manifest now, and
-    this file still needs to write it -- a release added, a release commented out, a label duplicated
-    -- so the resolver moves for the length of one test and nothing else. The product keeps one rule
-    (`test_config_path_resolution.py` states it), and every other guard in this file reads the
-    shipped bytes.
-    """
+    """Move the asset root into the fixture, so the manifest is a file this run can write."""
     relocate_asset_root(fixture_repo.root, monkeypatch)
 
 
 def seeded_manifest_path(fixture_repo):
-    """Where the manifest this fixture makes the command read lives.
-
-    `relocate_asset_root` above moves the asset root into the fixture, so the packaged manifest --
-    the only manifest -- is a file this test can write, and this is where it lands. One
-    function rather than a literal, because three tests need to say which path the refusal named.
-    """
+    """Where the manifest this fixture makes the command read lives."""
     return fixture_repo.root / "values" / "helmfile.yaml.gotmpl"
 
 
 def seeded_helmfile(fixture_repo, body=FIXTURE_HELMFILE):
-    """The manifest, written into the relocated asset root so this run reads it.
-
-    Before the manifest became product data this helper wrote two files, because the command answered
-    two questions: the copy
-    under `platform_config/{environment}/kubementat_components/` was what `helmfile` applied and the
-    template was what kubementat shipped, and a test that seeded only one had half an answer. There
-    is one manifest now and it is product data, so there is one file to seed and the disagreement
-    that needed two is a state the tree cannot construct.
-    """
+    """The manifest, written into the relocated asset root so this run reads it."""
     target = seeded_manifest_path(fixture_repo)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(body)
@@ -165,12 +114,7 @@ TRAEFIK_RELEASE = """\
 
 
 def installed(fixture_repo, component, *flags):
-    """The install command through the group, in this process.
-
-    In-process rather than `run_kmt` because four of these tests have to change something the
-    command reads at call time — a patched `constants`, a patched Traefik discovery — and a
-    subprocess would read this interpreter's environment instead of the patched one.
-    """
+    """The install command through the group, in this process."""
     return CliRunner().invoke(component_cli.component,
                               ["install", fixture_repo.environment, component, *flags])
 
@@ -192,13 +136,7 @@ def helmfile_selectors(fake_binaries):
 def test_installing_one_component_starts_nothing_helm_could_have_done_itself(fixture_repo,
                                                                             dry_run_env,
                                                                             fake_binaries):
-    """There is exactly one way to put a component on a cluster here, and it is helmfile.
-
-    A `helm upgrade` or `helm install` written into the install half would work against a chart and
-    fail against a label: helmfile is what evaluates the gotmpl, exports the namespaces and owns the
-    diff the operator reads. So this asserts what the run did *not* call, and it is the assertion
-    that keeps a future "simplification" from being called a simplification.
-    """
+    """There is exactly one way to put a component on a cluster here, and it is helmfile."""
     seeded_helmfile(fixture_repo)
 
     installed(fixture_repo, "prometheus")
@@ -219,18 +157,7 @@ def test_installing_one_component_starts_nothing_helm_could_have_done_itself(fix
 
 def test_a_stale_copy_in_the_configuration_changes_nothing(fixture_repo, dry_run_env,
                                                            fake_binaries):
-    """Plan row 13's bug, made unconstructible rather than refused.
-
-    The state the divergence answer used to be written for is one a test can still arrange: a
-    `helmfile.yaml.gotmpl` lying under `platform_config/{environment}/kubementat_components/`,
-    declaring releases the product does not. The single-manifest design is what makes that arrangement
-    worthless, and this
-    is the test that says so -- the manifest `helmfile_apply` applies and the release index reads is
-    the packaged one, so the copy is data nobody loads. The proof has to be behavioural rather than a
-    path check, and this is the behaviour: a stale copy that names traefik leaves the command
-    believing exactly what it believed without it, so it refuses, tells the operator what it read,
-    and asks the cluster nothing.
-    """
+    """No configuration value can point the install at a manifest other than the packaged one."""
     # The manifest that will be applied declares no traefik; the copy beside the configuration does.
     seeded_helmfile(fixture_repo, FIXTURE_HELMFILE.replace(TRAEFIK_RELEASE, ""))
 
@@ -255,12 +182,7 @@ def test_a_stale_copy_in_the_configuration_changes_nothing(fixture_repo, dry_run
 
 def test_the_refusal_for_a_component_with_no_release_never_points_at_initialize(
         fixture_repo, dry_run_env, fake_binaries):
-    """Two states, one sentence, one thing neither of them says.
-
-    `kmt initialize` writes no helmfile, so pointing at it is not a fix for a missing
-    release block -- it is advice to run a command that will not touch the file in question. Both
-    states get the same check for that, because they now get the same answer.
-    """
+    """Two states, one sentence, one thing neither of them says."""
     for component, description in (("vpa", "a namespace-only component"),
                                    ("goldilocks", "a release that is only commented out")):
         seeded_helmfile(fixture_repo)
@@ -272,15 +194,7 @@ def test_the_refusal_for_a_component_with_no_release_never_points_at_initialize(
 
 def test_a_missing_manifest_names_the_file_and_not_a_command_that_cannot_help(
         fixture_repo, dry_run_env, fake_binaries):
-    """A run that cannot read the manifest says so, and does not point at `kmt initialize`.
-
-    This used to be the "the environment was never initialized" case, and the answer was to tell the
-    operator to run `kmt initialize`, because that command is what put a helmfile into
-    `platform_config/`. It no longer writes one -- the manifest is product data -- so the same
-    sentence now sends a human to a command that will not fix the thing it names. What is missing is
-    the installed package's own data, and the refusal says that, names the path, applies nothing, and
-    does not hand back a `FileNotFoundError` on the way.
-    """
+    """A run that cannot read the manifest says so, and does not point at `kmt initialize`."""
     result = installed(fixture_repo, "grafana")
 
     assert result.exit_code != 0, result.output
@@ -294,12 +208,7 @@ def test_a_missing_manifest_names_the_file_and_not_a_command_that_cannot_help(
 def test_two_releases_under_one_label_are_refused_as_a_manifest_finding(fixture_repo,
                                                                        dry_run_env,
                                                                        fake_binaries):
-    """If the filter selects two releases, the command is wrong to pick one of them.
-
-    "Install the openbao component" cannot mean "apply two releases and call it one component". The
-    answer is to name both and put the correction where it belongs — the manifest's labels — and to
-    apply nothing on the way there.
-    """
+    """If the filter selects two releases, the command is wrong to pick one of them."""
     seeded_helmfile(fixture_repo)
     manifest = seeded_helmfile(fixture_repo).read_text()
     manifest += """- name: openbao-second
@@ -320,13 +229,7 @@ def test_two_releases_under_one_label_are_refused_as_a_manifest_finding(fixture_
 
 def test_a_typo_names_the_component_set_and_deletes_nothing(fixture_repo, dry_run_env,
                                                             fake_binaries):
-    """`grafanaa` is not a component. One line says so, lists what is, and exits non-zero.
-
-    Same shape as the uninstall command's answer to a typo, for the same reason: the alternative is a
-    command that
-    reports success on a namespace it never touched. The `KUBEMENTAT_HOME`-pointed subprocess keeps
-    `main()`'s wiring in the path, so the group is really reachable from `kmt component`.
-    """
+    """`grafanaa` is not a component. One line says so, lists what is, and exits non-zero."""
     seeded_helmfile(fixture_repo)
 
     result = run_kmt(["component", "install", fixture_repo.environment, "grafanaa"], dry_run_env)
@@ -358,14 +261,7 @@ def a_presence(classification, namespace="traefik"):
 
 def test_installing_traefik_where_a_foreign_controller_runs_refuses_and_applies_nothing(
         fixture_repo, dry_run_env, fake_binaries, monkeypatch):
-    """The verb must be safe, not merely present.
-
-    A cluster already running a Traefik kubementat did not install would gain a second controller, a
-    second class and a second writer of `Ingress.status` if this command applied its own release —
-    and helmfile would have done it in one apply, without asking. `kmt routing install` refuses this
-    case (or asks for consent with `--update`); a command that installs one component beside that
-    controller is the hole in it. So: refuse, apply nothing, and name the verb that can ask.
-    """
+    """The verb must be safe, not merely present."""
     seeded_helmfile(fixture_repo)
     monkeypatch.setattr(traefik_presence, "discover",
                         lambda ctx, **kwargs: a_presence(
@@ -381,12 +277,7 @@ def test_installing_traefik_where_a_foreign_controller_runs_refuses_and_applies_
 
 def test_installing_traefik_kubementat_already_installed_leaves_the_release_alone(
         fixture_repo, dry_run_env, fake_binaries, monkeypatch):
-    """Already ours means already there, and `install` is not how you upgrade it.
-
-    The same answer `kmt routing install` gives without `--update`: a controller that is serving is
-    not touched by a command named `install`, because the upgrade is a values edit and a version pin,
-    and applying a release is how you find out mid-traffic.
-    """
+    """Already ours means already there, and `install` is not how you upgrade it."""
     seeded_helmfile(fixture_repo)
     monkeypatch.setattr(traefik_presence, "discover",
                         lambda ctx, **kwargs: a_presence(
@@ -402,12 +293,7 @@ def test_installing_traefik_kubementat_already_installed_leaves_the_release_alon
 
 def test_installing_traefik_on_a_cluster_that_has_no_controller_applies_it_once(
         fixture_repo, dry_run_env, fake_binaries, monkeypatch):
-    """The branch where installing is correct: nothing answers, so kubementat installs its own.
-
-    The same filter as every other component, which is the point — routing's decision chooses
-    *whether*, and helmfile's label decides *what*. No routing-shaped code path is added to this
-    command beyond the question it asks.
-    """
+    """The branch where installing is correct: nothing answers, so kubementat installs its own."""
     seeded_helmfile(fixture_repo)
     monkeypatch.setattr(traefik_presence, "discover",
                         lambda ctx, **kwargs: a_presence(
@@ -427,17 +313,7 @@ def test_installing_traefik_on_a_cluster_that_has_no_controller_applies_it_once(
 
 def test_a_component_added_to_the_constants_is_accepted_by_both_verbs(fixture_repo, dry_run_env,
                                                                       fake_binaries, monkeypatch):
-    """The accepted names are `DEFAULT_NAMESPACES`, read at call time.
-
-    A component that exists only in the constants is a real kubementat component with nothing to
-    apply, and the refusal that comes back must be the "no release" one and not the "not a
-    component" one. That difference is the whole check: a command carrying its own list of valid
-    names would reject a name the constants just added, and every test above, which uses names that
-    already exist, would still pass.
-
-    The same patched set is what the typo message has to list, which is the other direction: the
-    names a typo tells you about are the ones that exist now.
-    """
+    """The accepted names are `DEFAULT_NAMESPACES`, read at call time."""
     extended = dict(constants.DEFAULT_NAMESPACES)
     extended["newcomer"] = "newcomer"
     monkeypatch.setattr(constants, "DEFAULT_NAMESPACES", extended)
@@ -453,30 +329,7 @@ def test_a_component_added_to_the_constants_is_accepted_by_both_verbs(fixture_re
 
 def test_the_live_manifest_makes_the_components_the_readme_names_installable(fake_binaries,
                                                                              monkeypatch):
-    """What the tree actually declares, measured and not asserted.
-
-    A component is installable when the live manifest gives it a release carrying its label, and that
-    is the whole rule. It used to be spelled out as a list of seven names beside a count of thirteen,
-    which moved every time a block was commented in or out and said nothing in either direction; here
-    both sides are read off the index the apply itself consults, so a release added to the manifest
-    arrives as installable without a row being edited and a block that stops being shipped takes its
-    component with it. What remains asserted is what a derivation cannot say for itself.
-
-    The labels that name no component are the fact this row has to keep honest, because they are not
-    all the same kind of thing. The prometheus exporters are releases under labels `constants` never
-    named, so a `standard` group apply brings them and `component install prometheus` does not, which
-    is worth knowing when a reader is told "the group is what a component is in".
-
-    `alloy` is there for the third reason, and it is the one that is easy to read as a bug. The
-    collector shares the loki namespace by decision, not by accident
-    (`helmfile.yaml.gotmpl`, the release block's own comment), and adding an `alloy` entry to
-    `constants` would be the wrong fix: it would export an `ALLOY_DEPLOYMENT_NAMESPACE` that
-    helmfile never asks for, give `kmt uninstall` a namespace to delete twice, and let a rename of
-    `LOKI_DEPLOYMENT_NAMESPACE` leave the collector behind the store it writes to. So alloy is
-    installed by the group, swept by the namespace, and refused by `kmt component install alloy` for
-    the same reason the exporters are refused. If that ever looks wrong, the thing to change is this
-    paragraph, not the map.
-    """
+    """What the tree actually declares, measured and not asserted."""
     # One `Context`. What this reads is the live manifest, not a configuration, so the object
     # is `cluster_fixture`'s configuration-only shape: a real `Config`, lazy, and no claim on a
     # cluster this test is not addressing.

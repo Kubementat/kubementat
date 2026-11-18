@@ -1,26 +1,4 @@
-"""Two `helmfile_apply` traces in one process: what each child is told is only what *it* decided.
-
-The channel this file guards used to be `os.environ`. `helmfile_apply` published five groups of decided
-values -- grafana's admin pair, every component namespace, the ingress class, the configuration
-coordinates, and the release knobs -- by writing them into the process environment six times per apply,
-so an apply that was still on its way to the spawn could be overtaken by another one, and the child it
-then started was templated out of somebody else's configuration. `helmfile_apply` now collects the same
-values into one dictionary and hands it to `shell.run(..., env=)`, so a decision lives and dies with
-the child it was made for.
-
-**Why this is an interleaving and not two applies in a row.** One apply is started, and *while it is
-on its way to spawning helmfile* -- after its values have been collected, before argv is handed over --
-the other apply runs to completion inside that gap. A test that ran the two one after the other could
-only prove the second saw the first one's leftovers, which is the weaker claim; it would also keep
-passing if the change were reverted and an `os.environ.pop()` glued on at the end. That is why the
-interleaving is asserted from the recorder's own trace and not taken on faith.
-
-**The claim stops at re-entrancy.** Two applies interleaved in one process, on one thread, do not share
-their variables. **That is not the same as thread-safe**, and nothing here should be read as if it were:
-cluster reads, the packaged manifest's path and the logging stream are still process-wide, and no item
-in this plan adds a thread, a pool or a lock. The docstring in `src/kubementat/infrastructure/helm.py`
-and `CHANGELOG.md` say the same thing in the same words.
-"""
+"""Two `helmfile_apply` traces in one process: what each child is told is only what *it* decided."""
 
 import json
 import types
@@ -56,9 +34,6 @@ SILENT_KNOBS = {component_config_key("prometheus", "VERSION"): "1.0.0-alpha",
 
 def seed(root, environment: str, team: str, *, declared: dict) -> Config:
     """A `platform_config` tree that declares everything one apply can be told, in its own spelling.
-
-    The namespaces come from `constants.DEFAULT_NAMESPACES`, the same set the export iterates, so a
-    component added there lands in this fixture and in the assertions without an edit to either.
     """
     environment_dir = root / "platform_config" / environment
     team_dir = environment_dir / team
@@ -85,10 +60,6 @@ def seed(root, environment: str, team: str, *, declared: dict) -> Config:
 
 def utils_for(root, environment: str, declared: dict, monkeypatch) -> HelmUtils:
     """One `HelmUtils`, over its own tree, with every variable it decides cleared from the process.
-
-    Clearing them is not decoration: a value the *test* leaves in the environment would look
-    identical to a value an earlier apply left there, and this file's whole subject is telling those
-    two apart.
     """
     team = TEAMS[environment]
     config = seed(root, environment, team, declared=declared)
@@ -101,11 +72,7 @@ def utils_for(root, environment: str, declared: dict, monkeypatch) -> HelmUtils:
 
 
 def decided_values(environment: str, root, team: str, declared: dict) -> dict:
-    """Everything one apply decides for its own child, spelled the way the templates read it.
-
-    Derived from the tables the library itself uses -- `constants.DEFAULT_NAMESPACES` and
-    `component_config_key` -- so this is not a second list of names someone has to keep in agreement.
-    """
+    """Everything one apply decides for its own child, spelled the way the templates read it."""
     decided = {"GRAFANA_ADMIN_USER": f"{environment}-admin",
                "GRAFANA_ADMIN_PASSWORD": f"{environment}-secret",
                component_config_key(constants.COMPONENT, "INGRESS_CLASS"): f"{environment}-class",
@@ -120,11 +87,6 @@ def decided_values(environment: str, root, team: str, declared: dict) -> dict:
 
 class InterleavingShell:
     """`shell.run` that runs the second apply inside the first one's gap, and records both handovers.
-
-    A cluster read by the outer apply is the trigger, because it is the last thing `helmfile_apply`
-    performs before it assembles the child's environment: the inner apply gets the exact window in
-    which the old code had already written its exports into the process. Everything the child was
-    handed is kept per call, so the trace can be read back as an ordering and not only as a mapping.
     """
 
     def __init__(self, trigger_environment: str, inner_apply):
@@ -170,11 +132,7 @@ def an_interleaved_pair(tmp_path, monkeypatch, outer: str, inner: str,
                          ids=["alpha-interleaved-by-beta", "beta-interleaved-by-alpha"])
 def test_two_interleaved_applies_neither_of_which_sees_the_ones_variables(tmp_path, monkeypatch,
                                                                           outer, inner):
-    """The Done-when, in one trace: every child gets its own apply's decisions and nothing else.
-
-    The parameters swap which environment is the outer one, so the claim is not the accident of a
-    convenient order, and an implementation that only worked in one direction is caught.
-    """
+    """The Done-when, in one trace: every child gets its own apply's decisions and nothing else."""
     outer_declared = SILENT_KNOBS if outer == FIRST else {}
     inner_declared = SILENT_KNOBS if inner == FIRST else {}
     recorder, outer_utils = an_interleaved_pair(tmp_path, monkeypatch, outer, inner,

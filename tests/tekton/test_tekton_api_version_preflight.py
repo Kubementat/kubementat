@@ -1,16 +1,4 @@
-"""The preflight that decides, once, whether this cluster can be spoken to.
-
-kubementat writes and reads one `tekton.dev` API version: `v1`. The old failure mode this
-replaces is the interesting one — a cluster running Pipelines 0.x serves only
-`tekton.dev/v1beta1`, and `setup_pipelines` would then be told to apply every Task and
-Pipeline in `tekton_ci/` one at a time and would report forty-odd 404s without ever saying
-that the controller behind the group is not there. That is a wall of errors with no
-explanation, and it is the only symptom of a problem with one cause.
-
-So the check has two halves: something that asks the cluster one question
-(`KubernetesUtils.api_version_is_served`), and something that refuses to go on when the
-answer is no (`preflight_tekton_api_version`), asked before anything is applied.
-"""
+"""The preflight that decides, once, whether this cluster can be spoken to."""
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,9 +11,7 @@ from kubementat.config import keys as config_keys
 from kubementat.errors import TektonControllerWithoutConfiguredApiError
 from kubementat.infrastructure.kubernetes import apply
 
-# Both halves of the split this file's checks reach are module-qualified (P4-2 for the preflight,
-# P4-3 for the listings that ask the version question): no shim keeps a copy of either
-# name, and the seam a patch reaches is the module that runs.
+# Imported as modules so a patch lands on the module that runs the check.
 from kubementat.infrastructure.tekton import preflight, runs
 
 
@@ -100,16 +86,7 @@ class FakeConfig:
 
 
 def a_setup_pipelines_call_on(tmp_path, cluster, applied, monkeypatch):
-    """Run `setup_pipelines` without the constructor, which would want a live cluster and helm.
-
-    Everything past the version question is replaced by a recorder, because this file is
-    about where the refusal sits, not about what secrets get created after it. The deployer
-    keypair guard that runs before the question is answered with a stand-in pair over real
-    files: its own claims live in `test_the_deployer_keypair_is_a_property_of_the_`
-    `configuration_directory.py` and `test_the_deployer_secrets_are_built_from_the_`
-    `configuration_directorys_keypair.py`, and re-measuring them here would put a gpg keygen
-    in the way of an ordering claim.
-    """
+    """Run `setup_pipelines` without the constructor, which would want a live cluster and helm."""
     root = tmp_path / "platform_config"
     root.mkdir(parents=True, exist_ok=True)
     pair = {}
@@ -142,12 +119,7 @@ def a_setup_pipelines_call_on(tmp_path, cluster, applied, monkeypatch):
 
 def test_setup_pipelines_never_starts_applying_until_the_controller_answers_the_question(tmp_path,
                                                                                        monkeypatch):
-    """The whole point of the preflight: the refusal comes before the first resource.
-
-    A too-old controller is not forty failures here; it is one failure, once, at the front.
-    If the ordering is wrong this says so by name, because the recorder still picked up the
-    `applied:` entries.
-    """
+    """The whole point of the preflight: the refusal comes before the first resource."""
     cluster = RecordingCluster()
     applied = []
 
@@ -160,19 +132,7 @@ def test_setup_pipelines_never_starts_applying_until_the_controller_answers_the_
 
 def test_the_products_tasks_and_pipelines_are_applied_from_the_package_and_not_a_root(tmp_path,
                                                                                     monkeypatch):
-    """The sentence this ticket exists for, read off the calls rather than off a comment.
-
-    `setup_pipelines` used to build `{kubementat_main_dir}/tekton_ci/{tasks,pipelines}` inline, so a
-    `kmt` installed from a wheel aimed `apply_resources` at a directory that does not exist there.
-    Measured, not guessed: the old path raised `FileNotFoundError: Resource directory does not
-    exist: <venv>/tekton_ci/tasks` (a missing directory is not the same as a team with no resources,
-    which `apply_resources`' own docstring says), and with `KUBEMENTAT_HOME` pointed at a checkout it
-    applied *that checkout's* manifests — so one install answered one question two ways depending on
-    a variable unrelated to the cluster. Either way the claim here is not "the path is right" but
-    "the accessor is asked", which is what this recorder can see — the two global directories handed
-    to `apply_resources` are the asset accessors' values, and the checkout-relative root that used to
-    be interpolated into them is not in what they came from.
-    """
+    """The layers are applied product first, then environment, then team, read off the calls."""
     cluster = RecordingCluster(served_versions=["v1"])
     applied = []
     context = a_setup_pipelines_call_on(tmp_path, cluster, applied, monkeypatch)
@@ -190,7 +150,7 @@ def test_the_products_tasks_and_pipelines_are_applied_from_the_package_and_not_a
         ("Task", context.config.tekton_env_task_dir),
         ("Pipeline", context.config.tekton_env_pipeline_dir),
         # The team's own two directories are checkout-relative output, and they are still applied,
-        # last: this ticket moved which layer sits in the middle, not the team's place at the end.
+        # last.
         ("Task", context.config.tekton_team_task_dir),
         ("Pipeline", context.config.tekton_team_pipeline_dir),
     ], f"what `setup_pipelines` applied, in order: {calls}"

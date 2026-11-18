@@ -1,36 +1,4 @@
-"""What `kmt uninstall` deletes, and how it knows.
-
-The bash that did this until now kept its own answer in two places: fourteen
-`*_NAMESPACE` keys read out of `static.json`, and two team names typed into the script. The
-configuration declares twelve component namespaces and any number of teams, so the script
-was wrong in both directions at once. A full lane measured it (`result.json` of
-`20261027T184758Z-full-3e8b3f6`):
-
-    helm releases that survived uninstall: ['cert-manager', 'nginx-ingress']
-    snapshots/ns-after-uninstall.json:     still lists both namespaces
-
-Two keys with no reader, and the routing half of what an uninstall owes stayed up. This file is the
-argv-level evidence that the Python path asks for them — and for the things the script never asked for
-at all: every team's namespaces, the claims it only announced, the Linkerd and the ingress
-controller a cluster may still be carrying even though this product stopped installing either of
-them, and the CRDs as the cluster names them rather than as nineteen strings.
-
-Traefik joins the set from the other direction: kubementat installs it, so its namespace is
-already in the sweep and its release is already found by `helm list`, and what needs owning is
-only what Helm never takes back -- the CustomResourceDefinitions its chart applies with the
-`crds/` directory, which outlive the release, the namespace and the log line that said the
-uninstall was finished.
-
-The cluster-scoped RBAC joins it from the gap the script left: it deleted `helm-deployer-cluster-role`
-by name and everything else in that class stayed on the cluster -- the Tekton, Triggers and
-Dashboard releases apply theirs with `kubectl apply`, which writes what a manifest declares and not
-what kubementat would have liked, and no namespace delete reaches any of it. What identifies those
-objects is not a label (upstream declares none kubementat owns) and not a name list (rejected, and
-rightly), so it is the object's own subjects and `roleRef` -- both of which only mean something
-while the namespaces they point at still exist, which is why that sweep goes first.
-
-What only a real lane can still confirm is written down at the bottom of this file.
-"""
+"""What `kmt uninstall` deletes, and how it knows."""
 
 import json
 import logging
@@ -202,12 +170,9 @@ RELEASE_RBAC = {
     ],
 }
 
-# kubementat's own writes: stamped, as `infrastructure/tekton/triggers.py`'s `_trigger_labels` and
-# `automations/install/pipelines.py`'s `_setup_pipelines_setup_role_bindings` stamp them, and bound wherever the team's
-# `static.json` said. The label is what takes them, so a binding that lands in a namespace this
-# command owns but is not labelled still goes -- and one that is labelled goes whatever its
-# subjects say. The namespace is the fixture's own and not a string, because a sweep that matched a
-# hard-coded `dev1` would be the name list this ticket forbids.
+# kubementat's own RBAC writes carry its label and land wherever the team's `static.json` says. The
+# label decides ownership: a labelled binding goes whatever its subjects say, an unlabelled one in a
+# namespace kubementat owns goes with the namespace.
 def owned_rbac_bindings(fixture_repo):
     trigger_binding_name = ("tekton-triggers-sa-to-tekton-triggers-bindings-and-interceptors-role-binding-"
                             + fixture_repo.team)
@@ -227,13 +192,7 @@ def owned_rbac_bindings(fixture_repo):
 
 
 def owned_rbac_roles(fixture_repo):
-    """The `ClusterRole`s that same install path wrote, all of them labelled.
-
-    `helm-deployer-cluster-role` is in here on purpose: its binding is a *namespaced* RoleBinding,
-    which is invisible to a sweep of cluster-scoped objects, so the label is the only thing that
-    reaches it from out here -- and `helm-deployer-cluster-role` is the one name the script already
-    knew, so this is where "the one object that gets forgotten" stops being one.
-    """
+    """The `ClusterRole`s that same install path wrote, all of them labelled."""
     return [{"metadata": {"name": "tekton-triggers-bindings-and-interceptors-role",
                           "labels": {"managed-by": "kubementat"}}},
             {"metadata": {"name": "tekton-cleanup-cluster-role", "labels": {"managed-by": "kubementat"}}},
@@ -268,25 +227,14 @@ FOREIGN_RBAC = {
 
 
 def answering_the_cluster_scoped_rbac(recorded_api, bindings, roles):
-    """What the cluster answers about its ClusterRoles and ClusterRoleBindings.
-
-    Written as a helper rather than left to each test body because two of the asserts below read
-    the same two answers twice -- once for what went, once for what stayed -- and a fixture that
-    only writes one of them would have the sweep read an empty cluster through one hole.
-    """
+    """What the cluster answers about its ClusterRoles and ClusterRoleBindings."""
     cluster_state(recorded_api, "clusterrole", list(roles))
     cluster_state(recorded_api, "clusterrolebinding", list(bindings))
     return recorded_api
 
 
 def swept_rbac_deletes(recorded_api):
-    """The cluster-scoped RBAC the *sweep* deleted, as `(kind, name)` pairs.
-
-    Only the objects it decided it owned — which excludes `helm-deployer-cluster-role`, deleted by
-    name unconditionally, and would otherwise make every "the sweep claimed nothing" assert read as
-    a failure the code never committed. This used to be read out of `kubectl delete ...`
-    argv, where the by-name line landed in the same log and the distinction was invisible.
-    """
+    """The cluster-scoped RBAC the *sweep* deleted, as `(kind, name)` pairs."""
     named = uninstall_slice.HELM_DEPLOYER_CLUSTER_ROLE
     roles = {("clusterrole", kwargs["name"])
              for method, kwargs in recorded_api.calls
@@ -314,13 +262,7 @@ class NodeList:
 
 
 class NamespaceList:
-    """What `list_namespace().items` hands back, optionally carrying a deletion phase.
-
-    The phase is not decoration: a namespace that was told to delete and has not finished is
-    `Terminating`, and reporting it as a bare name is what let a four-second-old observation be
-    read as "still there". An unspecified namespace is `Active`, which is what the fake was
-    already asserting without saying so.
-    """
+    """What `list_namespace().items` hands back, optionally carrying a deletion phase."""
 
     def __init__(self, names, phases=None):
         phases = phases or {}
@@ -331,13 +273,7 @@ class NamespaceList:
 
 
 def on_a_cluster(recorded_api, present_namespaces):
-    """Point the recording client at a cluster that has exactly these namespaces.
-
-    Deletion is *modelled*, not assumed: the set the cluster reports shrinks when something deletes
-    a namespace, because that is what a cluster does -- asynchronously, several seconds later, which
-    is exactly why `uninstall` has to poll instead of taking the client's word for it. A fake that
-    keeps reporting a namespace it was told to delete is a fake that contradicts the API.
-    """
+    """Point the recording client at a cluster that has exactly these namespaces."""
     present = set(present_namespaces)
     recorded_api.answer("list_namespace", lambda **kwargs: NamespaceList(sorted(present)))
     recorded_api.answer("delete_namespace", lambda name=None, **kwargs: present.discard(name))
@@ -345,26 +281,13 @@ def on_a_cluster(recorded_api, present_namespaces):
 
 
 def what_helm_list_answers(fake_binaries):
-    """The rows `helm list --all-namespaces` is answering with, at this moment of the run.
-
-    The fake's answer is a file the shim cats, so that file is the state, and `respond` writes the
-    same path a test body would. Reading it rather than keeping a list here is what lets a test
-    overwrite the answer for its own purposes and still have the model keep working underneath.
-    """
+    """The rows `helm list --all-namespaces` is answering with, at this moment of the run."""
     listing = fake_binaries.responses / "helm.list"
     return json.loads(listing.read_text()) if listing.exists() else []
 
 
 def a_helm_that_forgets_what_it_uninstalled(fake_binaries):
-    """A `helm list` that stops reporting the releases this run has already taken.
-
-    One uninstall reads the release list twice: once to find the releases to take, and once again
-    afterwards to ask whether a Traefik controller is still serving from the definitions the sweep is
-    about to delete. An answer that never changes is false at the second reading, because it is still
-    carrying the release the run deleted a few calls earlier -- and it is that reading, and nothing
-    else, that decides the delete. So a successful `helm uninstall` drops its row out of the answer,
-    which is all a cluster does, and a failing one leaves it there to be found again.
-    """
+    """A `helm list` that stops reporting the releases this run has already taken."""
     real_run = shell.run
 
     def answering(argv, **kwargs):
@@ -379,15 +302,8 @@ def a_helm_that_forgets_what_it_uninstalled(fake_binaries):
 
 
 def uninstalled_target(argv):
-    """`(release, namespace)` a `helm uninstall` addressed, read out of a line that carries its cluster.
-
-    The line used to be `helm uninstall NAME --namespace NS`, and this harness read the name at index
-    two and the namespace at the end. The address sits in between now, and index two is a
-    kubeconfig path -- so the fake would keep reporting a release this run had already deleted, the
-    Traefik sweep would read a controller still serving from the definitions, and the residue assert
-    would say "clean" about a cluster that still had them. Reading it by position is what broke;
-    reading it by what the flags mean is the fix, and `namespace_of`/`named_after` are how this file
-    already reads every other helm line.
+    """`(release, namespace)` a `helm uninstall` addressed, read out of a line that carries its
+    cluster.
     """
     flags = {"--kubeconfig", "--kube-context", "--context"}
     words = []
@@ -408,13 +324,7 @@ def uninstalled_target(argv):
 
 
 def helm_uninstall_of(commands, name, namespace):
-    """The `helm uninstall` lines that addressed *name* in *namespace*.
-
-    Written as a check against the whole command line until the cluster moved into the middle of
-    it, which made `["helm", "uninstall", "openbao", "--namespace", "openbao"] in calls` a claim
-    about where the flags sit and not about what was uninstalled. The same two facts are read out of
-    the line instead, so the assertion still says what it was written to say.
-    """
+    """The `helm uninstall` lines that addressed *name* in *namespace*."""
     return [argv for argv in commands
             if argv[:2] == ["helm", "uninstall"]
             and uninstalled_target(argv) == (name, namespace)]
@@ -422,16 +332,7 @@ def helm_uninstall_of(commands, name, namespace):
 
 @pytest.fixture
 def uninstaller(fixture_repo, dry_run_env, fake_binaries, recorded_api, monkeypatch):
-    """`kmt uninstall`'s implementation against a fixture cluster that is carrying everything.
-
-    Everything, including the two routing namespaces whose names no reader could find: that is
-    the state the lane found the residue in, so it is the state every test here starts from.
-
-    The node's own Traefik is deliberately absent from the release list. Whether it is there is the
-    fact the definition sweep reads before it deletes, so the tests that are about it say so where
-    they assert it and the rest get a cluster whose only Traefik release is kubementat's own - which
-    the release sweep takes, and which therefore is not on the list when the sweep asks.
-    """
+    """`kmt uninstall`'s implementation against a fixture cluster that is carrying everything."""
     present = set(constants.DEFAULT_NAMESPACES.values()) | {
         fixture_repo.pipeline_namespace, fixture_repo.app_namespace} | CLUSTER_ADDONS
     on_a_cluster(recorded_api, present)
@@ -451,17 +352,14 @@ def namespaces_deleted(recorded_api):
 
 
 def recorded(fake_binaries):
-    """Everything the shims saw, as calls - and the log is left empty behind them.
-
-    The two helpers below read the same list: `take_calls` is the only way to know which calls
-    belonged to this test rather than to the fixture that set the responses up.
-    """
+    """Everything the shims saw, as calls - and the log is left empty behind them."""
     return fake_binaries.take_calls()
 
 
 def argv_of(calls):
-    """The same calls as command lines, because `["helm", "uninstall", ...] in calls` compares
-    against a `RecordedCall` and can never be true."""
+    """The same calls as command lines, because `["helm", "uninstall", ...] in calls` compares against
+    a `RecordedCall` and can never be true.
+    """
     return [call.argv for call in calls]
 
 
@@ -476,23 +374,13 @@ def client_writes(recorded_api):
 
 
 def deleted_names(recorded_api, method):
-    """The names one delete method was asked for, in the order it was asked.
-
-    The sweeps moved off `kubectl delete <kind> <name> --namespace <ns>` and onto one call
-    per object, so the name is a parameter and not the last word of an argv. The order survives,
-    which is the part the ordering asserts below depend on.
-    """
+    """The names one delete method was asked for, in the order it was asked."""
     return [kwargs["name"] for name, kwargs in recorded_api.calls if name == method]
 
 
 def test_the_namespaces_a_team_directory_does_declare_are_still_swept(uninstaller, fixture_repo,
                                                                      recorded_api):
-    """Not a team, but not nothing either: the namespaces it names are kubementat's to delete.
-
-    The harness's probe declares `APP_DEPLOYMENT_NAMESPACE` and no pipeline namespace. Guessing
-    the missing half is still forbidden, but the declared half is on the cluster and it belongs to
-    this installation, so the sweep takes it and leaves the rest alone.
-    """
+    """Not a team, but not nothing either: the namespaces it names are kubementat's to delete."""
     fixture_repo.write_json(fixture_repo.platform_config / fixture_repo.environment / "dev2"
                             / "static.json",
                             {"SENTINEL": "kmt-e2e-sentinel",
@@ -511,15 +399,7 @@ def test_the_namespaces_a_team_directory_does_declare_are_still_swept(uninstalle
 
 def test_a_directory_whose_configuration_will_not_parse_does_not_stop_the_teardown(
         uninstaller, fixture_repo, recorded_api, caplog):
-    """A `static.json` that is not JSON is read the same way as one that says nothing.
-
-    It is the second way a single foreign directory can hold the teardown hostage, and it is the
-    more common one in the wild: a directory is copied, a template is left in place, a `sed`
-    edits it into something `json.load` refuses. The answer is the same shape as the missing key
-    -- nothing is swept for it, nothing is guessed, and the file is named -- and the reason it has
-    to be the same answer is that the previous behaviour was to abort with a `JSONDecodeError`
-    nobody had to explain.
-    """
+    """A `static.json` that is not JSON is read the same way as one that says nothing."""
     foreign = fixture_repo.platform_config / fixture_repo.environment / "template" / "static.json"
     foreign.parent.mkdir(parents=True, exist_ok=True)
     foreign.write_text('{"PIPELINE_NAMESPACE": "unparsed",\n')
@@ -539,10 +419,8 @@ def test_a_directory_whose_configuration_will_not_parse_does_not_stop_the_teardo
 
 def test_the_run_summary_says_which_team_directories_it_swept_and_which_it_skipped(
         uninstaller, fixture_repo, recorded_api, caplog):
-    """The residue asserts read the cluster, so they cannot tell "skipped a directory" from "swept everything".
-
-    The run's own log can, and it has to: this is the line a green `no-extra-namespaces` is
-    explained by, and the line that stops a `DONE` from meaning more than it does.
+    """The residue asserts read the cluster, so they cannot tell "skipped a directory" from "swept
+    everything".
     """
     fixture_repo.write_json(fixture_repo.platform_config / fixture_repo.environment / "ops"
                             / "static.json",
@@ -571,17 +449,7 @@ def test_the_run_summary_says_which_team_directories_it_swept_and_which_it_skipp
 
 def test_a_root_that_configures_no_teams_says_so_and_does_not_claim_it_swept_one(
         uninstaller, fixture_repo, recorded_api, caplog):
-    """Census D's worst case: a valid environment layer under the given root, and no teams.
-
-    This tree is legal -- `kmt initialize` writes no team directory, and deleting nothing there is
-    the correct answer -- so the run must not refuse. What it must not do is print `DONE` without
-    saying which root it read and that no team was swept from it: a sweep of every component
-    namespace and zero teams otherwise reads exactly like a sweep of its teams, and the reader has
-    no way to tell "there were none" from "they were handled".
-
-    So both halves are asserted: the sentence naming the root appears, and the claim it replaces --
-    that there was something team-shaped to sweep -- is not silently made.
-    """
+    """Census D's worst case: a valid environment layer under the given root, and no teams."""
     team_directory = fixture_repo.platform_config / fixture_repo.environment / fixture_repo.team
     shutil.rmtree(team_directory)
     recorded_api.calls.clear()
@@ -615,13 +483,7 @@ def test_a_root_that_configures_no_teams_says_so_and_does_not_claim_it_swept_one
 
 def test_an_environment_that_was_never_initialized_still_refuses_to_delete_anything(
         uninstaller, fixture_repo, recorded_api, fake_binaries):
-    """Tolerating a foreign directory is not the same as tolerating no environment.
-
-    The asymmetry has to stay: `platform_config/dev/` absent is not "a team that named nothing",
-    it is an environment nobody configured, and deleting namespaces on the strength of a typo is
-    not something a command that takes `--yes` gets to do. `Config.teams()`' `ClickException` is
-    the answer and it comes before the first write.
-    """
+    """Tolerating a foreign directory is not the same as tolerating no environment."""
     for name in ("static.json", "static.encrypted.json"):
         (fixture_repo.platform_config / fixture_repo.environment / name).unlink()
     recorded_api.calls.clear()
@@ -636,11 +498,7 @@ def test_an_environment_that_was_never_initialized_still_refuses_to_delete_anyth
 
 
 def test_the_cluster_is_printed_before_a_single_object_is_deleted(uninstaller, caplog):
-    """A human with a terminal has to be able to object, so the log says the cluster first.
-
-    Ordering is the whole contract here, so it is asserted on the log the operator reads rather
-    than on the calls, which arrive in two logs and cannot be interleaved.
-    """
+    """A human with a terminal has to be able to object, so the log says the cluster first."""
     with caplog.at_level(logging.INFO):
         uninstall_kubementat(uninstaller, consent=Consent.assumed())
 
@@ -656,15 +514,7 @@ def test_the_cluster_is_printed_before_a_single_object_is_deleted(uninstaller, c
 
 def test_a_claim_that_is_already_gone_is_not_residue(uninstaller, recorded_api, fixture_repo,
                                                      caplog):
-    """The API saying "that is not there" is the answer a teardown wanted, not a failure.
-
-    The reason this is a claim and not a detail: `kubectl` has no machine-readable way to say which
-    of its own refusals were an absence, so the distinction lives only in the server's reason on
-    stderr -- which is why the test asserts the sentence was *read*, not merely that nothing was
-    raised. Namespace deletion releases volumes while the sweep is running, so a name present a
-    moment ago may be gone when the delete reaches it, and calling that residue makes `kmt
-    uninstall` fail on a cluster that is cleaner than the one it started from.
-    """
+    """The API saying "that is not there" is the answer a teardown wanted, not a failure."""
     cluster_state(recorded_api, "persistentvolumeclaims",
                   {"prometheus": [{"metadata": {"name": "prometheus-server"}}]})
     # The absence is an HTTP status now and not a sentence on stderr: the API server states it as 404
@@ -690,12 +540,7 @@ def test_a_claim_that_is_already_gone_is_not_residue(uninstaller, recorded_api, 
 
 def test_a_claim_refused_for_a_real_reason_is_residue_and_its_words_reach_the_error(
         uninstaller, recorded_api, fixture_repo, caplog):
-    """The other half: a refusal that is not an absence is residue, with its sentence attached.
-
-    Both halves matter. Leaving it out would be a lie about the cluster; leaving the server's own
-    words out would be the artifact this lane already had, where the only evidence was `exit 1` and
-    the namespace had to be guessed out of a traceback.
-    """
+    """The other half: a refusal that is not an absence is residue, with its sentence attached."""
     cluster_state(recorded_api, "persistentvolumeclaims",
                   {"prometheus": [{"metadata": {"name": "prometheus-server"}}]})
     cluster_deletes(recorded_api, "persistentvolumeclaims",
@@ -722,14 +567,7 @@ def test_a_claim_refused_for_a_real_reason_is_residue_and_its_words_reach_the_er
 def test_a_refusal_that_left_nothing_behind_is_said_but_not_counted(uninstaller, fake_binaries,
                                                                    fixture_repo, caplog,
                                                                    monkeypatch, recorded_api):
-    """The verdict is the namespace's, not the command's.
-
-    After a refusal the sweep asks the namespace once more, and a claim that is not there now is not
-    something this command can be blamed for. It is still logged: a delete that exits 1 while the
-    object is on its way out is precisely the thing a later reader would otherwise file as a bug in
-    the sweep. This is the one shape the shims cannot answer -- they hold one static answer per call
-    shape -- so the namespace is answered directly.
-    """
+    """The verdict is the namespace's, not the command's."""
     # Present when the sweep looks, gone by the time it asks again -- which the recorder answers
     # by counting the reads it has already been asked for. This is expressible because a client
     # call is one stateful answer, while a shim holds one static response per call shape.
@@ -759,18 +597,8 @@ def test_a_refusal_that_left_nothing_behind_is_said_but_not_counted(uninstaller,
 def test_linkerd_is_swept_off_a_cluster_that_still_carries_the_mesh(uninstaller, fixture_repo,
                                                                     fake_binaries, recorded_api,
                                                                     caplog):
-    """A cluster that got Linkerd while kubementat installed it still has it, and `uninstall` takes it off.
-
-    The mesh is not a component any more, so no entry in `constants.DEFAULT_NAMESPACES` and no
-    `static.json` key would find its two namespaces: they are swept by their own step, which is
-    what a cluster that never had a mesh also needs to be told about. Its
-    CustomResourceDefinitions are the other half — cluster-scoped, invisible to a namespace
-    delete, and named by nothing else in this command.
-
-    The thing being locked here is that this happens without the `linkerd` binary. Handing
-    deletion to the mesh's own uninstallers made the removal depend on a tool kubementat stopped
-    shipping, so a lane on a machine that only has kubectl would report a green run over a cluster
-    that still had a control plane. Nothing named `linkerd` is started, in any branch.
+    """A cluster that got Linkerd while kubementat installed it still has it, and `uninstall` takes it
+    off.
     """
     on_a_cluster(recorded_api, sorted(set(constants.DEFAULT_NAMESPACES.values())
                                       | {fixture_repo.pipeline_namespace,
@@ -796,13 +624,7 @@ def test_linkerd_is_swept_off_a_cluster_that_still_carries_the_mesh(uninstaller,
 
 def test_linkerds_definitions_go_before_their_namespaces(uninstaller, fixture_repo,
                                                          fake_binaries, recorded_api, monkeypatch):
-    """The order is the product here, not cosmetics.
-
-    A mesh resource inside a namespace that is being torn down is how a namespace gets stuck in
-    `Terminating`, and deleting the definition is what takes its instances with it. Both recorders
-    in this file are separate logs with no shared clock, so the ordering claim is checked with a
-    spy on each side of the one call the step makes.
-    """
+    """The order is the product here, not cosmetics."""
     order = []
     # Spied on the class rather than an instance: the command builds its own client from the
     # `Context` now, so an instance-level spy would watch a client the run never uses.
@@ -840,13 +662,7 @@ def test_linkerds_definitions_go_before_their_namespaces(uninstaller, fixture_re
 
 def test_linkerd_is_not_touched_on_a_cluster_that_never_got_a_mesh(uninstaller, fake_binaries,
                                                                    recorded_api, caplog):
-    """Absence is a normal answer, and this is the state every lane this suite runs is in.
-
-    The old script ran `linkerd viz uninstall | kubectl delete -f -` unconditionally and, under
-    `set -e`, took the whole uninstall down on a cluster that had never seen a mesh. An install
-    that never had the service mesh now costs one line in the log: no program is started, no
-    namespace is named, and nothing is reported as residue.
-    """
+    """Absence is a normal answer, and this is the state every lane this suite runs is in."""
     # The fixture's cluster is mesh-free, and so is its `linkerd.io` group: `uninstall` has to
     # tell the two halves of the sweep apart and find neither of them.
     cluster_state(recorded_api, "crd", [{"metadata": {"name": "tasks.tekton.dev"}}])
@@ -867,19 +683,8 @@ def test_linkerd_is_not_touched_on_a_cluster_that_never_got_a_mesh(uninstaller, 
 
 def test_the_ingress_controller_is_swept_off_a_cluster_that_still_carries_it(
         uninstaller, fixture_repo, fake_binaries, recorded_api, caplog):
-    """A cluster that got the controller while kubementat installed it still has it, and
-    `uninstall` takes it off. Same shape as the mesh, three times over.
-
-    nginx-ingress is not a component any more, so no entry in `constants.DEFAULT_NAMESPACES` and no
-    `static.json` key would find its namespace: it is swept by its own step, which is what a cluster
-    that never had a controller also needs to be told about. The release is found by asking the
-    cluster where it lives rather than by naming it, so a release somebody named after the chart
-    instead of the namespace is still taken off. And the `IngressClass` it registered is
-    cluster-scoped: it is the third thing a namespace delete leaves behind, and it keeps advertising
-    a class nothing serves.
-
-    A class bound to somebody else's controller is asserted to survive, because naming objects by
-    what they are bound to is how an uninstall stops being able to delete the right things.
+    """A cluster that got the controller while kubementat installed it still has it, and `uninstall`
+    takes it off. Same shape as the mesh, three times over.
     """
     on_a_cluster(recorded_api, sorted(set(constants.DEFAULT_NAMESPACES.values())
                                       | {fixture_repo.pipeline_namespace,
@@ -914,14 +719,7 @@ def test_the_ingress_controller_is_swept_off_a_cluster_that_still_carries_it(
 
 def test_the_ingress_controller_is_not_touched_on_a_cluster_that_never_got_one(
         uninstaller, fake_binaries, recorded_api, caplog):
-    """A cluster that never had a controller costs one line in the log.
-
-    This is the state every lane this suite runs is in, and it is the branch a removal has to get
-    right: the install that stopped shipping the controller is the normal case, so a cluster that
-    carries nothing may not be told it left residue, and it may not be asked to name a class it
-    does not have. The fake answers with somebody else's class only, which is the closest thing a
-    cluster that never had nginx-ingress can say about IngressClasses.
-    """
+    """A cluster that never had a controller costs one line in the log."""
     cluster_state(recorded_api, "ingressclass", [INGRESS_CLASSES[1]])
     fake_binaries.take_calls()
     recorded_api.calls.clear()
@@ -940,25 +738,7 @@ def test_the_ingress_controller_is_not_touched_on_a_cluster_that_never_got_one(
 
 
 def test_both_groups_of_definitions_helm_never_removes_are_swept(uninstaller, fake_binaries, recorded_api):
-    """`helm uninstall` takes the release and no part of the chart's `crds/`.
-
-    So a router that is gone leaves `*.traefik.io` and `*.hub.traefik.io` behind, cluster-scoped,
-    owned by no release secret, named by nothing else in kubementat -- which is the state a residue
-    assert reads as clean. Both groups, because the evidence is the chart's own directory rather
-    than a guess: `helm show crds traefik/traefik --version 42.1.3` (run 2026-10-28) prints 25
-    definitions, ten under `traefik.io` and fifteen under `hub.traefik.io`. A sweep of the
-    first group alone would delete ten, log a clean sweep, and leave fifteen serving objects
-    nobody owns -- the failure mode the plan names for this ticket.
-
-    `prometheusrules.monitoring.coreos.com` is the control: the sweep is a group match, not a
-    "everything the cluster has" match, and deleting somebody else's definition is not an
-    uninstall.
-
-    The cluster this runs against is the shape that makes the sweep entitled: the router is the only
-    Traefik release on it and the release sweep above has taken it by the time the definition sweep
-    asks, so nothing is left serving from them. What a controller that *did* stay does about that is
-    the next two tests.
-    """
+    """`helm uninstall` takes the release and no part of the chart's `crds/`."""
     uninstall_kubementat(uninstaller, consent=Consent.assumed())
 
     deleted = deleted_names(recorded_api, "delete_custom_resource_definition")
@@ -975,13 +755,7 @@ def test_both_groups_of_definitions_helm_never_removes_are_swept(uninstaller, fa
 
 def test_a_foreign_alloy_still_collecting_keeps_its_customresourcedefinition(uninstaller, fake_binaries,
                                                                             caplog, recorded_api):
-    """The gate, asked of the cluster and not of a component list.
-
-    kubementat installs one Alloy, so the easy implementation deletes the definition unconditionally and
-    is wrong the day somebody else's Alloy is running in a namespace this tool would never have swept.
-    Deleting a CustomResourceDefinition deletes every object of that kind, so the answer to "is this
-    still somebody's?" has to come from `helm list` over every namespace rather than from a name.
-    """
+    """The gate, asked of the cluster and not of a component list."""
     fake_binaries.respond("helm", json.dumps(HELM_RELEASES + [FOREIGN_ALLOY_RELEASE]), subcommand="list")
     fake_binaries.take_calls()
 
@@ -997,13 +771,7 @@ def test_a_foreign_alloy_still_collecting_keeps_its_customresourcedefinition(uni
 
 def test_the_definitions_go_before_the_namespace_they_could_stick(uninstaller, recorded_api,
                                                                   monkeypatch):
-    """Order again, for the same physical reason as Linkerd's.
-
-    An `IngressRoute` still pointing at a definition is how a namespace being torn down stays in
-    `Terminating`, and a delete that is still running when the sweep reports is what let a lane
-    read a clean cluster out of a half-finished one. The two recorders have no shared clock, so
-    the claim is checked with spies on the one pair of calls that has an order.
-    """
+    """Order again, for the same physical reason as Linkerd's."""
     order = []
     # Spied on the class rather than an instance: the command builds its own client from the
     # `Context` now, so an instance-level spy would watch a client the run never uses.
@@ -1038,15 +806,7 @@ def test_the_definitions_go_before_the_namespace_they_could_stick(uninstaller, r
 
 def test_a_cluster_that_will_not_answer_for_its_definitions_does_not_stop_the_uninstall(
         uninstaller, fake_binaries, recorded_api, caplog):
-    """The read is asked of the cluster, and a cluster that answers with an error is not fatal.
-
-    A cluster old enough to predate `CustomResourceDefinition`, or a kubeconfig that points at
-    nothing, replies with an exit code and no items. The sweep may not raise through that: this is
-    the highest-risk command in the product, and half-deleting a platform while chasing a
-    definition nobody asked for is worse than finishing the sweep. What it may not do is pretend -
-    "could not ask" is logged as itself, not as `No kubementat CRDs on the cluster.`, because those
-    two sentences mean different things to the lane that reads the log afterwards.
-    """
+    """The read is asked of the cluster, and a cluster that answers with an error is not fatal."""
     cluster_state(recorded_api, "crd", error="the cluster would not answer")
     fake_binaries.take_calls()
     recorded_api.calls.clear()
@@ -1066,19 +826,7 @@ def test_a_cluster_that_will_not_answer_for_its_definitions_does_not_stop_the_un
 
 def test_a_cluster_that_will_not_answer_for_its_releases_claims_no_definition_as_deleted(
         uninstaller, fake_binaries, recorded_api, monkeypatch, caplog):
-    """The gate's own read, and the tolerance it is written with.
-
-    The release sweep asks `helm list` with `check=True` and aborts when it fails, which is right at
-    that point of the run: nothing has been deleted yet and there is everything to go back to. By the
-    time the definition sweep asks the same question, namespaces are gone and there is nothing to
-    abort into, so a cluster that has gone quiet gets the only answer that cannot do damage: delete
-    nothing, and say that nothing is claimed as deleted. The warning is not logged as `No Traefik CRDs
-    on the cluster.`, for the reason the definition read two methods later gives -- a sweep that found
-    nothing and a sweep that could not ask read the same to a log, and are not the same fact.
-
-    The fake models the gap and not a broken binary. A `helm` that fails from its first call onward
-    raises inside the release sweep, which is a different question and one the tests above answer.
-    """
+    """The gate's own read, and the tolerance it is written with."""
     real_run = shell.run
     listings = []
 
@@ -1112,11 +860,7 @@ def test_a_cluster_that_will_not_answer_for_its_releases_claims_no_definition_as
 
 def test_an_uninstall_of_a_cluster_that_is_already_clean_reports_clean(uninstaller, fake_binaries,
                                                                       recorded_api, caplog):
-    """The lane runs uninstall twice. The second pass must delete nothing and fail nothing.
-
-    A residue list is not empty because a command failed for a good reason: a namespace that is
-    already gone is not residue, and neither is a release that was never there.
-    """
+    """The lane runs uninstall twice. The second pass must delete nothing and fail nothing."""
     on_a_cluster(recorded_api, sorted(CLUSTER_ADDONS))
     fake_binaries.respond("helm", "[]", subcommand="list")
     cluster_state(recorded_api, "crd", [])
@@ -1138,11 +882,6 @@ def test_an_uninstall_of_a_cluster_that_is_already_clean_reports_clean(uninstall
 def test_something_kubementat_owned_that_survives_is_an_error_and_not_a_DONE(
         uninstaller, fake_binaries, caplog):
     """The exit code is the operator's only signal, and a green `DONE` over live releases is a lie.
-
-    `no-kubementat-releases` measures the cluster precisely because the tooling's own word is
-    not trusted; the tooling now has to agree with the cluster or say what is left. And `DONE` is
-    the log line that used to mean "the script finished", which is exactly the line that has to be
-    withheld.
     """
     fake_binaries.respond("helm", "Command exited with code 1", subcommand="uninstall", exit_code=1)
 
@@ -1157,12 +896,7 @@ def test_something_kubementat_owned_that_survives_is_an_error_and_not_a_DONE(
 
 
 def namespaces_that_are_still_deleting(recorded_api, present, stuck):
-    """A cluster that accepted every delete and finished all but `stuck`.
-
-    This is the state the watch log measured -- ten namespaces accepted, draining over roughly
-    forty seconds -- with the slow one pinned in `Terminating` so a test can ask what the
-    uninstall says when the cluster is not finished with its own work.
-    """
+    """A cluster that accepted every delete and finished all but `stuck`."""
     still_there = set(present)
 
     def delete(name=None, **kwargs):
@@ -1177,14 +911,7 @@ def namespaces_that_are_still_deleting(recorded_api, present, stuck):
 
 def test_a_namespace_the_cluster_has_not_finished_deleting_is_residue_and_not_a_DONE(
         uninstaller, recorded_api, monkeypatch, caplog):
-    """Deleting is not the same as deleted, and the measured gap was 42 seconds.
-
-    The lane said it plainly: the deletes were fired, `still present` was logged four seconds
-    later, and the watch log showed the same namespaces gone by 42 s. A tool that reports over an
-    unfinished deletion is not reporting a failure -- it is reporting its own impatience. So a
-    namespace the cluster is still removing has to appear as residue, named with its phase, and
-    `DONE` has to be withheld.
-    """
+    """Deleting is not the same as deleted, and the measured gap was 42 seconds."""
     present = set(constants.DEFAULT_NAMESPACES.values()) | CLUSTER_ADDONS
     namespaces_that_are_still_deleting(recorded_api, present, stuck={"grafana"})
     # The real ceiling is three minutes of polling; a unit test asserts the decision, not the clock.
@@ -1203,11 +930,7 @@ def test_a_namespace_the_cluster_has_not_finished_deleting_is_residue_and_not_a_
 
 def test_answering_no_deletes_nothing(fixture_repo, dry_run_env, fake_binaries, recorded_api,
                                      monkeypatch):
-    """`n` at the prompt is a cancellation, not a partial uninstall.
-
-    The bash had the same rule, but it was inside the script, so the CLI had to run a script to
-    find out. Now the answer is the library's and it is given before the first command.
-    """
+    """`n` at the prompt is a cancellation, not a partial uninstall."""
     present = set(constants.DEFAULT_NAMESPACES.values()) | {fixture_repo.pipeline_namespace,
                                                            fixture_repo.app_namespace} | CLUSTER_ADDONS
     on_a_cluster(recorded_api, present)
@@ -1247,20 +970,7 @@ def test_answering_no_deletes_nothing(fixture_repo, dry_run_env, fake_binaries, 
 def test_the_cluster_scoped_rbac_the_release_manifests_applied_is_swept(uninstaller, fixture_repo,
                                                                        fake_binaries, recorded_api,
                                                                        caplog):
-    """The RBAC the Tekton releases put outside every namespace goes too, and it is not labelled.
-
-    `install()` (`infrastructure/tekton/install.py`) applies the three release manifests with
-    `kubectl apply -f`, so
-    everything in them arrives with upstream's `app.kubernetes.io/part-of` and without kubementat's
-    `managed-by` claim -- which is the reason a sweep that only reads its own label finds one object
-    out of thirty-odd. What all sixteen of the bindings those manifests ship have in common is that
-    every subject is a ServiceAccount inside a namespace `constants.DEFAULT_NAMESPACES` says
-    kubementat owns and is about to delete, and that is what is read instead of a name list.
-
-    `roleRef` is the other half of the read: `tekton-aggregate-view` is bound by nothing of its own
-    and is reached only through the dashboard binding that grants it, so a sweep that stopped at the
-    binding would leave the role behind with the log claiming it swept everything.
-    """
+    """The RBAC the Tekton releases put outside every namespace goes too, and it is not labelled."""
     answering_the_cluster_scoped_rbac(
         recorded_api,
         RELEASE_RBAC["bindings"] + owned_rbac_bindings(fixture_repo) + FOREIGN_RBAC["bindings"],
@@ -1279,7 +989,7 @@ def test_the_cluster_scoped_rbac_the_release_manifests_applied_is_swept(uninstal
                   "tekton-events-controller-cluster-access", "tekton-aggregate-view",
                   "tekton-triggers-bindings-and-interceptors-role", "tekton-cleanup-cluster-role"]}
     assert expected <= deleted, \
-        f"the release RBAC and kubementat's own are the half this ticket is about: {sorted(expected - deleted)}"
+        f"the release RBAC and kubementat's own are missing from the sweep: {sorted(expected - deleted)}"
     assert "helm-deployer-cluster-role" in {name for kind, name in deleted}, \
         "it is bound through a namespaced RoleBinding, so the label is the only thing that reaches it"
     assert any("cluster-scoped RBAC" in record.message for record in caplog.records), \
@@ -1291,10 +1001,6 @@ def test_the_cluster_scoped_rbac_goes_before_the_namespaces_it_is_bound_into(uni
                                                                             fake_binaries,
                                                                             caplog, recorded_api):
     """Order, for the reason that decides the whole read: a subject is only evidence while it exists.
-
-    The sweep's second rule asks where a binding's ServiceAccounts live, and it answers it from the
-    namespaces about to be deleted. Run it afterwards and the answer is a cluster that has forgotten
-    what it deleted, which is the same question asked a beat late.
     """
     answering_the_cluster_scoped_rbac(
         recorded_api, RELEASE_RBAC["bindings"], RELEASE_RBAC["roles"])
@@ -1313,21 +1019,7 @@ def test_the_cluster_scoped_rbac_goes_before_the_namespaces_it_is_bound_into(uni
 def test_a_cluster_role_kubementat_never_stamped_or_bound_is_left_where_it_is(uninstaller,
                                                                               fixture_repo,
                                                                               fake_binaries, recorded_api):
-    """The other half: an uninstall that is complete because it deleted only its own.
-
-    A ClusterRole kubementat wrote no claim on and bound to nothing is exactly the object the sweep
-    must not touch, and the shape of it is threefold: `cluster-admin`, which is bound to a group and
-    so has no namespace to ask about; `prometheus-k8s`, bound inside a namespace kubementat owns
-    nothing about; and `gitlab-runner-cluster-admin`, whose binding points at somebody else's
-    controller. Deleting any of them would turn a green residue assert into a broken cluster, and a
-    sweep that could tell it had nothing to delete -- deleting nothing and deleting nothing that
-    mattered are the same action only to a reader who cannot see the cluster.
-
-    This is the unit evidence that the foreign-object half of the ticket is closed. Whether every
-    one of *kubementat's* own thirty-odd objects went is a question for a `full` lane; what a unit
-    can say, and what it says here without a name list, is that the rule cannot reach an object that
-    kubementat neither wrote nor bound into a namespace of its own.
-    """
+    """The other half: an uninstall that is complete because it deleted only its own."""
     answering_the_cluster_scoped_rbac(
         recorded_api, RELEASE_RBAC["bindings"] + FOREIGN_RBAC["bindings"],
         RELEASE_RBAC["roles"] + FOREIGN_RBAC["roles"])
@@ -1349,14 +1041,7 @@ def test_a_cluster_role_kubementat_never_stamped_or_bound_is_left_where_it_is(un
 def test_a_cluster_that_will_not_answer_for_its_rbac_claims_no_object_as_deleted(uninstaller,
                                                                                 fake_binaries,
                                                                                 caplog, recorded_api):
-    """The read is not fatal, and it is not allowed to be silent.
-
-    A kubeconfig pointed somewhere that will not answer replies with an exit code and no items,
-    which is the same bytes as a cluster that has no RBAC. `_delete_crds_in_groups` gives the
-    argument for why that difference is logged and not smoothed over -- a residue assert cannot tell
-    a sweep that found nothing from one that could not ask, and here the second one is the difference
-    between `DONE` and a cluster still holding everything.
-    """
+    """The read is not fatal, and it is not allowed to be silent."""
     answering_the_cluster_scoped_rbac(recorded_api, RELEASE_RBAC["bindings"],
                                       RELEASE_RBAC["roles"])
     cluster_state(recorded_api, "clusterrole", error="the cluster would not answer")

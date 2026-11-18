@@ -1,19 +1,4 @@
-"""`kmt run-ci-container`, once it is the library calling `kubectl` and not a script.
-
-`scripts/utilities/run_ci_container.sh` did three things in 34 lines: print the kubectl context,
-read three keys out of `{env}/static.json` with `jq`, and start one interactive pod. All three are
-now Python, and the two interesting branches are the ones bash could not take:
-
-* an image key that is not configured. `jq -r` answered `null`, the pod was accepted, and the
-  failure arrived on the cluster as a pull error for `null/ci-runner:null`. Here the key names
-  itself, and `kubectl` is never called.
-* the arguments that used to reach a script. The script interpolated `$1`/`$2` into a command
-  line, which is what the port to Python removed. Asserted as argv here, because that is the only
-  difference a shell-based test could not see.
-
-The pod itself is still interactive, so nothing in the port may capture it: a captured `bash` is a
-session that never shows up, not a quieter one.
-"""
+"""`kmt run-ci-container`, once it is the library calling `kubectl` and not a script."""
 
 import logging
 
@@ -30,11 +15,7 @@ CI_IMAGE = "registry.example.test/ci-runner:1.2.3"
 
 
 def container_runs(fake_binaries):
-    """The `kubectl run` calls, as argv. Reads are not part of this claim.
-
-    The cluster is in the argv before `run`, so matching on the first two words no longer
-    finds the call. What is matched instead is the subcommand, wherever it sits.
-    """
+    """The `kubectl run` calls, as argv. Reads are not part of this claim."""
     return [call for call in fake_binaries.commands()
             if call[0] == "kubectl" and "run" in call]
 
@@ -46,15 +27,7 @@ def kubectl_reads(fake_binaries):
 
 def test_the_cluster_the_container_lands_in_is_named_and_never_asked_for(
         fixture_repo, dry_run_env, fake_binaries, caplog):
-    """The script printed the context with `set -e` in front of it, so it had to answer.
-
-    The guarantee is the same and the mechanism is gone: the
-    `kubectl config current-context` read is deleted because it answered from the local kubeconfig and not
-    from what the command had resolved, so on a machine that said `prod` and a command that said
-    `dev` it printed `prod`. Which cluster this is is now said from the `Context`, so there is no
-    read to get wrong and no call to make before the pod. Asserted as an absence, because the only
-    thing that can regress here is the read coming back.
-    """
+    """The script printed the context with `set -e` in front of it, so it had to answer."""
     with caplog.at_level(logging.INFO):
         CiUtils(Context.build(fixture_repo.environment, fixture_repo.team)).run_ci_container()
 
@@ -66,12 +39,7 @@ def test_the_cluster_the_container_lands_in_is_named_and_never_asked_for(
 
 def test_an_image_key_the_configuration_omits_names_itself_and_touches_nothing(
         fixture_repo, dry_run_env, fake_binaries):
-    """The missing-configuration branch, asserted as "the cluster was never asked".
-
-    bash sent `null` as the image name. Python refuses to build a reference out of a key it was
-    not given, which is also the difference between "nothing happened" and "a pod was created
-    that will never start".
-    """
+    """The missing-configuration branch, asserted as "the cluster was never asked"."""
     fixture_repo.environment_static(TEKTON_CI_IMAGE_TAG="")
 
     with pytest.raises(CiImageNotConfiguredError) as error:
@@ -86,9 +54,6 @@ def test_an_image_key_the_configuration_omits_names_itself_and_touches_nothing(
 def test_a_registry_url_is_not_glued_to_the_image_name_twice(fixture_repo, dry_run_env,
                                                              fake_binaries):
     """`https://registry/` + `/ci-runner` is `https://registry//ci-runner`, and that is a bad image.
-
-    The base URL is written by people into JSON, and a trailing slash is a thing people do. It is
-    trimmed, so the reference is what the registry actually serves.
     """
     fixture_repo.environment_static(DOCKER_REGISTRY_BASE_URL="registry.example.test/")
 
@@ -98,12 +63,7 @@ def test_a_registry_url_is_not_glued_to_the_image_name_twice(fixture_repo, dry_r
 
 def test_the_command_is_the_reachable_path_and_takes_the_environment_and_the_team(
         fixture_repo, dry_run_env, fake_binaries):
-    """`kmt run-ci-container dev fixture` is still how an operator runs this.
-
-    Invoked as a process would be, through the command module rather than the library, because
-    what is under test is that the CLI reaches the library at all. Before this it reached
-    `scripts/utilities/run_ci_container.sh`, which is the whole of what changed.
-    """
+    """`kmt run-ci-container dev fixture` is still how an operator runs this."""
     result = CliRunner().invoke(run_ci_container,
                                 [fixture_repo.environment, fixture_repo.team],
 )

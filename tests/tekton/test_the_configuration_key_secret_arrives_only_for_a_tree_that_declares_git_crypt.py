@@ -1,24 +1,4 @@
 """`kmt install` creates the configuration's git-crypt Secret only where a clone would need opening.
-
-Two decisions have to agree, and nothing in the tree forces them to:
-
-* install's. It reads the configuration directory and decides whether to build
-  `git-crypt-configuration-key`.
-* the unlock step's. It reads the *clone's* `.gitattributes` and decides whether an absent key is a bug or
-  the expected shape of an unencrypted configuration.
-
-If install says "no Secret needed" and the step says "this clone is encrypted, refuse", a plaintext tree
-fails every pipeline. If install says "Secret" and the step says "no key is fine", an encrypted tree whose
-key went missing goes silently green, which is worse: the ciphertext is what the pipeline reads.
-
-So the marker is the subject of this file, and it is `.gitattributes` naming `filter=git-crypt`. That is
-the one git-crypt fact a clone carries: the keystore lives under `.git/`, which git does not clone, and
-`git_crypt_symmetric.key` is gitignored, which is the entire reason this ticket exists. A predicate
-built on either of those two would answer "no" to the exact tree that needs unlocking.
-
-The measurements that back this are in
-`test_exactly_one_base64_layer_sits_between_the_key_and_the_unlock_step.py`, which runs the shipped step
-against real git-crypt repositories. This file is about the other side of the pair.
 """
 import os
 import shutil
@@ -102,12 +82,7 @@ class PipelineConfig:
 
 @pytest.fixture(scope="module")
 def armored_deployer_key():
-    """One real key's two armored halves, made once per module in a keyring that dies with it.
-
-    Real armor and not a marker string, for the reason the deployer guard gives: `require_deployer_keypair`
-    reads the deployer's identity out of the key itself, and a file that does not import is refused before
-    this file's own subject is reached. A fixture that could not pass that check would be measuring nothing.
-    """
+    """One real key's two armored halves, made once per module in a keyring that dies with it."""
     home = Path(tempfile.mkdtemp(prefix="kubementat-configuration-key-keyring-"))
     os.chmod(home, 0o700)
     try:
@@ -123,12 +98,7 @@ def armored_deployer_key():
 
 
 def a_configuration_directory(root: Path, *, git_crypt: bool, key: bool, armor) -> Path:
-    """The files install reads, with the two that matter switched on or off.
-
-    `git_crypt` writes the `.gitattributes` line the product's predicate looks for. `key` puts the exported
-    symmetric key in the directory's root, which is what `config init` step 8 does and what a clone of the
-    repository cannot have.
-    """
+    """The files install reads, with the two that matter switched on or off."""
     directory = root / "platform_config"
     directory.mkdir(parents=True, exist_ok=True)
     (directory / config_keys.SSH_PRIVATE_NAME).write_bytes(SSH_PRIVATE_BYTES)
@@ -161,10 +131,8 @@ def a_secret_named(cluster: RecordingCluster, name: str):
 
 
 def test_a_tree_that_declares_the_filter_gets_the_secret_it_needs(tmp_path, monkeypatch, armored_deployer_key):
-    """The configuration clone that `git-clone-configuration` fetches is locked, so the Secret must exist.
-
-    This is the case the ticket is *for*. If it is the only case the guard covers, everything below is
-    decoration, which is why the next test asserts the opposite shape rather than repeating this one.
+    """The configuration clone that `git-clone-configuration` fetches is locked, so the Secret must
+    exist.
     """
     directory = a_configuration_directory(tmp_path, git_crypt=True, key=True, armor=armored_deployer_key)
     cluster = install_pipelines(directory, monkeypatch)
@@ -178,10 +146,6 @@ def test_a_tree_that_declares_the_filter_gets_the_secret_it_needs(tmp_path, monk
 
 def test_a_tree_that_never_used_git_crypt_gets_no_secret_and_still_installs(tmp_path, monkeypatch, armored_deployer_key):
     """A configuration with nothing encrypted has no key to hand out, and install must not pretend.
-
-    The important half is that `setup_pipelines` *completes*. Failing an install because a file is missing
-    from a repository that never used git-crypt would be a regression this ticket introduced, and it is the
-    kind of failure that shows up on somebody else's tree and not on yours.
     """
     directory = a_configuration_directory(tmp_path, git_crypt=False, key=False, armor=armored_deployer_key)
     cluster = install_pipelines(directory, monkeypatch)

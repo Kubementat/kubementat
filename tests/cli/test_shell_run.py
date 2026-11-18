@@ -1,20 +1,4 @@
-"""Tests for `kubementat.infrastructure.shell.run` — the one command-execution primitive.
-
-These pin the behaviour the primitive exists to guarantee: command lines are argv, the
-working directory is an argument, output is either streamed or captured by choice, and a
-failure says which command failed. They also close the defects the primitive replaces
-(plan D8, review 1.4 / 3.10):
-
-* `subprocess.check_call(f"{script} {environment} {team}", shell=True)` — a second parser
-  on values the operator controls, so a team name with a space or a `;` was an argument
-  split, a broken command line, or an injection.
-* `subprocess.run([command], check=True, shell=True, capture_output=True)` for
-  `kubectl port-forward` — output captured instead of streamed, so the tunnel looked frozen.
-* `os.chdir(...)` before exec — a global process mutation that no failed command could undo.
-
-The companion file `test_command_execution_policy.py` proves nothing else in `src/`
-estarts commands, which is what makes these guarantees hold everywhere.
-"""
+"""Tests for `kubementat.infrastructure.shell.run` — the one command-execution primitive."""
 
 import sys
 
@@ -55,11 +39,7 @@ def test_a_missing_binary_is_reported_as_such():
 
 
 def test_a_missing_working_directory_blames_the_directory(tmp_path):
-    """`execve` reports both misses as the same errno; only one means "install something".
-
-    The old code `os.chdir`'d first, so this failure surfaced as a confusing
-    `FileNotFoundError` from the CLI rather than from the command.
-    """
+    """`execve` reports both misses as the same errno; only one means "install something"."""
     missing = tmp_path / "never-created"
 
     with pytest.raises(errors.CommandExecutionError) as excinfo:

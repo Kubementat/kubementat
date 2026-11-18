@@ -1,9 +1,4 @@
-"""`kmt`'s help output, read from the real entry point.
-
-The commands are attached inside `main()`, so the surface that ships is only visible after it runs.
-`--help` ends the invocation before any command body executes, which makes this safe in a suite that
-has no cluster.
-"""
+"""`kmt`'s help output, read from the real entry point."""
 
 import contextlib
 import io
@@ -37,7 +32,8 @@ def run_main(monkeypatch, argv):
 
 
 def run_help(*arguments):
-    """The help text one `kmt` invocation prints. Click answers `--help` before a command body runs."""
+    """The help text one `kmt` invocation prints. Click answers `--help` before a command body runs.
+    """
     out = io.StringIO()
     monkeypatch = pytest.MonkeyPatch()
     try:
@@ -54,10 +50,6 @@ def help_output():
 
 
 def commands_from_help(text):
-    """The command names a `--help` listing prints.
-
-    Click writes each name in a two-space column; a name longer than the column gets a line of its
-    own and its help continues indented further, so only the two-space column holds names.
-    """
+    """The command names a `--help` listing prints."""
     listing = text.split("Commands:\n", 1)[1]
     return {line.split()[0] for line in listing.splitlines() if re.match(r"^ {2}\S", line)}

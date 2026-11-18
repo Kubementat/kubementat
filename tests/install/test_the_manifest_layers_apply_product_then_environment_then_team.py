@@ -1,26 +1,4 @@
-"""The three manifest apply layers, and the order that resolves a collision between them.
-
-`setup_pipelines` used to apply two things: what kubementat ships, and what the team wrote. The
-design adds a third — `platform_config/{environment}/tekton/{tasks,pipelines}/` — for an
-environment that needs a Task tweaked without forking it into every team's directory. This file
-holds what makes that layer real, which is not the directory's existence but the *sequence* it is
-applied in.
-
-The rule the ticket settled, and the reason there is no code to write:
-
-* A `metadata.name` that appears in two layers is not a collision, it is an ordering. The same
-  namespace, the same kind, the same name — the document applied later patches the object the
-  earlier one created, because `create_or_replace_custom_resource` creates and patches on 409. So
-  the answer to "which layer owns this Task" is already in the call sequence, and a name index, a
-  collision table or an ownership registry would be a second source of truth about it, correct only
-  until the order moves.
-* Order is only evidence if it is *readable*, so every layer logs one line naming the directory it
-  is applying and how many documents it found. A reader debugging a cluster should be able to tell
-  from the log alone which layer answered for a Task, which is what the assertions below read off.
-
-What this file deliberately does not do: assert that an object "ends up patched". A fake cannot
-prove what a cluster does with two writes, and the order the fake *received* is the fact under test.
-"""
+"""The three manifest apply layers, and the order that resolves a collision between them."""
 
 import os
 import shutil
@@ -76,7 +54,8 @@ def product_dirs(root):
 
 
 def environment_dirs(root, environment="dev"):
-    """The environment layer, spelled from the configuration root — the same spelling `Config` uses."""
+    """The environment layer, spelled from the configuration root — the same spelling `Config` uses.
+    """
     env = root / "platform_config" / environment / "tekton"
     return env / "tasks", env / "pipelines"
 
@@ -88,13 +67,7 @@ def team_dirs(root, environment="dev", team="dev1"):
 
 
 class RecordingCluster:
-    """Records every write `setup_pipelines` sends, as the write was made.
-
-    The only method that matters is the create-or-replace one; everything else the setup path asks
-    the cluster for is a namespace, a secret, a service account, or a read, and none of it is under
-    test. They are answered with a no-op rather than a `None`-returning mock so a method the test
-    forgot about shows up as an unexpected call and not as a crash three frames deep.
-    """
+    """Records every write `setup_pipelines` sends, as the write was made."""
 
     def __init__(self):
         self.applied = []
@@ -153,11 +126,7 @@ _DEPLOYER_ARMOR = {}
 
 
 def deployer_armor():
-    """One 2048-bit key's armor, generated once per module and thrown away with its keyring.
-
-    `require_deployer_keypair` reads the deployer's identity back out of the key itself, so the
-    pair these trees carry has to be real armor and not a marker string.
-    """
+    """One 2048-bit key's armor, generated once per module and thrown away with its keyring."""
     if "armor" not in _DEPLOYER_ARMOR:
         home = Path(tempfile.mkdtemp(prefix="kubementat-layer-test-keyring-"))
         os.chmod(home, 0o700)
@@ -178,12 +147,7 @@ def deployer_armor():
 
 
 def plant_deployer_keypair(root):
-    """The four files `require_deployer_keypair` asks for, inside the tree's configuration root.
-
-    The deployer Secrets are built from this pair now, so a `setup_pipelines` run against
-    a tree without one refuses before it applies anything -- which is not what the layer tests
-    below are about, so the pair is planted here.
-    """
+    """The four files `require_deployer_keypair` asks for, inside the tree's configuration root."""
     directory = root / "platform_config"
     directory.mkdir(parents=True, exist_ok=True)
     armor = deployer_armor()
@@ -195,13 +159,7 @@ def plant_deployer_keypair(root):
 
 
 def a_setup_pipelines(root, cluster, monkeypatch, environment="dev", team="dev1"):
-    """Run the real `setup_pipelines` against a fake cluster, from a `Context` and nothing else.
-
-    What is under test is what the *apply* sequence sends, so everything past the client stays
-    real — including `apply_resources`, which is what walks the directories these tests lay out.
-    The client and the two halves that are not about manifests are replaced on the module, which
-    is where the function reads them now that there is no instance to hold them.
-    """
+    """Run the real `setup_pipelines` against a fake cluster, from a `Context` and nothing else."""
     plant_deployer_keypair(root)
     context = SimpleNamespace(environment=environment, team=team,
                               config=LayeredConfig(root, environment, team))
@@ -219,12 +177,7 @@ def written(cluster, kind):
 
 
 def test_all_three_layers_are_applied_in_one_order_for_one_kind(tmp_path, monkeypatch):
-    """One sequence, six directories, and no place for a second one to hide.
-
-    Asserted on the whole run rather than per layer because the ticket is the *order*: a layer that
-    lands in the right place when the other two are absent proves nothing about a run that has all
-    three.
-    """
+    """One sequence, six directories, and no place for a second one to hide."""
     for directory, layer in ([(d, "product") for d in product_dirs(tmp_path)]
                              + [(d, "environment") for d in environment_dirs(tmp_path)]
                              + [(d, "team") for d in team_dirs(tmp_path)]):
@@ -243,13 +196,7 @@ def test_all_three_layers_are_applied_in_one_order_for_one_kind(tmp_path, monkey
 # (e) templates are never applied
 # ---------------------------------------------------------------------------
 def test_a_generator_template_under_a_layer_is_never_applied_as_a_manifest(tmp_path, monkeypatch):
-    """A `templates/` directory under the environment or the team layer is generator input.
-
-    The exclusion is not defensive: `templates/` sits *inside* real resource roots, so the walk that
-    applies a layer's Tasks reaches it on its way through. Applying one would put a
-    `deploy-pipeline-APP_NAME_PLACEHOLDER` in front of a cluster — a Pipeline named after a
-    placeholder, which is exactly what a real user's cluster had once.
-    """
+    """A `templates/` directory under the environment or the team layer is generator input."""
     for root in [d for dirs in (environment_dirs(tmp_path), team_dirs(tmp_path)) for d in dirs]:
         (root / "templates").mkdir(parents=True, exist_ok=True)
         (root / "templates" / "deploy-pipeline-APP_NAME_PLACEHOLDER.yaml").write_text(TEMPLATE)

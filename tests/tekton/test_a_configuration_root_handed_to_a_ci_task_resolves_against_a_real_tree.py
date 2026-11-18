@@ -1,43 +1,4 @@
-"""Every configuration root a shipped CI Task names must resolve against a real tree.
-
-This file exists because a guard can check a param's *shape* and still miss the bug.
-
-The earlier guard (`test_the_configuration_root_in_ci_is_a_clone_and_not_the_product_checkout.py`) asked
-whether the clone step and the reader step agree about one directory. They did agree, and both were wrong:
-the reader was handed `<clone>/platform_config`, which a configuration root does not have. A root puts
-`<environment>/` one
-directory below the configuration root, so a clone of a configuration repository *is* the root, and
-appending `platform_config` to it reads one level too deep. The disagreement that the shape guard watches
-for never happens; the failure is a `no environment in ... declares a cluster` printed about a clone that
-does declare one, attributed to the operator.
-
-So the check here is not what the path says but what the path **opens**. A configuration-root-shaped
-directory is built once for real, a workspace path is invented, each shipped Task's param default is
-substituted into it, and the resulting path is required to name something that exists in the tree. The
-mutations that pass a spelling check and fail this one:
-
-* append `platform_config` to a root -> the environment directory is no longer under it;
-* point the root at the code checkout -> nothing in the configuration tree is under it;
-* drop the environment segment out of a values path -> the app directory is no longer under it.
-
-Two shapes are asserted and neither is a fiction:
-
-*1. A configuration repository*: the root holds `kubementat.yaml`, `<environment>/static.json`, and
-`<environment>/<team>/`. The first directory that carries a `static.json` at depth one is an
-environment, which is what makes depth
-the thing to get right.
-
-*2. A combined tree*, which is allowed to keep `platform_config/` inside a checkout. There the
-operator points the root *at* that directory, and the same assertions hold one level down — which is the
-proof that the rule is "name the root", not "know the layout". Nothing in a shipped script may add the
-segment, because a script that adds it can only work for one of the two shapes, and both shapes have to
-work.
-
-Nothing in `src/` is touched. The rule is enforced on shipped YAML, against a directory built in a temp
-tree, and `Config`/`kubementat/config/init.py`/the read paths stay out of it — most trees in this suite are fixtures
-and not prepared directories, and a tree-shape rule phrased against `Config` is how 227 unrelated tests
-break.
-"""
+"""Every configuration root a shipped CI Task names must resolve against a real tree."""
 import re
 from pathlib import Path
 
@@ -63,12 +24,7 @@ APP = "nginx"
 # ---------------------------------------------------------------------------------------------
 
 def _build_v2_root(root: Path) -> Path:
-    """`<root>/kubementat.yaml` + `<root>/<environment>/...`, the shape a configuration root has.
-
-    `static.json` carries `CLUSTER_KUBE_CONTEXT` because `environments list` prints an environment that
-    declares a cluster and refuses the rest, and the refusal is indistinguishable from a root that names
-    nothing. A test that cannot tell those apart is a test that passes on the bug.
-    """
+    """`<root>/kubementat.yaml` + `<root>/<environment>/...`, the shape a configuration root has."""
     root.mkdir(parents=True, exist_ok=True)
     (root / "kubementat.yaml").write_text("schema_version: 1\nkubementat: \">=0.4,<2\"\n",
                                           encoding="utf-8")
@@ -89,12 +45,7 @@ def _build_v2_root(root: Path) -> Path:
 
 
 def _build_combined_root(root: Path) -> Path:
-    """A combined tree, where `platform_config/` survives inside a checkout.
-
-    Same contents, one level down, under the directory an operator is told to point `--config-dir`
-    at. The rule under test has to hold for this tree too, and it holds only because the operator names
-    the root rather than the Task guessing the segment.
-    """
+    """A combined tree, where `platform_config/` survives inside a checkout."""
     return _build_v2_root(root / "platform_config")
 
 
@@ -118,11 +69,7 @@ def _params(manifest: dict) -> dict:
 
 
 def _script(manifest: dict) -> str:
-    """The steps' scripts and commands joined, with comments dropped.
-
-    A commented line about `platform_config` is prose about the rule, not the rule, and this file is
-    about the argv a pod runs.
-    """
+    """The steps' scripts and commands joined, with comments dropped."""
     lines = []
     for step in manifest.get("spec", {}).get("steps") or []:
         text = "\n".join([step.get("script", "")] + list(step.get("command") or []))
@@ -131,12 +78,7 @@ def _script(manifest: dict) -> str:
 
 
 def _resolve_shell_variables(text: str) -> dict:
-    """`NAME="$(params.x)"` lines the way bash's `set -ue` block would, for one pass.
-
-    The Task's script assigns every parameter to an upper-case name before it builds a path, so a path
-    built out of those names is a path built out of the params -- and the assignment lines are the only
-    honest way to learn the names, rather than this file inventing a mapping.
-    """
+    """`NAME="$(params.x)"` lines the way bash's `set -ue` block would, for one pass."""
     variables = {}
     for name, value in re.findall(r'^\s*([A-Z_]+)="([^"]*)"\s*$', text, re.M):
         variables[name] = value
@@ -144,13 +86,7 @@ def _resolve_shell_variables(text: str) -> dict:
 
 
 def _substitute(value: str, params: dict, workspace: str) -> str:
-    """Resolve `$(params.X)` and `$(workspaces.workspace.path)` down to a filesystem path.
-
-    Params with no shipped default (an environment, a team, an app name are never defaulted -- naming one
-    for the operator is what no shipped default does) are answered by `RUN_PARAM_VALUES`, which is what a
-    TaskRun would pass. Leaving them empty is the bug class this file exists to close: a path with empty
-    segments still "resolves", and it resolves to the wrong directory.
-    """
+    """Resolve `$(params.X)` and `$(workspaces.workspace.path)` down to a filesystem path."""
     text = value
     for _ in range(8):
         previous = text
@@ -167,7 +103,8 @@ def _substitute(value: str, params: dict, workspace: str) -> str:
 
 def _substitute_path(value: str, params: dict, workspace: str, script: str) -> str:
     """A path in a Task's script, whether it is spelled with params or with the variables the script
-    assigns them into. Both are the same path; the second is how three of these Tasks write it."""
+    assigns them into. Both are the same path; the second is how three of these Tasks write it.
+    """
     variables = _resolve_shell_variables(script)
     text = value
     for _ in range(12):
@@ -197,11 +134,7 @@ ROOT_PARAMS = ("configuration-root", "path-to-configuration")
 
 
 def _config_reading_tasks() -> list:
-    """Every shipped Task that declares a root it reads configuration from.
-
-    A Task with no root param is not this file's business: it reads no configuration, which is a different
-    question and is answered by whichever guard covers that Task.
-    """
+    """Every shipped Task that declares a root it reads configuration from."""
     found = []
     for path in sorted(tekton_ci_path("tasks").glob("*.yml")):
         manifest = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -212,12 +145,7 @@ def _config_reading_tasks() -> list:
 
 
 def _is_configuration_clone(root: Path, workspace: str) -> bool:
-    """True when this root is the configuration clone, not the code checkout.
-
-    Both are directories under the same workspace, and which one a Task's root lands in is exactly the
-    question the source A/source B split is about -- so it is decided by resolving, not by trusting the
-    param's name.
-    """
+    """True when this root is the configuration clone, not the code checkout."""
     config = Path(_substitute(f"$(workspaces.workspace.path)/{CONFIG_DIR}", {}, workspace))
     code = Path(_substitute(f"$(workspaces.workspace.path)/{CODE_DIR}", {}, workspace))
     if root == code:
@@ -230,12 +158,8 @@ def _is_configuration_clone(root: Path, workspace: str) -> bool:
 
 
 def _census(workspace: str) -> dict:
-    """{(task, root param): {root, paths, appends_platform_config}} for every shipped configuration root.
-
-    Classified per **param**, not per Task, because `run-tekton-pipeline` declares two roots and means two
-    different things by them: `path-to-configuration` is the directory `uv` walks up from to find the
-    project, and `configuration-root` is the directory the command reads. Sorting that out per Task would
-    call the clearest documented case "mixed" and be wrong about it.
+    """{(task, root param): {root, paths, appends_platform_config}} for every shipped configuration
+    root.
     """
     survey = {}
     for name in _config_reading_tasks():
@@ -254,12 +178,7 @@ def _census(workspace: str) -> dict:
 
 
 def _locates_only_the_project(entry: dict) -> bool:
-    """A root that leads to no read is the directory `uv` runs from, not a configuration root.
-
-    `run-tekton-pipeline`'s `path-to-configuration` is that: the manifest says so out loud, in the param's
-    own description. Calling it a configuration root would be the file guessing, so the census says what the
-    manifest says.
-    """
+    """A root that leads to no read is the directory `uv` runs from, not a configuration root."""
     return not entry["paths"]
 
 
@@ -269,18 +188,7 @@ def _locates_only_the_project(entry: dict) -> bool:
 
 
 def test_a_source_b_root_is_never_written_with_a_platform_config_segment_between_it_and_the_read(tmp_path):
-    """Naming a root is the point; a script that appends `platform_config` is locating one.
-
-    This is resolved, not grepped, for the same reason the rest of the file is: the bug hid in
-    `"${PATH_TO_CONFIGURATION}/platform_config/..."`, which is a script variable and not a param
-    reference, so a check written against `$(params.` would have read past it.
-
-    Two things are asserted per resolved path. The first is containment: a path that is not under the root
-    its own param names is a path that is not reading the tree that was declared. The second is the
-    segment, and only for the clone-rooted half -- because the Tasks still reading
-    `platform_config/` out of the code checkout are still to do, and the other test in this file names
-    that half rather than pretending it is clean.
-    """
+    """Naming a root is the point; a script that appends `platform_config` is locating one."""
     workspace = tmp_path / "workspace"
     _build_v2_root(workspace / CONFIG_DIR)
     survey = _census(str(workspace))
@@ -311,13 +219,7 @@ def test_a_source_b_root_is_never_written_with_a_platform_config_segment_between
 
 
 def _paths_from_root(script: str, params: dict, root_param: str, workspace: str) -> list:
-    """Every absolute path in the script that descends from one root param.
-
-    Collected from assignment lines and from quoted paths, because the Tasks do both: `deploy-local-helm-chart`
-    builds `HELM_VALUES_FILE` from a variable that was assigned the param, and the kmt Tasks put the
-    param straight onto a command line. Missing either one is how a path guard goes quiet while the bug
-    stays in the file.
-    """
+    """Every absolute path in the script that descends from one root param."""
     paths = []
     # Assignments, and the arguments that go straight onto a command line. Quoting is read line by line
     # rather than by pairing quotes across the whole script, because a bash script has apostrophes and
@@ -336,10 +238,7 @@ def _paths_from_root(script: str, params: dict, root_param: str, workspace: str)
 
 
 def _derived_from_root(script: str, text: str, root_param: str) -> bool:
-    """True when a `$VARIABLE` inside `text` was assigned the param that names this root.
-
-    Both bash spellings count, because these Tasks use both: `${NAME}` and the bare `$NAME`.
-    """
+    """True when a `$VARIABLE` inside `text` was assigned the param that names this root."""
     for name, assigned in _resolve_shell_variables(script).items():
         if f"$(params.{root_param})" not in str(assigned):
             continue
@@ -351,11 +250,8 @@ def _derived_from_root(script: str, text: str, root_param: str) -> bool:
 
 
 def test_a_combined_tree_works_by_naming_platform_config_as_the_root(tmp_path):
-    """An operator whose tree keeps `platform_config/` inside the checkout, held to the same assertions.
-
-    The tree keeps `platform_config/` inside a checkout. Pointing the root at that directory finds the
-    environment; pointing it at the checkout's top level does not, and that is the operator's choice to
-    make by naming a root, not something a Task may fix by appending.
+    """An operator whose tree keeps `platform_config/` inside the checkout, held to the same
+    assertions.
     """
     workspace = tmp_path / "workspace"
     checkout = workspace / CODE_DIR

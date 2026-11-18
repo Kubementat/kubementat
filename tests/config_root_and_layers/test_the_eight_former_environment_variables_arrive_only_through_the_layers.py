@@ -1,31 +1,4 @@
-"""The variable row: the eight keys arrive through the layers, or they arrive nowhere.
-
-`KUBEMENTAT_ENVIRONMENT_CONFIGURATION` was `initialize`'s eight-variable requirement list, and the
-rule that replaced it is not "the keys are required" — it is *where they come from*.
-Measured at `37a2613`, the dictionary named by the spec is gone from `src/`, `_check_required_environment_variables`
-is gone, and no `os.environ` read anywhere in `src/` answers one of the eight. What a reader could not
-tell from the greps is whether that was the end of the migration or the absence of a check, so this
-file states the property the greps cannot: **the only door a value of one of these keys comes through
-is the layered configuration read path**, and the only refusal that fires when a key answers nothing
-names the key, the file it belongs in, and the verb that sets it.
-
-The eight, in the spec's own order, with the one name that changed underneath them:
-
-`KUBERNETES_DEFAULT_STORAGE_CLASS` became `TEKTON_KUBERNETES_STORAGE_CLASS` in `7888bdf`, the
-`initialize` deletion. The old name is the only identifier that left the product during this epic
-(census S), so the row below carries the live spelling; a row that carried the
-dead one would be a key that no door answers. `AUTOMATION_GIT_PROJECT_NAME` and
-`AUTOMATION_GIT_REVISION` are the two automation coordinates that sit next to `AUTOMATION_GIT_URL`
-and carry an L0 of their own — they are the CI param spellings that were renamed and are deliberately not
-added to this row, which is the eight variables and no more.
-
-Two things this file does *not* do, and both matter. It adds no required-key list and no validator to
-`Config`: most of the trees this suite opens are fixtures and not prepared directories, and a rule
-phrased as "the tree must answer every key" is how the version-stamp gate broke 227 tests before it
-moved to the CLI boundary. And it does not touch the `helm.py` exports of `os.environ`: those are
-how an answer reaches the helmfile subprocess, they are writes and not reads, and the check below says
-so by classifying every access in the tree rather than banning the pattern.
-"""
+"""The variable row: the eight keys arrive through the layers, or they arrive nowhere."""
 
 import ast
 import json
@@ -61,14 +34,13 @@ FORMER_ENVIRONMENT_VARIABLES = {
     "CLUSTER_MANAGER_EMAIL": "the ACME contact every ClusterIssuer registers",
 }
 
-# The keys of the row that `constants.DEFAULT_STATIC_ANSWERS` answers for, so a tree that typed
-# nothing still has an answer. Measured and not assumed: this is the intersection of the row with the
-# L0 table, and it is why "missing" cannot be asserted for all eight.
+# The keys kubementat has a default for (`constants.DEFAULT_STATIC_ANSWERS`): a tree that declares
+# nothing still gets an answer for these, so only the others can be asserted missing.
 KEYS_WITH_A_CODE_DEFAULT = tuple(key for key in FORMER_ENVIRONMENT_VARIABLES
                                  if key in constants.DEFAULT_STATIC_ANSWERS)
 
 
-# The CI key the refusal clause is proven on: no L0, and a live consumer.
+# A key with no kubementat default and a live reader, so its absence must refuse.
 CI_REGISTRY_KEY = "DOCKER_REGISTRY_BASE_URL"
 
 
@@ -76,11 +48,7 @@ CI_REGISTRY_KEY = "DOCKER_REGISTRY_BASE_URL"
 
 
 def seed(root, environment_level=None, team_level=None) -> Config:
-    """A tree that declares what the test handed and nothing else.
-
-    Both pairs of both layers exist, because a missing layer file is refused and that refusal is about
-    a broken tree rather than about a key. The root is named and never located.
-    """
+    """A tree that declares what the test handed and nothing else."""
     environment_dir = root / "platform_config" / ENVIRONMENT
     team_dir = environment_dir / TEAM
     team_dir.mkdir(parents=True, exist_ok=True)
@@ -102,12 +70,7 @@ def _answers(config, key: str):
 
 @pytest.mark.parametrize("key", sorted(FORMER_ENVIRONMENT_VARIABLES))
 def test_a_key_the_row_leaves_to_l0_never_arrives_from_the_process_environment(tmp_path, key):
-    """Nothing declares it, so the answer is the code default or nothing. Never the shell.
-
-    `constants.static_answer` is the only thing that can answer here, and it is reached through the
-    same walk; a key outside that table answers `None` and its consumer refuses. Either way the
-    process environment has not been asked, which is the half the greps could only suggest.
-    """
+    """Nothing declares it, so the answer is the code default or nothing. Never the shell."""
     config = seed(tmp_path, environment_level={}, team_level={})
     expected = constants.static_answer(key)  # None for the keys outside the table.
 
@@ -134,19 +97,7 @@ def _is_environ(node) -> bool:
 
 def test_the_registry_url_the_configuration_never_answers_refuses_with_the_verb_that_sets_it(
         tmp_path):
-    """The done-when for this row, on the one key that has no L0 and a live consumer.
-
-    `CiUtils.ci_image` is reached the way the existing CI tests reach it — the same call, the same
-    exception, no message assembled for the test — because a refusal shape asserted against a string
-    the product does not produce is a green that means nothing.
-
-    The three parts, measured as they arrive:
-      * the **key**: `DOCKER_REGISTRY_BASE_URL` in the sentence, which is the only key of the row this
-        path can refuse, since the name and the tag answer from `constants.py` and nothing else;
-      * the **file**: the `static.json` the value belongs in, so the operator opens one file;
-      * the **command**: `kmt config set`, the verb that writes that file. `routing.py`'s refusal of
-        `CLUSTER_MANAGER_EMAIL` has always ended this way; this is that shape, on this key.
-    """
+    """A key with no default and no answer refuses, naming the verb that sets it."""
     config = seed(tmp_path, environment_level={}, team_level={})
     assert CI_REGISTRY_KEY not in config.get("env_static"), "the fixture declared the key itself"
 

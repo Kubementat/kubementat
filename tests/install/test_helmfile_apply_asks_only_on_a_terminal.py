@@ -1,15 +1,4 @@
-"""Who answers helmfile's `[y/n]`: a terminal does, a script does not.
-
-`helmfile apply` prints the diff and then asks. The CLI used to pass `interactive=True` as
-its own default, so the prompt went out even when nobody could answer it — and off a terminal
-helmfile reads the end of input as a refusal and exits 1. That is why every scripted use of
-`kmt helm apply` failed.
-
-The decision now lives in `kmt helm apply`, the one place that can see stdin: ask when
-stdin is a terminal, do not ask when it is not, and `--yes`/`-y` is the explicit "do not ask"
-for both cases. `HelmUtils.helmfile_apply` keeps a plain `interactive: bool` and appends
-`--interactive` only when it is handed True.
-"""
+"""Who answers helmfile's `[y/n]`: a terminal does, a script does not."""
 
 import types
 from dataclasses import replace
@@ -78,9 +67,6 @@ class HelmfileApply:
 
     def helm_utils(self):
         """The `HelmUtils` this fixture installed, for the tests that call the library and not the CLI.
-
-        Same name the command reaches for, same patched-in scratch configuration, so a library call
-        and a `kmt helm apply` in this file cannot be looking at two different configurations.
         """
         return helm.HelmUtils(self._context)
 
@@ -127,11 +113,7 @@ def helmfile_apply(monkeypatch, tmp_path):
         monkeypatch.delenv(_name, raising=False)
 
     class ScratchConfig:
-        """What `HelmUtils` reads off `Config`, without a platform_config tree.
-
-        `component_namespace` is part of that surface: helmfile cannot deploy a release into a
-        namespace the config does not name, so it comes from the same accessor the tunnels use.
-        """
+        """What `HelmUtils` reads off `Config`, without a platform_config tree."""
 
         def __init__(self, environment, team, preload_configs=False):
             self.kubementat_main_dir = str(main_dir)
@@ -159,9 +141,7 @@ def helmfile_apply(monkeypatch, tmp_path):
             return None
 
         # ...and the routing class the traefik release names. Nothing in this scratch tree declares
-        # it, so the real `Config`'s answer is L0 and that is what the export hands over. Whether
-        # helmfile *prompts* is the only thing under test here, so a class this tree has not named has
-        # to cost nothing -- and leaving the accessor out would be a hole in the fake.
+        # it, so the export hands over kubementat's default.
         def component_ingress_class(self, component):
             return constants.static_answer(component_config_key(component, "INGRESS_CLASS"))
 

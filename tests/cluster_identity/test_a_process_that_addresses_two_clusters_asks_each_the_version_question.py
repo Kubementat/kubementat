@@ -1,19 +1,4 @@
-"""One process, two clusters, and the check that must be asked twice.
-
-The version preflight is the one read on the Tekton path that answers *about a cluster* rather than
-about a call, and that is the only reason it can be cached at all. It used to be cached per object:
-the answer lived as a class attribute that the first successful check shadowed onto the instance,
-so every `TektonUtils` in a process carried its own copy. The split moves the function out of the
-class, and a function has no instance to write to — which is exactly the moment a module-level flag
-looks free. It is not free. A flag says "some cluster was verified", and the second cluster a
-command addresses then skips a check it never made: it gets the first cluster's answer, and if that
-answer is "v1 is served", a cluster that serves nothing goes on applying manifests one 404 at a
-time. This file is that case, because nothing else in the suite touches the cache at all.
-
-The shape is `test_two_clusters_can_be_addressed_by_one_process_at_once.py`'s, and for the same
-reason: the property is worth more than the assertion's convenience. What that file proves for the
-clients, this proves for the one cached answer that sits above them.
-"""
+"""One process, two clusters, and the check that must be asked twice."""
 
 from types import SimpleNamespace
 
@@ -35,11 +20,7 @@ SPOKEN_VERSION = SimpleNamespace(TEKTON_API_GROUP="tekton.dev", TEKTON_API_VERSI
 
 
 def a_target_on(kubeconfig, context):
-    """A real `ClusterTarget`, read out of a real kubeconfig by its own context.
-
-    `from_kubeconfig` is what the resolution order selects, so the address the cache compares is
-    the address a command would have carried, and not a field a test invented for it.
-    """
+    """A real `ClusterTarget`, read out of a real kubeconfig by its own context."""
     return ClusterTarget.from_kubeconfig(str(kubeconfig), context, context)
 
 
@@ -50,12 +31,7 @@ def two_clusters(tmp_path):
 
 
 def asking_the_served_version(monkeypatch):
-    """The discovery question, watched per cluster instead of answered by a socket.
-
-    It is patched on the *class* so that every `KubernetesUtils` answers from the same recorder and
-    the recording can name which cluster asked — which is what the assertion below needs, and what a
-    shared answer would blur.
-    """
+    """The discovery question, watched per cluster instead of answered by a socket."""
     asked = []
 
     def is_served(self, group, version):
@@ -67,15 +43,7 @@ def asking_the_served_version(monkeypatch):
 
 
 def test_both_clusters_are_asked_and_neither_is_asked_twice(tmp_path, monkeypatch):
-    """The case the split could have lost silently: a second cluster in one process.
-
-    The order is the whole test. `alpha` is asked first, and `beta` second — because the way this
-    fails is not a crash, it is `beta` quietly inheriting `alpha`'s verdict and never being asked.
-    The second half is the cache still working: after both answers are in, nothing is asked again,
-    including for a second `KubernetesUtils` built to address the cluster the first one already
-    answered for. That is the property of a cache keyed by cluster rather than by object, and it is
-    the half that makes the first half worth having.
-    """
+    """The case the split could have lost silently: a second cluster in one process."""
     kubeconfig = two_clusters(tmp_path)
     asked = asking_the_served_version(monkeypatch)
 

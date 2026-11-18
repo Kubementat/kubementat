@@ -1,30 +1,4 @@
-"""`kmt config add-environment` / `add-team` put one layer on a tree, and nothing else.
-
-Four claims, and the first two are what separates these verbs from `config init`.
-
-**A layer is added and not started.** `kubementat.yaml` is what says which product a tree is for, and
-one verb writes it, so `add-environment` refuses a root with no manifest and `add-team` refuses an
-environment that was never laid down. Nothing is written on the way out of either refusal: an
-additive verb that bootstraps is a second `init` with a different name, and the rule — no second
-function creates a layer — is what both of them here are held to.
-
-**One layer, and no answers.** The write set is the environment's two static files plus its two
-`tekton/` directories, or the team's two empty files plus its four layer directories. No template is
-copied, no namespace is written, no cluster key goes into a team's file (`EnvironmentRegistry.resolve`
-and `_environment_declaration`, both in `core/identity/registry.py`, read the environment's file and no
-other, and one directory is exactly one cluster). Where a
-key belongs it is `null`, the same way `init` writes it, because `config set` is the verb that answers
-and these two verbs write no answer at all.
-
-**The directories are the properties.** Both verbs go through `Config` and through the same plan and
-directory primitives `init_configuration` uses, so the assertion is `step.path == the property's path`
-and not a string typed into a test: a test that spells the path cannot tell a moved property from a
-moved directory. The step *names* are init's too, which is the point of the rule rather than a
-coincidence — two verbs that add a layer print the same sentence about a layer.
-
-**Idempotence is the same claim.** Adding what is already there is all `skipped`, no bytes, no error.
-A file that is there and differs is refused by init's rule, naming the path.
-"""
+"""`kmt config add-environment` / `add-team` put one layer on a tree, and nothing else."""
 
 import json
 from pathlib import Path
@@ -61,11 +35,7 @@ def initialized_root(tmp_path) -> Path:
 
 
 def layers(root, environment, team=None, preload=False) -> Config:
-    """The `Config` the readers would use for that tree — the same construction the verbs make.
-
-    `preload` is False for the path assertions, which want the properties and not the files, and True
-    for the readback in test 8, whose whole claim is what a loaded configuration answers.
-    """
+    """The `Config` the readers would use for that tree — the same construction the verbs make."""
     return Config(environment, team, platform_config_dir=root, preload_configs=preload)
 
 
@@ -87,15 +57,6 @@ def documents(root: Path) -> dict[Path, object]:
 
 def run_verb(verb, root, *arguments):
     """`kmt config <verb> --config-dir <root> …`, through the group so the verb's name is exercised.
-
-    A bug inside the command is re-raised rather than folded into an exit code, and a refusal is not:
-    the library raises a `ClickException` to say "I will not write", and standing up as
-    `SystemExit` is how that answer reaches a terminal. The distinction is the whole test for the
-    refusals, so a raised `ValueError` cannot hide behind `exit_code == 1`.
-
-    The root is the second argument and it travels as `--config-dir`, because that is the only way
-    the surface names a root: a test that handed one over any other way would be asserting about a
-    command nobody can type.
     """
     result = CliRunner(mix_stderr=False).invoke(
         config_module.config,
@@ -129,13 +90,7 @@ def refuse(verb, root, *arguments) -> str:
 
 
 def test_the_second_add_environment_reports_every_step_skipped_and_writes_no_bytes(tmp_path):
-    """The idempotence claim, held to a second verb: adding what is there changes nothing.
-
-    Four `skipped` lines on stdout and a byte-for-byte identical tree. `created` on a second run would
-    claim a write that did not happen, which is the same lie the file steps must not tell, and a
-    rewrite that happened to land on identical bytes would still fail the snapshot even though the
-    step list stayed honest.
-    """
+    """The idempotence claim, held to a second verb: adding what is there changes nothing."""
     root = initialized_root(tmp_path)
     run_verb("add-environment", root, NEW_ENVIRONMENT)
     before = snapshot(root)
@@ -157,11 +112,6 @@ def test_the_second_add_environment_reports_every_step_skipped_and_writes_no_byt
 
 def test_add_environment_refuses_a_root_with_no_manifest_and_names_config_init(tmp_path):
     """No manifest is no tree, and no layer is a tree. One sentence, one refusal, nothing written.
-
-    `kubementat.yaml` is written by exactly one verb, so the refusal does more than say "not found":
-    it names `kmt config init` as the one way to make the thing that is missing. The empty tree is the
-    other half — a verb that got to this conclusion by writing the manifest on the way would leave a
-    directory behind.
     """
     root = config_root(tmp_path)
 
@@ -174,9 +124,6 @@ def test_add_environment_refuses_a_root_with_no_manifest_and_names_config_init(t
 
 def test_add_team_refuses_a_root_that_is_not_a_directory_at_all_and_says_which_root(tmp_path):
     """The ordinary refusal, for the root that is not there. `tmp_path` exists; the root does not.
-
-    "Not a configuration directory" is the same sentence in both verbs, and the root is the fact in it:
-    an operator who mistyped the directory should hear which one this verb looked at.
     """
     missing = tmp_path / "nowhere"
 
@@ -194,13 +141,7 @@ def test_add_team_refuses_a_root_that_is_not_a_directory_at_all_and_says_which_r
 
 
 def test_add_team_refuses_an_environment_that_was_never_added_and_names_add_environment(tmp_path):
-    """No environment is no layer to sit under, so the refusal names the verb that makes one.
-
-    This is `init_configuration`'s refusal of `--team` without `--environment`, said to an operator
-    who is already standing at a tree. The whole tree is snapshotted around the run: `static.json` for
-    the team under a directory the environment never had is the exact half-write this rule exists to
-    prevent, and a step list would say `created` about it.
-    """
+    """No environment is no layer to sit under, so the refusal names the verb that makes one."""
     root = initialized_root(tmp_path)
     before = snapshot(root)
 
@@ -216,12 +157,7 @@ def test_add_team_refuses_an_environment_that_was_never_added_and_names_add_envi
 
 
 def test_the_second_add_team_reports_every_step_skipped(tmp_path):
-    """The same claim as the second `add-environment`, about four directories and two files.
-
-    Six lines, all `skipped`, and a tree that cannot tell the run happened. A `created` here would
-    train an operator to expect writes from a verb that does none — and to reach for the one flag that
-    must mean something else, `force`, which these verbs do not even take.
-    """
+    """The same claim as the second `add-environment`, about four directories and two files."""
     root = initialized_root(tmp_path)
     run_verb("add-environment", root, NEW_ENVIRONMENT)
     add_team(root, NEW_ENVIRONMENT, TEAM)

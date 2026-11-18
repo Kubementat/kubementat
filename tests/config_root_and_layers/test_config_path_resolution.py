@@ -1,27 +1,4 @@
-"""Where kubementat's configuration lives, and who is allowed to say so.
-
-Three defects live under this subject:
-
-* **D11** — `kubementat_main_dir` was `Path(__file__).parent.parent.parent`, which is the
-  checkout for a working tree and *site-packages* for a real install. `KUBEMENTAT_HOME` is
-  the override that makes an installed `kmt` read the checkout it was pointed at, and it is
-  the prerequisite for the CI-container work: there the checkout is `/workspace/...` while
-  `kmt` itself is installed.
-* **D10** — `logging.basicConfig()` ran while `kubementat.core.config.config` was still being imported,
-  so every library consumer got a root handler and an INFO level whether it wanted them or
-  not. The CLI installs the handler now; importing the library installs nothing.
-* The generated trigger config had no accessor at all — `tekton_team_pipeline_dir`,
-  `tekton_team_task_dir` and `tekton_team_pipeline_run_dir` existed, triggers were left
-  behind — so neither a generator nor its readers had a path to agree on.
-* `Config.__init__` consulted `$KUBEMENTAT_HOME` **before** honouring its own
-  `kubementat_main_dir` argument, so the environment answered first and the argument only edited
-  the answer afterwards. A fully-threaded `Config` refused over an empty-but-set `KUBEMENTAT_HOME`
-  it had never been asked about. Two tests under `KUBEMENTAT_HOME` below pin both
-  sides of the corrected ordering, and they sit in this file because naming a root is the subject.
-
-The `TODOs.md` ask ("an option for setting the platform_config directory") is the same
-mechanism as the first one, so the answer is one environment variable and no CLI option.
-"""
+"""Where kubementat's configuration lives, and who is allowed to say so."""
 
 import json
 
@@ -69,23 +46,7 @@ def test_an_explicit_path_beats_the_environment_variable(tmp_path, monkeypatch):
 
 def test_a_handed_root_answers_and_the_variable_answers_only_when_nothing_is_handed(
         tmp_path, monkeypatch):
-    """Both sides of one precedence, because the defect was an ordering and not a comparison.
-
-    `Config.__init__` used to run `default_kubementat_main_dir()` on the line before it honoured
-    the argument, so the environment answered first and the argument only edited the answer
-    afterwards. The value came out right in that state and wrong beside it, which is the signature
-    of an ordering bug: it passes a value test and fails a refusal test. So both directions are
-    asserted here, in one place:
-
-    * a `Config` that was **handed** a root is answered by that root, and `$KUBEMENTAT_HOME` —
-      pointed at a decoy on purpose — never votes. The derived `tekton_ci/pipeline-runs/` path is
-      asserted too, because that is the half a command acts on: the argument had to reach it, and
-      not only the attribute the parameter is assigned to.
-    * a `Config` that was handed **nothing** is answered by the variable, exactly as before. This
-      is the control, and it sits beside the first case rather than being left to
-      `test_the_project_root_follows_kubementat_home`: a change that inverted the precedence
-      instead of fixing the ordering passes one of these two and fails the other.
-    """
+    """Both sides of one precedence, because the defect was an ordering and not a comparison."""
     handed = tmp_path / "root-the-command-was-handed"
     decoy = tmp_path / "root-the-environment-happens-to-name"
     monkeypatch.setenv(HOME_VAR, str(decoy))
@@ -110,12 +71,7 @@ def test_a_handed_root_answers_and_the_variable_answers_only_when_nothing_is_han
 
 
 def test_a_platform_config_directory_that_is_set_but_empty_names_the_variable(monkeypatch):
-    """Empty-but-set is `_directory_from_environment`'s rule verbatim, not a second rule.
-
-    An empty `KUBEMENTAT_PLATFORM_CONFIG_DIR` in a unit file or a CI `env:` block used to be
-    answered by the checkout. It is still answered by nothing: naming the variable is what an
-    unset one means, and setting it to nothing is a mistake about the name.
-    """
+    """Empty-but-set is `_directory_from_environment`'s rule verbatim, not a second rule."""
     monkeypatch.setenv(PLATFORM_CONFIG_VAR, "")
 
     with pytest.raises(RootDirectoryVariableIsEmptyError) as excinfo:
@@ -125,15 +81,7 @@ def test_a_platform_config_directory_that_is_set_but_empty_names_the_variable(mo
 
 
 def test_no_platform_config_root_is_named_and_the_refusal_names_both_dials(monkeypatch):
-    """A configuration root is named, never located.
-
-    Replaces the test that used to assert `Config(...).platform_config_dir ==
-    KUBEMENTAT_HOME / "platform_config"`, which was the deleted behaviour and not a rule worth
-    keeping. Nothing is unset-and-defaulted here: with neither `--config-dir` nor the variable,
-    there is no root, the sentence names both spellings that could have given one, and it names no
-    third place — no checkout, no `platform_config`, no guess. The empty case above is the same
-    rule from the other side: a variable set to nothing is not a root either.
-    """
+    """A configuration root is named, never located."""
     unset_path_variables(monkeypatch)
 
     with pytest.raises(ConfigurationRootNotNamedError) as excinfo:

@@ -1,25 +1,4 @@
-"""A shell inside a pod and a log stream: what they ask kubectl, and how they hand over.
-
-`ssh_into_helm_deployment.sh` and `tail_logs_for_helm_deployment.sh` were a pod lookup and one
-`kubectl` call each. That is all they did, and all of it is easy to get wrong in the direction
-that does not fail a test: a captured `kubectl exec --stdin --tty` is a session nobody sees,
-and a captured `kubectl logs -f` is a terminal that shows nothing until Ctrl+C. Both scripts
-streamed, so both replacements must stream, and that is the assertion this file is built
-around rather than an afterthought -- see `CiUtils` in `automations/ci.py`, which documents the same
-rule for the
-one interactive command that predates these two.
-
-The other half is what both scripts answered *badly*, because bash had no way to tell a
-namespace that does not exist apart from a deployment that is not installed:
-
-* the namespace is asked of the client first, so a typo says "namespace X does not exist"
-  before any pod lookup runs;
-* the pod is found by the release label every other kubementat command uses
-  (`app.kubernetes.io/instance`), not by a second selector invented near the exec call.
-
-And one thing neither script did that the CLI does: a `kubectl` that fails on the way in
-(a distroless image with no `/bin/bash`) is a one-line error, not a traceback.
-"""
+"""A shell inside a pod and a log stream: what they ask kubectl, and how they hand over."""
 
 from types import SimpleNamespace
 
@@ -41,17 +20,7 @@ SELECTOR = f"app.kubernetes.io/instance={DEPLOYMENT}"
 
 
 class RecordingShell:
-    """A `shell.run` that records what it was handed, so the streaming rule is assertable.
-
-    An interactive call that is captured is indistinguishable in its argv from one that is
-    not: the difference is `capture_output=True` on the child, and the symptom is a session
-    that never returns. So the flag is what this recorder keeps, next to the argv.
-
-    It answers nothing but the sessions themselves, because that is what is under test here;
-    the pod lookup that comes before them goes through the client, so the fixture's
-    `recorded_api` answers it. Everything else is a clean exit, which is what a session looks
-    like when the operator has left.
-    """
+    """A `shell.run` that records what it was handed, so the streaming rule is assertable."""
 
     def __init__(self, pod_names=(POD,)):
         self.pod_names = list(pod_names)
@@ -80,12 +49,7 @@ class RecordingShell:
 
 @pytest.fixture
 def cluster_with_a_web_pod(recorded_api, monkeypatch):
-    """A cluster that answers, and a shell recorder in place of every child process.
-
-    The namespace read is answered too, because the commands ask for it before they look for
-    a pod: a fixture that left it unanswered would be testing the exception the client raises
-    for an unconfigured method rather than the flow.
-    """
+    """A cluster that answers, and a shell recorder in place of every child process."""
     recorder = RecordingShell()
     recorded_api.answer("read_namespace", SimpleNamespace(metadata=SimpleNamespace(
         name=NAMESPACE)))
@@ -98,12 +62,7 @@ def cluster_with_a_web_pod(recorded_api, monkeypatch):
 
 
 def test_the_session_streams_and_is_never_captured(cluster_with_a_web_pod, recorded_api):
-    """The whole reason this command can hang a test: a captured shell is a hung shell.
-
-    `capture=False` is asserted here, not inferred from the argv. A session whose output is
-    collected reaches the operator only when the child exits, which is when they typed
-    `exit`, which is why an implementation that "worked" in a test is unusable in practice.
-    """
+    """The whole reason this command can hang a test: a captured shell is a hung shell."""
     KubernetesUtils(TARGET_DEV, api_client=recorded_api).open_deployment_shell(NAMESPACE, DEPLOYMENT)
 
     assert cluster_with_a_web_pod.call_for("exec")["capture"] is False
@@ -111,12 +70,7 @@ def test_the_session_streams_and_is_never_captured(cluster_with_a_web_pod, recor
 
 def test_a_namespace_that_was_never_created_says_so_before_a_pod_is_seeked(recorded_api,
                                                                            monkeypatch):
-    """Both commands, and neither of them starts by hunting for pods that cannot exist.
-
-    The bash scripts had one failure shape for both questions and it named neither: kubectl
-    printed an error about the namespace and exited. Here the read that can tell them apart
-    comes first, so the answer the operator acts on is the one they get.
-    """
+    """Both commands, and neither of them starts by hunting for pods that cannot exist."""
     recorder = RecordingShell()
     recorded_api.answer("read_namespace", ApiException(status=404, reason="not found"))
     monkeypatch.setattr(shell, "run", recorder.run)
@@ -133,11 +87,7 @@ def test_a_namespace_that_was_never_created_says_so_before_a_pod_is_seeked(recor
 # the CLI surface: what an operator sees when the cluster answers no
 # ---------------------------------------------------------------------------
 def test_the_cli_answers_a_missing_namespace_in_one_line(recorded_api):
-    """No traceback for a namespace that was never created, and no exit code that says 0.
-
-    `click.ClickException` is the shape: one line of output, exit 1. The alternative is what
-    an unhandled `ApiException` would have printed -- a stack, and a status code.
-    """
+    """No traceback for a namespace that was never created, and no exit code that says 0."""
     recorded_api.answer("read_namespace", ApiException(status=404, reason="not found"))
 
     for command in (kubernetes.deployment_logs, kubernetes.deployment_ssh):
@@ -148,12 +98,7 @@ def test_the_cli_answers_a_missing_namespace_in_one_line(recorded_api):
 
 
 def test_a_kubectl_that_fails_on_the_way_in_is_answered_as_an_error(fake_binaries, recorded_api):
-    """The distroless case: the pod is fine, the binary is not, and kubectl says so.
-
-    The scripts exited 1 with kubectl's text and no explanation. The command does the same
-    thing more legibly: the failure is reported as a failure, and the stderr that names
-    `/bin/bash` is in the message rather than two frames away from it.
-    """
+    """The distroless case: the pod is fine, the binary is not, and kubectl says so."""
     fake_binaries.respond("kubectl", "error: unable to dohand /bin/bash: no such file\n",
                           exit_code=1, subcommand="exec")
     recorded_api.answer("read_namespace", SimpleNamespace(metadata=SimpleNamespace(
@@ -171,13 +116,7 @@ def test_a_kubectl_that_fails_on_the_way_in_is_answered_as_an_error(fake_binarie
 
 def test_the_log_command_takes_a_container_and_a_tail_without_losing_either(fake_binaries,
                                                                            recorded_api):
-    """The arguments are the script's arguments, and one of them is an option.
-
-    Positional `environment namespace deployment [container]`, then `--tail` -- which the script
-    could only answer by editing itself. The environment is first because it says which cluster the
-    session is opened against and the script could not say it; the rest stay where the script had
-    them. Every value still travels as its own argv entry.
-    """
+    """The arguments are the script's arguments, and one of them is an option."""
     recorded_api.answer("list_namespaced_pod", lambda **kwargs: SimpleNamespace(
         items=[SimpleNamespace(metadata=SimpleNamespace(name=POD))]))
     fake_binaries.respond("kubectl", "", subcommand="logs")
@@ -201,10 +140,5 @@ def test_the_log_command_takes_a_container_and_a_tail_without_losing_either(fake
 
 @pytest.fixture(autouse=True)
 def _an_environment_the_command_can_resolve(resolvable_environment):
-    """A session that streams still resolves first, so this module declares a cluster.
-
-    `kubectl logs -f` and `kubectl exec` stay kubectl and still carry the target that
-    `Context` resolved, which is why a test of their error handling now needs an environment that
-    answers. It is not asked about: the failure under test is the pod or the namespace.
-    """
+    """A session that streams still resolves first, so this module declares a cluster."""
     return resolvable_environment

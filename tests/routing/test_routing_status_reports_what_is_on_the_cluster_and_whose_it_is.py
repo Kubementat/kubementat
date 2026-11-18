@@ -1,24 +1,4 @@
-"""What `kmt routing status` says, and why it is worth running before `--update`.
-
-The report is the product, and the reason is a decision the operator has to make:
-`kmt routing install` either installs or skips, and `--update` is what makes it overwrite
-something. The only honest way to answer those two questions is to read the cluster, so the report
-has to carry the facts `install` decides on -- namespace, chart+version, class, whose it is, and
-the action the command would take -- and say which of them it could not read.
-
-Two layers are checked here, and they check different things:
-
-* **The report** (`presence.report()`), answered by a fixture cluster through the reader seam
-  `discover` exposes. This is where the wording is pinned: a fact the guard acts on has to appear
-  in the text, not only on the object.
-* **The command** (`kmt routing status <environment>`), run against `tests/shims/` as the fake
-  cluster tools and a seeded `platform_config`. This is the layer that proves the CLI prints the
-  report rather than paraphrasing it, that it costs exactly the three reads, and that it writes
-  nothing -- the claim that makes it safe to run before `--update`, while a cluster is live.
-
-Both layers read a cluster that is not there: nothing in this file needs a machine, and the reads
-are answered either in-process (`Cluster`) or by the recorder shims (`fake_binaries`).
-"""
+"""What `kmt routing status` says, and why it is worth running before `--update`."""
 
 import json
 from types import SimpleNamespace
@@ -64,11 +44,7 @@ def helm_release(name, namespace=K3S_NAMESPACE, chart=K3S_CHART, status="deploye
 
 
 def ingress_class(name, namespace=K3S_NAMESPACE, with_service=True):
-    """An `IngressClass` on the controller string the chart's `_helpers.tpl` writes.
-
-    `spec.service` is the half that lets a cluster-scoped object be placed in a namespace, so it
-    belongs in the fixture: without it, the report would have to say the class is unattributable.
-    """
+    """An `IngressClass` on the controller string the chart's `_helpers.tpl` writes."""
     spec = {"controller": traefik_presence.TRAEFIK_CONTROLLER_NAME}
     if with_service:
         spec["service"] = {"name": "traefik", "namespace": namespace}
@@ -83,14 +59,7 @@ def pod(namespace=K3S_NAMESPACE, name="traefik-6f59c4d8c-j2xq8", image=TRAEFIK_I
 
 
 class Cluster:
-    """A cluster that answers the three reads, over the two channels they arrive on.
-
-    The release read is a command, so this answers it with a real `CommandResult`, `capture=True`
-    and `check=False`, the way discovery asks. The class and pod reads are API calls, so this
-    answers them with objects and raises what a cluster raises when it has no answer -- a refusal
-    that arrives as a return code on one channel and an `ApiException` on the other is the same
-    finding on both, and that is the claim this fixture exists to let a test make.
-    """
+    """A cluster that answers the three reads, over the two channels they arrive on."""
 
     target = TARGET_DEV
 
@@ -131,15 +100,7 @@ class Cluster:
 
 
 def read(cluster, namespace=CONFIGURED, environment=ENVIRONMENT):
-    """The report for one fixture cluster, with the namespace the configuration would name.
-
-    The namespace is handed in rather than resolved here on purpose: the file that proves it comes
-    from `Config.component_namespace` is
-    `test_the_namespace_that_decides_whose_a_release_is_comes_from_the_configuration`, and this
-    file's command layer proves it through a real `platform_config` and the shims. What is not
-    patched is the reading -- `reader` and `cluster` are the two seams `discover` advertises for
-    exactly this, one per channel.
-    """
+    """The report for one fixture cluster, with the namespace the configuration would name."""
     return traefik_presence.discover(
         Context(environment=environment, team=TEAM, config=None,
                 target=ClusterTarget(environment=environment, context=environment,
@@ -155,11 +116,7 @@ def read(cluster, namespace=CONFIGURED, environment=ENVIRONMENT):
 
 
 def test_the_report_says_a_cluster_that_answered_and_found_nothing_would_install_it():
-    """The `none` branch, and the two facts that make it a decision instead of a shrug.
-
-    `install` would create this, so the report says what it would create and where: the chart from
-    `constants`, and the namespace from the configuration. Everything else would be a guess.
-    """
+    """The `none` branch, and the two facts that make it a decision instead of a shrug."""
     report = read(Cluster()).report()
 
     assert "no traefik found by any of the three reads" in report
@@ -170,12 +127,7 @@ def test_the_report_says_a_cluster_that_answered_and_found_nothing_would_install
 
 
 def test_the_report_of_a_cluster_that_would_not_answer_is_none_said_as_a_guess():
-    """The same word, two meanings, and the difference is the whole point.
-
-    A cluster that refuses every read produces the same three classifications as a clean one.
-    Nothing may let the report present that as an answer, because `install` would act on it and
-    put a second controller beside one it could not see.
-    """
+    """The same word, two meanings, and the difference is the whole point."""
     presence = read(Cluster(refusing=("helm", "classes", "pods")))
 
     report = presence.report()
@@ -198,16 +150,7 @@ def test_the_report_of_a_cluster_that_would_not_answer_is_none_said_as_a_guess()
 
 
 def seeded_configuration(tmp_path, monkeypatch, namespace=CONFIGURED):
-    """A `platform_config` in a throwaway checkout, so the report's namespace is configuration.
-
-    The report names the key it read; a test that patched the namespace instead would be asserting
-    a string that no configuration ever contained. `KUBEMENTAT_HOME` is what makes that read the
-    throwaway and not this checkout.
-
-    It also declares a cluster, because `kmt routing status` resolves one before it reads and
-    an environment that declares nothing is refused. The address is written into the payload rather
-    than left to `$KUBECONFIG`, so the test names every file its answer came out of.
-    """
+    """A `platform_config` in a throwaway checkout, so the report's namespace is configuration."""
     root = tmp_path / "checkout"
     root.mkdir(parents=True, exist_ok=True)
     kubeconfig = write_kubeconfig(root / "kubeconfig", {"routing": CLUSTER_SERVER})
@@ -233,17 +176,7 @@ def seeded_configuration(tmp_path, monkeypatch, namespace=CONFIGURED):
 
 
 def answering(fake_binaries, recorded_api, helm=(), classes=(), pods=(), refusing=()):
-    """The three reads, answered by the two fakes the command layer has.
-
-    The release read is a command, so the shims answer it; the other two are client calls, so the
-    recorder does. Passing both is not ceremony: a test that answered only the shims would read a
-    command and two refusals, and the report it compared against would be describing a cluster that
-    is not the one declared here.
-
-    A refused read is written the way each channel refuses: the command exits non-zero and prints to
-    stderr, the API raises. Both have to survive into the report, which is the claim this fixture
-    pair exists to let a test make.
-    """
+    """The three reads, answered by the two fakes the command layer has."""
     fake_binaries.respond("helm", json.dumps(list(helm)), subcommand="list",
                           exit_code=1 if "helm" in refusing else 0)
     cluster_state(recorded_api, "ingressclass", items=list(classes),
@@ -261,35 +194,13 @@ def answering(fake_binaries, recorded_api, helm=(), classes=(), pods=(), refusin
 
 
 def status(environment=ENVIRONMENT):
-    """`kmt routing status`, invoked the way the operator or the harness invokes it.
-
-    The streams are kept apart because the resolution report goes on stderr before the body
-    runs, and what these tests compare is the command's own report — which is the thing discovery
-    produced, not the sentence saying which cluster it was read against.
-
-    No `--team`, because the command takes none: it reads the cluster and one namespace out of the
-    environment's own `static.json`, which gives it no team to name. A run of this command
-    used to pass a team it never used, and that is what made `TEAM: None` possible on the tunnels.
-    """
+    """`kmt routing status`, invoked the way the operator or the harness invokes it."""
     return CliRunner(mix_stderr=False).invoke(routing.status, [environment])
 
 
 def test_the_command_prints_the_report_once_and_asks_the_cluster_three_questions(
         tmp_path, monkeypatch, fake_binaries, recorded_api):
-    """The command layer of the same answer: the report, the reads, and no side effect.
-
-    Three things in one assertion, because they are the three ways this command could be wrong: it
-    could paraphrase discovery (two products giving two answers about one cluster), it could run
-    more than the three reads, or it could run one that writes. The report is computed first
-    through the same configuration and the same two fakes, and the call log is truncated between the
-    two so what follows belongs to the command alone. If the CLI ever re-summarises discovery the
-    equality fails; if it reaches for `helm upgrade` or `kubectl apply` the comparison fails, and
-    both failures say which.
-
-    The three questions land on two channels, so they are asserted on two channels: the release read
-    in the shim log, the class and pod reads in the recorder's. A test that read only the first
-    would be told a read-only command ran one command, which is true and beside the point.
-    """
+    """The command layer of the same answer: the report, the reads, and no side effect."""
     seeded_configuration(tmp_path, monkeypatch)
     answering(fake_binaries, recorded_api, helm=[helm_release("traefik", chart=K3S_CHART)],
               classes=[ingress_class("traefik")], pods=[pod()])

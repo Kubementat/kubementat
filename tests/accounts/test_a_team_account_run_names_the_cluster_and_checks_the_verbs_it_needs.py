@@ -1,23 +1,4 @@
-"""Before a team account is created, the cluster is named and its verbs are checked.
-
-`check_cluster_and_access` is the gate in front of every team-account write. The migration
-duplicated that gate rather than porting it: `scripts/user_management/user_management_helpers.sh`
-held one copy and `scripts/automation/tekton/create_team_account.sh` grew a second beside it,
-so the `--yes` escape hatch `390bd61` added to the first never reached the second and
-`cap:create-team-account` kept failing in a lane that had no terminal to answer a prompt it
-could not skip. There is one implementation now; this is what it owes:
-
-* the cluster is named first, so a person running this against the wrong cluster sees that
-  before anything is written;
-* a refusal is a cancellation, and it creates or deletes nothing;
-* `--yes` skips the question and changes nothing else -- same cluster, same verbs checked,
-  same writes;
-* no terminal and no `--yes` means nobody agreed, so nothing happens;
-* the verbs the flow will use are actually asked about. bash printed the answer of each
-  `kubectl auth can-i` and threw it away, which is the same as not checking: a "no" printed is
-  a "no" ignored, and the run then went on to fail mid-write on a permission it had just been
-  told it did not have.
-"""
+"""Before a team account is created, the cluster is named and its verbs are checked."""
 
 import base64
 import json
@@ -53,13 +34,7 @@ DENIED_VERBS = []
 
 
 def cluster_grants_everything(recorded_api):
-    """Say `yes` to each verb the flow checks, and `no` to whatever `cluster_refuses` denied.
-
-    Built from `CLUSTER_ACCESS_CHECKS` rather than spelled out here: a verb the flow starts to
-    need and nobody answered shows up as a denial instead of a passing test. This gate moved
-    off `kubectl auth can-i` and onto the `SelfSubjectAccessReview` kubectl's answer is produced
-    from, so the answer is registered once for every question the flow is allowed to ask.
-    """
+    """Say `yes` to each verb the flow checks, and `no` to whatever `cluster_refuses` denied."""
     DENIED_VERBS.clear()
     recorded_api.answer("create_self_subject_access_review",
                         lambda **kwargs: _review(allowed=not _is_denied(kwargs.get("body"))))
@@ -67,22 +42,13 @@ def cluster_grants_everything(recorded_api):
 
 
 def cluster_refuses(recorded_api, verb, resource):
-    """One verb the cluster will not grant.
-
-    The review carries the plural resource name, so this is the comparison that catches a
-    table left singular: a singular entry would never match the refusal, and the flow would sail
-    past a permission it was denied.
-    """
+    """One verb the cluster will not grant."""
     DENIED_VERBS.append((verb, resource))
     return recorded_api
 
 
 def _attributes(body):
-    """The review's `resource_attributes`, from either shape.
-
-    `recorded_operations.review_attributes` is the same reader the parity reducer uses, imported rather
-    than copied here so the two cannot disagree about where the verb lives.
-    """
+    """The review's `resource_attributes`, from either shape."""
     from recorded_operations import review_attributes
 
     found = review_attributes(body)
@@ -100,11 +66,7 @@ def _review(allowed):
 
 
 def cluster_holding_a_token_for_the_account(recorded_api):
-    """The token Secret, filled in -- the flow cannot print a kubeconfig without one.
-
-    Left unset, every create in this file would spend the token's whole wait failing and then
-    raise, which is a state no test here is about.
-    """
+    """The token Secret, filled in -- the flow cannot print a kubeconfig without one."""
     def answer(namespace=None, **kwargs):
         return type("SecretList", (), {"items": [type("Secret", (), {
             "type": "kubernetes.io/service-account-token",
@@ -119,12 +81,7 @@ def cluster_holding_a_token_for_the_account(recorded_api):
 
 @pytest.fixture
 def asked_cluster(fixture_repo, dry_run_env, fake_binaries, recorded_api):
-    """A cluster that says yes to everything, with both call logs emptied.
-
-    A shim with no response file prints an empty string, which to this gate is a *denial*, so
-    this fixture is what lets the rest of the file mean "the cluster granted that" rather than
-    "the test forgot to answer".
-    """
+    """A cluster that says yes to everything, with both call logs emptied."""
     cluster_grants_everything(recorded_api)
     fake_binaries.respond("kubectl", json.dumps({"clusters": [{"name": "under-test", "cluster": {
         "server": "https://the-cluster-under-test.example.test:6443",
@@ -137,23 +94,14 @@ def asked_cluster(fixture_repo, dry_run_env, fake_binaries, recorded_api):
 
 @pytest.fixture
 def on_a_cluster_that_grants_everything(asked_cluster, monkeypatch):
-    """The same cluster, with a terminal that answers `y` when it is asked.
-
-    `input` is patched rather than the terminal so that a test which never reaches the prompt
-    and one which does both get a definite answer, not whatever stdin happens to be.
-    """
+    """The same cluster, with a terminal that answers `y` when it is asked."""
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
     return Context.build(asked_cluster.environment, asked_cluster.team)
 
 
 def can_i_asked(recorded_api):
-    """The verbs and resources the flow asked the cluster about, in order.
-
-    The conversion of the preflight, asserted at the only layer it now lives on: the
-    `SelfSubjectAccessReview` the API server answers, where a singular resource name is a wrong
-    answer and not merely a different spelling.
-    """
+    """The verbs and resources the flow asked the cluster about, in order."""
     asked = []
     for method, kwargs in recorded_api.calls:
         if method != "create_self_subject_access_review":
@@ -170,18 +118,7 @@ def client_writes(recorded_api):
 
 def test_the_cluster_is_named_before_anything_on_it_is_changed(
         on_a_cluster_that_grants_everything, asked_cluster, fake_binaries, recorded_api, caplog):
-    """The first thing the operator sees is the cluster, not a permission error.
-
-    bash printed the context too, but the check that came after it was decorative, so the
-    ordering was the only part of the check that actually worked. This keeps both halves: the
-    cluster named is the one the client is bound to, and it is named before the first write.
-
-    Which is why the `Context` here is resolved and not built inert by
-    `configuration_only_context`: the cluster this line names is now the *target*, so a fixture
-    whose target is inert names nothing (`cluster_fixture` says the same thing about itself). The
-    address that answers is the fixture's own — `CLUSTER_KUBE_CONTEXT` in its `static.json`, read
-    through `Config` — and no kubeconfig on the machine running pytest is consulted.
-    """
+    """The first thing the operator sees is the cluster, not a permission error."""
     with caplog.at_level(logging.INFO):
         create_team_account(on_a_cluster_that_grants_everything, "ops-account", consent=team_account_consent(yes=False))
 
@@ -196,11 +133,7 @@ def test_the_cluster_is_named_before_anything_on_it_is_changed(
 
 def test_a_denied_verb_stops_the_run_before_the_first_write_and_names_it(
         asked_cluster, fake_binaries, recorded_api, monkeypatch):
-    """`no` from the cluster is a decision, not a note in the log.
-
-    Without this the run creates the namespace and the account and then fails on the binding,
-    leaving a half-configured account on a cluster and an operator guessing what was written.
-    """
+    """`no` from the cluster is a decision, not a note in the log."""
     cluster_refuses(recorded_api, "create", "rolebindings")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
@@ -215,11 +148,7 @@ def test_a_denied_verb_stops_the_run_before_the_first_write_and_names_it(
 
 def test_answering_no_at_the_prompt_creates_nothing(
         asked_cluster, fake_binaries, recorded_api, monkeypatch):
-    """The other refusal is the operator's, and it is final.
-
-    The bash's `set -e` turned a `n` into an abort with no message. A cancellation that says
-    "Cancelled" and writes nothing is the same outcome with the explanation attached.
-    """
+    """The other refusal is the operator's, and it is final."""
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "n")
     ctx = Context.build(asked_cluster.environment, asked_cluster.team)
@@ -234,11 +163,7 @@ def test_answering_no_at_the_prompt_creates_nothing(
 
 def test_an_answer_that_is_neither_yes_nor_no_is_asked_again(
         asked_cluster, fake_binaries, recorded_api, monkeypatch):
-    """The prompt loops until it gets a real answer, so typing `maybe` is not a no.
-
-    A single read of stdin with a fallthrough is how a script answers EOF, and what it leaves
-    behind is a run that carried on because nobody had said no.
-    """
+    """The prompt loops until it gets a real answer, so typing `maybe` is not a no."""
     answers = iter(["maybe", "nope", "y"])
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
@@ -251,13 +176,7 @@ def test_an_answer_that_is_neither_yes_nor_no_is_asked_again(
 
 def test_yes_skips_the_question_and_changes_nothing_else(
         asked_cluster, fake_binaries, recorded_api, monkeypatch):
-    """The claim behind `--yes`: it answers the question, it does not change the work.
-
-    The flow runs twice against the same cluster, once with a terminal that says `y` and once
-    with `--yes`, and every operation on the cluster is compared. An answer a lane gives that
-    produces different work than an answer a human gives is the difference between testing the
-    product and testing a mode.
-    """
+    """The claim behind `--yes`: it answers the question, it does not change the work."""
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
     by_hand = Context.build(asked_cluster.environment, asked_cluster.team)
@@ -280,11 +199,7 @@ def test_yes_skips_the_question_and_changes_nothing_else(
 
 def test_no_terminal_and_no_yes_is_refused_before_the_cluster_is_asked_anything(
         asked_cluster, fake_binaries, recorded_api, monkeypatch):
-    """The lane's whole problem, in one line of the contract.
-
-    Silence is not consent. Where the bash got EOF and carried on under `set -e`, this names
-    the flag that is missing and does nothing else -- no `can-i`, no namespace, no account.
-    """
+    """The lane's whole problem, in one line of the contract."""
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
     ctx = Context.build(asked_cluster.environment, asked_cluster.team)
 
@@ -298,11 +213,7 @@ def test_no_terminal_and_no_yes_is_refused_before_the_cluster_is_asked_anything(
 
 def test_the_checks_happen_before_any_write_whichever_command_is_standing_there(
         on_a_cluster_that_grants_everything, asked_cluster, fake_binaries, recorded_api):
-    """The gate is the same gate for the read-only variant.
-
-    A second copy of this function is exactly what let one variant walk past it, so the
-    read-only command is measured here rather than trusted to reuse it.
-    """
+    """The gate is the same gate for the read-only variant."""
     create_team_account_read_only(on_a_cluster_that_grants_everything, "ops-account", consent=team_account_consent(yes=False))
 
     assert can_i_asked(recorded_api) == list(user_management.CLUSTER_ACCESS_CHECKS)

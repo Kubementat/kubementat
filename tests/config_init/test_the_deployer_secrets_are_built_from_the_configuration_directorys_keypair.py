@@ -1,26 +1,4 @@
-"""The two deployer Secrets are built from the configuration directory's keypair, or not at all.
-
-The other half of the deployer keypair rule: `initialize` was the only writer of the two
-`GIT_DEPLOYER_*_BASE64`
-answers `setup_pipelines` used to read out of `env_static_encrypted`, and it is deleted. The
-Secrets are now built from the keypair `kmt config init` wrote into the configuration root, and a
-root without one is refused by name — `DeployerKeyMissingError`, whose message names `kmt config
-init` — before the run touches a cluster, instead of dying inside the Kubernetes client's
-serializer with `raw_data={"ssh-privatekey": None}` (census L, Q2 item 8).
-
-The encoding claims are about *layers*, because the consumers on the other side decode a fixed
-number of times:
-
-* `git-deployer-ssh-key` (`kubernetes.io/ssh-auth`): the `git-clone-with-ssh-auth` task writes the
-  environment variable straight to `$HOME/.ssh/deploy_key`, so the Secret's `data` is the key
-  file's bytes under exactly one base64 layer — the transport encoding kubelet removes on the way
-  into the container.
-* `git-deployer-gpg-key` (`Opaque`): the two `git-clone*.yml` Tasks pipe the variable through
-  exactly one `base64 -d` before `gpg --import` (`git-clone.yml`, `git-clone-with-ssh-auth.yml`),
-  so what the variable carries is the key file's bytes base64-encoded once. It goes in as
-  `stringData` — the API server applies the transport encoding — and a second encoding on
-  kubementat's side is the bug no assertion here would forgive twice.
-"""
+"""The two deployer Secrets are built from the configuration directory's keypair, or not at all."""
 
 import os
 import shutil
@@ -48,11 +26,7 @@ SSH_PRIVATE_BYTES = (b"-----BEGIN RSA PRIVATE KEY-----\n"
 
 @pytest.fixture(scope="module")
 def gpg_armor():
-    """One real key's two armored halves, made once per module in a keyring that dies with it.
-
-    Real armor and not a marker string, because `require_deployer_keypair` reads the deployer's
-    identity back out of the key itself — a file that does not import is a file the guard refuses.
-    """
+    """One real key's two armored halves, made once per module in a keyring that dies with it."""
     home = Path(tempfile.mkdtemp(prefix="kubementat-secret-test-keyring-"))
     os.chmod(home, 0o700)
     try:
@@ -80,11 +54,7 @@ def configuration_root(tmp_path, gpg_armor):
 
 
 class SecretRecordingCluster:
-    """Records everything `setup_pipelines` asks of the cluster, with the Secrets in full.
-
-    Every method is on the record, so "refused before it touched a cluster" is an assertion about
-    an empty log and not about a method the fake happened not to have.
-    """
+    """Records everything `setup_pipelines` asks of the cluster, with the Secrets in full."""
 
     def __init__(self):
         self.calls = []
@@ -142,12 +112,7 @@ class PipelineConfig:
 
 
 def a_setup_pipelines(root, cluster, monkeypatch):
-    """The real `setup_pipelines` against the recording cluster, without the constructor.
-
-    What is under test is what the function asks of the configuration root and what it sends the
-    cluster, so the two halves that are neither — the role bindings and the closing print — are
-    stubbed and everything else runs. The client is replaced on the module it is built from.
-    """
+    """The real `setup_pipelines` against the recording cluster, without the constructor."""
     context = SimpleNamespace(environment=ENVIRONMENT, team=TEAM, config=PipelineConfig(root))
     monkeypatch.setattr(pipelines_slice, "KubernetesUtils", lambda ctx: cluster)
     monkeypatch.setattr(pipelines_slice, "_setup_pipelines_setup_role_bindings", lambda *args: None)
@@ -163,13 +128,7 @@ def a_secret_named(cluster, name):
 
 
 def test_a_root_without_a_keypair_refuses_by_name_before_touching_a_cluster(tmp_path, monkeypatch):
-    """The guard census L found missing: named, early, and with nothing asked of the cluster.
-
-    The message owes the operator the path it looked in, the four names the deployer is made of,
-    and the command that creates them — and the cluster log owes the claim "before": an empty
-    record, including the read preflight, because the keypair is a fact about the tree and nothing
-    about the cluster can excuse its absence.
-    """
+    """The guard census L found missing: named, early, and with nothing asked of the cluster."""
     root = tmp_path / "platform_config"
     root.mkdir()
     cluster = SecretRecordingCluster()

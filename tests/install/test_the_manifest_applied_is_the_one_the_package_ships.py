@@ -1,30 +1,4 @@
-"""The manifest kubementat applies is the one the package ships.
-
-Four claims, and they are the ones the whole ticket stands on:
-
-**(a) the paths resolve inside the package.** `helmfile_paths()` answers with the shipped
-`helmfile.yaml.gotmpl` and its own directory. Nothing in the answer comes from
-`platform_config/`, because the operator's checkout is not part of the question "which manifest is
-this applying".
-
-**(b) a stale copy changes nothing.** Plan row 13's bug was a cluster whose hand-edited copy of the
-manifest declared releases the installed product did not, with both files read for different
-questions. The fix is not a check that catches the divergence and explains it; it is a surface that
-cannot construct it. So the test that matters here writes the copy by hand and asserts the run is
-indistinguishable from a run without it -- the apply is addressed at the packaged file, and the
-release index that decides what is installable reads that same file.
-
-**(c) the values files resolve from the packaged working directory.** helmfile takes a release's
-`values:` path relative to the directory of the manifest it was handed, so the directory this
-function returns and the files the manifest names have to be the same tree.
-
-**(d) the configuration is named by three exports.** A packaged manifest cannot reach the operator's
-tree by path, so `helmfile_apply` exports the root, the environment and the team when one is named.
-These are the only new mechanism on the surface, and the claim is about what the *child* sees.
-
-The rest of the file is the guard for (b) at the level of a single release, because that is the shape
-the bug had: a label on a release nobody ships.
-"""
+"""The manifest kubementat applies is the one the package ships."""
 
 import json
 from pathlib import Path
@@ -55,12 +29,8 @@ releases:
 
 
 class RecordingShell:
-    """`kubementat.infrastructure.shell` reduced to what a helmfile run needs: argv, and the environment it saw.
-
-    The environment is read at call time, because that is the only way to tell "exported before the
-    child started" apart from "exported at some point during it" -- helmfile's templating looks at
-    the environment of the process, and a test that reads `os.environ` afterwards is reading the
-    test's own interpreter.
+    """`kubementat.infrastructure.shell` reduced to what a helmfile run needs: argv, and the
+    environment it saw.
     """
 
     def __init__(self):
@@ -80,11 +50,7 @@ class RecordingShell:
 
 
 def seeded_config(tmp_path, monkeypatch, team=TEAM):
-    """A `Config` over a scratch root, with the two environment files helmfile reads.
-
-    `KUBEMENTAT_PLATFORM_CONFIG_DIR` is what names the root, so the root under test is the
-    root the command resolves and not this checkout's.
-    """
+    """A `Config` over a scratch root, with the two environment files helmfile reads."""
     root = tmp_path / "platform_config"
     environment = root / ENVIRONMENT
     environment.mkdir(parents=True, exist_ok=True)
@@ -102,12 +68,7 @@ def seeded_config(tmp_path, monkeypatch, team=TEAM):
 
 
 def apply_helmfile(utils, monkeypatch, recorder=None):
-    """One `helmfile apply`, with the recorder installed as `kubementat.infrastructure.shell`.
-
-    Every cluster read the apply makes on its way to the apply goes through the same recorder and is
-    answered as a cluster holding no releases, which is what this scratch root is: nothing on it has
-    been deployed, and the check that refuses a namespace rename asks exactly that question.
-    """
+    """One `helmfile apply`, with the recorder installed as `kubementat.infrastructure.shell`."""
     recorder = recorder or RecordingShell()
     monkeypatch.setattr(helm_utils, "shell", recorder)
     utils.helmfile_apply(environment_name=ENVIRONMENT,
@@ -124,11 +85,7 @@ def helmfile_call(recorder):
 
 
 def test_the_manifest_and_the_working_directory_are_the_packaged_ones(tmp_path, monkeypatch):
-    """`helmfile_paths()` answers with the packaged manifest and its own directory.
-
-    Both halves have to be inside the asset root, and neither is allowed to be under the
-    configuration root -- that is the sentence the ticket exists to make true.
-    """
+    """`helmfile_paths()` answers with the packaged manifest and its own directory."""
     config, root = seeded_config(tmp_path, monkeypatch)
     working_directory, manifest = HelmUtils(
         configuration_only_context(ENVIRONMENT, TEAM, config)).helmfile_paths()
@@ -142,12 +99,7 @@ def test_the_manifest_and_the_working_directory_are_the_packaged_ones(tmp_path, 
 
 
 def test_the_answer_never_changes_when_the_configuration_root_changes(tmp_path, monkeypatch):
-    """Two different configuration roots, one manifest.
-
-    `helmfile_paths()` takes nothing from the root, so a second environment, a second root, or the
-    same root twice all answer with the same file. This is the read-only half of (b): the root is
-    what decides which *values* apply, and nothing else.
-    """
+    """Two different configuration roots, one manifest."""
     first, _ = seeded_config(tmp_path / "one", monkeypatch)
     second, _ = seeded_config(tmp_path / "two", monkeypatch)
 
@@ -162,12 +114,7 @@ def test_the_answer_never_changes_when_the_configuration_root_changes(tmp_path, 
 
 
 def test_a_stale_copy_left_by_hand_changes_nothing(tmp_path, monkeypatch):
-    """The plan-row-13 bug, written by hand into the configuration and read by nothing.
-
-    Both readers of the manifest are asserted: the argv `helmfile_apply` builds, and the release
-    index `kmt component install` decides with. A copy that fools one and not the other would still
-    be the divergence this ticket was written to end, so a single reader's assertion is not enough.
-    """
+    """A manifest path written into the configuration is not read; the packaged manifest is applied."""
     config, root = seeded_config(tmp_path, monkeypatch)
     utils = HelmUtils(configuration_only_context(ENVIRONMENT, TEAM, config))
 
@@ -196,12 +143,7 @@ def test_a_stale_copy_left_by_hand_changes_nothing(tmp_path, monkeypatch):
 
 
 def test_the_exports_come_before_helmfile_runs(tmp_path, monkeypatch):
-    """Order is the fact: a variable exported after the spawn is a variable helmfile never read.
-
-    The same reason the namespaces are exported the way they are -- helmfile evaluates its templates
-    with the environment of the process it starts -- so this is asserted at the moment of the call
-    and not afterwards.
-    """
+    """Order is the fact: a variable exported after the spawn is a variable helmfile never read."""
     config, root = seeded_config(tmp_path, monkeypatch)
     utils = HelmUtils(configuration_only_context(ENVIRONMENT, TEAM, config))
     seen = {}

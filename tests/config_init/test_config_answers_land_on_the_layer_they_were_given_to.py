@@ -1,48 +1,4 @@
-"""`kmt config set` / `config unset` put one answer on one layer, and nothing else.
-
-Census H's measured fact is what these verbs are first at: **nothing in `src/` used to edit one key
-inside a `static.json`.** Every writer before them built a whole document — `initialize`'s four
-writers `json.load` the *template* and emit the file, and `init_configuration`/`add_environment`/
-`add_team` plan whole bytes per path. A read-modify-write verb has the opposite duty, and it is the
-one these tests are about: **the document belongs to the operator, and every key this verb was not
-told about keeps its value and its position.**
-
-Six claims, and the fifth is the one that breaks a "simpler" implementation.
-
-**One answer, one layer, read back through `Config`.** `set` writes the key into one file of one
-layer, and the layer that declares it answers it. Where the same key is declared twice it is answered
-*by the team*, which is precedence and not presence: `CATEGORY_LAYERS['team_static']` is team-then-
-environment (`core/config/config.py:103-111`), so an environment answer sitting below a team answer is
-invisible,
-not redundant. `unset` is the other half of that — clearing the team's answer is what lets the
-environment's answer appear, which is the contract stated here and the reason the verb exists.
-
-**The pair rule is honest, not decorative.** One layer is two files, and the encrypted one is ordered
-first, so a `set` writes the file the operator chose (`--encrypted` says which) while an `unset` clears
-**both**: clearing only the plain file is a no-op on the read side, and the operator would watch the
-value they just removed come back.
-
-**Idempotence here is a different rule from `init`'s, and the two must not be confused.** `init`
-refuses an existing *file* that differs, because an edited answer and a half-written file are not
-tellable apart. `set` overwrites an *answer* that differs — that is what the verb is for — and reports
-`SKIPPED` when the new document is byte-identical, because setting a value that is already there is not
-an event.
-
-**A missing layer is a refusal.** `kmt config init`, `add-environment` and `add-team` make layers;
-`set` and `unset` write into them, and a team file that "just isn't there" would be answered out of the
-environment. Same anti-bootstrap claim, same nothing-is-written.
-
-**One refusal about keys, and it is the cheap true one.** The two cluster keys on `--team` are refused
-for one reason — one directory is exactly one cluster, and what resolves it reads the environment's
-file and no other (`EnvironmentRegistry.resolve` and `_environment_declaration`, both in
-`core/identity/registry.py`). No table of "keys a team reader consults"
-appears anywhere, because `config show` already answers that by tagging each key with the layer and the
-file it came from, and this verb would be guessing about every call site in `src/` to hold one.
-
-Everything is proved through `Config` where `Config` can read it, through the tree where the claim is
-about the tree, and through `Config`'s path properties where the claim is about *where* — a string typed
-into this file would tell a moved property from a moved directory badly.
-"""
+"""`kmt config set` / `config unset` put one answer on one layer, and nothing else."""
 
 import json
 from pathlib import Path
@@ -102,21 +58,13 @@ def initialized_root(tmp_path) -> Path:
 
 
 def layered(root: Path, team=None) -> Config:
-    """The `Config` a reader would use for that tree — the same construction the library makes.
-
-    `preload=True`, because every assertion here is about what a *loaded* configuration answers, and
-    the point of reading through `Config` is that the layer order is the one in `core/config/config.py` and
-not the
-    one this file believes in.
-    """
+    """The `Config` a reader would use for that tree — the same construction the library makes."""
     return Config(ENVIRONMENT, team, platform_config_dir=root, preload_configs=True)
 
 
 def properties(root: Path, team=None) -> Config:
-    """The same `Config`, unloaded — for its paths, which is what a step's line must be checked against.
-
-    The paths are `Config`'s and are resolved by `Config`, so comparing a printed line against one of
-    them says "this is where a reader looks" and not "this is the string in the message".
+    """The same `Config`, unloaded — for its paths, which is what a step's line must be checked
+    against.
     """
     return Config(ENVIRONMENT, team, platform_config_dir=root, preload_configs=False)
 
@@ -140,18 +88,13 @@ def stamp(root: Path) -> dict[Path, int]:
 
 def document(root: Path, relative: Path) -> dict:
     """A layer file read as JSON. For the two claims that are about the file itself: order, and keys
-    that belong to someone else. Every other assertion goes through `Config`."""
+    that belong to someone else. Every other assertion goes through `Config`.
+    """
     return json.loads((root / relative).read_text(encoding="utf-8"))
 
 
 def run_verb(*arguments):
-    """`kmt config <verb> …`, invoked through the group so the verb's own name is exercised.
-
-    A bug inside the command is re-raised rather than folded into an exit code, and a refusal is not:
-    the library raises a `ClickException` to say "I will not write", and standing up as `SystemExit` is
-    how that answer reaches a terminal. The distinction is the whole test for the refusals, so a raised
-    `ValueError` cannot hide behind `exit_code == 1`.
-    """
+    """`kmt config <verb> …`, invoked through the group so the verb's own name is exercised."""
     # The root is the caller's second argument and it travels as `--config-dir`, which is the
     # only spelling the surface gives a root, so what is checked here is the command somebody can
     # actually type and not a private argv this file invented.
@@ -174,12 +117,7 @@ def reported(result) -> str:
 
 
 def refused(*arguments) -> str:
-    """Run a verb expecting a refusal, and return the sentence it said.
-
-    A refusal that wrote stdout is caught here rather than asserted around: refusing is the answer that
-    comes with `nothing is written`, and a verb that prints steps and then errors is the half-written
-    tree this module keeps promising not to make.
-    """
+    """Run a verb expecting a refusal, and return the sentence it said."""
     result = run_verb(*arguments)
     assert result.exit_code != 0, reported(result)
     assert not printed(result), f"the refusal printed steps on stdout: {reported(result)}"
@@ -206,12 +144,6 @@ def added_team(root: Path) -> None:
 
 def test_an_encrypted_answer_lands_once_and_is_cleared_from_both_files_of_the_layer(tmp_path):
     """Test 4: `set --encrypted` writes one file, `unset` clears the pair, and the layer above answers.
-
-    This is the falsification the brief asked for: an implementation that clears only the plain file
-    passes every other test here and fails this one, because the encrypted file is ordered first and
-    keeps answering what the plain file was just cleared of. The last two lines are that claim read
-    from the read side — after the unset, neither encrypted file answers, and the environment's plain
-    answer is what a reader gets.
     """
     root = initialized_root(tmp_path)
     run_verb("set", root, ENVIRONMENT, "GRAFANA_ADMIN_PASSWORD=env-secret")
@@ -252,14 +184,7 @@ def test_an_encrypted_answer_lands_once_and_is_cleared_from_both_files_of_the_la
 
 
 def test_an_answer_that_changed_is_overwritten_and_one_that_did_not_change_is_skipped(tmp_path):
-    """Test 5b: `set`'s rule over an *answer*, next to `init`'s rule over a *file*.
-
-    The two rules look alike and are not: overwriting a different value is this verb's purpose, while
-    the same value written again is not an event and says `skipped`. And `init` on that very tree —
-    where the file is no longer what it would write — still refuses, because that rule is about not
-    guessing whose bytes they are. A comment in either function that conflated them would make one of
-    these four lines impossible.
-    """
+    """Test 5b: `set`'s rule over an *answer*, next to `init`'s rule over a *file*."""
     root = initialized_root(tmp_path)
     run_verb("set", root, ENVIRONMENT, f"{KEY}={ENVIRONMENT_ANSWER}")
 
@@ -285,12 +210,7 @@ def test_an_answer_that_changed_is_overwritten_and_one_that_did_not_change_is_sk
 
 
 def test_a_missing_layer_is_refused_and_names_the_verb_that_makes_it(tmp_path):
-    """Test 6a: a layer is made by `init` / `add-environment` / `add-team`, and not by an answer.
-
-    Both verbs, both layers, and the sentence says which verb to go and run. A team layer that is only
-    half there is refused too: writing its plain file would put an answer at a layer whose encrypted
-    half the reader opens first, which is the "the team file just isn't there" bug told to the tree.
-    """
+    """Test 6a: a layer is made by `init` / `add-environment` / `add-team`, and not by an answer."""
     root = initialized_root(tmp_path)
     before = files(root)
 
@@ -320,11 +240,7 @@ def test_a_missing_layer_is_refused_and_names_the_verb_that_makes_it(tmp_path):
 
 
 def test_a_null_value_is_refused_and_names_config_unset(tmp_path):
-    """Test 6b: `null` is the absence of an answer, and only one verb should create it.
-
-    `KEY=null` is a legal thing to type and is refused on the way past the parser, which is why the
-    sentence points at the verb that removes answers instead of storing one.
-    """
+    """Test 6b: `null` is the absence of an answer, and only one verb should create it."""
     root = initialized_root(tmp_path)
     before = files(root)
 
@@ -337,12 +253,7 @@ def test_a_null_value_is_refused_and_names_config_unset(tmp_path):
 
 
 def test_an_unset_of_a_key_no_layer_declares_is_refused_and_lists_what_it_searched(tmp_path):
-    """Test 6c: a no-op is not a success, so the refusal says which files it opened.
-
-    A silent `unset` would leave the operator believing a value was gone. Listing the files is the
-    honest version of the same fact: the search set is exactly what this verb could have written, so a
-    key that lives one layer down is told where to look instead of being called a typo.
-    """
+    """Test 6c: a no-op is not a success, so the refusal says which files it opened."""
     root = initialized_root(tmp_path)
     before = files(root)
     config = properties(root)
@@ -374,22 +285,7 @@ def test_an_unset_of_a_key_no_layer_declares_is_refused_and_lists_what_it_search
 
 
 def test_the_cluster_keys_on_the_team_layer_are_refused_and_the_environment_layer_answers_for_them(tmp_path):
-    """Test 7: one directory is exactly one cluster, so a team cannot answer for it.
-
-    Both keys, both verbs that could land one. The reason is stated as one sentence,
-    because the alternative — a table of keys a team reader is believed to consult — is a guess about
-    every call site in `src/`, and `config show` is the verb that answers that question, key by key.
-    Then the
-    same key on the layer that *does* address a cluster: accepted, and the cluster sentence goes away,
-    which is what proves the refusal is about the layer and not about the key.
-
-    The refusal used to be asserted two ways: that it states the rule, and that it prints the rule's
-    document number. The second of those was deleted when the refusal started stating the rule in prose
-    instead of citing where it was written down, and it was the only assertion in the suite that demanded
-    an identifier in an operator's error message — the one thing a reader has no way to look up. The
-    sentence the refusal has to carry is still asserted, and still asserted against the whole message,
-    so the removal is one claim fewer and not a weaker claim.
-    """
+    """Test 7: one directory is exactly one cluster, so a team cannot answer for it."""
     root = initialized_root(tmp_path)
     added_team(root)
     before = files(root)
@@ -419,14 +315,7 @@ def test_the_cluster_keys_on_the_team_layer_are_refused_and_the_environment_laye
 
 
 def test_the_library_returns_the_pair_in_the_order_a_reader_resolves_it(tmp_path):
-    """The step names and their order, straight from `set_answer` / `unset_answer`.
-
-    The CLI prints what the library returns, so the pair's order is a library claim: encrypted first,
-    which is the order the layer is resolved in (`TEAM_PAIR`, `ENVIRONMENT_PAIR`). Asserted on the
-    functions rather than on a subprocess because this is the only place the *names* can be compared to
-    the names `init_configuration` uses for the same files — a printed line shows one word, and these
-    show that the word is the same verb's word for the same file.
-    """
+    """The step names and their order, straight from `set_answer` / `unset_answer`."""
     root = initialized_root(tmp_path)
 
     steps = set_answer(root, ENVIRONMENT, KEY, ENVIRONMENT_ANSWER)

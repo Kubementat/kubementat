@@ -1,20 +1,4 @@
-"""Tests for the command-execution rule: argv everywhere, one module doing the executing.
-
-`kubementat.infrastructure.shell.run` is the only way kubementat starts a program
-(`test_shell_run.py` is its contract). This file proves two things about everywhere else.
-
-Two kinds of test live here on purpose:
-
-**A rule**, asserted against the syntax tree of everything in `src/` — no `shell=True`,
-no `os.chdir`, no direct `subprocess` outside `kubementat/shell.py`. AST rather than grep
-because the prose in this repo's own comments mentions `shell=True` at least as often as
-the code did.
-
-**The call sites**, run against fake `helmfile`/`kubectl`/`.sh` binaries that record the
-argv they were given, the directory they were run from, and what arrived on stdin. These
-are what prove the conversions did not change a command line, which is the one thing a
-mechanical argv rewrite can get wrong.
-"""
+"""Tests for the command-execution rule: argv everywhere, one module doing the executing."""
 
 import os
 import shlex
@@ -154,9 +138,7 @@ def apply_helmfile(tmp_path, monkeypatch, shims, **kwargs):
             return None
 
         # ...and the routing class helmfile's traefik release names. This scratch tree declares
-        # nothing, which is what the real `Config` answers for a tree that names nothing -- L0, out of
-        # `constants.py` -- so the export writes that and these tests stay about the argv they were
-        # written for. Leaving the accessor out is a hole in the fake and not a fact about the apply.
+        # nothing, so the export writes kubementat's own default and these tests stay about the argv.
         def component_ingress_class(self, component):
             return constants.static_answer(component_config_key(component, "INGRESS_CLASS"))
 
@@ -182,12 +164,7 @@ def apply_helmfile(tmp_path, monkeypatch, shims, **kwargs):
 # ---------------------------------------------------------------------------
 @pytest.fixture
 def kubernetes_utils(monkeypatch):
-    """A `KubernetesUtils` with no cluster, and one that costs nothing to build.
-
-    There is no kube-config load to neutralise any more: the constructor binds `TARGET_DEV`
-    and stops. The two ways this fixture's tests reach a cluster are a shimmed `kubectl` argv and a
-    monkeypatched pod lookup, so no client is ever built and none is needed.
-    """
+    """A `KubernetesUtils` with no cluster, and one that costs nothing to build."""
     return KubernetesUtils(TARGET_DEV)
 
 
@@ -218,11 +195,7 @@ def test_open_tunnel_reports_a_failure_as_exit_1_not_as_a_traceback(kubernetes_u
 
 
 def test_pod_lookup_reports_an_uninstalled_component_readably(recorded_api):
-    """No items is a state the operator can act on, and it is still said that way.
-
-    It used to be a non-zero exit carrying empty stdout; the client answers with an empty list,
-    which is a different mechanism and must not be a different message.
-    """
+    """No items is a state the operator can act on, and it is still said that way."""
     recorded_api.answer("list_namespaced_pod", lambda **kwargs: SimpleNamespace(items=[]))
     utils = KubernetesUtils(TARGET_DEV, api_client=recorded_api)
 
@@ -237,15 +210,6 @@ def test_pod_lookup_reports_an_uninstalled_component_readably(recorded_api):
 # ---------------------------------------------------------------------------
 def test_cluster_permission_probes_ask_the_server_and_answer_themselves(recorded_api, monkeypatch):
     """The six probes were converted to client reads, and they answer with less machinery, not more.
-
-    `kubectl auth can-i create namespace` needed a stdin to answer its own yes/no prompt, which is
-    why `input="yes"` was there. A `SelfSubjectAccessReview` is a request with a boolean in the
-    reply and nothing else to answer, so no child process is started at all -- which is what this
-    asserts: a run that still went out through a shell would have left calls in the log.
-
-    The resources are asserted as the API spells them. The singular forms kubectl accepted were a
-    convenience of its discovery mapping, and a review that carried them would answer "no" on
-    every cluster for a permission the service account does have.
     """
     utils = KubernetesUtils(TARGET_DEV, api_client=recorded_api)
     # The probe builds its client from the name the slice imported, which is the seam there is no
@@ -265,7 +229,8 @@ def test_cluster_permission_probes_ask_the_server_and_answer_themselves(recorded
 
 
 def test_a_denied_verb_stops_the_run_and_names_the_verbs_it_denied(recorded_api, monkeypatch):
-    """A "no" that is printed and thrown away is the same as not checking, which is what bash did."""
+    """A "no" that is printed and thrown away is the same as not checking, which is what bash did.
+    """
     def answering(**kwargs):
         resource = kwargs["body"].spec.resource_attributes.resource
         if resource == "clusterroles":

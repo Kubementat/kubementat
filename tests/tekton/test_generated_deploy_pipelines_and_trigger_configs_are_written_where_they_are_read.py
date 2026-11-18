@@ -1,23 +1,4 @@
-"""Generated deploy pipelines and trigger configs land where the commands that read them look.
-
-Two generators live in `infrastructure/tekton/generation.py`: `generate_deploy_pipeline()` turns a
-team's template into `deploy-pipeline-<app>.yml`, and `generate_trigger_configs()` turns the shipped
-trigger templates into the four manifests an app needs. Both are `kmt` commands, and where they write
-is the decision that makes the next command work — `setup-pipelines` applies
-`Config.tekton_team_pipeline_dir` and `setup_triggers` applies `Config.tekton_team_trigger_dir`, so a
-generated file that is reviewed and committed is a file the team's cluster gets. Templates and output
-are never read from the same place, which is also why `apply_resources` skips any `templates/`
-directory.
-
-Three refusals are as much the contract as the writes, because each closes a way to produce a file
-that looks right and does nothing: a placeholder the configuration does not supply, an app name that
-would escape the team's directory, and a pre-move `<team>/triggers/` directory whose contents would be
-applied nowhere.
-
-What the round trip costs is said out loud rather than argued about: a template is not a text
-substitution any more, so the review guidance a template leaves in comments does not reach the
-generated file — which is why the command prints that itself.
-"""
+"""Generated deploy pipelines and trigger configs land where the commands that read them look."""
 
 
 import shutil
@@ -28,7 +9,8 @@ import pytest
 import yaml
 from asset_paths import relocate_asset_root, tekton_ci_path
 from cluster_fixture import configuration_only_context
-from conftest import REPO_ROOT, run_kmt
+from asset_paths import REPO_ROOT
+from conftest import run_kmt
 
 from kubementat.infrastructure.tekton import generation
 
@@ -60,17 +42,7 @@ TEAM_PIPELINE_DIR = "platform_config/dev/fixture/tekton/pipelines"
 
 @pytest.fixture
 def checkout(fixture_repo, dry_run_env, monkeypatch):
-    """The fixture checkout, with the generator templates added back.
-
-    `fixture_repo` seeds scripts and configuration and no `tekton_ci` templates, and the generators
-    read templates from `Config.tekton_pipeline_template_dir`. Those are tracked product assets, so
-    the fixture uses the real ones; a template invented for the test would be a template nobody
-    generates from.
-
-    `BASE_DOMAIN` is set here rather than in `conftest.ENVIRONMENT_STATIC` because it is the trigger
-    generator's own read, and a fixture that always had it could never show what happens when it
-    is missing.
-    """
+    """The fixture checkout, with the generator templates added back."""
     # The bytes come from where the installed kubementat carries them, and they are laid
     # down in the fixture checkout so the relocated resolver below can point the generator at them.
     # Without the relocation the generator would read the real package and every one of this file's
@@ -85,17 +57,13 @@ def checkout(fixture_repo, dry_run_env, monkeypatch):
 
 
 def generation_config(checkout):
-    """The configuration the two generators read, with no `TektonUtils` in front of it.
-
-    The generation group moved out of the class, so the parity harness calls the module the way a
-    caller does now: the parameter the conversion gave those functions is `Config`, which is what
-    the old methods read from the instance, and nothing else about the call changed.
-    """
+    """The configuration the two generators read, with no `TektonUtils` in front of it."""
     return configuration_only_context(checkout.environment, checkout.team).config
 
 
 def documents_of(path):
-    """The documents of one manifest file, empty ones dropped the way `apply_resources` drops them."""
+    """The documents of one manifest file, empty ones dropped the way `apply_resources` drops them.
+    """
     return [document for document in yaml.safe_load_all(Path(path).read_text()) if document is not None]
 
 
@@ -115,12 +83,7 @@ def generated_deploy_pipeline(checkout, **overrides):
 
 
 def test_the_generated_api_version_is_the_configured_one_and_not_the_templates(checkout):
-    """Stamped from `Config.TEKTON_API_VERSION`, so one version bump moves every generated file.
-
-    Both sides read `v1` today, so the visible half of the rule is the second clause: a template
-    whose `tekton.dev` apiVersion has gone stale is generated at the version kubementat speaks,
-    rather than at the one somebody edited into a file that is never applied.
-    """
+    """Stamped from `Config.TEKTON_API_VERSION`, so one version bump moves every generated file."""
     template = checkout.root / "tekton_ci/pipelines/templates/template-deploy-pipeline.yml"
     template.write_text(template.read_text().replace("apiVersion: tekton.dev/v1",
                                                      "apiVersion: tekton.dev/v1beta1"))
@@ -131,12 +94,7 @@ def test_the_generated_api_version_is_the_configured_one_and_not_the_templates(c
 
 
 def test_generating_the_same_pipeline_twice_writes_the_same_bytes(checkout):
-    """Idempotence, measured as bytes rather than as "nothing crashed".
-
-    The second run is the one that follows a review, so it has to be a function of the same inputs
-    and not of whatever the template looked like when the first run happened. Regeneration is what
-    makes a committed deploy pipeline safe to touch again.
-    """
+    """Idempotence, measured as bytes rather than as "nothing crashed"."""
     first = generated_deploy_pipeline(checkout)
     expected = first.read_bytes()
 
@@ -158,13 +116,7 @@ def test_a_deploy_pipeline_template_that_is_not_there_says_where_it_reached_for(
 
 def test_a_placeholder_the_config_does_not_supply_fails_naming_the_key_and_writes_nothing(
         checkout, tmp_path):
-    """The rule that makes this a generator rather than a `sed` with a personality.
-
-    A generated file that still carries a placeholder token is applied and then fails somewhere the
-    manifest does not point at, and `null` is worse: it is four characters that parse. So nothing is
-    written, and the message names the key and the file it is read from, so the fix
-    is a line in `static.json` rather than a hunt through a manifest.
-    """
+    """The rule that makes this a generator rather than a `sed` with a personality."""
     template = tmp_path / "template-with-a-config-placeholder.yml"
     template.write_text(
         "apiVersion: tekton.dev/v1\n"
@@ -189,9 +141,6 @@ def test_a_placeholder_the_config_does_not_supply_fails_naming_the_key_and_write
 
 def test_a_missing_git_coordinate_is_refused_by_name_and_writes_nothing(checkout):
     """Those five coordinates belong to the app rather than to the platform, so nothing looks them up.
-
-    The answer names every one that is missing at once, because an operator who forgot two should not
-    have to discover them one run at a time.
     """
     from kubementat.errors import GenerationArgumentNotSuppliedError
 
@@ -223,10 +172,6 @@ def test_an_app_name_that_would_escape_the_directory_is_refused(checkout):
 
 def test_generated_trigger_files_are_the_same_bytes_when_generated_twice(checkout):
     """The same rule as the deploy pipeline, asserted separately: four files, twice, byte for byte.
-
-    Overwriting is what makes this the interesting case. The script checked each target file and
-    stopped on the first that already existed, having written the ones before it — so the second run
-    of a four-file generator left three new files and one old one in a directory that looked fine.
     """
     written = generated_trigger_files(checkout)
     expected = {path: path.read_bytes() for path in written}
@@ -239,12 +184,6 @@ def test_generated_trigger_files_are_the_same_bytes_when_generated_twice(checkou
 
 def test_a_trigger_type_with_no_templates_names_the_resource_and_the_layer_it_came_from(checkout):
     """A trigger type that exists nowhere has to be answered about the installation, not the checkout.
-
-    The message used to read "this checkout has `github`, `gitlab`", which is a sentence a wheel
-    cannot make true: there is no checkout, so the diagnosis points at something the operator does
-    not have and the directory listing reads as a fact about a tree that is not there. Two things
-    replace it — the resource that was looked for, and the layer it would have come from — and the
-    listing stays, because "which trigger types exist" is the question that actually gets asked.
     """
     from kubementat.errors import GenerationTemplateNotFoundError
 
@@ -265,12 +204,7 @@ def test_a_trigger_type_with_no_templates_names_the_resource_and_the_layer_it_ca
 
 
 def test_a_trigger_set_generated_for_gitlab_does_not_read_the_github_templates(checkout):
-    """The trigger type is the directory that is read, and only that directory.
-
-    A wrong-type read here would be a github interceptor inside a gitlab team's webhook, and no
-    listing of the output directory would ever show it: the files are named for the app, not for the
-    provider whose templates produced them.
-    """
+    """The trigger type is the directory that is read, and only that directory."""
     for host in ("gitlab", "github"):
         for name in ("template-event-listener-ingress.yml", "template-event-listener.yml",
                      "template-trigger-binding.yml", "template-trigger-template.yml"):
@@ -290,11 +224,7 @@ def test_a_trigger_set_generated_for_gitlab_does_not_read_the_github_templates(c
 
 
 def test_the_command_generates_the_trigger_set_into_the_team_directory(checkout, dry_run_env):
-    """The whole reason the library call exists: it is reachable as a command.
-
-    `kmt --help` listing the name is not the same claim as a command that runs, so the CLI is run
-    here the way an operator runs it, against the same fixture checkout.
-    """
+    """The whole reason the library call exists: it is reachable as a command."""
     result = run_kmt(["tekton", "generate-triggers", "dev", "fixture", APP,
                       "--pipeline-name", PIPELINE, "--trigger-type", "github"], dry_run_env)
 
@@ -309,9 +239,6 @@ def test_the_command_generates_the_trigger_set_into_the_team_directory(checkout,
 
 def test_the_command_refuses_a_deploy_pipeline_with_no_git_coordinates(checkout, dry_run_env):
     """A missing input is the commonest way this command fails, so the CLI's answer is the library's.
-
-    Exit code and all: a bare traceback is not an answer an operator can act on, and `kmt` is what
-    they read.
     """
     result = run_kmt(["tekton", "generate-deploy-pipeline", "dev", "fixture", APP], dry_run_env)
 
@@ -319,18 +246,11 @@ def test_the_command_refuses_a_deploy_pipeline_with_no_git_coordinates(checkout,
     assert "--git-url" in result.stderr + result.stdout
 
 
-# --- content parity against the deleted scripts ----------------------------------------------
+# --- generated content ----------------------------------------------------------------------
 
 
 def test_a_pre_move_trigger_directory_is_refused_and_nothing_is_generated_beside_it(checkout):
-    """The tree an older kubementat wrote is refused by name, because only the new path is read.
-
-    Generated triggers moved from `<team>/triggers/` to `<team>/tekton/triggers/`. A tree laid down
-    before the move can hold both, and a directory that is read by nothing applies its manifests
-    nowhere, silently — so the generator stops, names both paths, and writes nothing into the new one.
-    Moving the operator's manifests is a decision, not a side effect of generating, so nothing here
-    deletes or renames anything either.
-    """
+    """The tree an older kubementat wrote is refused by name, because only the new path is read."""
     from kubementat.errors import ObsoleteTriggerDirectoryError
 
     obsolete = checkout.root / OBSOLETE_TRIGGER_DIR / APP
@@ -349,13 +269,7 @@ def test_a_pre_move_trigger_directory_is_refused_and_nothing_is_generated_beside
 
 
 def test_generated_configuration_is_invisible_to_nothing_because_it_is_written_elsewhere():
-    """The output moved out of the checkout, so no ignore rule is what keeps it reviewable.
-
-    Generated trigger manifests land under the configuration directory's team layer, and generated deploy
-    pipelines under the environment's `tekton/pipelines`, so neither is a path in this tree that
-    `git status` could be told to skip. The assertion is that this checkout ignores nothing that could
-    hold generated configuration — a rule that hid such a file would be the one thing that could.
-    """
+    """The output moved out of the checkout, so no ignore rule is what keeps it reviewable."""
     for path in ("tekton_ci/triggers", "tekton_ci/triggers/fixture/x.yml",
                  "tekton_ci/pipeline-runs", "tekton_ci/pipelines"):
         ignored = subprocess.run(["git", "check-ignore", "-q", path], cwd=str(REPO_ROOT))

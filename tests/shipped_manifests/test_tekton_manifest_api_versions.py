@@ -1,28 +1,4 @@
-"""The manifest inventory that says the `v1beta1` -> `v1` conversion is *finished*, not applied.
-
-Pipelines 1.0 removed the beta API and the field shapes that came with it: a `PipelineRun` hides
-its service account under `taskRunTemplate` and its deadline under `timeouts`, and a Task step
-says `computeResources` where it used to say `resources`. The dangerous part is not the renames —
-it is that the same word `resources` also names a Kubernetes `PersistentVolumeClaim` block
-(`volumeClaimTemplate.spec.resources`) and an `EventListener` block, and a transform that renames
-by name alone takes the storage requests with it. A PVC whose `requests` went missing does not fail
-to apply; it applies, and the pipeline waits forever on a volume that was never claimed. That is
-the failure this file is written to make impossible.
-
-So, over every manifest in `tekton_ci/` and `examples/tekton_ci/` — read today from two places,
-because the product's own half of `tekton_ci/` is package data while its pipeline runs are
-not: nothing in the `tekton.dev` group is still on the beta API, every `PipelineRun` puts its two
-moved fields where v1 reads them,
-every `volumeClaimTemplate` still asks for storage, every `EventListener` still has the `resources`
-block that is its own, no step container says `resources`, and no Task declares `spec.resources`.
-
-The exceptions are part of the contract too, so they are asserted rather than tolerated: Triggers
-stays on `triggers.tekton.dev/v1beta1` (the pinned controller is 0.33, and rewriting that string
-would emit a manifest no controller here serves), and no manifest may name a `PipelineResource`,
-which v1 does not serve at all. The counts below are the population of the beta tree, measured off
-`git show HEAD`; they are here so that a block which was renamed *away* rather than renamed shows up
-as a count change and not as a passing assertion.
-"""
+"""The manifest inventory that says the `v1beta1` -> `v1` conversion is *finished*, not applied."""
 
 
 import yaml
@@ -96,12 +72,7 @@ def documents():
 
 
 def nodes(data, path=()):
-    """Every mapping in a document, tagged with the path that leads to it.
-
-    Recursing instead of walking only the top of a document is not decoration: a TriggerTemplate
-    carries its `PipelineRun` inside `spec.resourcetemplates`, and a field that moved only there
-    is exactly the kind of thing a top-level-only check misses.
-    """
+    """Every mapping in a document, tagged with the path that leads to it."""
     if isinstance(data, dict):
         yield path, data
         for key, value in data.items():
@@ -132,13 +103,7 @@ def all_nodes():
 
 
 def is_step_container(container):
-    """True when `container` is the path of a step, a sidecar, or a stepTemplate mapping.
-
-    The shape is what decides, not the surrounding kind or the word `resources`: a mapping at
-    the top of a `spec` fails this test, which is the whole reason
-    `volumeClaimTemplate.spec.resources` and `EventListener.spec.resources` survive a rename
-    that targets steps.
-    """
+    """True when `container` is the path of a step, a sidecar, or a stepTemplate mapping."""
     if not container:
         return False
     if container[-1] == "stepTemplate":
@@ -158,12 +123,7 @@ def pipeline_runs():
 
 
 def test_every_resource_in_the_pipelines_group_speaks_the_version_the_code_writes():
-    """No `tekton.dev` manifest may still say `v1beta1`, wherever the document sits.
-
-    The group is what decides this, not the file: `triggers.tekton.dev/v1beta1` contains the
-    beta string and is not part of the move, which is why a plain substring grep over the
-    tree says nothing either way.
-    """
+    """No `tekton.dev` manifest may still say `v1beta1`, wherever the document sits."""
     offenders = sorted(
         label(path, node_path)
         for path, node_path, node in all_nodes()
@@ -175,11 +135,8 @@ def test_every_resource_in_the_pipelines_group_speaks_the_version_the_code_write
 
 
 def test_the_triggers_templates_keep_the_version_the_pinned_triggers_controller_serves():
-    """The pinned Triggers controller serves `v1beta1`, so its API version is an exception that has to stay.
-
-    The same `v1beta1` string here looks like the thing the migration removed. Getting it
-    "helpfully" rewritten produces a manifest no controller in this tree serves, so the
-    exception is asserted instead of assumed.
+    """The pinned Triggers controller serves `v1beta1`, so its API version is an exception that has to
+    stay.
     """
     offenders = sorted(
         label(path, node_path)
@@ -199,11 +156,7 @@ def test_the_triggers_templates_keep_the_version_the_pinned_triggers_controller_
 
 
 def test_a_v1_tree_declares_no_pipeline_resource():
-    """`PipelineResource` is not served by v1, so the tree that claims v1 must not name one.
-
-    This is the shape a name-for-name transform leaves behind: the apiVersion can be bumped and
-    the kind cannot be applied, so the file looks migrated and fails at the cluster.
-    """
+    """`PipelineResource` is not served by v1, so the tree that claims v1 must not name one."""
     offenders = sorted(
         label(path, node_path)
         for path, node_path, node in all_nodes() if node.get("kind") == "PipelineResource"
@@ -213,11 +166,7 @@ def test_a_v1_tree_declares_no_pipeline_resource():
 
 
 def test_no_step_argument_still_reads_the_removed_resource_field():
-    """`$(resources.inputs.<name>.path)` is a string in a step argument, not a key.
-
-    Renaming keys cannot reach it, which is why the hand-written conversion of an example task
-    shows up here rather than in a diff of key names.
-    """
+    """`$(resources.inputs.<name>.path)` is a string in a step argument, not a key."""
     offenders = sorted(str(path.relative_to(REPOSITORY_ROOT))
                        for path in manifest_files() if "$(resources." in path.read_text())
 
@@ -225,12 +174,7 @@ def test_no_step_argument_still_reads_the_removed_resource_field():
 
 
 def test_every_pipeline_run_hides_its_service_account_and_deadline_where_v1_reads_them():
-    """`spec.serviceAccountName` and `spec.timeout` are not dropped by a v1 controller.
-
-    They are ignored, which is worse than an error: a pipeline that used to run with a
-    namespace-crossing service account now runs with the default one, and the deadline reverts
-    to the controller default. Both belong nested.
-    """
+    """`spec.serviceAccountName` and `spec.timeout` are not dropped by a v1 controller."""
     offenders = []
     for path, node_path, node in pipeline_runs():
         spec = node.get("spec") or {}
@@ -242,11 +186,7 @@ def test_every_pipeline_run_hides_its_service_account_and_deadline_where_v1_read
 
 
 def test_every_pipeline_run_that_needs_a_service_account_can_reach_its_task_runs_with_it():
-    """The nesting is what carries, so the account has to resolve one level down.
-
-    The count is the other half: a `PipelineRun` whose `taskRunTemplate` is empty applied fine
-    at the beta version, so an empty block is not caught by the shape check above.
-    """
+    """The nesting is what carries, so the account has to resolve one level down."""
     runs = pipeline_runs()
     with_account = [
         (path, node_path) for path, node_path, node in runs
@@ -271,12 +211,7 @@ def test_every_pipeline_run_that_needs_a_service_account_can_reach_its_task_runs
 
 
 def test_a_volume_claim_template_still_asks_for_the_storage_it_wants():
-    """The test that says the transformer did not eat a PVC.
-
-    `volumeClaimTemplate.spec.resources.requests` is a Kubernetes field that v1 says nothing
-    about. Renamed away, the claim is created with no storage request; it still applies, still
-    schedules nothing, and never says why.
-    """
+    """The test that says the transformer did not eat a PVC."""
     templates = [(path, node_path, node.get("volumeClaimTemplate"))
                  for path, node_path, node in all_nodes() if "volumeClaimTemplate" in node]
 
@@ -300,11 +235,7 @@ def test_a_volume_claim_template_still_asks_for_the_storage_it_wants():
 
 
 def test_an_event_listener_keeps_the_resources_block_that_is_its_own():
-    """An `EventListener` is a Triggers object. Its `resources` is a KubernetesResource block.
-
-    The container limits under it and its pod-level `serviceAccountName` are equally not the
-    Pipelines fields the migration moved, so all three stay exactly where they are.
-    """
+    """An `EventListener` is a Triggers object. Its `resources` is a KubernetesResource block."""
     listeners = [(path, node_path, node)
                  for path, node_path, node in all_nodes() if node.get("kind") == "EventListener"]
     assert listeners, "the trigger generator templates ship an EventListener"
@@ -325,12 +256,7 @@ def test_an_event_listener_keeps_the_resources_block_that_is_its_own():
 
 
 def test_a_task_step_states_its_limits_under_compute_resources():
-    """The rename the migration asked for, plus the count that proves it landed everywhere.
-
-    A step that still says `resources` is accepted by v1 — but its limits are ignored, and a
-    step that quietly needs more memory than the node offers is scheduled anyway and
-    OOMKilled, which reads like a bug in the step and is a bug in the manifest.
-    """
+    """The rename the migration asked for, plus the count that proves it landed everywhere."""
     renamed_back = []
     with_limits = 0
     for path, node_path, node in all_nodes():
@@ -349,11 +275,7 @@ def test_a_task_step_states_its_limits_under_compute_resources():
 
 
 def test_a_task_does_not_declare_input_or_output_resources_at_spec_level():
-    """`spec.resources` on a Task is gone, not renamed — the one field with no v1 successor.
-
-    A workspace replaces it. This is the case the plan flagged as needing a human, because the
-    replacement is a different shape and not a string change.
-    """
+    """`spec.resources` on a Task is gone, not renamed — the one field with no v1 successor."""
     offenders = sorted(
         label(path, node_path + ("spec",))
         for path, node_path, node in all_nodes()

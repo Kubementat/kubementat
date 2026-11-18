@@ -1,41 +1,4 @@
-"""`kmt config set --from-file PATH` answers a whole document, or refuses and writes nothing.
-
-This verb's surface is `config set KEY=VALUE` **and** `--from-file`,
-so the flag is part of the contract and not an extra a lane asked for. What a document buys is the
-case an argv cannot serve: a value too long to paste, or a credential the operator does not want in
-the process table, where every `ps`, every shell history line and every captured command would have
-it. The file is what makes the answer stop being a command line, and the path is the only thing that
-travels (the rule about credentials is not only about environment variables).
-
-Five claims, and the third is the one an implementation would get wrong.
-
-**Everything in the document is answered, and the file's order is the document's order.** One
-`set_answer` per key and one step line per answered key, because that is what a step means. The order
-is proved on the file and not on stdout, because a document's keys all land in one file and two
-answers therefore print two identical lines; what carries the order is the document the operator's
-reader will consult. This is a real dependency and not a lucky accident, so it is asserted and not
-assumed.
-
-**The document changes no layer and chooses no file.** `--team` and `--encrypted` are the same flags
-they are for one answer on the command line, and a document that could re-decide either would be a
-second source of truth about which layer answers. That is the rule stated from the operator's
-side: the tree holds the layers, and the verb is told which one to write.
-
-**A document that is wrong is refused whole, before the first byte.** A `null` anywhere, a non-object,
-unreadable JSON, an empty object — each refusal names the path, and each is followed by `nothing was
-written`: the tree's bytes and mtimes are the assert, not a sentence about intent. This is what makes
-`--from-file` more than a shell loop over `set`: a loop would answer three keys and then fail on the
-fourth, leaving a tree in a state nobody meant. A refusal that lands after three writes is the defect
-this verb exists to make impossible.
-
-**One answer, one document, never both.** An argv answer, a `--generate`, or a document: exactly one,
-refused as a command-line fault with the tree untouched. Two spellings of the same answer in one run
-would be two orders of writes and one line describing both.
-
-**Nothing generated, nothing printed.** The step lines name files. A document can hold credentials,
-and echoing what was read back from it would put the answer in a terminal buffer that outlives the
-file — `config show` is the verb that prints answers, and this one is not it.
-"""
+"""`kmt config set --from-file PATH` answers a whole document, or refuses and writes nothing."""
 
 import json
 import time
@@ -58,7 +21,8 @@ SECOND_KEY = "AUTOMATION_GIT_URL"
 
 
 def initialized_root(tmp_path) -> Path:
-    """A tree `kmt config init` laid down for one environment — the precondition `set` insists on."""
+    """A tree `kmt config init` laid down for one environment — the precondition `set` insists on.
+    """
     from kubementat.config.init import init_configuration
     root = tmp_path / "platform_config"
     root.mkdir(parents=True, exist_ok=True)
@@ -68,18 +32,12 @@ def initialized_root(tmp_path) -> Path:
 
 def layered(root: Path, team=None) -> Config:
     """The `Config` a reader would use for that tree, loaded, because every assert is about the answer.
-
-    A document that landed in the wrong file, or in the wrong layer, still parses; the only reader
-    that can tell a write that works from a write that is read is the one production code uses.
     """
     return Config(ENVIRONMENT, team, platform_config_dir=root, preload_configs=True)
 
 
 def stamp(root: Path) -> dict:
     """Every file's mtime, so a refusal can be proved to have touched nothing rather than asserted.
-
-    Bytes alone cannot tell a rewrite of identical content from a no-op; the clock can, which is the
-    difference between "the tree is unchanged" and "the tree was opened and closed unchanged".
     """
     return {path: path.stat().st_mtime_ns for path in root.rglob("*") if path.is_file()}
 
@@ -89,23 +47,14 @@ def document_of(root: Path, relative: str) -> dict:
 
 
 def answers_file(tmp_path, document) -> Path:
-    """The document the operator's `--from-file` points at, on disk where it was told to be.
-
-    Written by the test and not by the verb: whose hand writes the *document* is not what the claim is
-    about, and the list it is drawn from is about configuration, which is the tree.
-    """
+    """The document the operator's `--from-file` points at, on disk where it was told to be."""
     path = tmp_path / "answers.json"
     path.write_text(json.dumps(document), encoding="utf-8")
     return path
 
 
 def run_verb(*arguments):
-    """`kmt config <verb> …`, through the group so the verb's own name is exercised.
-
-    Same contract as the sibling file: a bug inside the command re-raises, and a `ClickException`
-    refusal is allowed to stand as an exit code, because "I will not write" is a real answer and not
-    a crash.
-    """
+    """`kmt config <verb> …`, through the group so the verb's own name is exercised."""
     # The root is the caller's second argument and it travels as `--config-dir`, which is the
     # only spelling the surface gives a root, so what is checked here is the command somebody can
     # actually type and not a private argv this file invented.
@@ -123,7 +72,8 @@ def printed(result) -> list[str]:
 
 
 def refused(*arguments) -> str:
-    """Run expecting a refusal, and return what it said — refusing with a step on stdout fails here."""
+    """Run expecting a refusal, and return what it said — refusing with a step on stdout fails here.
+    """
     result = run_verb(*arguments)
     assert result.exit_code != 0, f"{result.stdout}{result.stderr}"
     assert not printed(result), f"the refusal printed steps on stdout: {result.stdout}"
@@ -131,15 +81,7 @@ def refused(*arguments) -> str:
 
 
 def test_the_document_answers_in_the_order_it_was_written_in(tmp_path):
-    """The file's key order follows the document's, which is what makes an order claim testable.
-
-    The step lines cannot carry this: every key of a document lands in the same file, so two answers
-    print two identical lines and stdout has nothing to sort on. What is observable is the file, and
-    `set_answer` adds the keys it was given to the document it read, in the order it was given them,
-    so a document whose keys sort the wrong way proves the rule a `set()` or a sorted dict would
-    break. The two keys below are deliberately spelled so that alphabetical order is the reverse of
-    the document's, and they are both new to the file so nothing already in it is shuffled.
-    """
+    """The file's key order follows the document's, which is what makes an order claim testable."""
     root = initialized_root(tmp_path)
     answers = answers_file(tmp_path, {SECOND_KEY: "https://git.example.invalid/k.git",
                                       FIRST_KEY: "ci"})
@@ -152,13 +94,7 @@ def test_the_document_answers_in_the_order_it_was_written_in(tmp_path):
 
 
 def test_a_key_the_document_answers_the_same_way_it_already_reads_is_not_reported_as_a_change(tmp_path):
-    """`SKIPPED`, not `CREATED`: an answer that is already exactly there is not an event.
-
-    The rule `set` states for one answer and repeats for a document, because a document is a way of
-    spelling answers and not a different verb. Asserting the file was not opened-and-closed is what
-    makes the word mean something: a step line that says `SKIPPED` over a file whose bytes changed
-    would be a lie with the right exit code.
-    """
+    """`SKIPPED`, not `CREATED`: an answer that is already exactly there is not an event."""
     root = initialized_root(tmp_path)
     answers_file(tmp_path, {FIRST_KEY: "ci"})
     run_verb("set", root, ENVIRONMENT, "--from-file", tmp_path / "answers.json")
@@ -172,14 +108,7 @@ def test_a_key_the_document_answers_the_same_way_it_already_reads_is_not_reporte
 
 
 def test_a_document_answering_a_key_with_null_is_refused_and_writes_nothing(tmp_path):
-    """The refusal that matters most, because it is the one three quarters right on purpose.
-
-    `null` is the absence of an answer, and `unset` is the verb that removes one — the same rule the
-    command line's `KEY=null` answer states. What `--from-file` adds is the order of the refusal: a
-    document that answers two keys and answers the second with `null` must not have written the first,
-    because a tree that received a partial document is a tree no operator meant to have. That is the
-    whole reason this verb is not a loop a caller writes, so the assert is the bytes and not a sentence.
-    """
+    """The refusal that matters most, because it is the one three quarters right on purpose."""
     root = initialized_root(tmp_path)
     run_verb("set", root, ENVIRONMENT, f"{FIRST_KEY}=before")
     answers = answers_file(tmp_path, {FIRST_KEY: "after", "GRAFANA_SERVICE_ACCOUNT_TOKEN": None})
@@ -194,13 +123,7 @@ def test_a_document_answering_a_key_with_null_is_refused_and_writes_nothing(tmp_
 
 
 def test_an_unreadable_or_unstructured_document_is_refused_by_name(tmp_path):
-    """Three shapes of nothing-to-write, each named: the path is the answer's half.
-
-    A mistyped path is the operator's problem and not the tree's, JSON that is not JSON is a document
-    that does not exist, and JSON that is a list or a scalar is a shape this verb does not have — it
-    writes `key: value` at the top level of one file, so anything else is a claim about layers nobody
-    named. All three come back with the path in the sentence and the tree untouched.
-    """
+    """Three shapes of nothing-to-write, each named: the path is the answer's half."""
     root = initialized_root(tmp_path)
     before = stamp(root)
 
@@ -221,12 +144,7 @@ def test_an_unreadable_or_unstructured_document_is_refused_by_name(tmp_path):
 
 
 def test_an_empty_document_says_it_answered_nothing_rather_than_applying_the_file(tmp_path):
-    """An empty object is a document that wrote nothing, and silence here would read as success.
-
-    A lane that hands over `{}` has not told this verb anything, and a run that exits 0 over that tree
-    is a run whose log says it applied a file that applied no keys. The sentence says what the tree
-    already says instead, which is the difference between a no-op and a lie.
-    """
+    """An empty object is a document that wrote nothing, and silence here would read as success."""
     root = initialized_root(tmp_path)
     answers = answers_file(tmp_path, {})
     before = stamp(root)
@@ -238,12 +156,7 @@ def test_an_empty_document_says_it_answered_nothing_rather_than_applying_the_fil
 
 
 def test_the_document_and_an_answer_on_the_command_line_are_refused_together(tmp_path):
-    """One answer per run, spelled three ways and settled once: argv, `--generate`, or document.
-
-    The refusal is a command-line fault and so comes with `UsageError` and nothing on disk, exactly as
-    `KEY=VALUE` beside `--generate` already refuses. Two spellings in one run would be two orders of
-    writes with one line describing both, and the tree cannot tell the reader which half it got.
-    """
+    """One answer per run, spelled three ways and settled once: argv, `--generate`, or document."""
     root = initialized_root(tmp_path)
     answers = answers_file(tmp_path, {FIRST_KEY: "ci"})
     before = stamp(root)

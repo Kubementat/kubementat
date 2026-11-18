@@ -1,18 +1,9 @@
-"""Fixtures every parity and CLI-surface test builds on.
+"""What every test stands on: no machine state, no cluster, and recorders in place of both.
 
-Three things are needed to compare a bash script against the Python path that replaced it,
-and none of them is a cluster:
-
-* **`fake_binaries`** — `tests/shims/` on `PATH`, with the calls it makes appended to a log.
-  Both halves of the comparison run against it, so neither side can tell it is not real.
-* **`fixture_repo`** — a throwaway checkout in `tmp_path`: the scripts, a `tekton_ci/`, and
-  the smallest `platform_config/dev/fixture/` that answers every read. The real repo's
-  configuration is never opened, and a test that writes into it cannot leak.
-* **`dry_run_env`** — `KUBEMENTAT_HOME` pointed at that checkout, so a `kmt` started by the
-  test reads the fixture and not this working tree.
-
-The fixture values are the ones the tests compare *both* sides against, so they are written
-down here once and are the same strings a `jq` read of `static.json` would return.
+Two seams replace the cluster. `recorded_api` stands in for the generated Kubernetes client and
+logs each call with the cluster it was addressed to; `fake_binaries` puts recorder programs named
+`helm`, `helmfile`, `kubectl`, `git-crypt` and `tkn` first on `PATH`. `fixture_repo` writes a small
+configuration tree that answers every read, and `dry_run_env` points a `kmt` run at it.
 """
 
 import base64
@@ -32,42 +23,28 @@ import pytest
 from bootstrap_tools import deployer_secret_key, root, tools  # noqa: F401
 from kubernetes import client
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
 SHIM_SOURCE_DIR = Path(__file__).resolve().parent / "shims"
 
-# Where `run_kmt` points `PYTHONPATH` so a subprocess gets the fake API transport.
-# The directory holding `sitecustomize.py`, and the tests directory it imports `apiserver_fake`
-# from. Both go on `PYTHONPATH` for a `kmt` run as a subprocess.
+# `run_kmt` puts both on `PYTHONPATH`, so a `kmt` subprocess talks to `apiserver_fake` instead of a cluster.
 SITE_DIR = Path(__file__).resolve().parent / "_site"
 TESTS_DIR = Path(__file__).resolve().parent
 
-# The team the fixture configuration is written for. A name this specific so a test that
-# forgets to pass a team fails on the path rather than reading someone else's config.
+# The environment and team the fixture configuration is written for.
 FIXTURE_ENVIRONMENT = "dev"
 FIXTURE_TEAM = "fixture"
 
-# What the fixture config says, spelled out once because two sides have to agree on it.
+# What the fixture configuration answers, for tests to assert against.
 PIPELINE_NAMESPACE = "fixture-pipelines"
 APP_DEPLOYMENT_NAMESPACE = "fixture-deployments"
 HELM_DEPLOYER_SERVICE_ACCOUNT = "fixture-helm-deployer"
 MYSQL_DEPLOYMENT_NAME = "fixture-mysql"
 
-# The cluster the fixture addresses, under the key a resolution reads from the fixture's own
-# `static.json`, because every command that touches a cluster now resolves one before it runs — so a
-# fixture that declared nothing would fail every CLI test with a resolution error rather than with
-# whatever the test is about. It names the context the `KUBECONFIG` document below defines, so the
-# answer is the fixture's and not the machine's.
+# The context the fixture environment declares, defined by the kubeconfig below.
 FIXTURE_KUBE_CONTEXT = "fixture"
 
-# The server that fixture kubeconfig names, spelled once: the document below and
-# `FIXTURE_TARGET`'s address both read it from here, so a comparison between "what the file says"
-# and "what the target says" cannot go stale in one of the two places.
 FIXTURE_SERVER = "https://kubeconfig-fixture.invalid:6443"
 
-# The environment variables that outrank `static.json` in cluster resolution. The fixture declares
-# its cluster in `static.json`, so these are cleared from every fixture-run: left set by someone's
-# shell they would answer every CLI test from outside the test, which is the one way a resolution
-# test can go quietly wrong.
+# The variables that state a cluster from outside the configuration and outrank `static.json`.
 PROCESS_CLUSTER_VARIABLES = ("CLUSTER_KUBE_CONTEXT", "CLUSTER_KUBECONFIG_PATH")
 
 ENVIRONMENT_STATIC = {
@@ -81,19 +58,13 @@ ENVIRONMENT_STATIC = {
     "AUTOMATION_GIT_SERVER_HOST": "git.example.test",
     "AUTOMATION_GIT_SERVER_PORT": "22",
     "AUTOMATION_GIT_SERVER_SSH_USER": "git",
-    # Namespaces and selectors are configuration; the scripts hardcode these
-    # values, so the fixture has to use the same ones or the comparison is meaningless.
     "GRAFANA_DEPLOYMENT_NAMESPACE": "grafana",
     "POLARIS_DEPLOYMENT_NAMESPACE": "polaris",
     "OPENBAO_DEPLOYMENT_NAMESPACE": "openbao",
     "TEKTON_DEPLOYMENT_NAMESPACE": "tekton-pipelines",
     "GRAFANA_SERVICE_SELECTOR": "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=grafana",
     "POLARIS_SERVICE_SELECTOR": "app.kubernetes.io/name=polaris,app.kubernetes.io/instance=polaris",
-    # OpenBao's chart puts `app.kubernetes.io/name` on the server pods as the *chart* name and
-    # `app.kubernetes.io/instance` as the release name, so the pair is the shape the chart itself
-    # writes and not what the Vault selector looked like. Order does not matter to `kubectl`, and
-    # `recorded_operations._selector` folds it anyway, but the fixture should not carry an order that
-    # only ever matched a chart kubementat no longer installs.
+    # The shape OpenBao's chart writes: chart name as `name`, release name as `instance`.
     "OPENBAO_SERVICE_SELECTOR": "app.kubernetes.io/name=openbao,app.kubernetes.io/instance=openbao",
     "TEKTON_SERVICE_SELECTOR": "app=tekton-dashboard",
 }
@@ -102,16 +73,11 @@ TEAM_STATIC = {
     "PIPELINE_NAMESPACE": PIPELINE_NAMESPACE,
     "APP_DEPLOYMENT_NAMESPACE": APP_DEPLOYMENT_NAMESPACE,
     "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME": HELM_DEPLOYER_SERVICE_ACCOUNT,
-    # Where the team's MySQL lives, and the release its pods carry. kubementat does not install
-    # it any more, and row 25 retired the one command that read it (`tunnel-mysql`), so this key is
-    # fixture configuration nothing in `src/` consults. It is left here because pruning a config
-    # key is not this ticket's to do; the name is written down so the next reader can tell
-    # unreachable from forgotten.
+    # A team key kubementat no longer reads; a real team file may still carry it.
     "MYSQL_DEPLOYMENT_NAME": MYSQL_DEPLOYMENT_NAME,
 }
 
-# The environment-level encrypted file. `Config` requires it (its absence is a `FileNotFoundError`
-# that aborts the command), so the fixture has to write one; its values are only ever printed.
+# `Config` requires the environment's encrypted file, so the fixture writes one.
 ENVIRONMENT_STATIC_ENCRYPTED = {
     "GRAFANA_ADMIN_USER": "grafadmin",
     "GRAFANA_ADMIN_PASSWORD": "not-a-password",
@@ -142,10 +108,8 @@ TEAM_STATIC_ENCRYPTED = {
     ],
 }
 
-# A kubeconfig that points nowhere. It is still written because a command that *resolves* a cluster
-# reads one, and `static.json` names this file as `CLUSTER_KUBECONFIG_PATH` — but nothing here
-# loads it into the kubernetes library any more: `KubernetesUtils` is handed a target and an injected
-# client, so which machine is running pytest has stopped being an input to anything.
+# A kubeconfig that points at an unreachable server. Commands read it to resolve a cluster; no client
+# ever connects through it, because every client is injected.
 KUBECONFIG = """apiVersion: v1
 kind: Config
 clusters:
@@ -165,48 +129,8 @@ users:
 """.format(server=FIXTURE_SERVER)
 
 
-def _fixture_target():
-    """The cluster the fixture checkout actually addresses, as a `ClusterTarget`.
-
-    This had to exist once recorded cluster reads could be compared against the target a command
-    resolved. Three parity tests drive `KubernetesUtils` directly rather
-    than through a command, and they were handed `cluster_fixture.TARGET_DEV` — a fabricated target
-    whose context is `dev` while the checkout they run their bash side in declares `fixture` in its
-    `static.json` and in the `current-context` of its kubeconfig. Nothing in the tree is wrong about
-    that: the two sides of those comparisons had been addressed to two different clusters for as
-    long as anyone looked, and the record's old shape could not say so. A target the test made up is
-    allowed wherever a *comparison* is not what the test is doing; when it is, the target has to be
-    the one the fixture declares, which is this.
-
-    `kubeconfig_path` is left unset rather than pointed at a file that only exists inside a test's
-    `tmp_path`. The identity the record compares is the context, and the address is a value
-    nothing in these tests contacts.
-    """
-    from kubementat.core.constants import STATIC_SOURCE_PREFIX
-    from kubementat.core.identity.target import ClusterTarget
-
-    return ClusterTarget(environment=FIXTURE_ENVIRONMENT, context=FIXTURE_KUBE_CONTEXT,
-                         kubeconfig_path=None, address=FIXTURE_SERVER,
-                         source=f"{STATIC_SOURCE_PREFIX}tests/conftest.py")
-
-
-# The one target a test that compares both channels has to address, for the reason in the helper.
-FIXTURE_TARGET = _fixture_target()
-
-
 class _CallLog(list):
-    """A `(method, kwargs)` log that also remembers which cluster each entry was asked of.
-
-    The entries stay two-element tuples — every test that reads the log unpacks it as
-    `for method, kwargs in recorder.calls`, and that is 47 places the record's new field must not
-    disturb. So the cluster lives alongside, and the two are kept in step by overriding every
-    mutation the log offers rather than by trusting the caller: a `calls.clear()` between two
-    commands that left the clusters behind would attribute the second run's calls to the first
-    command's target, which is a wrong answer delivered as a passing test.
-
-    `None` is not "the default cluster", it is "nobody said". `operations_from_api_calls` raises on
-    it, so an unattributed entry cannot quietly become a comparison that proves nothing.
-    """
+    """A `(method, kwargs)` log that keeps, alongside, the cluster each call was addressed to."""
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -252,19 +176,7 @@ class _CallLog(list):
 
 
 class RecordedApi:
-    """One generated Kubernetes client, recording instead of calling.
-
-    Every call is appended to the shared `calls` log as `(method, kwargs)`, which is what
-    `recorded_operations.operations_from_api_calls` reads, together with the cluster this particular
-    client was built to address — which is what makes the same reading say *which* cluster was
-    asked. `answers` decides what it gets back: anything unconfigured returns a plausible empty
-    list for a `list_*`, and nothing for the rest, because the operations are what is under test,
-    not the data. A call the implementation treats as a failure is configured with an exception.
-
-    `cluster=None` means this recorder answers for no cluster in particular, and the operations
-    reduced from its log raise rather than being compared as if they had said. A recorder that is
-    meant to answer a command's own client is built by `ApiRecorder.for_target`.
-    """
+    """One generated Kubernetes client, recording instead of calling."""
 
     def __init__(self, log, answers=None, recorder=None, cluster=None):
         self.log = log
@@ -275,9 +187,7 @@ class RecordedApi:
     def __getattr__(self, method):
         def call(*args, **kwargs):
             if args:
-                # The recorder reads keyword arguments; a positional call would be recorded
-                # with its arguments in the wrong place, i.e. as a parity failure nobody can
-                # see. Nothing in `src/` does this, and if it starts, say so here.
+                # Calls are recorded by keyword; a positional one would be recorded wrongly.
                 raise AssertionError(f"{method} was called positionally: {args}")
             self.log.append((method, kwargs), cluster=self.cluster)
             answers = dict(self.answers)
@@ -295,11 +205,7 @@ class RecordedApi:
 
 
 class ApiRecorder:
-    """The Python side's equivalent of `$SHIM_LOG`: what the cluster was asked to do.
-
-    `answer` sets what any client returns for a method, so a test configures the *call* it
-    cares about without caring which client class it happened to go through.
-    """
+    """What the cluster was asked to do, shared by every client a test hands out."""
 
     def __init__(self):
         self.calls = _CallLog()
@@ -313,31 +219,13 @@ class ApiRecorder:
         return RecordedApi(self.calls, answers, recorder=self)
 
     def for_target(self, target):
-        """A client that answers as this recorder does and says which cluster it addresses.
-
-        This is the client half of the comparison: a `ClusterOperation` reduced from a call made
-        through the returned object carries the target's cluster, so it can be compared against the
-        `kubectl` the same run would have made instead of merely sitting beside it. Where the
-        recorder is handed in as `api_client=`, handing it in *addressed* is the line that makes the
-        comparison mean something.
-        """
+        """A client that answers as this recorder does and says which cluster it addresses."""
         from cluster_fixture import target_cluster
 
         return RecordedApi(self.calls, recorder=self, cluster=target_cluster(target))
 
     def __getattr__(self, method):
-        """Answer as any one of the four API objects, so one recorder is enough.
-
-        This is what makes `KubernetesUtils(TARGET_DEV, api_client=recorder)` work: the recorder is
-        handed to every API attribute the utility builds, and a call lands in the same log the
-        generated clients would have written to. Only names the recorder does not already own land
-        here — `answer`, `api`, `calls` and the rest keep answering as themselves.
-
-        What lands here is *unaddressed*: it records the call and no cluster, so reducing it says
-        "which cluster?" and raises. A test that means its client to carry one passes
-        `api_client=recorder.for_target(target)` instead, which is the honest spelling of the same
-        object.
-        """
+        """Answer as any one of the four API objects, so one recorder is enough."""
         return self.api().__getattr__(method)
 
     def operations(self):
@@ -346,11 +234,7 @@ class ApiRecorder:
         return operations_from_api_calls(self.entries())
 
     def entries(self):
-        """The log as `(method, kwargs, cluster)` triples — the record's own shape.
-
-        `operations()` reads this, and a test that wants to say something about one call's cluster
-        can read it without reaching into two parallel lists.
-        """
+        """The log as `(method, kwargs, cluster)` triples — the record's own shape."""
         return [(method, kwargs, attributed)
                 for (method, kwargs), attributed in zip(self.calls, self.calls.clusters)]
 
@@ -358,12 +242,7 @@ class ApiRecorder:
         return [method for method, _kwargs in self.calls]
 
     def called_as(self, method):
-        """The last call made as *method*, as its kwargs.
-
-        Tests that assert what a read was asked with need the arguments and nothing else, so this
-        is the one accessor that keeps the shape out of the assertion. A test that cares about two
-        calls of the same name reads `calls` directly; one call is what this is for.
-        """
+        """The last call made as *method*, as its kwargs."""
         matching = [kwargs for name, kwargs in self.calls if name == method]
         return matching[-1] if matching else None
 
@@ -372,15 +251,7 @@ class ApiRecorder:
 
 
 class ClusterNotInjected(AssertionError):
-    """A test reached for a cluster without handing the client anything to reach it with.
-
-    This is what the rule that no test may dial out looks like when it is enforced instead of
-    remembered. Before the cluster reads moved from `kubectl` into the generated client, a test that
-    forgot to fake its cluster read got a shim that printed nothing; after them the same test dials
-    whatever kubeconfig the machine has, which is quiet on a laptop and red on a runner with none.
-    Patched at the transport and not at the constructor, so a test that builds a real client to
-    assert something about the client still gets one -- it just cannot make it talk.
-    """
+    """A test reached for a cluster without handing the client anything to reach it with."""
 
 
 def _refuse_the_cluster(self, *args, **kwargs):
@@ -392,13 +263,7 @@ def _refuse_the_cluster(self, *args, **kwargs):
 
 
 def is_a_write(method: str) -> bool:
-    """Whether a recorded client call changed the cluster.
-
-    A test that asks "did this flow write anything" cannot spell it as
-    `method.startswith("create_")` once the client path brings in the permission reviews: the generated
-    client calls a `SelfSubjectAccessReview` `create_...`, and a preflight is not a write. One
-    function, and the reducer is where the answer lives, so the two cannot disagree.
-    """
+    """Whether a recorded client call changed the cluster."""
     from recorded_operations import PROBE_METHODS
 
     if method in PROBE_METHODS:
@@ -407,24 +272,16 @@ def is_a_write(method: str) -> bool:
 
 
 def is_apply(argv) -> bool:
-    """Whether a recorded command was `kubectl apply`, however it was addressed.
-
-    The kubectl calls that stay carry their cluster, so `apply` is no longer the second
-    word of the argv. A test that reads the verb out of a position would report a correctly
-    addressed call as a call that never happened — which is the false alarm the whole harness is
-    built to avoid.
-    """
+    """Whether a recorded command was `kubectl apply`, wherever its cluster flags sit."""
     if not argv or argv[0] != "kubectl":
         return False
     words = [argument for index, argument in enumerate(argv)
-              if not argument.startswith("-") and (index == 0 or not _is_flag_value(argv, index))]
+             if not argument.startswith("-") and (index == 0 or not _is_flag_value(argv, index))]
     return "apply" in words
 
 
 def _is_flag_value(argv, index):
     """Whether `argv[index]` is the value of the flag before it."""
-    if index == 0:
-        return False
     previous = argv[index - 1]
     return previous.startswith("-") and "=" not in previous
 
@@ -437,43 +294,22 @@ CLUSTER_READ_METHODS = {
     "persistentvolumeclaims": "list_namespaced_persistent_volume_claim",
     "pod": "list_namespaced_pod",
 }
-"""A `kubectl get` word and the client method the converted code now asks for.
-
-The table states the cluster reads that moved into the client once, as the harness sees it: a test
-that declares "the cluster has these ClusterRoles" says it with the word an operator would type, and
-this is where it becomes the method the client calls. It belongs in `conftest` and not in each test
-file because the same handful of reads is converted everywhere, and two tables that must agree would
-be the bug waiting to happen.
-"""
+"""A resource as an operator would name it, and the client method that lists it."""
 
 
 def _attribute(key):
-    """A JSON key the way the deserialised model spells it.
-
-    An API body says `roleRef`; the model the code reads says `role_ref`. Tests declare state in
-    the first shape because that is what a `kubectl get -o json` body always was, so the
-    translation is done here once rather than in every fixture.
-    """
+    """A JSON key the way the deserialised model spells it."""
     return re.sub(r"(?<!^)(?=[A-Z])", "_", key).lower()
 
 
-# Keys whose *values* are operator-authored maps and not model fields, so their inner keys must
-# survive exactly as written: `managed-by` is a label, and turning it into `managed_by` would make
-# the "whose is this object?" sweep read nothing and own nothing.
+# Keys whose values are operator-authored maps (labels, data), kept verbatim when a body becomes
+# a model: `managed-by` must not turn into `managed_by`.
 OPAQUE_KEYS = frozenset({"labels", "annotations", "data", "string_data", "match_labels",
                          "match_expressions"})
 
 
 class RecordedObject(dict):
-    """The payload behind a recorded cluster object, addressable both ways.
-
-    Production reads these either as `to_dict()` does (`item.get("metadata")`, because a sweep that
-    used to parse `kubectl` JSON kept the dictionary shape) or as a model is read (`item.metadata
-    .name`, because the converted code has no reason to prefer either). One dict subclass that also
-    answers attribute access keeps both readings honest, so a test never has to know which one a
-    given function happens to use — and a change of style in `src/` shows up as a passing test
-    rather than a fixture rewrite.
-    """
+    """The payload behind a recorded cluster object, addressable both ways."""
 
     def __getattr__(self, item):
         try:
@@ -487,13 +323,7 @@ class RecordedObject(dict):
 
 
 def as_k8s_object(payload):
-    """A parsed API body, addressable the way the SDK's models are.
-
-    Tests write cluster state as JSON because that is the shape they had when the answer was a
-    `kubectl` body, and the recorder hands back objects the code reads by attribute. Rather than
-    make every test construct `V1ObjectMeta`, the payload is given attributes recursively — which
-    is what the models are, viewed from a test that only needs `metadata.name`.
-    """
+    """A parsed API body, addressable the way the SDK's models are."""
     if isinstance(payload, dict):
         return RecordedObject(**{
             (key if key in OPAQUE_KEYS else _attribute(key)):
@@ -505,17 +335,7 @@ def as_k8s_object(payload):
 
 
 def cluster_state(recorded_api, resource, items=None, error=None):
-    """What the cluster contains, answered to the client the converted code now speaks.
-
-    `resource` is the kubectl word (`crd`, `clusterrole`, `ingressclass`, ...), `items` is the list
-    as it would appear in a `kubectl get -o json` body, and `error` is an `ApiException` (or the
-    reason string for one) for the kind that cannot be read.
-
-    A dict answers *per namespace*, which is what a namespaced sweep needs: the recorder answers
-    one method and not one call shape, so a claim set that differs between namespaces has to be
-    keyed by the namespace the client was asked about. The shim had this for free, because its call
-    shape included the namespace.
-    """
+    """Answer the list call for *resource* with *items*, or raise *error*; a dict answers per namespace."""
     from kubernetes.client.exceptions import ApiException
 
     method = CLUSTER_READ_METHODS[resource]
@@ -542,12 +362,7 @@ def cluster_state(recorded_api, resource, items=None, error=None):
 
 
 def cluster_deletes(recorded_api, resource, refused=None):
-    """The delete half of the same declaration, for a sweep that must report a refusal.
-
-    A refusal is an `ApiException` here and not an exit code, because the answer now comes from
-    the API server and not from a process. A dict of refusals keyed by name answers per object,
-    which is what the one-name-per-delete rule makes assertable.
-    """
+    """Answer deletes of *resource*, refusing with *refused* (a reason, an exception, or a callable by name)."""
     from kubernetes.client.exceptions import ApiException
 
     method = "delete_" + CLUSTER_READ_METHODS[resource].removeprefix("list_")
@@ -572,12 +387,7 @@ POINTING_VARIABLES = ("KUBEMENTAT_HOME", "KUBEMENTAT_PLATFORM_CONFIG_DIR", "KUBE
 
 @pytest.fixture(autouse=True)
 def nothing_on_this_machine_answers_a_test(monkeypatch, tmp_path):
-    """Every test starts from a machine that names no root, no environment and no cluster.
-
-    The record `kmt config init` keeps under the user's home is pointed at a file nothing creates,
-    and the pointing variables are cleared. A test that wants any of them sets it in its own body,
-    which runs after this fixture.
-    """
+    """Every test starts from a machine that names no root, no environment and no cluster."""
     monkeypatch.setenv("KUBEMENTAT_CONFIGURED_ROOTS",
                        str(tmp_path / "configuration-roots-are-not-recorded-here.json"))
     for name in POINTING_VARIABLES:
@@ -593,26 +403,7 @@ def no_cluster_is_contacted(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def no_cluster_is_running_this_process(monkeypatch):
-    """The in-cluster layer is answered "no", in every test, whatever the machine says.
-
-    `no_cluster_is_contacted` asserts about what a test may reach. This one asserts about where the
-    suite happens to be running, and the layer that reads the kubelet's own mount made that a
-    question the suite had to keep answering: a resolution that finds the kubelet's own files can
-    name a cluster without any configuration, so a test about *missing* configuration would quietly
-    resolve instead of refusing if pytest were sitting inside a pod.
-
-    So the mount root is pointed at a path that cannot exist and the two variables the kubelet
-    injects are cleared. A test that wants to be a pod fabricates the mount itself — see
-    `cluster_fixture.mounted_service_account` — and does it inside the test body, after this
-    fixture has run, which is the whole of the ordering rule.
-
-    The patch lands on `kubementat.core.identity.kubeconfig`, the module that owns
-    `SERVICE_ACCOUNT_ROOT` and that `core/identity/context.py` reads it through, and
-    `raising=True` is what makes that home an assertion rather than a hope: this fixture used to
-    patch `kubementat.cluster` with
-    `raising=False`, which is the shape of failure that stays green after the name moves, because
-    the miss is silent and the layer under test reads the machine's real mount.
-    """
+    """The in-cluster layer is answered "no", in every test, whatever the machine says."""
     from kubementat.core.identity import kubeconfig as _kubeconfig_module
 
     monkeypatch.setattr(_kubeconfig_module, "SERVICE_ACCOUNT_ROOT",
@@ -623,22 +414,7 @@ def no_cluster_is_running_this_process(monkeypatch):
 
 @pytest.fixture
 def recorded_api(monkeypatch):
-    """`KubernetesUtils` with its clients swapped for recorders, and nothing read from this machine.
-
-    The constructor used to load a kubeconfig, which every test neutralised by patching
-    `config.load_kube_config`. It does not any more, so there is nothing left to neutralise:
-    the seam is the `api_client` parameter, and a test that wants the recorder passes it
-    (`KubernetesUtils(TARGET_DEV, api_client=recorded_api)`). A machine with a real `~/.kube/config`
-    and a machine with none get the same answer here because neither is consulted.
-
-    Two answers are seeded: a service account that exists, and a Service whose webhook has
-    endpoints. `patch_service_account_with_pull_secrets` reads the account before it patches it, and
-    `infrastructure/tekton/install.py`'s `install` holds the Triggers release until the Pipelines
-    webhook is reachable — so a
-    `None` in either place is a cluster that answers nothing, which is a bug the test would invent
-    rather than one it is testing. A test that cares about the unreachable case says so with its own
-    `answer()`.
-    """
+    """Every client kubementat builds becomes a recorder bound to the cluster it was built for."""
     from kubernetes.client import (
         V1EndpointAddress,
         V1Endpoints,
@@ -653,10 +429,7 @@ def recorded_api(monkeypatch):
     recorder.answer("read_namespaced_service_account",
                     lambda name=None, namespace=None, **kwargs: V1ServiceAccount(
                         metadata=V1ObjectMeta(name=name, namespace=namespace)))
-    # A permission probe that was never configured answers "allowed". That is the same stance as
-    # the empty list a `list_*` gets: the recorder is a cluster that cooperates, and the test that
-    # wants a denial says so with its own `answer()`. A `None` here would be read as a denial, which
-    # is a bug the test would invent rather than one it is testing.
+    # Unconfigured permission probes answer "allowed"; a test that wants a denial answers it itself.
     recorder.answer("create_self_subject_access_review", lambda **kwargs: SimpleNamespace(
         status=SimpleNamespace(allowed=True)))
     recorder.answer("read_namespaced_endpoints",
@@ -664,41 +437,14 @@ def recorded_api(monkeypatch):
                         metadata=V1ObjectMeta(name=name, namespace=namespace),
                         subsets=[V1EndpointSubset(
                             addresses=[V1EndpointAddress(ip="10.42.0.1")])]))
-    # The seam for a test that cannot inject one. A test driving a verb of `automations/` builds its
-    # `KubernetesUtils` from the `Context` inside a function it does not control, so the one place it
-    # can put the recorder is the target's own client factory — which is also the only line in `src/`
-    # that
-    # touches a credential, so replacing it is exactly what a suite that must not read the machine
-    # asks for. `KubernetesUtils` then takes the injected path: a client that is not an
-    # `ApiClient` is used as the API object, which is what this recorder already is.
-    #
-    # It is answered *per target*, and that is the comparison's other half: `for_target` binds the
-    # recorder to the `ClusterTarget` whose `client()` was asked for, so every recorded call knows
-    # which cluster it went to. Handing back one unbound recorder would put the cluster back to
-    # "this process", which is exactly the answer a parity test must not be able to fall back to.
+    # `ClusterTarget.client` is the one place kubementat builds a client, so replacing it reaches
+    # code a test cannot hand a client to. Each recorder is bound to the target that asked.
     monkeypatch.setattr(ClusterTarget, "client", lambda self: recorder.for_target(self))
     return recorder
 
 
 def run_kmt(argv, env):
-    """The CLI the way an operator runs it, as its own process.
-
-    Subprocess rather than `CliRunner` because the point is what the whole command reaches:
-    the shims must be found through `PATH` the same way the real binaries would be, and no
-    in-process test can prove `main()` wired the command in correctly.
-
-    The cluster is answered on the way too, and by the same mechanism: `PYTHONPATH` gets the
-    directory holding `sitecustomize.py`, which points the generated client's transport at the fake
-    in `apiserver_fake`. Without it, a command that reads through the client instead of
-    through `kubectl` would dial the machine running the test, which is the one thing a suite that
-    must not contact a cluster forbids.
-
-    The child is also told that it is not inside a cluster. The in-cluster layer would otherwise
-    answer a *subprocess* from the pod the suite is running in, which is the one place
-    `no_cluster_is_running_this_process` cannot reach with a monkeypatch. A test that wants a CLI
-    resolving in-cluster drives `Context` in the test process instead, where the mount is fabricated
-    deliberately.
-    """
+    """The CLI the way an operator runs it, as its own process."""
     environment = dict(env)
     for kubelet_variable in ("KUBERNETES_SERVICE_HOST", "KUBERNETES_SERVICE_PORT"):
         environment.pop(kubelet_variable, None)
@@ -711,11 +457,7 @@ def run_kmt(argv, env):
 
 
 class RecordedCall:
-    """One invocation of one shim binary.
-
-    Equality is defined over what the call *was*, not over the object identity, because a
-    parity test compares two of these lists, not two of these objects.
-    """
+    """One invocation of one shim binary."""
 
     def __init__(self, program, args, cwd, stdin=None):
         self.program = program
@@ -750,15 +492,7 @@ class ShimEnvironment:
         self.responses = responses
 
     def respond(self, program, text, exit_code=0, subcommand=None, stderr=None):
-        """What `program` prints (and exits) when the shim is called.
-
-        `subcommand` narrows it to one call shape, e.g. `respond('kubectl', json,
-        subcommand='get')` answers `kubectl get …` and leaves `kubectl apply …` silent.
-
-        `stderr` is what goes to file descriptor 2. Most answers do not need it; the code that has
-        to tell "it was not there" apart from "it was refused" does, because that difference lives
-        only in the server's reason on stderr and nowhere in the exit code.
-        """
+        """What `program` prints (and exits) when the shim is called."""
         key = f"{program}.{subcommand}" if subcommand else program
         self.responses.joinpath(key).write_text(text)
         if exit_code:
@@ -774,19 +508,13 @@ class ShimEnvironment:
         return parse_shim_log(self.log.read_text())
 
     def take_calls(self):
-        """The calls so far, and an empty log behind them.
-
-        A parity test needs to know which calls belonged to which side, and both sides write
-        to one log. Truncating between them is that separation, and the only kind this
-        harness needs: nothing runs concurrently. `O_TRUNC` rather than a rewrite so an empty
-        log means "nothing called", not "nothing read".
-        """
+        """The calls so far, and an empty log behind them."""
         recorded = self.calls()
         self.log.write_text("")
         return recorded
 
     def commands(self):
-        """The same calls reduced to argv lists — the thing a parity test compares."""
+        """The recorded calls as argv lists."""
         return [call.argv for call in self.calls()]
 
     def environment(self, base=None):
@@ -799,12 +527,7 @@ class ShimEnvironment:
 
 
 def parse_shim_log(text):
-    """Read a `$SHIM_LOG` body back into calls.
-
-    The format is tab-separated on purpose: an argument may contain anything except a tab
-    (and the recorder quotes nothing), so a delimiter that can appear inside an argument
-    would silently split one call into two.
-    """
+    """Read a `$SHIM_LOG` body back into calls."""
     calls = []
     current = None
     for line in text.splitlines():
@@ -822,12 +545,7 @@ def parse_shim_log(text):
 
 @pytest.fixture
 def fake_binaries(tmp_path, monkeypatch):
-    """`tests/shims/` first on `PATH`, with `SHIM_LOG`/`SHIM_RESPONSE_DIR` set.
-
-    The shims are copied into `tmp_path` rather than used in place so a test can overwrite
-    one binary with a variant that answers differently without touching the repo, and so two
-    tests cannot write the same log.
-    """
+    """`tests/shims/` first on `PATH`, with `SHIM_LOG`/`SHIM_RESPONSE_DIR` set."""
     directory = tmp_path / "shims"
     shutil.copytree(SHIM_SOURCE_DIR, directory, symlinks=True)
     for shim in directory.iterdir():
@@ -841,12 +559,7 @@ def fake_binaries(tmp_path, monkeypatch):
 
 
 class FixtureRepo:
-    """A throwaway kubementat checkout.
-
-    `scripts/` is a copy so a bash script run from the fixture reads the fixture's
-    `platform_config` (they resolve `../../../platform_config` against themselves) instead
-    of this working tree's.
-    """
+    """A throwaway kubementat checkout."""
 
     def __init__(self, checkout_root):
         self.root = checkout_root
@@ -855,20 +568,11 @@ class FixtureRepo:
         self.team = FIXTURE_TEAM
         self.kubeconfig = checkout_root / "kubeconfig"
         self.kubeconfig.write_text(KUBECONFIG)
-        # The stamp this fixture stands for. This class is the fixture's whole claim to be *a prepared
-        # tree*, and a prepared tree says which product it was made for (`config init` writes
-        # `kubementat.yaml` as one of its steps), so a fixture that omits it is not simulating an
-        # older tree — it is simulating a directory that was never prepared, which no CLI verb here
-        # is testing. Written through the same constants the writer uses, so the fixture and the
-        # product cannot drift apart and make every command agree on a stale version.
+        # A prepared tree carries the stamp `config init` writes.
         self.stamp()
 
     def stamp(self, *, schema_version=None, constraint=None):
-        """Write `<platform_config>/kubementat.yaml` and hand the path back.
-
-        A test that wants an unstamped tree calls neither; one that wants a tree that disagrees
-        passes the values it is checking. Both shapes are answers and neither is a default.
-        """
+        """Write `<platform_config>/kubementat.yaml` and hand the path back."""
         from kubementat.core import constants
         path = self.platform_config / constants.CONFIG_MANIFEST_FILENAME
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -892,13 +596,7 @@ class FixtureRepo:
         return payload
 
     def environment_static(self, **overrides):
-        """The environment's `static.json`, with the cluster the fixture addresses written in.
-
-        The two cluster keys are merged in rather than pasted into `ENVIRONMENT_STATIC`, so a test
-        that calls this to override one namespace does not quietly delete the environment's claim on
-        a cluster and get a resolution error instead of the behaviour it is checking. A test that
-        *wants* an unresolvable environment passes `CLUSTER_KUBE_CONTEXT=None`.
-        """
+        """The environment's `static.json`, with the cluster the fixture addresses written in."""
         return self.write_json(self.platform_config / self.environment / "static.json",
                                {**ENVIRONMENT_STATIC,
                                 "CLUSTER_KUBE_CONTEXT": FIXTURE_KUBE_CONTEXT,
@@ -919,21 +617,7 @@ class FixtureRepo:
 
     def write_pipeline_run(self, relative_path="hello-run.yml", name="hello-run", pipeline="hello",
                            **extra):
-        """A pipeline-run manifest, with the placeholders `run_pipeline` substitutes.
-
-        The bash side used to read this file and sed eleven tokens into place; the Python side loads
-        the same file and replaces the same tokens in the dict. All eleven are in here — in
-        `annotations`, where a string value is legal and a wrong substitution is visible — so that a
-        token renamed on one side of the comparison is caught by it and not by a pipeline failing on
-        somebody else's cluster. The keys the substitution really belongs in (`serviceAccountName`)
-        are in the shape they have in a real run file.
-
-        The tokens in `annotations` are quoted. bash sed-ed the *text* of the file, so a bare token
-        holding a number (`git-port: AUTOMATION_GIT_SERVER_PORT_PLACEHOLDER`) would have landed as a
-        number after parsing where Python's dict substitution leaves a string. This fixture is not the
-        place that difference is judged, so nothing here carries a token unquoted on a line that
-        could turn into an integer.
-        """
+        """A pipeline-run manifest, with the placeholders `run_pipeline` substitutes."""
         path = self.team_pipeline_run_dir().joinpath(relative_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(dedent(f"""\
@@ -973,15 +657,10 @@ class FixtureRepo:
 
 @pytest.fixture
 def fixture_repo(tmp_path):
-    """The throwaway checkout — scripts, a `tekton_ci/`, and a seeded `platform_config`."""
+    """A throwaway checkout with a `tekton_ci/` and a seeded `platform_config`."""
     checkout_root = tmp_path / "checkout"
     checkout_root.mkdir()
     (checkout_root / "tekton_ci" / "pipeline-runs").mkdir(parents=True)
-    # No `templates/` here. The fixture used to scaffold one because a guard's subject was two
-    # disagreeing copies and the shipped half had to stay writable; the product ships no templates any
-    # more, so the directory was scaffolding for a file that no longer exists. What the relocating
-    # guard needs is the manifest's own checkout_root, which it writes itself
-    # (`tests/test_one_component_is_installed_by_the_label_the_environment_names_it_under.py`).
     (checkout_root / "platform_config" / FIXTURE_ENVIRONMENT / "kubementat_components").mkdir(parents=True)
     return FixtureRepo(checkout_root).all_static_files()
 
@@ -990,21 +669,9 @@ def fixture_repo(tmp_path):
 def dry_run_env(fixture_repo, fake_binaries, monkeypatch):
     """The environment a fixture-run `kmt` needs: home, config dir, kubeconfig, shims."""
     monkeypatch.setenv("KUBEMENTAT_HOME", str(fixture_repo.root))
-    # The configuration checkout_root is named, never located, so a fixture that wants its own
-    # `platform_config` read has to name it. Pointing `KUBEMENTAT_HOME` at the checkout is not
-    # enough any more, and pointing it there *and* clearing this variable would make every CLI
-    # fixture fail on the refusal rather than on what the test is about.
     monkeypatch.setenv("KUBEMENTAT_PLATFORM_CONFIG_DIR", str(fixture_repo.platform_config))
     monkeypatch.setenv("KUBECONFIG", str(fixture_repo.kubeconfig))
-    # Nothing here patches `KUBE_CONFIG_DEFAULT_LOCATION` any more, and the reason is the shape of
-    # the read rather than the shape of the fixture: `ClusterTarget.client()` names the file it
-    # wants, so `$KUBECONFIG` is honoured when the client is built and the constant the library
-    # captured at import is never consulted. The env var above still belongs, because a `kmt` run as a
-    # subprocess resolves its cluster through it.
     for name in PROCESS_CLUSTER_VARIABLES:
-        # The variables that outrank `static.json`. Left set by someone's shell, it answers every
-        # fixture command from outside the test, and the fixture's own `static.json` then goes
-        # unread.
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("ENVIRONMENT", fixture_repo.environment)
     monkeypatch.setenv("TEAM", fixture_repo.team)
@@ -1014,21 +681,7 @@ def dry_run_env(fixture_repo, fake_binaries, monkeypatch):
 
 @pytest.fixture
 def resolvable_environment(tmp_path, monkeypatch):
-    """A checkout whose one environment declares a cluster, on the dials that decide it.
-
-    Every command that reaches a cluster resolves one before it runs, so a CLI
-    test that has no cluster to talk to still has to have *somewhere* that says which cluster it is
-    not talking to. This fixture is that: the smallest `platform_config` that resolves, in a
-    `tmp_path` checkout, with `KUBEMENTAT_HOME`/`KUBECONFIG` pointed at nothing else and the two
-    environment variables that outrank `static.json` cleared.
-
-    It is deliberately not `fixture_repo`: no `scripts/`, no team configuration, nothing a service
-    reads. Tests that replace the service — the ones this exists for — need the resolution half and
-    nothing else, and a test that needs a real namespace already has the bigger fixture.
-
-    The address is `cluster_fixture.DEV_SERVER`, which is not reachable by construction: resolving a
-    cluster is a file read, so a green test here still proves nothing was contacted.
-    """
+    """A checkout whose one environment declares a cluster, on the dials that decide it."""
     from cluster_fixture import (
         DEV_SERVER,
         checkout,
@@ -1041,8 +694,6 @@ def resolvable_environment(tmp_path, monkeypatch):
     redirect_checkout(monkeypatch, checkout_root)
     write_kubeconfig(checkout_root / "kubeconfig", {"fixture": DEV_SERVER})
     write_environment(checkout_root, FIXTURE_ENVIRONMENT, context=FIXTURE_KUBE_CONTEXT)
-    # The commands that reach a cluster without declaring the argument — the `users` group is the
-    # in-tree case, and the decorator answers for its environment because the command never names it
-    # — read this; the ones that declare it ignore it, so setting it costs those nothing.
+    # Commands that take no environment argument read it from here.
     monkeypatch.setenv("ENVIRONMENT", FIXTURE_ENVIRONMENT)
     return checkout_root

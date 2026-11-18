@@ -1,33 +1,4 @@
-"""A refusal that tells an operator what to run has to print a command that runs.
-
-This is the same bug class as a false sentence, and the spec says so on purpose: *a printed instruction
-that exits 2 is the same bug class as a printed sentence that is false* — the Decided section's reason
-that `config init`'s closing line spells `kmt install <env> <team> --config-dir <root>` as a command and
-not as advice.
-
-Measured while the fix landed. `routing._cluster_manager_email` refuses a tree that never answered the
-ACME contact and ends with the verb that fixes it, and it spelled the answer as
-
-    kmt config set <dir> <environment> CLUSTER_MANAGER_EMAIL <address>
-
-which is Click's **two positionals**, and the command declares one. Typing it does not set the key; it
-answers `Error: Got unexpected extra argument`, measured. `kmt config set` takes `KEY=VALUE` as a single
-answer (`metavar='[KEY=VALUE]'`), and both `docs/README_PLATFORM_CONFIG.md` and
-`kubementat.errors.CiImageNotConfiguredError`, raised from `automations/ci.py`, already spell it that
-way. The guard here is that shape, checked by running what the refusal printed rather than by searching
-for an `=`.
-
-The same guard catches the root's spelling now that `--config-dir` is a flag on every verb here: a
-sentence that types the directory as the first positional is a usage error, and a sentence that types
-the flag without a value is answered by the next token and so reads as an option instead of a refusal.
-The placeholder set below is what keeps either spelling from rotting quietly — an unrecognised
-placeholder fails the run, because an instruction that stops at a `<something>` nobody can fill in is
-not an instruction.
-
-A usage error is what fails this file. A refusal that objects to the directory is a pass, because that
-is the command recognising its own arguments and disagreeing about the tree — a different sentence from
-the one this file is about.
-"""
+"""A refusal that tells an operator what to run has to print a command that runs."""
 
 import json
 import re
@@ -63,7 +34,8 @@ SUBSTITUTIONS = {
 
 
 def seed(root, environment_level=None) -> Config:
-    """Both pairs of both layers present, so the refusal is about the key and not about a missing file."""
+    """Both pairs of both layers present, so the refusal is about the key and not about a missing file.
+    """
     environment_dir = root / "platform_config" / ENVIRONMENT
     team_dir = environment_dir / TEAM
     team_dir.mkdir(parents=True, exist_ok=True)
@@ -78,11 +50,6 @@ def seed(root, environment_level=None) -> Config:
 
 def _argv_from(message, root) -> list:
     """The argv the refusal is telling a human to run, placeholders resolved, group name taken off.
-
-    The first two elements come back as `["config", "set", …]` because the sentence names the group;
-    `config_module.config` is already that group, so the invoke below drops them. That is the only
-    editing this function does — a token that is not a placeholder is handed over untouched, which is
-    what lets an invented flag fail instead of matching quietly.
     """
     match = INSTRUCTION.search(message)
     assert match, f"no instruction sentence in {message!r}. This file's rule is that the sentence is a " \
@@ -103,11 +70,7 @@ def _argv_from(message, root) -> list:
 
 
 def _assert_parses(argv, root, where):
-    """Click's verdict on argv as a human would type it, and nothing else.
-
-    `exit_code == 2` is Click's usage error: the sentence kubementat printed is not the command
-    kubementat takes. Anything else is a pass.
-    """
+    """Click's verdict on argv as a human would type it, and nothing else."""
     result = CliRunner(mix_stderr=False).invoke(config_module.config, argv)
     assert result.exit_code != 2, \
         f"{where}: the instruction {argv[1:]!r} is a usage error and not a command. A human following " \

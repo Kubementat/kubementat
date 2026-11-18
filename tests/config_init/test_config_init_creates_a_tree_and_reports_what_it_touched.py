@@ -1,43 +1,4 @@
-"""`kmt config init` — the verb that *prepares* a directory, and the account it gives of itself.
-
-The library half is already landed and already tested (`kubementat/config/bootstrap.py`,
-`test_config_init_prepares_the_directory_it_is_handed.py`). What lives here is the *verb*, and the
-verb's claims are not the library's:
-
-* **The verb prepares.** `kmt config init` is `config_bootstrap.prepare_configuration_directory` seen
-  through Click: `git init`, the two git files, the layout, the deployer keypair, git-crypt's
-  keystore/collaborator/export, and one commit of kubementat's own. The step list is therefore longer
-  than the four lines `init_configuration` used to return, and the *order of the print* is still the
-  order the library applied the plan — which is what makes the first commit ciphertext and not
-  plaintext, so the print order is asserted and not assumed.
-* **The print is the plan, in order, and it is the file list.** One line per step, on stdout, nothing
-  else on stdout. The closing instruction is guidance about state and so goes to stderr, where the
-  cluster sentence already was; a script reading `kmt config init | ...` gets paths and no prose.
-* **A run that can be refused is refused before it writes.** A bare `config init --environment E`
-  with no `--gpg-key` and no `--gpg-email` has no identity to work from, and `config_keys` says so
-  ahead of `git init`: no directory, no `.git`, no half-prepared tree for somebody to delete.
-* **The root is named and never located.** `--config-dir`, or the
-  `KUBEMENTAT_PLATFORM_CONFIG_DIR` a container already sets, with the flag above the variable and a
-  refusal below both — the same rule every command that reaches a cluster answers with, and this verb
-  is not an exception to it. `git init` happens after that decision, so a run that named no root
-  leaves no tree behind anywhere. Test 8 sets the variable to a decoy beside a named root and proves
-  only the root that was handed over is written to; test 9 leaves the command line empty and proves
-  the variable still names the tree; test 10 deletes both and proves nothing is scaffolded.
-* **The value is typed.** `--set GRAFANA_ENABLED=false` stores a boolean and `--set
-  BASE_DOMAIN=example.test` stores a string, which is the claim test 4 asserts in both directions.
-  A parser that `str()`-ed everything would keep the tree green and the key dead.
-* **Refusals stay refusals.** No environment, a `KEY=VALUE` with no `=`, the same key twice, foreign
-  material without `--force`, no identity and no key — one refusal each. `--force` accepts material
-  kubementat did not write and touches none of it; it is not an overwrite, so the foreign file's
-  bytes are asserted and not assumed, and it is not a way past a `.gitattributes` somebody else
-  configured either (that rule is decided by byte-identity and belongs to the library).
-
-The last test is the one that keeps the rule honest: a verb that takes its own root must write
-nothing where the checkout happens to live, and the way to know that is true is to compare the
-checkout's own `platform_config/` before and after. `kmt initialize` does write there, and it writes
-the deployer keypair there today, so this claim is the difference between the two paths and not a
-note about them.
-"""
+"""`kmt config init` — the verb that *prepares* a directory, and the account it gives of itself."""
 
 import stat
 import subprocess
@@ -74,37 +35,19 @@ ENV_TEKTON_DIRS = [Path(ENVIRONMENT) / "tekton" / "tasks",
 
 @pytest.fixture(autouse=True)
 def no_configuration_root_in_the_environment(monkeypatch):
-    """Neither dial is set for any test here, so a tree that lands on a decoy did it on its own.
-
-    `KUBEMENTAT_HOME` is cleared beside `KUBEMENTAT_PLATFORM_CONFIG_DIR` for the same reason: the
-    second is what a `Config` with no root resolves, and a stale one on the machine would be a
-    second root rather than the one argument the verb was handed.
-    """
+    """Neither dial is set for any test here, so a tree that lands on a decoy did it on its own."""
     monkeypatch.delenv("KUBEMENTAT_PLATFORM_CONFIG_DIR", raising=False)
     monkeypatch.delenv("KUBEMENTAT_HOME", raising=False)
 
 
 def run_init(root, *arguments):
     """`kmt config init --config-dir <root> …`, through the group so the verb's name is exercised.
-
-    A bug inside the command is re-raised rather than folded into an exit code: `exit_code == 1`
-    with a swallowed traceback reads as "the verb refused", which is exactly the failure this file
-    must not mistake for a refusal.
-
-    The root travels as the flag the surface names it with, so every assertion below is evidence
-    about the command a human or a container types and not about a private argv.
     """
     return in_root_group(["init", *arguments, "--config-dir", str(root)])
 
 
 def in_root_group(argv):
-    """`kmt config …`, dispatched the way `main()` dispatches it: through the root group class.
-
-    The root group is what renders a named refusal into one `Error:` line, so a test that invoked the
-    `config` sub-group directly would be asserting the shape of a run no operator can have. Same
-    argv, same `CliRunner`, one more level of dispatch — which is also what `main()` builds when it
-    hangs `config` off `cli` before calling it.
-    """
+    """`kmt config …`, dispatched the way `main()` dispatches it: through the root group class."""
     from cli.kmt import KmtGroup
 
     root_group = KmtGroup(name="kmt")
@@ -116,12 +59,7 @@ def in_root_group(argv):
 
 
 def reported(result) -> str:
-    """Both streams, for the assertions that ask what the operator would have read.
-
-    With `mix_stderr=False`, `result.output` is stdout alone — so an assertion about a refusal has to
-    name the stream it expects the sentence on, and a test that read only stdout would pass a verb
-    that refused in silence and said something else on stderr.
-    """
+    """Both streams, for the assertions that ask what the operator would have read."""
     return f"{result.stdout}{result.stderr}"
 
 
@@ -136,15 +74,7 @@ def lines(text: str) -> list:
 
 
 def prepared_paths(root, *, again=False) -> list:
-    """Every path a prepared run reports, in the order the steps were applied.
-
-    Listed here and not inside a test because four tests need it: the print is the verb's whole
-    stdout, so both the order and the set are a claim about behaviour and not about the library's
-    internals. Two entries change shape between the first run and the second. The collaborator step
-    names the directory it registered into when it ran and the fingerprint file that proves it ran
-    when it did not, and the two calls that close the run report `root` — staging and committing are
-    different steps and the same path. Neither is a mistake; both are why the list is a function.
-    """
+    """Every path a prepared run reports, in the order the steps were applied."""
     return [
         root / ".git",
         root / ".gitattributes",
@@ -168,10 +98,6 @@ def prepared_paths(root, *, again=False) -> list:
 
 def identity_arguments() -> list:
     """`--gpg-email <email>`, because every run in this file that expects success needs an identity.
-
-    Spelled in a helper and not in a fixture that adds arguments behind the test's back: which flag
-    carries the identity is itself a claim about the verb, and a test that could run without typing it
-    could not tell that a bare run refuses.
     """
     return ["--gpg-email", EMAIL]
 
@@ -189,14 +115,7 @@ def tracked(root, tools) -> list:
 
 
 def test_a_second_run_writes_no_byte_makes_no_commit_and_names_the_steps_it_skipped(root, tools):
-    """Test 2: idempotence as a claim about bytes, commits and calls.
-
-    `created` on a second run would say a write happened that did not, and the sentence that a
-    repeated init is a no-op is exactly the sentence an operator has to be able to trust before
-    running it inside a script. What makes the claim more than a step list is the middle pair: no new
-    commit in the history, and no second `git-crypt export-key` over a file that was already correct —
-    an export is a write no matter what the step says.
-    """
+    """Test 2: idempotence as a claim about bytes, commits and calls."""
     run_init(root, "--environment", ENVIRONMENT, *identity_arguments())
     before, first = tree_bytes(root), commit_count(root, tools)
     since_last_run(tools)
@@ -219,13 +138,7 @@ def test_a_second_run_writes_no_byte_makes_no_commit_and_names_the_steps_it_skip
 
 
 def test_a_set_argument_with_no_equals_sign_is_refused_naming_the_flag(root, tools):
-    """Test 5: `--set GRAFANA_ENABLED` is a typo and not a half-answer.
-
-    It names the flag it came from because `--encrypted-set` is the same typo on a different file,
-    and an operator reading "KEY=VALUE expected" would fix the wrong half of the command. The answer
-    arrives before the library is called, so the tree is still absent afterwards — a typo is not a
-    reason to make a repository.
-    """
+    """Test 5: `--set GRAFANA_ENABLED` is a typo and not a half-answer."""
     result = run_init(root, "--environment", ENVIRONMENT, "--set", "GRAFANA_ENABLED")
 
     assert result.exit_code != 0
@@ -234,15 +147,7 @@ def test_a_set_argument_with_no_equals_sign_is_refused_naming_the_flag(root, too
 
 
 def test_the_same_key_given_twice_is_refused_and_not_last_write_wins(root, tools):
-    """Test 6: a JSON object cannot carry a key twice, so a repeated answer is a question.
-
-    Last-write-wins would pick one of two answers the operator gave in one command and silently call
-    that the configuration. The repeat is decided where the answers become a document, which is inside
-    `init_configuration` and so four steps into the preparation — which is why the claim here is about
-    the tree rather than about the directory: no manifest, no layer, no answer picked in either case.
-    The typo that the verb does decide before it writes anything is the malformed `KEY=VALUE` two
-    tests up.
-    """
+    """Test 6: a JSON object cannot carry a key twice, so a repeated answer is a question."""
     result = run_init(root, "--environment", ENVIRONMENT,
                       "--set", "BASE_DOMAIN=a.test", "--set", "BASE_DOMAIN=b.test",
                       *identity_arguments())
@@ -254,12 +159,7 @@ def test_the_same_key_given_twice_is_refused_and_not_last_write_wins(root, tools
 
 
 def test_foreign_material_is_named_and_a_force_leaves_it_alone(root, tools):
-    """Test 7: `--force` means "this tree holds something of someone else's", never "overwrite".
-
-    Both halves are asserted: the refusal names the file so the operator can move it, and the run
-    that accepts the tree leaves that file's bytes exactly where they were. A `force` that rewrote
-    the foreign file would be the one flag that loses work without asking.
-    """
+    """Test 7: `--force` means "this tree holds something of someone else's", never "overwrite"."""
     root.mkdir(parents=True)
     foreign = root / "NOTES.md"
     foreign.write_text("hand-written by a human\n", encoding="utf-8")
@@ -285,12 +185,6 @@ def test_the_flag_outranks_the_platform_config_variable_and_the_decoy_stays_empt
                                                                                  tools,
                                                                                  monkeypatch):
     """Test 8: the flag is the layer above the variable, so a decoy the variable names stays empty.
-
-    This is the test a verb that read the variable beside a named root — or worse, that let the
-    variable answer when the flag disagreed with it — would fail: the decoy would gain the tree and
-    the root that was named would gain nothing. The precedence is `paths.resolve_platform_config_dir`
-    and nothing else, so a verb that spelled it a second way here would be a second owner of one rule
-    and the first place it could rot.
     """
     decoy = tmp_path / "decoy"
     decoy.mkdir()
@@ -310,13 +204,7 @@ def test_the_flag_outranks_the_platform_config_variable_and_the_decoy_stays_empt
 
 
 def test_the_exported_symmetric_key_is_the_run_that_can_read_every_credential(root, tools):
-    """The exported file's mode is the claim, because git-crypt writes it at the run's umask.
-
-    On a normal umask that is 0644, which is a key every account on the box can read. The ignore rule
-    in `.gitignore` keeps it out of the commit, which is asserted here because the two halves — mode
-    and ignore — are what make "the key is in this directory and nowhere else" true, and each is only
-    half the claim without the other.
-    """
+    """The exported file's mode is the claim, because git-crypt writes it at the run's umask."""
     result = run_init(root, "--environment", ENVIRONMENT, *identity_arguments())
 
     assert result.exit_code == 0, reported(result)
@@ -331,13 +219,7 @@ def test_the_exported_symmetric_key_is_the_run_that_can_read_every_credential(ro
 
 def test_the_symmetric_key_instruction_is_printed_once_and_only_when_this_run_exported_it(root,
                                                                                           tools):
-    """The sentence about the export, and the half that says *once*.
-
-    The sentence is worth printing when the run made the file and is not worth printing when it did
-    not, because advice that repeats is advice that stops being read. Both streams are checked: on
-    stderr beside the rest of the guidance, and never on stdout, where a path list is what a script
-    is reading.
-    """
+    """The sentence about the export, and the half that says *once*."""
     first = run_init(root, "--environment", ENVIRONMENT, *identity_arguments())
     assert first.exit_code == 0, reported(first)
 
@@ -358,13 +240,7 @@ def test_the_symmetric_key_instruction_is_printed_once_and_only_when_this_run_ex
 
 
 def test_the_closing_instruction_names_the_remote_it_was_handed_and_not_one_it_made_up(root, tools):
-    """`--git-url` is a flag about the summary and not about the repository.
-
-    Given a URL, the instruction names it. Given none, the honest sentence is that the commit is local
-    and the operator has to add a remote — because the alternative is printing a URL nobody typed, or
-    naming `upstream` as if kubementat had configured one. Neither half of this is about the tree, so
-    both are printed after it and nothing is added to it.
-    """
+    """`--git-url` is a flag about the summary and not about the repository."""
     named = run_init(root, "--environment", ENVIRONMENT, "--git-url", "git.example.invalid:k/t.git",
                      *identity_arguments())
     assert named.exit_code == 0, reported(named)
@@ -377,12 +253,8 @@ def test_the_closing_instruction_names_the_remote_it_was_handed_and_not_one_it_m
 
 
 def test_gpg_key_is_imported_and_nothing_is_generated(root, tools, monkeypatch, deployer_secret_key):
-    """The done-when for the import, as the verb: the file the operator handed over *is* the private key.
-
-    `--gpg-key` is the half of the ruling that keeps a fresh directory from blocking on a generation
-    nobody asked for, so both directions are asserted: the bytes arrive unchanged, and the generator
-    is never called. A verb that imported and generated anyway would be indistinguishable from the
-    right answer by looking at the tree alone.
+    """The done-when for the import, as the verb: the file the operator handed over *is* the private
+    key.
     """
     generated: list = []
 
