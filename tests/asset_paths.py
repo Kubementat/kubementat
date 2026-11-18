@@ -36,13 +36,16 @@ from pathlib import Path
 from kubementat.core.assets import asset_path as _resolver
 from kubementat.core.assets import assets_root
 
-__all__ = ["ASSET_ROOT", "asset_path", "template_path", "values_path", "tekton_ci_path",
+__all__ = ["REPO_ROOT", "ASSET_ROOT", "asset_path", "template_path", "values_path", "tekton_ci_path",
            "relocate_asset_root"]
 
 # Taken once, not per call: the resolver is a function of where the package is installed, and
 # that does not move inside a run. Named so a guard that wants the whole root does not build the
 # same path four times.
 ASSET_ROOT: Path = assets_root()
+
+# The checkout this suite runs from: the shipped Tekton tasks, the examples and the pyproject live here.
+REPO_ROOT: Path = Path(__file__).resolve().parent.parent
 
 
 def asset_path(*parts: str) -> Path:

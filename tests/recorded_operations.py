@@ -10,7 +10,6 @@ import base64
 import json
 import re
 
-
 # The fake API transport's own record (`tests/apiserver_fake.py`) arrives in the same log as the
 # shims' calls, because a run that reads through the client and opens a `kubectl` session is one
 # run and the comparison needs both halves. It is not a tool on `PATH` and it is not a mistake:

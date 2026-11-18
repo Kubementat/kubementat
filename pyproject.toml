@@ -45,16 +45,6 @@ include = ["kubementat*","cli*"]
 # a half-written manifest inside site-packages is the bug R-12.1 names).
 "kubementat.core.assets" = ["values/**/*", "tekton_ci/**/*"]
 
-# `integration` marks the tests that need something this suite is not allowed to need: a
-# running cluster, a real helmfile, a machine with the tools installed. They are skipped by
-# default so `uv run pytest -q` stays runnable anywhere, which is the promise the README
-# makes. A parity test is only marked this way when its *bash* half genuinely talks to a
-# cluster; the whole point of FIN-03 is that most of them do not.
-[tool.pytest.ini_options]
-markers = [
-    "integration: needs a Kubernetes cluster or a real cluster tool, skipped unless -m integration is asked for",
-]
-
 [project.urls]
 Homepage = "https://github.com/Kubementat/kubementat"
 Repository = "https://github.com/Kubementat/kubementat"

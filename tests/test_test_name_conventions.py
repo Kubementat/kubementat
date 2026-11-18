@@ -23,7 +23,7 @@ TICKET_ID = re.compile(r"(?i)(?:^|_)(?:fin|vvt|fr)-?\d+|(?:^|_)d\d+(?:_|$)")
 def unit_test_functions():
     """Every `def test_*` in the unit suite, paired with the file that declares it."""
     functions = []
-    for path in sorted(TESTS_DIR.glob("test_*.py")):
+    for path in sorted(TESTS_DIR.rglob("test_*.py")):
         for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
             if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
                 functions.append((path, node.name))
@@ -31,7 +31,7 @@ def unit_test_functions():
 
 
 def test_unit_test_files_are_named_for_the_behaviour_they_check():
-    offenders = sorted(path.name for path in TESTS_DIR.glob("test_*.py")
+    offenders = sorted(path.name for path in TESTS_DIR.rglob("test_*.py")
                        if TICKET_ID.search(path.stem))
 
     assert offenders == [], "a file name has to say what it tests, not which ticket asked for it"

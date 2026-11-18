@@ -27,10 +27,10 @@ from textwrap import dedent
 from types import SimpleNamespace
 
 import pytest
-from kubernetes import client
 
 # Fixtures the configuration-directory tests share, offered to every test module from here.
 from bootstrap_tools import deployer_secret_key, root, tools  # noqa: F401
+from kubernetes import client
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SHIM_SOURCE_DIR = Path(__file__).resolve().parent / "shims"
@@ -182,8 +182,8 @@ def _fixture_target():
     `tmp_path`. The identity the record compares is the context, and the address is a value
     nothing in these tests contacts.
     """
-    from kubementat.core.identity.target import ClusterTarget
     from kubementat.core.constants import STATIC_SOURCE_PREFIX
+    from kubementat.core.identity.target import ClusterTarget
 
     return ClusterTarget(environment=FIXTURE_ENVIRONMENT, context=FIXTURE_KUBE_CONTEXT,
                          kubeconfig_path=None, address=FIXTURE_SERVER,
@@ -639,8 +639,13 @@ def recorded_api(monkeypatch):
     rather than one it is testing. A test that cares about the unreachable case says so with its own
     `answer()`.
     """
-    from kubernetes.client import (V1EndpointAddress, V1EndpointSubset, V1Endpoints, V1ObjectMeta,
-                                   V1ServiceAccount)
+    from kubernetes.client import (
+        V1EndpointAddress,
+        V1Endpoints,
+        V1EndpointSubset,
+        V1ObjectMeta,
+        V1ServiceAccount,
+    )
 
     from kubementat.core.identity.target import ClusterTarget
 
@@ -1024,7 +1029,13 @@ def resolvable_environment(tmp_path, monkeypatch):
     The address is `cluster_fixture.DEV_SERVER`, which is not reachable by construction: resolving a
     cluster is a file read, so a green test here still proves nothing was contacted.
     """
-    from cluster_fixture import checkout, redirect_checkout, write_environment, write_kubeconfig, DEV_SERVER
+    from cluster_fixture import (
+        DEV_SERVER,
+        checkout,
+        redirect_checkout,
+        write_environment,
+        write_kubeconfig,
+    )
 
     checkout_root = checkout(tmp_path)
     redirect_checkout(monkeypatch, checkout_root)
