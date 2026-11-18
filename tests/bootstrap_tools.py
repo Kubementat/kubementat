@@ -93,7 +93,9 @@ def tools(tmp_path, monkeypatch):
 
     `CryptoUtils`' two generators are replaced so a per-test run does not put 4096 bits of RSA into
     whoever's keyring owns this checkout — a side effect `config_keys`' own docstring already owns
-    and tests.
+    and tests. HOME is replaced too: the committer identity git finds before a first commit belongs to
+    whoever is running the suite, and a recorded argv that depends on whose is a list that passes on a
+    configured box and fails on a machine that was just created.
     """
     directory = tmp_path / "fake-tools"
     directory.mkdir()
@@ -115,6 +117,26 @@ def tools(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", f"{directory}{os.pathsep}{os.environ['PATH']}")
     for name in ("KUBEMENTAT_HOME", "KUBEMENTAT_PLATFORM_CONFIG_DIR", "BASE_DOMAIN", "GNUPGHOME"):
         monkeypatch.delenv(name, raising=False)
+
+    # The committer identity a run can see is a machine-level fact, and a machine-level fact must not
+    # be inherited by a fixture that asserts an argv list. `config init` reads `user.name` and
+    # `user.email` before its first commit and writes kubementat's own identity only into the gap it
+    # finds, so a box that has a global identity records two reads and no writes, while a VM that was
+    # just created -- where the read of either half answers nothing -- records two `git config` writes
+    # as well. Both are correct behaviour and both belong to the commit step, so the same expected
+    # ordering is true on one machine and false on the other. This fixture therefore states the
+    # identity in an isolated HOME: the reads answer, nothing is written, and the ordering claim is
+    # about the steps. That both halves of the fallback work is asserted against real git by
+    # test_config_init_can_commit_on_a_machine_that_names_no_committer.py, which repoints HOME the same
+    # way and states the opposite case on purpose.
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".gitconfig").write_text("[user]\n\tname = Fixture Operator\n"
+                                      "\temail = fixture@example.invalid\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+    # A stale $XDG_CONFIG_HOME on the machine running the suite would otherwise outrank the file above
+    # and leak somebody's real identity into a fixture that just declared it has none.
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(home / ".config"))
 
     # The two gpg questions step 7 asks about a key file, answered by the fixture. See the module
     # docstring: the fingerprint is the fact the keystore file is named after, and the import is what

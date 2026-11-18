@@ -8,8 +8,8 @@ Git had refused to commit: the guest had no `user.name` and no `user.email` anyw
 state of a freshly created machine. The error sent the operator to `git config --global`, a
 machine-level setting, to fix something inside a repository kubementat had itself just created. Nothing
 in the lane had reached stage 02 since 2026-11-02, and nothing in the unit suite could have seen it
-either, for the ordinary reason: the stand-in git in `bootstrap_tools` answers 0 to a config read, which
-is the case where kubementat writes nothing.
+either, for the ordinary reason: the fixture that asserts the steps declares a machine that already
+names somebody, which is the case where kubementat writes nothing.
 
 So this file exercises real git in a real repo with a real refusal.
 

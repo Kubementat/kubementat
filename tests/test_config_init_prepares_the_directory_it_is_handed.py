@@ -74,9 +74,11 @@ def test_a_fresh_directory_runs_the_nine_steps_in_the_order_the_order_is_the_pro
         ["git", "add", "-A"],
         # The two committer-identity reads sit here and not before `add`: they are a precondition of the
         # commit and nothing else, so asking earlier would read a repository that may not have a
-        # HEAD to read against. They are *reads* in this fixture because the stand-in git answers 0,
-        # which is the case where kubementat writes nothing -- the writes are asserted in the identity
-        # tests, which run a git that answers 1.
+        # HEAD to read against. They answer without writing, so the list holds no identity writes, and
+        # that is a property of the fixture and not of the machine running the suite: `tools` states an
+        # identity in an isolated HOME, so the read answers on a developer's box and on a freshly
+        # created VM alike. What kubementat writes when the read answers nothing is asserted against
+        # real git by the committer-identity file.
         ["git", "config", "user.name"],
         ["git", "config", "user.email"],
         ["git", "commit", "-m", "chore: initialize kubementat configuration"],
