@@ -576,25 +576,24 @@ def cluster_deletes(recorded_api, resource, refused=None):
     return recorded_api
 
 
+# The variables that point kubementat at a root, an environment or a cluster. A developer's shell
+# commonly exports some of them, and any one left set answers a test from outside it.
+POINTING_VARIABLES = ("KUBEMENTAT_HOME", "KUBEMENTAT_PLATFORM_CONFIG_DIR", "KUBECONFIG",
+                      "ENVIRONMENT", "TEAM", *PROCESS_CLUSTER_VARIABLES)
+
+
 @pytest.fixture(autouse=True)
-def no_configuration_root_recorded_for_this_user(monkeypatch, tmp_path):
-    """The recorded configuration root is a fixture fact, never a fact about the machine.
+def nothing_on_this_machine_answers_a_test(monkeypatch, tmp_path):
+    """Every test starts from a machine that names no root, no environment and no cluster.
 
-    `paths.default_platform_config_dir` falls back, below `--config-dir` and below
-    `KUBEMENTAT_PLATFORM_CONFIG_DIR`, to the tree `kmt config init` recorded under the user's home.
-    Left alone, that would make two kinds of test lie: one that asserts a command *refuses* would
-    resolve whoever's home directory pytest is running in, and one that runs `kmt config init` would
-    write into that home directory. So the dial that says where the record lives
-    (`KUBEMENTAT_CONFIGURED_ROOTS`) is pointed at a file inside `tmp_path` that nothing creates, which
-    makes "nothing is recorded" the default state of this suite and not an accident of the host.
-
-    A test that wants a record points the dial at its own file — see
-    `test_the_configuration_root_is_recorded_once_and_the_refusal_still_answers.py`, which does it in
-    the body and so lands after this fixture, the same ordering rule
-    `no_cluster_is_running_this_process` states.
+    The record `kmt config init` keeps under the user's home is pointed at a file nothing creates,
+    and the pointing variables are cleared. A test that wants any of them sets it in its own body,
+    which runs after this fixture.
     """
     monkeypatch.setenv("KUBEMENTAT_CONFIGURED_ROOTS",
                        str(tmp_path / "configuration-roots-are-not-recorded-here.json"))
+    for name in POINTING_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture(autouse=True)
