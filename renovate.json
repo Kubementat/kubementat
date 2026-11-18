@@ -1,0 +1,485 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "kubementat version-freshness config. Covers every machine-readable pin in this tree: the chart versions in the Go-template helmfile manifest, the versions declared in Python source and in the CI image build args, the container images the Tekton assets and the end-to-end harness run, Concourse's chart and its image pair, the Python dependencies and their lock file, and the GitHub Actions the unit lane uses.",
+  "extends": [
+    "config:recommended"
+  ],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/build/**",
+    "**/__pycache__/**",
+    "**/.venv/**",
+    "**/.ruff_cache/**",
+    "**/.pi/**",
+    "**/*.egg-info/**"
+  ],
+  "ignorePresets": [
+    ":ignoreModulesAndTests"
+  ],
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 5,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "description": "refresh uv.lock weekly through the pep621 manager, which shells out to uv — so the runner must use the renovate -full image",
+    "schedule": [
+      "before 4am on monday"
+    ]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "helmfile chart pin — prometheus-community/prometheus",
+      "managerFilePatterns": [
+        "/(^|/)helmfile\\.ya?ml\\.gotmpl$/"
+      ],
+      "matchStrings": [
+        "env\\s*\"PROMETHEUS_VERSION\"\\s*\\|\\s*default\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "prometheus-community/prometheus",
+      "packageNameTemplate": "prometheus",
+      "datasourceTemplate": "helm",
+      "registryUrlTemplate": "https://prometheus-community.github.io/helm-charts",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "helmfile chart pin — prometheus-community/prometheus-blackbox-exporter",
+      "managerFilePatterns": [
+        "/(^|/)helmfile\\.ya?ml\\.gotmpl$/"
+      ],
+      "matchStrings": [
+        "env\\s*\"PROMETHEUS_BLACKBOX_EXPORTER_VERSION\"\\s*\\|\\s*default\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "prometheus-community/prometheus-blackbox-exporter",
+      "packageNameTemplate": "prometheus-blackbox-exporter",
+      "datasourceTemplate": "helm",
+      "registryUrlTemplate": "https://prometheus-community.github.io/helm-charts",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "helmfile chart pin — sstarcher/helm-exporter (its version carries build metadata, which semver-coerced orders correctly)",
+      "managerFilePatterns": [
+        "/(^|/)helmfile\\.ya?ml\\.gotmpl$/"
+      ],
+      "matchStrings": [
+        "env\\s*\"PROMETHEUS_HELM_EXPORTER_VERSION\"\\s*\\|\\s*default\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "sstarcher/helm-exporter",
+      "packageNameTemplate": "helm-exporter",
+      "datasourceTemplate": "helm",
+      "registryUrlTemplate": "https://shanestarcher.com/helm-charts/",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "helmfile chart pin — grafana-community/grafana",
+      "managerFilePatterns": [
+        "/(^|/)helmfile\\.ya?ml\\.gotmpl$/"
+      ],
+      "matchStrings": [
+        "env\\s*\"GRAFANA_VERSION\"\\s*\\|\\s*default\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "grafana-community/grafana",
+      "packageNameTemplate": "grafana",
+      "datasourceTemplate": "helm",
+      "registryUrlTemplate": "https://grafana-community.github.io/helm-charts",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "helmfile chart pin — grafana-community/loki",
+      "managerFilePatterns": [
+        "/(^|/)helmfile\\.ya?ml\\.gotmpl$/"
+      ],
+      "matchStrings": [
+        "env\\s*\"LOKI_VERSION\"\\s*\\|\\s*default\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "grafana-community/loki",
+      "packageNameTemplate": "loki",
+      "datasourceTemplate": "helm",
+      "registryUrlTemplate": "https://grafana-community.github.io/helm-charts",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "helmfile chart pin — grafana/alloy",
+      "managerFilePatterns": [
+        "/(^|/)helmfile\\.ya?ml\\.gotmpl$/"
+      ],
+      "matchStrings": [
+        "env\\s*\"ALLOY_VERSION\"\\s*\\|\\s*default\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "grafana/alloy",
+      "packageNameTemplate": "alloy",
+      "datasourceTemplate": "helm",
+      "registryUrlTemplate": "https://grafana.github.io/helm-charts",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "helmfile chart pin — fairwinds-stable/polaris",
+      "managerFilePatterns": [
+        "/(^|/)helmfile\\.ya?ml\\.gotmpl$/"
+      ],
+      "matchStrings": [
+        "env\\s*\"POLARIS_VERSION\"\\s*\\|\\s*default\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "fairwinds-stable/polaris",
+      "packageNameTemplate": "polaris",
+      "datasourceTemplate": "helm",
+      "registryUrlTemplate": "https://charts.fairwinds.com/stable",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "helmfile chart pin — jetstack/cert-manager (this pin carries a v-prefix, which semver-coerced accepts and strips for comparison)",
+      "managerFilePatterns": [
+        "/(^|/)helmfile\\.ya?ml\\.gotmpl$/"
+      ],
+      "matchStrings": [
+        "env\\s*\"CERT_MANAGER_VERSION\"\\s*\\|\\s*default\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "jetstack/cert-manager",
+      "packageNameTemplate": "cert-manager",
+      "datasourceTemplate": "helm",
+      "registryUrlTemplate": "https://charts.jetstack.io",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "helmfile chart pin — traefik/traefik (the chart's appVersion is the Traefik binary version, so the chart bump is the only Traefik version PR and no separate image pin is wanted)",
+      "managerFilePatterns": [
+        "/(^|/)helmfile\\.ya?ml\\.gotmpl$/"
+      ],
+      "matchStrings": [
+        "env\\s*\"TRAEFIK_VERSION\"\\s*\\|\\s*default\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "traefik/traefik",
+      "packageNameTemplate": "traefik",
+      "datasourceTemplate": "helm",
+      "registryUrlTemplate": "https://traefik.github.io/charts",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "helmfile chart pin — openbao/openbao",
+      "managerFilePatterns": [
+        "/(^|/)helmfile\\.ya?ml\\.gotmpl$/"
+      ],
+      "matchStrings": [
+        "env\\s*\"OPENBAO_VERSION\"\\s*\\|\\s*default\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "openbao/openbao",
+      "packageNameTemplate": "openbao",
+      "datasourceTemplate": "helm",
+      "registryUrlTemplate": "https://openbao.github.io/openbao-helm",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "helmfile chart pin — concourse/concourse (the chart's appVersion is what the shipped Concourse values pin as its image tag, so the two pins belong to one release and are grouped into one PR below)",
+      "managerFilePatterns": [
+        "/(^|/)helmfile\\.ya?ml\\.gotmpl$/"
+      ],
+      "matchStrings": [
+        "env\\s*\"CONCOURSE_VERSION\"\\s*\\|\\s*default\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "concourse/concourse",
+      "packageNameTemplate": "concourse",
+      "datasourceTemplate": "helm",
+      "registryUrlTemplate": "https://concourse-charts.storage.googleapis.com/",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "Concourse image tag in the shipped component values — the image the chart runs, pinned beside the chart pin above because an image tag that is not the chart's appVersion runs a binary nobody judged the chart against",
+      "managerFilePatterns": [
+        "/src/kubementat/core/assets/values/ci/concourse/values\\.yaml$/"
+      ],
+      "matchStringsStrategy": "combination",
+      "matchStrings": [
+        "image:\\s*(?<depName>concourse/concourse)",
+        "imageTag:\\s*\"(?<currentValue>[0-9][0-9a-zA-Z.+-]*)\""
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "constants.py pinned binary versions — helm (the quoted-value form only, so the integer majors in PORTABLE_MAJORS_BELOW_THE_PIN cannot be mistaken for a pin)",
+      "managerFilePatterns": [
+        "/src/kubementat/core/constants\\.py$/"
+      ],
+      "matchStrings": [
+        "\"helm\"\\s*:\\s*\"(?<currentValue>[0-9][0-9a-zA-Z.+-]*)\""
+      ],
+      "depNameTemplate": "helm/helm",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "depNameTemplate": "helmfile/helmfile",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced",
+      "description": "helmfile pin in constants.py — the first of the two places that pin it. The other is the CI image build arg; both managers declare the same depName and datasource, so both lookups resolve to the same newest version and the pair is coherent again as soon as either PR merges.",
+      "managerFilePatterns": [
+        "/src/kubementat/core/constants\\.py$/"
+      ],
+      "matchStrings": [
+        "\"helmfile\"\\s*:\\s*\"(?<currentValue>[0-9][0-9a-zA-Z.+-]*)\""
+      ]
+    },
+    {
+      "customType": "regex",
+      "depNameTemplate": "helmfile/helmfile",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced",
+      "description": "helmfile pin in the CI image build args — the second of the two places that pin it (see the constants.py twin above)",
+      "managerFilePatterns": [
+        "/docker_files/.*/Dockerfile$/"
+      ],
+      "matchStrings": [
+        "ARG HELMFILE_VERSION=\"(?<currentValue>[0-9][0-9a-zA-Z.+-]*)\""
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "constants.py defaults — Tekton Pipelines release, which install.py builds its release URLs from",
+      "managerFilePatterns": [
+        "/src/kubementat/core/constants\\.py$/"
+      ],
+      "matchStrings": [
+        "TEKTON_VERSION_PIPELINE\"\\s*:\\s*\"(?<currentValue>[0-9][0-9a-zA-Z.+-]*)\""
+      ],
+      "depNameTemplate": "tektoncd/pipeline",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "constants.py defaults — Tekton Dashboard release",
+      "managerFilePatterns": [
+        "/src/kubementat/core/constants\\.py$/"
+      ],
+      "matchStrings": [
+        "TEKTON_VERSION_DASHBOARD\"\\s*:\\s*\"(?<currentValue>[0-9][0-9a-zA-Z.+-]*)\""
+      ],
+      "depNameTemplate": "tektoncd/dashboard",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "constants.py defaults — Tekton Triggers release",
+      "managerFilePatterns": [
+        "/src/kubementat/core/constants\\.py$/"
+      ],
+      "matchStrings": [
+        "TEKTON_VERSION_TRIGGERS\"\\s*:\\s*\"(?<currentValue>[0-9][0-9a-zA-Z.+-]*)\""
+      ],
+      "depNameTemplate": "tektoncd/triggers",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "CI image build arg — the kubectl apt channel. extractVersion reduces every upstream tag to its minor, so a PR means \"a new stable minor is served\" and never churns on patches inside the channel the URL already installs.",
+      "managerFilePatterns": [
+        "/(^|/)docker_files/.*/Dockerfile$/"
+      ],
+      "matchStrings": [
+        "ARG KUBECTL_MINOR_VERSION=\"(?<currentValue>[0-9]+\\.[0-9]+)\""
+      ],
+      "depNameTemplate": "kubernetes/kubernetes",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>[0-9]+\\.[0-9]+)$",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "CI image build arg — the Tekton CLI release. The download URL is built from this argument, so the argument is the whole pin.",
+      "managerFilePatterns": [
+        "/(^|/)docker_files/.*/Dockerfile$/"
+      ],
+      "matchStrings": [
+        "ARG TKN_CLI_VERSION=\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "tektoncd/cli",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "CI image build arg — the yq release",
+      "managerFilePatterns": [
+        "/(^|/)docker_files/.*/Dockerfile$/"
+      ],
+      "matchStrings": [
+        "ARG YQ_VERSION=\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "mikefarah/yq",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "CI image build arg — the helm-diff plugin release",
+      "managerFilePatterns": [
+        "/(^|/)docker_files/.*/Dockerfile$/"
+      ],
+      "matchStrings": [
+        "ARG HELM_DIFF_VERSION=\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "databus23/helm-diff",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "CI image build arg — the Linkerd edge release. extractVersion keeps edge-* tags only, so a stable tag never enters the candidate set and reorders the list.",
+      "managerFilePatterns": [
+        "/(^|/)docker_files/.*/Dockerfile$/"
+      ],
+      "matchStrings": [
+        "ARG LINKERD_VERSION=\"(?<currentValue>edge-[^\"]+)\""
+      ],
+      "depNameTemplate": "linkerd/linkerd2",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^edge-(?<version>[0-9][0-9a-zA-Z.-]*)$",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "CI image build arg — the Node version the tarball is fetched for",
+      "managerFilePatterns": [
+        "/(^|/)docker_files/.*/Dockerfile$/"
+      ],
+      "matchStrings": [
+        "ARG NODE_VERSION=\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "nodejs/node",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "Tekton asset parameter defaults — the buildkit image. The native tekton manager's step-image type does not cover these: the tag is a parameter default, not an image a step names.",
+      "managerFilePatterns": [
+        "/src/kubementat/core/assets/tekton_ci/.*\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "default:\\s*\"?(?<depName>moby/buildkit):(?<currentValue>v[0-9][0-9a-zA-Z.+-]+)\"?"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "Tekton asset parameter defaults — the Maven image (library/maven; the -openjdk suffix is preserved because only the version is captured)",
+      "managerFilePatterns": [
+        "/src/kubementat/core/assets/tekton_ci/.*\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "default:\\s*\"?(?<depName>maven):(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "end-to-end harness strings in config.py — the buildkit builder, the registry, and the nginx channel tag. Each depName is captured by its own match so one manager covers three images.",
+      "managerFilePatterns": [
+        "/tests/e2e/harness/config\\.py$/"
+      ],
+      "matchStrings": [
+        "DOCKERBUILD_BUILDER_IMAGE = \"(?<depName>moby/buildkit):(?<currentValue>v[0-9][0-9a-zA-Z.+-]+)\"",
+        "DOCKERBUILD_REGISTRY_IMAGE = \"(?<depName>registry):(?<currentValue>[0-9]+)\"",
+        "\"(?<depName>docker.io/library/nginx):(?<currentValue>[0-9]+\\.[0-9]+)-alpine\""
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "end-to-end harness string in stages.py — the alpine channel tag of the generated test pipeline",
+      "managerFilePatterns": [
+        "/tests/e2e/harness/stages\\.py$/"
+      ],
+      "matchStrings": [
+        "(?<depName>docker\\.io/library/alpine):(?<currentValue>[0-9]+\\.[0-9]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "end-to-end provision stage — the k3s version. The +k3sN suffix is valid semver build metadata, so semver-coerced orders it without help.",
+      "managerFilePatterns": [
+        "/tests/e2e/stages/.*\\.sh$/"
+      ],
+      "matchStrings": [
+        "K3S_VERSION=\"(?<currentValue>v[0-9][0-9.]*\\+k3s[0-9]+)\""
+      ],
+      "depNameTemplate": "k3s-io/k3s",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "the ansible manager mis-fires on this tree's Tekton YAML, reading container images as ansible tasks. Disabling it keeps the scan free of 26 deps that are not dependencies.",
+      "matchManagers": [
+        "ansible"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "the native helmfile manager must not touch helmfile.yaml.gotmpl: its file pattern matches the name but the Go-template content is not valid YAML, so it can only warn. The regex managers above own that file, and Concourse's release is one of them.",
+      "matchManagers": [
+        "helmfile"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "minor and patch chart bumps grouped into one branch; majors keep their own branch because the values layers that answer them are edited per release.",
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "excludeDepNames": [
+        "concourse/concourse"
+      ],
+      "groupName": "helm chart pins"
+    },
+    {
+      "description": "Concourse is pinned twice for one release: the chart in the helmfile manifest and the image tag in the shipped component values. Grouping the two puts both edits in one branch, so a bump cannot land a new chart over an old binary or the other way round. The image candidate Renovate proposes is the newest published tag, not the new chart's appVersion — so a Concourse bump PR is only right when the tag it writes equals that appVersion, and the reviewer sets it there.",
+      "matchDepNames": [
+        "concourse/concourse"
+      ],
+      "groupName": "concourse release (chart and image)"
+    },
+    {
+      "description": "the native helm-values manager reads this file and finds the image repository without a tag, because the chart names its image with a top-level image key rather than the repository/tag pair the manager expects; the regex manager above owns the tag, and leaving both would report the same image twice, once with nothing to compare.",
+      "matchManagers": [
+        "helm-values"
+      ],
+      "matchFileNames": [
+        "src/kubementat/core/assets/values/ci/concourse/values.yaml"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "untagged and floating base images (the example pipelines, and the apt-installed tools of the CI image) have no current value to diff against, so a recurring scan has nothing to say about them. Digest pinning is a one-off decision, not a scheduled PR.",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchCurrentVersion": "/^latest$/",
+      "enabled": false
+    }
+  ]
+}

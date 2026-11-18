@@ -1,4 +1,25 @@
 # Unreleased
+- **A Renovate integration scans the tree for newer versions of everything it pins, and runs from
+  one command: `tools/renovate/run-renovate-scan.sh`.** Adds `renovate.json` at the repo root and
+  the runner under `tools/renovate/`; documentation in
+  [docs/README_RENOVATE.md](docs/README_RENOVATE.md).
+  - **Why a config and not a check.** Nothing in this tree's pins is in a place Renovate reads on
+    its own: the chart versions sit in Go-template `default` expressions in the helmfile manifest,
+    the binary versions in `constants.py` and in image build arguments, the Concourse image tag in
+    a component values file whose image key the helm-values manager does not understand. Each gets
+    a `regex` manager that states where the version is and which upstream answers it, so the scan
+    sees the same pins a reader has to hunt for today.
+  - **The two pins that have to move together are grouped.** `helmfile` is pinned twice, in
+    `constants.py` and in the CI image build arguments, and the two numbers had drifted apart; both
+    managers declare the same dependency, so both lookups resolve to the same newest version and
+    the pair is coherent again when either branch merges. Concourse is pinned twice for one
+    release — the chart and its image — and is grouped into a single branch so a bump cannot land a
+    new chart over an old binary.
+  - **Nothing runs unattended, and `--dry-run` is the default mode.** The read-only scan mounts the
+    checkout read-only and writes nothing; the mode that opens branches against Forgejo has to be
+    asked for and refuses to start without an endpoint and a token. Renovate's CLI runs once and
+    exits, so the schedule is cron, and the weekly slot is placed inside the window the lock-file
+    refresh itself declares.
 - **One operator values file per component, encrypted by its name, read only at the environment
   layer: `kmt helm apply` and every component install now resolve a release's operator values
   through exactly one file, `<environment>/values/<component>.encrypted.yaml`.** Breaking.

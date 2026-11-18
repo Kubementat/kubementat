@@ -77,9 +77,9 @@ path under `src/` resolves a chart path against this checkout.
 
 ## Which document answers which question
 
-`docs/` holds 48 Markdown files, and this file links to exactly one of them. That is the whole reason for
+`docs/` holds 49 Markdown files, and this file links to exactly one of them. That is the whole reason for
 the table: a reader who finishes the quick start above still has to know where to go next, and most of
-those 48 files are dated records of work that is already finished. So — eleven documents are **live**, and
+those 49 files are dated records of work that is already finished. So — twelve documents are **live**, and
 the rest are **records**, read for why a decision was made and never as an instruction:
 
 | What you want to know | Read |
@@ -88,6 +88,7 @@ the rest are **records**, read for why a decision was made and never as an instr
 | how git-crypt is laid out inside that directory, and which of its commands a failure is about | [docs/README_GIT_CRYPT.md](docs/README_GIT_CRYPT.md) |
 | Tekton: the Tasks and Pipelines that ship, triggers, cleanup jobs, where generated pipeline runs go | [docs/README_TEKTON.md](docs/README_TEKTON.md) |
 | Concourse CI: what it runs beside Tekton, enabling it, key provisioning, external DB, backups, the upgrade/teardown runbook | [docs/concourse-ci.md](docs/concourse-ci.md) |
+| which versions this tree pins, how the scan finds newer ones for them, and how to run it | [docs/README_RENOVATE.md](docs/README_RENOVATE.md) |
 | where the monitoring stack is, and what it answers | [docs/README_MONITORING_AND_LOGGING.md](docs/README_MONITORING_AND_LOGGING.md) |
 | what other tools kubementat ships and what they are for | [docs/README_ADDITIONAL_TOOLS.md](docs/README_ADDITIONAL_TOOLS.md) |
 | how work in this repository is done (branches, commits, the lanes) | [docs/README_DEVELOPMENT_FLOW.md](docs/README_DEVELOPMENT_FLOW.md) |
@@ -127,6 +128,21 @@ tree:
 
 The commands `config init` wraps, so a reader can tell which one a failure is actually about, are written
 out in [docs/README_GIT_CRYPT.md](docs/README_GIT_CRYPT.md).
+
+## Version scans
+
+The versions this tree pins are checked by one command, which reads the tree, asks the upstreams, and
+leaves a timestamped log without touching the checkout:
+
+```
+tools/renovate/run-renovate-scan.sh --dry-run     # what is newer, writes nothing
+tools/renovate/run-renovate-scan.sh --pr          # opens branches against Forgejo
+```
+
+The dry run is the default. PR mode has to be asked for and refuses to start without the Forgejo web
+URL and a token. Repetition is cron's, and the weekly slot sits inside the window the `uv.lock`
+refresh declares, so the lock file is refreshed rather than quietly ageing. What the scan cannot see,
+and why, is in [docs/README_RENOVATE.md](docs/README_RENOVATE.md).
 
 ## Local Environment Prerequisites
 
