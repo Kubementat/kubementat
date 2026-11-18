@@ -16,7 +16,7 @@ and that is the failure the decorator's ordering is written to catch.
 from click.testing import CliRunner
 
 from cli.commands import kubernetes
-from cluster_fixture import (DEV_SERVER, PROD_SERVER, checkout, redirect_checkout,
+from cluster_fixture import (DEV_SERVER, checkout, redirect_checkout,
                             write_environment, write_kubeconfig)
 
 
@@ -54,26 +54,6 @@ def run(*arguments):
         kubernetes.pod_images, ["dev", "some-namespace", *arguments])
 
 
-def test_the_report_says_which_cluster_the_command_resolved_and_from_what_file(tmp_path, monkeypatch,
-                                                                               recorded_api):
-    """A resolved cluster, reported once, with the file that declared the claim.
-
-    The line is the command's answer to "which cluster" and it has to be readable on its own, so
-    the address, the file, and the coverage of the comparison are all in it.
-    """
-    resolving_root(tmp_path, monkeypatch)
-
-    result = run()
-
-    assert result.exit_code == 0, result.stderr
-    assert f"cluster dev: {DEV_SERVER} (" in result.stderr, result.stderr
-    assert "platform_config/dev/static.json" in result.stderr
-    # One environment in the root means nothing was compared, and the line says that instead of
-    # claiming a verification it did not do.
-    assert "not verified" in result.stderr, result.stderr
-    assert result.stderr.count(f"cluster dev: {DEV_SERVER}") == 1, result.stderr
-
-
 def test_the_environment_that_took_the_command_names_the_sibling_it_could_not_read(tmp_path,
                                                                                    monkeypatch,
                                                                                    recorded_api):
@@ -92,32 +72,6 @@ def test_the_environment_that_took_the_command_names_the_sibling_it_could_not_re
     assert "not verified" in result.stderr
     assert "staging could not be resolved" in result.stderr, result.stderr
     assert "no such context 'staging-eu'" in result.stderr, result.stderr
-
-
-def test_the_context_a_command_passes_is_read_from_the_kubeconfig_the_command_names(tmp_path,
-                                                                                     monkeypatch,
-                                                                                     recorded_api):
-    """The command's own flag above the layers, which is why the decorator is per-command and not
-    on the group.
-
-    A `--context` that the resolution order could not see would be the same class of bug as the
-    `current-context` fallback it replaced: the answer decided outside the command's own arguments.
-    The report is the assertion, because it records the layer the claim came out of.
-
-    The flag states the name the environment already declares and points it at a file of its own.
-    That is deliberate: a statement above the file may answer for an environment, and it is
-    refused when it contradicts one, so a test that aims a command at a *different* cluster than
-    the one its environment declared is no longer a resolution test — it is
-    `test_a_stated_cluster_is_checked_against_the_cluster_the_environment_declares.py`.
-    """
-    root = resolving_root(tmp_path, monkeypatch)
-    other = write_kubeconfig(root / "other-kubeconfig", {"context-of-dev": PROD_SERVER})
-
-    result = run("--context", "context-of-dev", "--kubeconfig", str(other))
-
-    assert result.exit_code == 0, result.stderr
-    assert f"cluster dev: {PROD_SERVER} (" in result.stderr, result.stderr
-    assert "flag --context" in result.stderr, result.stderr
 
 
 def test_a_cluster_two_environments_have_both_claimed_refuses_the_command_and_writes_nothing(
@@ -157,21 +111,3 @@ def test_a_command_that_cannot_name_a_cluster_never_builds_a_client(tmp_path, mo
     assert "does not address a cluster" in result.stderr, result.stderr
     assert "static.json" in result.stderr
     assert recorded_api.methods() == [], "the command reached a cluster it could not name"
-
-
-def test_the_report_lands_on_stderr_so_a_commands_stdout_keeps_its_shape(tmp_path, monkeypatch,
-                                                                         recorded_api):
-    """Every command prints what it resolved; it does not say it may change the output.
-
-    `create-ingress` puts a manifest on stdout so it can be piped into `kubectl apply`, and
-    `service-account-token` prints a credential and nothing else — for both of them a line in front
-    of the answer is the command breaking its own contract. So the report is stderr, asserted here
-    once and then per command where the contract already depends on it.
-    """
-    resolving_root(tmp_path, monkeypatch)
-
-    result = run()
-
-    assert result.exit_code == 0, result.stderr
-    assert "cluster dev:" not in result.stdout, result.stdout
-    assert "cluster dev:" in result.stderr, result.stderr

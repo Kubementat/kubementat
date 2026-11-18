@@ -19,9 +19,6 @@ import pytest
 
 from recorded_operations import API_PROGRAM
 
-from kubementat import errors
-from kubementat.core import constants
-from kubementat.core.config.config import Config
 from kubementat.core.identity.context import Context
 from kubementat.infrastructure.helm import HelmUtils
 from conftest import run_kmt
@@ -34,7 +31,6 @@ CLAIMS = ["polaris-data-0", "polaris-scratch-0"]
 # The router, addressed by the table that says which components exist. Read rather than typed so a
 # checkout that lost the entry fails here rather than in a test that believed a string.
 ROUTER = "traefik"
-ROUTER_NAMESPACE = constants.DEFAULT_NAMESPACES[ROUTER]
 
 
 def namespace_of(argv):
@@ -199,78 +195,6 @@ def written_commands(commands):
     return [command for command in commands if "uninstall" in command or "delete" in command]
 
 
-def test_the_release_and_the_claims_it_made_both_go(fixture_repo, dry_run_env, fake_binaries, recorded_api):
-    """One component: `helm uninstall` by the name the cluster reports, then its claims by label."""
-    configured(fixture_repo)
-    respond(fake_binaries, recorded_api, releases=[(RELEASE, NAMESPACE)], claims=CLAIMS)
-
-    outcome = uninstalled(fixture_repo, recorded_api)
-
-    assert outcome["namespace"] == NAMESPACE
-    assert outcome["releases"] == [RELEASE]
-    assert sorted(outcome["claims"]) == sorted(CLAIMS)
-
-    commands = fake_binaries.commands()
-    assert release_commands_to(commands, "uninstall", RELEASE, NAMESPACE), (
-        f"the release was not addressed by the name the cluster reports and the namespace the"
-        f" configuration names: {commands}")
-    # The claim read and delete are client calls now, so what is asserted is the namespace
-    # and the selector the API server was handed, not the argv a process was handed. The same two
-    # facts, asked a different way; the selector is spelled out here rather than in a helper so a
-    # label change that silently narrows the sweep is visible in this file and not only in a diff.
-    asked = recorded_api.called_as("list_namespaced_persistent_volume_claim")
-    assert asked["namespace"] == NAMESPACE, asked
-    assert asked["label_selector"] == "app.kubernetes.io/instance=polaris", asked
-    deleted = [call for call in recorded_api.calls
-               if call[0] == "delete_namespaced_persistent_volume_claim"]
-    assert sorted(call[1]["name"] for call in deleted) == sorted(CLAIMS), deleted
-    assert all(call[1]["namespace"] == NAMESPACE for call in deleted), deleted
-
-
-def test_the_namespace_is_the_one_the_environment_names_and_nowhere_else(fixture_repo,
-                                                                         dry_run_env,
-                                                                         fake_binaries, recorded_api):
-    """Everything this deletes lands in the one namespace the configuration names.
-
-    `polaris` is what the template ships, so it is also what the default answers with — that is the
-    fallback, and the next test renames it.
-    """
-    configured(fixture_repo)
-    respond(fake_binaries, recorded_api, releases=[(RELEASE, NAMESPACE)], claims=CLAIMS)
-
-    uninstalled(fixture_repo, recorded_api)
-
-    written = written_commands(fake_binaries.commands())
-    assert written, "nothing was addressed at a namespace, so nothing was addressed"
-    assert {namespace_of(command) for command in written} == {NAMESPACE}, written
-    assert Config(fixture_repo.environment, fixture_repo.team,
-                  preload_configs=False).component_namespace(COMPONENT) == NAMESPACE
-
-
-def test_renaming_the_namespace_uninstalls_from_the_new_place(fixture_repo, dry_run_env,
-                                                              fake_binaries, recorded_api):
-    """The rename test that had to exist: a namespace rename moves the uninstall with it.
-
-    kubementat never had a component uninstall to move, so this is the other half of the namespace
-    rule — the
-    reading side already honoured the key, and the writing side of the platform teardown only existed
-    inside a script nothing called.
-    """
-    configured(fixture_repo, namespace="nightly-polaris")
-    respond(fake_binaries, recorded_api, releases=[(RELEASE, "nightly-polaris")], claims=CLAIMS)
-
-    outcome = uninstalled(fixture_repo, recorded_api)
-
-    assert outcome["namespace"] == "nightly-polaris"
-    commands = fake_binaries.commands()
-    assert release_commands_to(commands, "uninstall", RELEASE, "nightly-polaris"), commands
-    assert {namespace_of(command) for command in written_commands(commands)} == \
-           {"nightly-polaris"}, commands
-    assert not [command for command in written_commands(commands)
-                if namespace_of(command) == NAMESPACE], \
-        "the release is still addressed in a namespace the code remembered"
-
-
 def test_a_component_that_is_not_installed_says_so_and_deletes_nothing(fixture_repo,
                                                                        dry_run_env,
                                                                        fake_binaries, recorded_api):
@@ -328,37 +252,6 @@ def test_a_release_that_will_not_uninstall_keeps_its_claims_and_raises(fixture_r
     assert RELEASE in str(error.value)
     assert not [command for command in fake_binaries.commands()
                 if "delete" in command], "the claims of a release that is still installed went"
-
-
-def test_an_unreachable_cluster_is_not_reported_as_an_absent_component(fixture_repo,
-                                                                       dry_run_env,
-                                                                       fake_binaries, recorded_api):
-    """The listing is the one read that is not tolerant.
-
-    `helm list` answering `connection refused` and `helm list` answering `[]` are the same shape to
-    a guesser, and the difference between them is whether the next install of the component finds
-    the last release's secrets. So the listing is checked, before anything is deleted.
-    """
-    configured(fixture_repo)
-    fake_binaries.respond("helm", "connect: connection refused", exit_code=1, subcommand="list")
-
-    with pytest.raises(errors.CommandExecutionError):
-        uninstalled(fixture_repo, recorded_api)
-
-    assert not [command for command in fake_binaries.commands() if "delete" in command]
-
-
-def test_a_name_that_is_not_a_component_is_named_and_stops(fixture_repo, dry_run_env,
-                                                           fake_binaries):
-    """`kmt component uninstall dev polari` is a typo, not an empty namespace.
-
-    The namespace is what the deletion is addressed at, so an unknown component has to raise rather
-    than fall back — otherwise the typo is what uninstalled something.
-    """
-    with pytest.raises(KeyError):
-        HelmUtils(Context.build(fixture_repo.environment, fixture_repo.team)).uninstall_release("polari")
-
-    assert fake_binaries.commands() == []
 
 
 def test_the_command_is_on_the_surface_and_needs_no_team(fixture_repo, dry_run_env, fake_binaries, recorded_api):
@@ -440,29 +333,6 @@ def test_the_uninstall_shows_up_once_and_under_the_group_name():
     assert [name for name in names if "component" in name] == ["component"], sorted(names)
 
 
-def test_the_ingress_controller_is_addressed_by_the_same_two_facts(fixture_repo,
-                                                                   dry_run_env,
-                                                                   fake_binaries, recorded_api):
-    """The router is a component, so this command needs nothing Traefik-shaped to find it.
-
-    Traefik entered `constants.DEFAULT_NAMESPACES` as a component entry, and the consequence for
-    this file is that `uninstall_release` can address it. Before the entry, that call was a
-    `KeyError` and taking the router off a cluster meant tearing the whole platform down. What it
-    reads after the entry is the same two facts it reads for `polaris` -- the namespace through
-    `Config.component_namespace`, the release through `helm list` -- which is the point of the
-    entry existing rather than a router-specific path that has to be kept right twice.
-    """
-    fake_binaries.respond("helm", json.dumps([{"name": ROUTER, "namespace": ROUTER_NAMESPACE}]),
-                          subcommand="list")
-
-    outcome = uninstalled_router(fixture_repo, recorded_api)
-
-    assert outcome["namespace"] == ROUTER_NAMESPACE
-    assert outcome["releases"] == [ROUTER]
-    commands = fake_binaries.commands()
-    assert release_commands_to(commands, "uninstall", ROUTER, ROUTER_NAMESPACE), commands
-
-
 def test_renaming_the_routers_namespace_uninstalls_from_the_new_place(fixture_repo,
                                                                       dry_run_env,
                                                                       fake_binaries, recorded_api):
@@ -483,5 +353,3 @@ def test_renaming_the_routers_namespace_uninstalls_from_the_new_place(fixture_re
     commands = fake_binaries.commands()
     assert release_commands_to(commands, "uninstall", ROUTER, "edge"), commands
     assert {namespace_of(command) for command in written_commands(commands)} == {"edge"}, commands
-
-

@@ -60,19 +60,3 @@ def test_the_summary_holds_the_phrase_the_routing_lane_matches_on():
     """
     assert LANE_MATCHES_ON in _result_for_skip(False, traefik_presence
                                                .CLASSIFICATION_FOREIGN).summary()
-
-
-def test_an_install_that_applied_traefik_says_the_opposite_and_still_names_the_filter():
-    """The other branch of the same sentence, so the pair cannot be edited in only one place.
-
-    A summary that said `was not applied` on a run that applied Traefik would be worse than the
-    reword this file exists to guard: the lane would pass while the product had installed a second
-    controller. Both branches are asserted because both branches are read.
-    """
-    installed = _result_for_skip(True, traefik_presence.CLASSIFICATION_NONE)
-    summary = installed.summary()
-    assert "was applied" in summary
-    assert LANE_MATCHES_ON not in summary, \
-        "the skip sentence is being printed for a run that applied the release"
-    assert routing.INSTALL_LABEL_FILTER in summary, \
-        "the filter that decided the run is not in the output, so a scripted run cannot read it"

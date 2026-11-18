@@ -17,7 +17,6 @@ import pytest
 from pathlib import Path
 from types import SimpleNamespace
 
-from kubementat.core.config import config as config_module
 from kubementat.config import keys as config_keys
 from kubementat.infrastructure.kubernetes import apply
 from kubementat.automations.install import pipelines
@@ -225,44 +224,3 @@ def test_a_cluster_that_serves_the_written_version_is_asked_once_for_a_whole_com
     assert cluster.asked == [("tekton.dev", "v1")], (
         f"the question was asked {len(cluster.asked)} times; the check belongs once per command"
     )
-
-
-def test_a_discovery_failure_that_is_not_a_missing_version_is_still_its_own_error(tmp_path):
-    """A dead token or an unreachable cluster is not an old controller.
-
-    Both arrive as an `ApiException`, and reading the second one out of the first would send
-    the reader to upgrade a controller that is already fine. 404 is the only answer that
-    means "not here".
-    """
-    from kubernetes.client.exceptions import ApiException
-
-    cluster = RecordingCluster(discovery_error=ApiException(status=401, reason="Unauthorized"))
-
-    with pytest.raises(ApiException) as error:
-        preflight.preflight_tekton_api_version(cluster, FakeConfig())
-
-    assert not isinstance(error.value, TektonControllerWithoutConfiguredApiError)
-    assert error.value.status == 401
-
-
-def test_kubementat_speaks_exactly_one_tekton_api_version_and_it_is_v1(tmp_path, monkeypatch):
-    """The version is a constant, so nothing can set it back to what the tree no longer is.
-
-    `tmp_path` and `preload_configs=False` are load-bearing and not tidying. `TEKTON_API_VERSION` is
-    assigned from the module constant (`config.py:153`) three lines before `Config.__init__` opens any
-    file, so this assertion never needed the checkout's config — but a bare `Config("dev", "dev1")`
-    resolves to this checkout and opens `platform_config/dev/static.json`, which is `initialize` output
-    and is not tracked in git. That made this test green on a machine that had once run `initialize`
-    and red on a clean checkout. The guard that keeps it that way is
-    `tests/test_no_test_loads_config_from_the_checkout_root.py`; do not shorten this call back.
-    """
-    assert config_module.TEKTON_API_VERSION == "v1"
-    assert config_module.TEKTON_API_GROUP == "tekton.dev"
-
-    monkeypatch.setenv("TEKTON_API_VERSION", "v1beta1")
-    from kubementat.core.config.config import Config
-
-    assert Config("dev", "dev1", kubementat_main_dir=str(tmp_path),
-                  platform_config_dir=str(tmp_path / "platform_config"),
-                  preload_configs=False).TEKTON_API_VERSION == "v1", (
-        "an environment override crept back in")

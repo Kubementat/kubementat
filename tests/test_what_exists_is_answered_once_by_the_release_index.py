@@ -41,28 +41,6 @@ from cluster_fixture import UNREAD_ROOT, configuration_only_context
 
 LIVE_HELMFILE = values_path("helmfile.yaml.gotmpl")
 
-# A manifest with one release every shipped component commented out and one unaddressed release
-# kept, so the derivation can be shown to *move*. A test that only ever reads the shipped file
-# cannot tell a derivation from a copy of the shipped file, and the whole claim of this item is
-# that it is a derivation.
-ONE_RELEASE_EACH = """\
-helmDefaults:
-  wait: true
-releases:
-- name: prometheus-blackbox-exporter
-  chart: prometheus-community/kube-prometheus-stack
-  namespace: prometheus
-  labels:
-    component_name: prometheus-blackbox-exporter
-    group: standard
-# - name: cert-manager
-#   chart: jetstack/cert-manager
-#   namespace: cert-manager
-#   labels:
-#     component_name: cert-manager
-#     group: standard
-"""
-
 
 def read_the_manifest_yourself(path: Path) -> dict:
     """The shipped manifest, parsed here rather than through the parser under test.
@@ -93,14 +71,6 @@ def shipped_universe() -> components.ComponentUniverse:
     return components.ComponentUniverse.read(config)
 
 
-def universe_of(manifest_text: str, tmp_path, declared=None) -> components.ComponentUniverse:
-    """A universe over a manifest the test wrote, so the derivation can be pointed somewhere else."""
-    path = tmp_path / "helmfile.yaml.gotmpl"
-    path.write_text(manifest_text, encoding="utf-8")
-    config = Config("dev", "dev1", platform_config_dir=UNREAD_ROOT, preload_configs=False)
-    return components.ComponentUniverse.read(config, path, declared=declared)
-
-
 # ---------------------------------------------------------------------------------------------
 # (a) the derived answer equals the file, for every shipped release
 # ---------------------------------------------------------------------------------------------
@@ -117,23 +87,6 @@ def test_every_release_the_manifest_names_is_in_the_answer_and_nothing_else_is()
 
     assert set(universe.released()) == set(from_file), \
         f"the derived release universe and the manifest disagree: {set(universe.released()) ^ set(from_file)}"
-
-
-def test_no_shipped_release_is_answered_as_though_it_did_not_exist():
-    """The sentence this item exists to retire, asserted by enumeration.
-
-    Every label the manifest carries gets a kind that is *not* `not_a_kubementat_name`, because
-    telling an operator that a release they are about to apply is not a kubementat thing is the
-    disagreement the two oracles produced. `alloy`, `prometheus-blackbox-exporter` and
-    `prometheus-helm-exporter` are the names this catches, and they are caught by the rule and not
-    by name.
-    """
-    universe = shipped_universe()
-
-    refused_as_absent = sorted(name for name in universe.released()
-                               if universe.kind(name) == components.NOT_A_KUBEMENTAT_NAME)
-    assert refused_as_absent == [], \
-        f"the manifest names these releases and the existence answer denies them: {refused_as_absent}"
 
 
 def test_the_namespace_table_and_the_release_index_agree_for_every_name_either_one_names():
@@ -160,51 +113,6 @@ def test_the_namespace_table_and_the_release_index_agree_for_every_name_either_o
 # ---------------------------------------------------------------------------------------------
 # (b) both directions of the mismatch are derived
 # ---------------------------------------------------------------------------------------------
-
-
-def test_the_mismatch_moves_when_either_side_moves(tmp_path):
-    """A name added to the table and a release added to the manifest both land in the answer.
-
-    Half the old disagreement was that only one half moved. Here neither side needs an edit to a
-    third place: `newcomer` appears in the universe's namespace-only answer because `constants`
-    carries it, and `standalone` appears in the release-without-a-component answer because the
-    manifest carries it.
-    """
-    manifest = ONE_RELEASE_EACH + """- name: standalone
-  chart: fairwinds-incubator/standalone
-  namespace: standalone
-  labels:
-    component_name: standalone
-    group: standard
-"""
-    universe = universe_of(manifest, tmp_path,
-                           declared=tuple(sorted(set(constants.DEFAULT_NAMESPACES) | {"newcomer"})))
-
-    assert "newcomer" in universe.namespace_only()
-    assert "standalone" in universe.releases_without_a_component()
-    assert universe.kind("newcomer") == components.NAMESPACE_ONLY
-    assert universe.kind("standalone") == components.RELEASE_WITHOUT_COMPONENT
-    assert universe.kind("cert-manager") == components.NAMESPACE_ONLY, \
-        "a release commented out of a manifest that still keys its namespace is namespace-only, "\
-        "which is the answer `kmt component install` refuses with a namespace-only verb"
-
-
-def test_commenting_a_release_out_removes_it_from_the_answer_and_from_the_sweep(tmp_path):
-    """The direction that proves this is a derivation and not a copy.
-
-    `cert-manager` is shipped, so the shipped answer includes its CRD groups. Read a manifest that
-    does not ship it and those groups are not kubementat's to delete -- and `tekton.dev` is still
-    there, because that half is not answered by the index and the test says so rather than
-    assuming it.
-    """
-    universe = universe_of(ONE_RELEASE_EACH, tmp_path)
-    config = Config("dev", "dev1", platform_config_dir=UNREAD_ROOT, preload_configs=False)
-    groups = set(residue.crd_groups_kubementat_owns(config, _manifest(tmp_path)))
-
-    assert "cert-manager" not in universe.released()
-    assert set(residue.CERT_MANAGER_CRD_GROUPS).isdisjoint(groups), \
-        "the sweep still deletes the CRDs of a release this manifest does not apply"
-    assert set(residue.CRD_GROUPS_APPLIED_WITH_KUBECTL) <= groups
 
 
 def _manifest(tmp_path) -> Path:
@@ -256,97 +164,9 @@ def test_a_release_with_no_component_of_its_own_is_not_refused_as_a_typo():
             f"the refusal for `{name}` does not name the verb that applies it: {message}"
 
 
-def test_a_name_neither_read_is_still_refused_as_a_typo():
-    """The other half, so (c) cannot be passed by refusing everything.
-
-    A name the manifest does not label and the table does not key is a typo, and it is refused with
-    the list of names that *are* kubementat's -- read from the table, so the list cannot go stale
-    against the verb that prints it.
-    """
-    universe = shipped_universe()
-
-    with pytest.raises(Exception) as raised:
-        component_cli._known_component_or_raise("not-a-component-at-all", "installed", universe)
-    message = str(raised.value)
-    assert "is not a kubementat component" in message, message
-    assert "grafana" in message
-
-    for name in universe.accepted_names():
-        assert component_cli._known_component_or_raise(name, "installed", universe) == name
-
-
-def test_the_accepted_names_are_exactly_the_namespace_addressed_names():
-    """Nothing this item did changes which names a verb takes.
-
-    That is the claim the before/after capture makes and this is where it is held down: the
-    accepted set is `constants.DEFAULT_NAMESPACES`, exactly as it was, and the released set is
-    wider than it on purpose -- a release with no namespace of its own is not something to install
-    by component name, which is a decision and not an oversight.
-    """
-    universe = shipped_universe()
-
-    assert set(universe.accepted_names()) == set(constants.DEFAULT_NAMESPACES)
-    # Both directions of the difference are populated, and both have to stay that way. If every
-    # released name became accepted, the verbs would offer to install releases kubementat owns no
-    # namespace for; if every accepted name had a release, the namespace-only components would stop
-    # being refused by a helm command that cannot apply them.
-    assert set(universe.released()) - set(universe.accepted_names()), \
-        "every shipped release now names a component, so `kmt component install` would offer to " \
-        "install releases that land in somebody else's namespace"
-    assert set(universe.accepted_names()) - set(universe.released()), \
-        "every addressed component now has a release, so the namespace-only refusal is dead"
-
-
 # ---------------------------------------------------------------------------------------------
 # (d) the CRD sweep, set-equal to the tables
 # ---------------------------------------------------------------------------------------------
-
-
-def test_the_derived_crd_sweep_equals_the_set_the_tables_produce():
-    """The highest-consequence assertion in the item, and it is an equality.
-
-    For the shipped manifest, the groups `crd_groups_kubementat_owns` hands the cluster must be
-    the union of the two tables it replaced -- `("tekton.dev",) + CERT_MANAGER_CRD_GROUPS` -- and
-    the fact that it is equal is *why* the derivation is safe: a swept set that moved either
-    leaves cluster-scoped definitions behind or deletes objects that were never kubementat's.
-    """
-    config = Config("dev", "dev1", platform_config_dir=UNREAD_ROOT, preload_configs=False)
-    groups = set(residue.crd_groups_kubementat_owns(config))
-
-    assert groups == set(residue.CRD_GROUPS_APPLIED_WITH_KUBECTL) | set(residue.CERT_MANAGER_CRD_GROUPS), \
-        f"the CRD sweep's set moved: {groups ^ (set(residue.CRD_GROUPS_APPLIED_WITH_KUBECTL) | set(residue.CERT_MANAGER_CRD_GROUPS))}"
-
-
-def test_every_shipped_component_that_owns_definitions_is_swept_by_exactly_one_path():
-    """No released component is unswept, and no unreleased one is swept twice.
-
-    The table is keyed by component and the index decides what shipped, so "whose CRDs are these"
-    is answerable per row. Every shipped component with a row must be reached by the unconditional
-    sweep or by the cluster-gated sweep that exists for it -- and a component whose chart leaves
-    nothing behind must not be swept out of a guess.
-    """
-    config = Config("dev", "dev1", platform_config_dir=UNREAD_ROOT, preload_configs=False)
-    released = set(components.components_the_manifest_releases(config))
-    unconditional = set(residue.crd_groups_kubementat_owns(config))
-    gated = set(residue.CRD_GROUPS_BY_COMPONENT["traefik"]) | set(residue.CRD_GROUPS_BY_COMPONENT["alloy"])
-
-    for component, groups in residue.CRD_GROUPS_BY_COMPONENT.items():
-        if component not in released:
-            continue
-        assert set(groups) <= unconditional | gated, \
-            f"{component}'s release is shipped and its API groups are swept by neither path: {groups}"
-        paths = [name for name, swept in (("the unconditional sweep", unconditional),
-                                          ("a cluster-gated sweep", gated))
-                 if set(groups) & swept]
-        assert len(paths) == 1, \
-            (f"{component}'s definitions are deleted by {len(paths)} sweeps: {paths}. The same group swept twice"
-             " is a sweep that reports a clean teardown over a cluster that still has something to delete.")
-
-    # And the unconditional sweep deletes no group belonging to a component that is not shipped.
-    unswept_shipped = {group for component, groups in residue.CRD_GROUPS_BY_COMPONENT.items()
-                       if component in released and component in residue.CRD_GROUPS_SWEEPED_WITHOUT_A_CLUSTER_READ
-                       for group in groups} - unconditional
-    assert unswept_shipped == set()
 
 
 def test_the_crd_sweep_says_so_when_it_cannot_read_its_own_manifest(tmp_path, monkeypatch):

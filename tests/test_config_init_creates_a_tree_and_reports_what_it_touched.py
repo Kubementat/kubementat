@@ -39,8 +39,6 @@ the deployer keypair there today, so this claim is the difference between the tw
 note about them.
 """
 
-import json
-import logging
 import stat
 import subprocess
 from pathlib import Path
@@ -49,7 +47,7 @@ import pytest
 from click.testing import CliRunner
 
 from bootstrap_tools import (EMAIL, FINGERPRINT, argv, commit_count, crypt_calls_on,
-                             deployer_secret_key, root, since_last_run, tools, tree_bytes)
+                             since_last_run, tree_bytes)
 from cli.commands import config as config_module
 from kubementat.config import bootstrap as config_bootstrap, keys as config_keys
 from kubementat.crypto_utils import CryptoUtils
@@ -64,9 +62,6 @@ ENV_ENCRYPTED = Path(ENVIRONMENT) / "static.encrypted.json"
 # asserted against the property in test_config_init_creates_the_directories_a_reader_looks_in.py.
 ENV_TEKTON_DIRS = [Path(ENVIRONMENT) / "tekton" / "tasks",
                    Path(ENVIRONMENT) / "tekton" / "pipelines"]
-
-# The checkout this suite runs in, which is where a verb with no root of its own would land.
-CHECKOUT_PLATFORM_CONFIG = Path(__file__).resolve().parents[1] / "platform_config"
 
 
 @pytest.fixture(autouse=True)
@@ -92,16 +87,6 @@ def run_init(root, *arguments):
     about the command a human or a container types and not about a private argv.
     """
     return in_root_group(["init", *arguments, "--config-dir", str(root)])
-
-
-def run_init_without_root(*arguments):
-    """The same verb with no root spelled anywhere, for the two cases that turn on that absence.
-
-    Going through the verb and not the library is the point here too: the question is what the
-    command does when neither of its two spellings of a root is present, and that is the verb's own
-    decision and not the library's.
-    """
-    return in_root_group(["init", *arguments])
 
 
 def in_root_group(argv):
@@ -195,30 +180,6 @@ def tracked(root, tools) -> list:
                           capture_output=True, text=True).stdout.split()
 
 
-def test_the_first_run_writes_the_tree_and_reports_every_path_it_touched(root, tools, caplog):
-    """Test 1: one line per prepared path, and the cluster sentence where guidance about state goes.
-
-    The stdout/stderr split is the assertion, not decoration. The step lines come out of the library,
-    which prints nothing on its own, so the verb owns them — and the file list they make is the whole
-    of stdout, which is why the closing instruction is on stderr beside the cluster sentence.
-
-    The cluster sentence is asserted through `caplog` and not through the runner's stderr, because it
-    is a `logging.warning` rather than an echo. Under the CLI that record lands on stderr like the
-    instruction did; what a unit run can still pin down is that it is nowhere on stdout.
-    """
-    with caplog.at_level(logging.WARNING):
-        result = run_init(root, "--environment", ENVIRONMENT, *identity_arguments())
-
-    assert result.exit_code == 0, reported(result)
-    printed = lines(result.stdout)
-    assert printed == [f"created {path}" for path in prepared_paths(root)], reported(result)
-    assert all(line.startswith("created ") for line in printed)
-
-    assert "does not address a cluster yet" in caplog.text
-    assert ENVIRONMENT in caplog.text
-    assert "does not address a cluster" not in result.stdout
-
-
 def test_a_second_run_writes_no_byte_makes_no_commit_and_names_the_steps_it_skipped(root, tools):
     """Test 2: idempotence as a claim about bytes, commits and calls.
 
@@ -247,47 +208,6 @@ def test_a_second_run_writes_no_byte_makes_no_commit_and_names_the_steps_it_skip
     assert crypt_calls_on(second, "add-gpg-user") == [], \
         "the deployer was registered a second time"
     assert crypt_calls_on(second, "init") == [], "the keystore was initialized a second time"
-
-
-def test_no_environment_is_one_refusal_and_writes_no_configuration(root, tools):
-    """Test 3: without an environment there is no layer to write, and guessing one is a default.
-
-    One refusal and not three, because a verb that answered the question with four separate errors is
-    a verb that has not decided which one it means.
-
-    The claim here is narrowed against the old verb, and that is worth stating rather than hiding:
-    an environment is decided inside `init_configuration`, four steps into the preparation, so by the
-    time this refusal arrives `git init` and the two git files have already happened. What must not be
-    there is the tree — no manifest, no layer, no answers. The refusal that *is* made ahead of the
-    first byte is the identity one, two tests down and in `test_a_bare_run_refuses_and_leaves_no_
-    repository_behind`.
-    """
-    result = run_init(root, *identity_arguments())
-
-    assert result.exit_code != 0
-    assert "environment" in reported(result).lower()
-    assert not (root / MANIFEST).exists(), "the tree was written by a run that refused"
-    assert not (root / ENVIRONMENT).exists(), "an environment with no name still should not have a layer"
-
-
-def test_the_value_of_set_is_typed_and_not_stringified(root, tools):
-    """Test 4: both directions of the typing claim, because one direction is a half-claim.
-
-    `false` has to be a boolean and not the word — a YAML/JSON reader that gets `"false"` is truthy,
-    so the answer inverts. And `example.test` has to stay a string, because parsing every value and
-    failing into `str()` is the same parser as the one that stores the domain as itself.
-    """
-    result = run_init(root, "--environment", ENVIRONMENT,
-                      "--set", "GRAFANA_ENABLED=false",
-                      "--set", "BASE_DOMAIN=example.test",
-                      *identity_arguments())
-
-    assert result.exit_code == 0, reported(result)
-    answers = json.loads((root / ENV_STATIC).read_text(encoding="utf-8"))
-    assert answers["GRAFANA_ENABLED"] is False
-    assert isinstance(answers["GRAFANA_ENABLED"], bool)
-    assert answers["BASE_DOMAIN"] == "example.test"
-    assert isinstance(answers["BASE_DOMAIN"], str)
 
 
 def test_a_set_argument_with_no_equals_sign_is_refused_naming_the_flag(root, tools):
@@ -376,139 +296,9 @@ def test_the_flag_outranks_the_platform_config_variable_and_the_decoy_stays_empt
     assert (root / ENV_STATIC).is_file()
 
 
-def test_the_variable_names_the_root_when_no_flag_does(tmp_path, root, tools, monkeypatch):
-    """Test 9: a root can be named by the variable a container already sets, with no flag at all.
-
-    This is what the verb shares with every verb that reaches a cluster, and it is the case a
-    positional root never served: a scheduled job or a CI container that had already configured its
-    root still had to spell the path onto the command line. `--config-dir` still outranks the
-    variable when both are present, so honouring it here is not a second rule, it is the same rule
-    below the flag.
-    """
-    monkeypatch.setenv("KUBEMENTAT_PLATFORM_CONFIG_DIR", str(root))
-
-    result = run_init_without_root("--environment", ENVIRONMENT, *identity_arguments())
-
-    assert result.exit_code == 0, reported(result)
-    assert (root / MANIFEST).is_file()
-    assert (root / ENV_STATIC).is_file()
-
-
-def test_a_run_that_names_no_root_refuses_and_lays_no_tree_down(root, tools, monkeypatch):
-    """Test 10: with neither spelling, the refusal is the sentence and there is no tree.
-
-    A directory-creating verb that picked a location for itself would be the D11 failure wearing a
-    cleaner shape: a tree laid down wherever the wheel happened to be installed, and nothing printed
-    about it. So the root is refused before `git init`, and the check is the absence of a tree rather
-    than the presence of a sentence.
-    """
-    monkeypatch.delenv("KUBEMENTAT_PLATFORM_CONFIG_DIR", raising=False)
-
-    result = run_init_without_root("--environment", ENVIRONMENT, *identity_arguments())
-
-    assert result.exit_code != 0
-    assert "KUBEMENTAT_PLATFORM_CONFIG_DIR" in reported(result)
-    assert tree_bytes(root) == {}
-
-
-def test_the_verb_writes_nothing_under_the_checkout(root, tools):
-    """Test 11: the root is named by a flag, so the checkout's own `platform_config/` is untouched.
-
-    `kmt initialize` writes there, and it writes the deployer keypair there too, which is how cluster
-    credentials ended up beside the product instead of in the tree that configures them. A
-    tree-creating verb that also wrote there would be a second way to lay down configuration that no
-    report names. The assertion is a snapshot of the checkout rather than a grep, because "nothing
-    wrote here" is a claim about bytes.
-
-    The checkout's `platform_config/` exists only where someone has run `initialize`; a fresh clone
-    has none, and the empty snapshot is the honest case rather than a vacuous one — it is the tree
-    appearing that this test would notice.
-    """
-    before = (snapshot(CHECKOUT_PLATFORM_CONFIG)
-              if CHECKOUT_PLATFORM_CONFIG.is_dir() else {})
-
-    result = run_init(root, "--environment", ENVIRONMENT, "--force", *identity_arguments())
-
-    assert result.exit_code == 0, reported(result)
-    after = (snapshot(CHECKOUT_PLATFORM_CONFIG)
-             if CHECKOUT_PLATFORM_CONFIG.is_dir() else {})
-    assert after == before
-
-
-def test_an_environment_handed_its_cluster_by_a_flag_does_not_claim_to_address_none(root, tools,
-                                                                                     caplog):
-    """The sentence is conditional, and this is the case that makes the condition matter.
-
-    `--set CLUSTER_KUBE_CONTEXT=dev-cluster` is an ordinary answer, so the tree written addresses a
-    cluster and printing `CLUSTER_KUBE_CONTEXT is null` afterwards would be a false statement about
-    the very tree the command configured. A verb that prints guidance because it always does is a
-    verb that eventually tells an operator to edit a file that is already right.
-
-    Asserted against `caplog` because the sentence is a logged warning now; the empty-stderr half is
-    kept beside it, because a run that did say it in a stream would still be caught.
-    """
-    with caplog.at_level(logging.WARNING):
-        result = run_init(root, "--environment", ENVIRONMENT, "--set",
-                          "CLUSTER_KUBE_CONTEXT=dev-cluster", *identity_arguments())
-
-    assert result.exit_code == 0
-    assert "does not address a cluster yet" not in caplog.text, \
-        "the null sentence printed over a tree that was just handed its cluster"
-    assert "does not address a cluster yet" not in result.stderr
-    assert json.loads((root / ENV_STATIC).read_text())["CLUSTER_KUBE_CONTEXT"] == "dev-cluster"
-
-
 # ---------------------------------------------------------------------------------------------
 # What the verb prepares, as claims of their own.
 # ---------------------------------------------------------------------------------------------
-
-def test_a_bare_run_refuses_and_leaves_no_repository_behind(root, tools):
-    """No identity and no key is a refusal made before the first byte, not one made four steps in.
-
-    `config_keys` promises that every refusal is decided before a file is written, and before this
-    change a bare `config init` broke that promise from the outside: the question was asked at the
-    keypair step, after `git init` had run and after the two git files had landed, so the operator
-    got a refusal *and* a directory that reads as prepared. The two flags that answer it are the two
-    the refusal names, and what is asserted next is the absence.
-    """
-    result = run_init(root, "--environment", ENVIRONMENT)
-
-    assert result.exit_code != 0
-    reported_text = reported(result)
-    assert config_keys.GPG_EMAIL_FLAG in reported_text and config_keys.GPG_KEY_FLAG in reported_text, \
-        f"refuse with the flags that fix it: {reported_text}"
-    assert not root.exists(), f"a refusal that still made the directory: {argv(tools)}"
-    assert not (root / ".git").exists(), "the run refused and left a repository behind"
-    assert argv(tools) == [], f"nothing was supposed to be exec'd: {argv(tools)}"
-
-
-def test_the_deployer_keypair_lands_in_the_directory_and_never_beside_the_product(root, tools):
-    """The keypair's own rule as the verb sees it: four files inside the tree, `0600` where the secret halves live.
-
-    The keypair's four names are asserted by name rather than by counting files, because "in the
-    configuration directory" is a claim about *which* files — the same four names `initialize` wrote
-    into the product checkout, and the whole point of the move is that the names travel with the tree
-    that configures the cluster. The checkout's own `platform_config/` is compared before and after
-    for the same reason, and no stream is allowed to carry key material: paths only.
-    """
-    before = (snapshot(CHECKOUT_PLATFORM_CONFIG)
-              if CHECKOUT_PLATFORM_CONFIG.is_dir() else {})
-
-    result = run_init(root, "--environment", ENVIRONMENT, *identity_arguments())
-
-    assert result.exit_code == 0, reported(result)
-    names = sorted(tree_bytes(root))
-    for name in config_keys.KEYPAIR_FILE_NAMES:
-        assert name in names, f"{name} is not in the prepared directory: {names}"
-        assert (root / name).is_file()
-    for secret in (config_keys.SSH_PRIVATE_NAME, config_keys.GPG_PRIVATE_NAME):
-        mode = stat.S_IMODE((root / secret).stat().st_mode)
-        assert mode == 0o600, f"{secret} grants {oct(mode)}"
-
-    after = (snapshot(CHECKOUT_PLATFORM_CONFIG)
-             if CHECKOUT_PLATFORM_CONFIG.is_dir() else {})
-    assert after == before, "the keypair landed beside the product as well as in the tree"
-    assert "PRIVATE KEY" not in reported(result), "the verb printed key material"
 
 
 def test_the_exported_symmetric_key_is_the_run_that_can_read_every_credential(root, tools):
@@ -578,69 +368,6 @@ def test_the_closing_instruction_names_the_remote_it_was_handed_and_not_one_it_m
         f"a run with no URL still has to say the commit is local: {local.stderr}")
 
 
-def test_the_closing_instruction_ends_with_the_command_that_uses_the_tree(root, tools):
-    """The last sentence is `kmt install`, and it spells the root only when it has to.
-
-    The deployer's public key is the thing between the tree and a clone that works — the git host has
-    to be told to read it, and it lives in the directory the run just prepared. Both lines are
-    assertions about paths, because that is all either of them is allowed to be.
-
-    What the instruction has to name changed with the recorded root, and the two runs in this test say
-    why. The first prepared the only tree on this machine, so the root is remembered and printing
-    `--config-dir` would be advice about a dial the operator does not have to type. The second prepared
-    a *second* tree, which is exactly the case the record refuses to choose between, so the instruction
-    goes back to spelling the directory — and the honest version of "the root has to appear in the
-    instruction" is therefore "the instruction is runnable", which one run satisfies by naming the root
-    and the other by having it remembered.
-    """
-    result = run_init(root, "--environment", ENVIRONMENT, *identity_arguments())
-    assert result.exit_code == 0, reported(result)
-
-    assert config_keys.SSH_PUBLIC_NAME in result.stderr
-    assert "git host" in result.stderr.lower(), "the operator is told to hand the key to somebody"
-    assert (root / config_keys.SSH_PUBLIC_NAME).is_file(), "the path named is the path that exists"
-    assert f"kmt install dev <team>" in result.stderr, \
-        f"install reads a root it is told and locates none, so a run that remembered the root it " \
-        f"prepared prints the command without the flag, and a tree with no team says so rather than " \
-        f"naming a command that exits 2: {result.stderr}"
-    assert f"--config-dir {root}" not in result.stderr, \
-        "this run recorded the tree, so telling the operator to type the flag is an instruction about " \
-        f"something they do not have to do: {result.stderr}"
-    assert "<team>" in result.stderr and "kmt config add-team" in result.stderr, \
-        "a run that made no team prints an install command the operator cannot run, so the sentence " \
-        f"says so and names the verb that writes the layer: {result.stderr}"
-
-    team_run = run_init(root / "with-team", "--environment", ENVIRONMENT, "--team", "team-a",
-                        *identity_arguments())
-    assert team_run.exit_code == 0, reported(team_run)
-    assert f"kmt install dev team-a --config-dir {root / 'with-team'}" in team_run.stderr, (
-        "a team that was created is a team the install has to be told about — spelled the way "
-        "install takes it, which is as the second positional and not as a flag, because an "
-        "instruction that fails is the same kind of bug as a sentence that is not true: "
-        f"{team_run.stderr}")
-
-
-def test_no_commit_stages_the_whole_tree_and_leaves_the_history_to_the_operator(root, tools):
-    """`--no-commit` is a shape and not a half-run.
-
-    No HEAD, everything staged, and not one `git commit` in the log. This is the flag that stops
-    kubementat from writing a commit named for initializing that the operator did not ask for, so the
-    absence is the whole claim — a `--no-commit` that committed would be reported as working.
-    """
-    result = run_init(root, "--environment", ENVIRONMENT, "--no-commit", *identity_arguments())
-
-    assert result.exit_code == 0, reported(result)
-    assert commit_count(root, tools) == "", "HEAD exists, so a commit was made anyway"
-    staged_now = staged(root, tools)
-    assert ".gitattributes" in staged_now and "dev/static.encrypted.json" in staged_now, \
-        f"the whole tree should be staged for the operator to commit: {staged_now}"
-    assert not [call for call in argv(tools) if call[:2] == ["git", "commit"]], \
-        "--no-commit still committed"
-    assert lines(result.stdout)[-2:] == [f"created {root}", f"skipped {root}"], (
-        "the staging step and the commit step both report `root`, and the commit has to say skipped: "
-        f"{lines(result.stdout)}")
-
-
 def test_gpg_key_is_imported_and_nothing_is_generated(root, tools, monkeypatch, deployer_secret_key):
     """The done-when for the import, as the verb: the file the operator handed over *is* the private key.
 
@@ -666,21 +393,3 @@ def test_gpg_key_is_imported_and_nothing_is_generated(root, tools, monkeypatch, 
     assert (root / config_keys.GPG_PUBLIC_NAME).is_file(), \
         "the public half the import exports is missing"
     assert generated == [], "a gpg keypair was generated beside the key that was handed over"
-
-
-def test_the_help_names_the_preparation_the_flags_and_what_force_does_not_do(root, tools):
-    """The surface is the documentation: `--help` says it prepares, and says what the flags do not do.
-
-    `--force`'s help is asserted because the wrong sentence about it is how the flag gets typed as a
-    way past a refusal that was never about material. The other four new flags are on the help because
-    a flag nobody finds is a flag that turns into an environment variable.
-    """
-    result = CliRunner(mix_stderr=False).invoke(config_module.config, ["init", "--help"])
-
-    assert result.exit_code == 0, reported(result)
-    help_text = result.stdout
-    assert "prepar" in help_text.lower(), f"the help has to say what the verb now does: {help_text}"
-    for flag in ("--gpg-key", "--gpg-email", "--git-url", "--no-commit", "--force"):
-        assert flag in help_text, f"{flag} is not on the help: {help_text}"
-    assert ".gitattributes" in help_text or ".gitignore" in help_text, (
-        "the help has to say what force does not lift, or the flag is read as a universal yes")

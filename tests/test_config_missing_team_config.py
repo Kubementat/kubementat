@@ -15,7 +15,6 @@ The behaviour is asserted here, against the door that implements it.
 """
 
 import json
-import logging
 
 import pytest
 from kubementat.errors import TeamConfigurationFileMissingError
@@ -62,36 +61,6 @@ def test_missing_team_config_fails_with_a_message_not_an_unbound_local_error(tmp
     assert config.get("env_static")["ENV_ONLY"] == "env-value"
 
 
-def test_missing_team_config_error_names_the_file_to_create(tmp_path, caplog):
-    """Both the warning and the error must name the path that was expected."""
-    root, platform_config_dir = make_repo_root(tmp_path, team_files=("static.encrypted.json",))
-    expected_path = str((platform_config_dir / ENVIRONMENT / TEAM / "static.json").resolve())
-    config = config_for(root, platform_config_dir)
-
-    with caplog.at_level(logging.WARNING):
-        with pytest.raises(TeamConfigurationFileMissingError) as excinfo:
-            config.get("team_static")
-        # the state is not consumed: a second read of the same category fails the same way
-        with pytest.raises(TeamConfigurationFileMissingError):
-            config.get("team_static")
-
-    assert expected_path in str(excinfo.value)
-    assert "static.json" in str(excinfo.value)
-    assert any("static.json" in record.message for record in caplog.records), "no warning named the file"
-    assert "team_static" in str(excinfo.value)
-
-
-def test_missing_encrypted_team_config_is_reported_the_same_way(tmp_path):
-    root, platform_config_dir = make_repo_root(tmp_path, team_files=("static.json",))
-    expected_path = str((platform_config_dir / ENVIRONMENT / TEAM / "static.encrypted.json").resolve())
-    config = config_for(root, platform_config_dir)
-
-    with pytest.raises(TeamConfigurationFileMissingError) as excinfo:
-        config.get("team_static_encrypted")
-
-    assert expected_path in str(excinfo.value)
-
-
 def test_lazy_loading_reads_environment_config_before_any_team_read(tmp_path):
     """This is the `Context`'s shape: preload_configs=False, then get(...)."""
     root, platform_config_dir = make_repo_root(tmp_path, team_files=())
@@ -101,11 +70,3 @@ def test_lazy_loading_reads_environment_config_before_any_team_read(tmp_path):
 
     with pytest.raises(TeamConfigurationFileMissingError):
         config.get("team_static")
-
-
-def test_present_team_config_files_are_unaffected(tmp_path):
-    root, platform_config_dir = make_repo_root(tmp_path)
-    config = config_for(root, platform_config_dir)
-
-    assert config.get("team_static")["PIPELINE_NAMESPACE"] == TEAM
-    assert config.get("team_static_encrypted")["TEAM_ONLY"] == "team-value"

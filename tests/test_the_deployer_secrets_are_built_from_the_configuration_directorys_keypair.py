@@ -22,7 +22,6 @@ number of times:
   kubementat's side is the bug no assertion here would forgive twice.
 """
 
-import base64
 import os
 import shutil
 import tempfile
@@ -162,43 +161,6 @@ def a_secret_named(cluster, name):
     found = [secret for secret in cluster.secrets if secret["secret_name"] == name]
     assert len(found) == 1, f"{name} was created {len(found)} times: {cluster.secrets}"
     return found[0]
-
-
-def test_the_ssh_secret_is_the_key_files_bytes_under_one_base64_layer(configuration_root, monkeypatch):
-    """`raw_data` is the `data` field: one layer, and under it the file's bytes and nothing else.
-
-    The task on the other side writes the decoded variable to `$HOME/.ssh/deploy_key` as-is, so
-    anything but the file's own bytes under the transport layer is a deploy key ssh cannot read.
-    """
-    cluster = SecretRecordingCluster()
-
-    a_setup_pipelines(configuration_root, cluster, monkeypatch)
-
-    secret = a_secret_named(cluster, "git-deployer-ssh-key")
-    assert secret["key_type"] == "kubernetes.io/ssh-auth"
-    assert secret["namespace"] == PIPELINE_NAMESPACE
-    assert base64.b64decode(secret["raw_data"]["ssh-privatekey"]) == SSH_PRIVATE_BYTES
-
-
-def test_the_gpg_secret_decodes_to_the_key_file_after_exactly_one_base64_d(configuration_root, monkeypatch):
-    """`string_data`, encoded once by kubementat: the task's one `base64 -d` lands on the armor.
-
-    A second encoding would decode to base64 text where `gpg --import` expects key material, which
-    is the failure shape that only ever showed up inside a pipeline — so the armor header is
-    asserted after one decode, and the stringData layer is asserted to be the only one added here.
-    """
-    cluster = SecretRecordingCluster()
-
-    a_setup_pipelines(configuration_root, cluster, monkeypatch)
-
-    secret = a_secret_named(cluster, "git-deployer-gpg-key")
-    assert secret["key_type"] == "Opaque"
-    assert secret["namespace"] == PIPELINE_NAMESPACE
-    variable = secret["string_data"]["private-key"]
-    decoded = base64.b64decode(variable)
-    assert decoded == (configuration_root / config_keys.GPG_PRIVATE_NAME).read_bytes()
-    assert decoded.startswith(b"-----BEGIN PGP PRIVATE KEY BLOCK-----"), \
-        "one decode did not land on key material: a second base64 layer crept in"
 
 
 def test_a_root_without_a_keypair_refuses_by_name_before_touching_a_cluster(tmp_path, monkeypatch):

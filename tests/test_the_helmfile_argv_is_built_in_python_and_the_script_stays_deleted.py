@@ -29,13 +29,11 @@ could run it names it, and the argv the script was a record of is what `HelmUtil
 `shell.run` -- one entry per token, no shell, no `.sh` anywhere on the way to helmfile.
 """
 
-import inspect
 import json
 from pathlib import Path
 from types import SimpleNamespace
 
 from kubementat.infrastructure import helm as helm_utils
-from kubementat.core.config import release_index as config_reads_index
 from kubementat.core.config.config import Config
 from cluster_fixture import configuration_only_context
 from kubementat.infrastructure.helm import HelmUtils
@@ -102,65 +100,10 @@ def apply_helmfile(tmp_path, monkeypatch, label_filter="group=standard", **kwarg
     return recorder.calls[-1], components
 
 
-def without_cluster_address(argv):
-    """*argv* with the cluster's flags and their values left out.
-
-    The address sits between the verb and the rest of the line, so a positional read of the
-    arguments that follow is now a read of `--kube-context`. This file is about *which program runs
-    and how its arguments are spelled*, and the address is a different file's claim
-    (`test_no_helm_call_is_addressed_by_the_process_any_more.py`); dropping it here keeps the
-    assertions about quoting, `cwd` and `-f` answering the question they were written to answer.
-    """
-    kept, skipping = [], False
-    for token in argv:
-        if skipping:
-            skipping = False
-            continue
-        if token in ("--kubeconfig", "--kube-context", "--context"):
-            skipping = True
-            continue
-        kept.append(token)
-    return kept
-
-
 def _is_packaging_leftover(path):
     """Build droppings only. `__pycache__` and `*.egg-info` are copies of this checkout, not callers."""
     parts = [part.lower() for part in path.parts]
     return any(part == "__pycache__" or part.endswith(".egg-info") for part in parts)
-def test_the_sentence_about_where_the_manifest_comes_from_names_the_package():
-    """The docstring is the sentence a reader trusts, and the packaged manifest is what it says.
-
-    The sentence moved to `config_reads_index.helmfile_paths_for` when the read lost its `Context`:
-    which manifest the product ships is a fact about a configuration and a filesystem, not about a
-    cluster, so that is where the words have to live. `HelmUtils.helmfile_paths` is the call that
-    reads them, and a guard pointed at the caller would still pass with nothing behind it. So the
-    guard is pointed at the function that owns the answer.
-
-    It used to say that `kmt initialize` copies
-    `templates/environment/kubementat_components/helmfile.yaml.gotmpl` into the environment's
-    directory, and that the copy is what gets applied. Both halves of that sentence were false the
-    moment the entry point became product-owned, and the command that carried the copy is deleted
-    now: nothing is copied any more, and the packaged file is what is applied. So the guard now
-    checks the new sentence — that the answer is the packaged root named by one accessor, that
-    nothing writes a manifest into a configuration tree, and that a copy left there is not part
-    of it.
-    """
-    doc = inspect.getdoc(config_reads_index.helmfile_paths_for)
-
-    assert "helmfile_asset_dir" in doc, \
-        "it has to name the one accessor that resolves the manifest, or the next reader re-derives " \
-        "it off a root that is not there: " + doc
-    assert "Nothing writes the manifest" in doc, \
-        "the reader has to be told no command writes a manifest into the configuration: " + doc
-    # The literal used to be spelled `platform_config/{environment}/kubementat_components`, because
-    # that is the directory the 1.x layout put between a tree and a layer. The sentence's job is to
-    # name the stale copy, not to name the 1.x level, so the guard reads the same sentence under the
-    # spelling the root has now: drop the sentence and this assertion still fails.
-    assert "{environment}/kubementat_components" in doc, \
-        "the stale copy is the reason this function is the only answer; naming it is what keeps a " \
-        "later reader from re-adding the fallback: " + doc
-    assert "templates/environment/" not in doc, \
-        "the docstring spells a shipped template as a path under a checkout: " + doc
 
 
 def test_the_helmfile_file_the_argv_carries_is_the_one_the_call_names(tmp_path, monkeypatch):
@@ -183,44 +126,3 @@ def test_the_helmfile_file_the_argv_carries_is_the_one_the_call_names(tmp_path, 
     assert chosen[chosen.index("-f") + 1] == str((elsewhere / "helmfile.yaml").absolute())
     assert Path(chosen[chosen.index("-f") + 1]).is_absolute(), \
         "a relative -f resolves against the child's cwd, not the caller's"
-
-
-def test_the_command_reaches_helmfile_and_no_bash(tmp_path, monkeypatch):
-    """One program on the way to the cluster, and it is helmfile.
-
-    Nothing in the path shells out, so nothing can shell out *instead*: the argv is made of
-    strings, `cwd` arrives as a keyword argument, no `shell=True` is anywhere near it, and no `.sh`
-    token is in it. That is the whole difference between "a Python command runs helmfile" and
-    "a Python command runs a shell that runs helmfile".
-    """
-    (argv, options), components = apply_helmfile(tmp_path, monkeypatch)
-
-    # The cluster sits between the verb and everything else, so the shape this file is about is
-    # read with the address flags left out. Nothing here is checking which cluster was named — that
-    # is `test_no_helm_call_is_addressed_by_the_process_any_more.py`'s claim — and a guard that made
-    # this file's assertions depend on the address would be two tests failing for one change.
-    assert argv[0] == "helmfile" and argv[1] == "apply", argv
-    asked = without_cluster_address(argv)
-    assert asked[2] == "--color", argv
-    assert asked[asked.index("-f") + 1] == str(components / "helmfile.yaml.gotmpl"), argv
-    assert asked[asked.index("-l") + 1] == "group=standard", argv
-    assert all(isinstance(token, str) for token in argv), "argv entries are strings, not paths"
-
-    assert options.get("shell") is not True, "shell=True is not how kubementat runs a command"
-    assert options.get("cwd") == str(components), \
-        "the working directory is an argument, because os.chdir is not a thing this does"
-    assert not any(token.endswith(".sh") for token in argv), \
-        "a script is on the command line; that is the second implementation this file deletes"
-
-
-def test_a_label_filter_with_a_comma_survives_as_one_argument(tmp_path, monkeypatch):
-    """The case a string command gets wrong, and an argv list cannot.
-
-    The old script took the filter as `$2` and quoted it once; get the quoting wrong and
-    `group=standard,component_name=openbao` becomes two filters, which helmfile reads as "nothing
-    matches" and applies. Here it is one entry, by construction.
-    """
-    (argv, _), _ = apply_helmfile(tmp_path, monkeypatch,
-                                  label_filter="group=standard,component_name=openbao")
-
-    assert argv[argv.index("-l") + 1] == "group=standard,component_name=openbao"

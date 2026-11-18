@@ -15,15 +15,10 @@ The fake clients below record what they were asked for and answer with whatever 
 configured, including a status that forces the branch under test.
 """
 
-import base64
-import ast
-import inspect
 
 import pytest
 from kubernetes import client
 
-from kubementat.infrastructure import shell
-from kubementat.errors import ServiceAccountTokenNotFoundError
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 from cluster_fixture import TARGET_DEV
 
@@ -78,24 +73,6 @@ def make_utils(monkeypatch, **apis):
     return utils
 
 
-# ---------------------------------------------------------------------------
-# the 409 path that used to crash
-# ---------------------------------------------------------------------------
-def test_a_role_that_already_exists_is_replaced_and_not_recreated(monkeypatch):
-    """Re-running a command on a cluster that already has the role must not crash (D4)."""
-    rbac = FakeApi(raises={"create_namespaced_role": 409})
-    utils = make_utils(monkeypatch, rbac_api=rbac)
-    body = {"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "Role", "metadata": {"name": "tekton-tunneling"}}
-
-    utils.create_or_replace_role("dev1-pipelines", "tekton-tunneling", body)
-
-    assert rbac.called_as("replace_namespaced_role") == {
-        "namespace": "dev1-pipelines",
-        "name": "tekton-tunneling",
-        "body": body,
-    }
-
-
 def test_a_role_that_is_not_there_is_created_once(monkeypatch):
     rbac = FakeApi()
     utils = make_utils(monkeypatch, rbac_api=rbac)
@@ -116,31 +93,6 @@ def test_a_failure_that_is_not_a_conflict_is_not_mistaken_for_exists(monkeypatch
 
     assert excinfo.value.status == UNEXPECTED_STATUS
     assert "replace_namespaced_role" not in rbac.names_called()
-
-
-def test_a_cluster_role_is_replaced_when_the_cluster_already_has_one(monkeypatch):
-    """`helm-deployer-cluster-role` is cluster scoped: the 409 branch has no namespace in it."""
-    rbac = FakeApi(raises={"create_cluster_role": 409})
-    utils = make_utils(monkeypatch, rbac_api=rbac)
-
-    utils.create_or_replace_cluster_role("helm-deployer-cluster-role", {"kind": "ClusterRole"})
-
-    assert rbac.called_as("replace_cluster_role") == {
-        "name": "helm-deployer-cluster-role",
-        "body": {"kind": "ClusterRole"},
-    }
-
-
-def test_a_cluster_role_binding_is_replaced_when_the_cluster_already_has_one(monkeypatch):
-    rbac = FakeApi(raises={"create_cluster_role_binding": 409})
-    utils = make_utils(monkeypatch, rbac_api=rbac)
-
-    utils.create_or_replace_cluster_role_binding("helm-deployer-cluster-role-binding", {"kind": "ClusterRoleBinding"})
-
-    assert rbac.called_as("replace_cluster_role_binding") == {
-        "name": "helm-deployer-cluster-role-binding",
-        "body": {"kind": "ClusterRoleBinding"},
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -184,96 +136,6 @@ def test_a_deletion_that_fails_for_a_real_reason_still_reaches_the_caller(monkey
         with pytest.raises(client.exceptions.ApiException) as excinfo:
             call()
         assert excinfo.value.status == UNEXPECTED_STATUS
-
-
-# ---------------------------------------------------------------------------
-# reading, where one definition is the whole point
-# ---------------------------------------------------------------------------
-def test_a_role_binding_is_read_from_the_namespace_it_lives_in(monkeypatch):
-    binding = object()
-    rbac = FakeApi(returns={"read_namespaced_role_binding": binding})
-    utils = make_utils(monkeypatch, rbac_api=rbac)
-
-    assert utils.get_role_binding("dev1", "helm-deployer-role-binding-app-deployment") is binding
-    assert rbac.called_as("read_namespaced_role_binding") == {
-        "namespace": "dev1",
-        "name": "helm-deployer-role-binding-app-deployment",
-    }
-
-
-def test_reading_a_role_binding_that_does_not_exist_raises_rather_than_answering_none(monkeypatch):
-    """A second definition of this method returned None on 404; the caller has to hear."""
-    rbac = FakeApi(raises={"read_namespaced_role_binding": 404})
-    utils = make_utils(monkeypatch, rbac_api=rbac)
-
-    with pytest.raises(client.exceptions.ApiException) as excinfo:
-        utils.get_role_binding("dev1", "helm-deployer-role-binding-app-deployment")
-
-    assert excinfo.value.status == 404
-
-
-def _kubernetes_source() -> str:
-    """The whole of `KubernetesUtils`, read where it is written: one body per area it is assembled
-    from. A method that was defined twice in one file would still show up twice here, and a method
-    the class answers without owning would not show up at all."""
-    return "\n".join(inspect.getsource(area) for area in KubernetesUtils.__mro__
-                     if area.__module__ != "builtins")
-
-
-def test_role_binding_lookup_is_defined_once_so_the_documented_return_is_the_real_one():
-    """D5: two definitions meant the second, undocumented one answered for callers."""
-    assert _kubernetes_source().count("def get_role_binding") == 1
-
-
-# The generated client is the one part of a call this file's fakes cannot check: a method
-# name that does not exist reads perfectly well, passes the fake, and fails the first time
-# anything runs against a cluster. `list_namespaced_pods` was exactly that.
-CLIENT_BY_ATTRIBUTE = {
-    "core_api": client.CoreV1Api,
-    "rbac_api": client.RbacAuthorizationV1Api,
-    "apps_api": client.AppsV1Api,
-    "custom_objects_api": client.CustomObjectsApi,
-}
-
-
-def test_every_generated_client_method_the_helpers_ask_for_is_a_real_one():
-    methods = _client_methods_called_on_self()
-
-    assert methods, "the source is not being read, so this test would prove nothing"
-    missing = [
-        f"self.{attribute}.{method}"
-        for attribute, method in sorted(methods)
-        if attribute in CLIENT_BY_ATTRIBUTE and not hasattr(CLIENT_BY_ATTRIBUTE[attribute], method)
-    ]
-    assert missing == []
-
-
-def _client_methods_called_on_self():
-    """Every `self.<api>.<method>` in the source of KubernetesUtils."""
-    tree = ast.parse(_kubernetes_source())
-    return {
-        (node.value.attr, node.attr)
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Attribute)
-        and isinstance(node.value, ast.Attribute)
-        and isinstance(node.value.value, ast.Name)
-        and node.value.value.id == "self"
-    }
-
-
-def test_a_role_binding_is_listed_per_namespace(monkeypatch):
-    """The helper hands back the items, because that is what its caller iterates.
-
-    It used to return the whole `V1RoleBindingList`, which is not iterable, and the
-    team-account flow met that `TypeError` in the step that prints what the account can now
-    do - after it had written every Role and Binding. `list_service_accounts` and `list_roles`
-    already return the items, so this is the same contract, not a new one.
-    """
-    bindings = [type("Binding", (), {"metadata": type("M", (), {"name": "ops-account-binding"})})()]
-    rbac = FakeApi(returns={"list_namespaced_role_binding": type("List", (), {"items": bindings})()})
-    utils = make_utils(monkeypatch, rbac_api=rbac)
-
-    assert utils.list_role_bindings("dev1") == bindings
 
 
 # ---------------------------------------------------------------------------

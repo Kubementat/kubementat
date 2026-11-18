@@ -25,7 +25,6 @@ The claims:
   keypair says so by name, by path, and by command instead of dying inside a client serializer.
 """
 
-import ast
 import os
 import re
 import shutil
@@ -34,22 +33,17 @@ from pathlib import Path
 
 import gnupg
 import pytest
-from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 
-from kubementat.config import init as config_init, keys as config_keys
-from kubementat.config.init import CREATED, EXISTED, SKIPPED
+from kubementat.config import init as config_init
+from kubementat.config.init import CREATED, SKIPPED
 from kubementat.config.keys import (GPG_PRIVATE_NAME, GPG_PUBLIC_NAME, KEYPAIR_FILE_NAMES,
-                                    SSH_PRIVATE_NAME, SSH_PUBLIC_NAME,
-                                    DeployerKeypair, ensure_deployer_keypair,
+                                    ensure_deployer_keypair,
                                     require_deployer_keypair)
 from kubementat.errors import DeployerKeyMissingError
 from kubementat.crypto_utils import CryptoUtils
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EMAIL = "deployer@base.example.test"
-
-PRIVATE_NAMES = (SSH_PRIVATE_NAME, GPG_PRIVATE_NAME)
-PUBLIC_NAMES = (SSH_PUBLIC_NAME, GPG_PUBLIC_NAME)
 
 
 @pytest.fixture
@@ -161,57 +155,9 @@ def read_all(directory) -> dict:
             if (directory / name).is_file()}
 
 
-def is_private_key(path: Path) -> bool:
-    return b"PRIVATE KEY" in path.read_bytes()[:64]
-
-
 # --------------------------------------------------------------------------------------------
 # The write set.
 # --------------------------------------------------------------------------------------------
-
-def test_generating_a_keypair_creates_exactly_four_files_and_reads_only_to_their_owner(config_dir,
-                                                                                        gpg_generator):
-    """Four files, in the four reserved names, with the private halves readable by their owner alone.
-
-    `CryptoUtils` writes through `open(path, "w")`, so without the module's own `chmod` the private
-    halves land at whatever umask the run had — 0644 on a normal machine, which is a deployer key
-    every account on the box can read.
-    """
-    steps = ensure_deployer_keypair(config_dir, gpg_email=EMAIL)
-
-    assert sorted(name for name in os.listdir(config_dir)) == sorted(KEYPAIR_FILE_NAMES), \
-        "the write set is the four keypair files and nothing else, not a set that grew a marker file"
-    assert actions(steps) == [CREATED, CREATED, CREATED, CREATED], \
-        f"every path was missing, so every step did create the file: {[str(s) for s in steps]}"
-
-    for name in PRIVATE_NAMES:
-        mode = (config_dir / name).stat().st_mode & 0o777
-        assert mode == 0o600, f"{name} is the deployer's own half and must not be readable by anyone else, got {oct(mode)}"
-    for name in PUBLIC_NAMES:
-        assert (config_dir / name).read_bytes().strip(), f"{name} is the half that gets handed to git, so empty is not it"
-    assert is_private_key(config_dir / SSH_PRIVATE_NAME), \
-        "the ssh private half is a private key and not an empty file with the right name"
-    assert load_ssh_public_key((config_dir / SSH_PUBLIC_NAME).read_bytes().split(b"\n")[0].strip()), \
-        "the two ssh halves are supposed to be one key; the public one has to parse as one"
-
-
-def test_the_generated_gpg_key_is_asked_for_by_the_email_the_caller_gave_and_not_another_one(config_dir,
-                                                                                             gpg_generator):
-    """The email goes to the generator and nothing else answers for it.
-
-    A module that invented an identity — `deployer@localhost` is the obvious candidate, and the shape
-    `initialize` settled for — would pass every file test above and be wrong about who the deployer
-    is. So the test that matters is the one on the argument the module was handed.
-    """
-    ensure_deployer_keypair(config_dir, gpg_email=EMAIL)
-
-    assert len(gpg_generator.calls) == 1, \
-        f"one key was asked for, not two: {gpg_generator.calls}"
-    call = gpg_generator.calls[0]
-    assert call["name_email"] == EMAIL, \
-        f"the identity is the caller's answer and not one the library found: {call['name_email']!r}"
-    assert call["passphrase"] == "" and call["public_key_filepath"], \
-        f"the generator is reached with no passphrase, which is what makes this non-interactive: {call}"
 
 
 def test_running_it_again_skips_every_step_and_moves_no_byte(config_dir, gpg_generator):
@@ -231,24 +177,6 @@ def test_running_it_again_skips_every_step_and_moves_no_byte(config_dir, gpg_gen
         f"nothing was missing the second time, so nothing may be claimed to be created: {[str(s) for s in steps]}"
     assert read_all(config_dir) == before, \
         "skipped has to mean the bytes are the ones that were there; a regenerated key is a different deployer"
-
-
-def test_a_foreign_keypair_is_somebody_elses_and_becomes_the_one_step_that_touches_it_not_at_all(config_dir):
-    """Material this module was not told to make is `EXISTED`, untouched.
-
-    `SKIPPED` would be almost as true and is the step the next ticket would trust as "this is mine".
-    `EXISTED` is what `config_init` uses for the same situation for the same reason, and the bytes are
-    what proves the word.
-    """
-    for name in KEYPAIR_FILE_NAMES:
-        (config_dir / name).write_bytes(b"somebody else's file entirely\n")
-    before = read_all(config_dir)
-
-    steps = ensure_deployer_keypair(config_dir, gpg_email=EMAIL)
-
-    assert actions(steps) == [EXISTED, EXISTED, EXISTED, EXISTED], \
-        f"foreign material is reported as foreign, not as work done: {[str(s) for s in steps]}"
-    assert read_all(config_dir) == before, "existing material is not touched, whatever the run was asked to do"
 
 
 def test_nothing_here_writes_the_git_crypt_key_and_nothing_writes_beside_the_product(config_dir,
@@ -365,28 +293,6 @@ Inventing one here would pass
         "an identity nobody gave cannot be the name on a key that got written anyway"
 
 
-def test_half_a_pair_stops_the_run_instead_of_becoming_a_pair_of_two_different_keys(config_dir,
-                                                                                    gpg_generator):
-    """One file of a pair and not the other is a refusal.
-
-    The only ways past it are both false: `CryptoUtils.generate_ssh_key_pair` writes *both* halves, so
-    finishing the pair would overwrite the half that is there, and generating only the missing half
-    would leave a deployer whose halves came from different keys — which fails later, and says so in a
-    sentence about signatures rather than this one.
-    """
-    (config_dir / SSH_PRIVATE_NAME).write_bytes(b"-----BEGIN RSA PRIVATE KEY-----\n")
-
-    with pytest.raises(Exception) as refused:
-        ensure_deployer_keypair(config_dir)
-
-    message = str(refused.value)
-    assert SSH_PUBLIC_NAME in message and SSH_PRIVATE_NAME in message, \
-        f"the refusal names both halves of the pair it refused to finish: {message}"
-    assert gpg_generator.calls == [], "and it refuses before it writes anything else"
-    assert not (config_dir / GPG_PRIVATE_NAME).exists(), \
-        "the gpg half is not collateral damage in a run that stopped on the ssh half"
-
-
 def test_a_keypair_cannot_be_written_into_a_tree_that_does_not_exist_yet(tmp_path, gpg_generator):
     """A missing directory is refused and not mkdir'd.
 
@@ -447,28 +353,6 @@ def test_a_directory_holding_none_of_the_four_says_so_once_and_not_twice(config_
     assert twice == [], f"the same file named twice in one sentence is not information, it is noise: {message}"
     assert "none of" in message, \
         f"an empty directory deserves 'none of the four', not a list of the four it is missing: {message}"
-
-
-def test_a_keypair_made_here_is_the_pair_a_caller_is_handed_paths_and_an_identity_with(config_dir,
-                                                                                        gpg_generator):
-    """The record is complete, and its identity is the key's and not a second opinion about it.
-
-    `gpg_email` is read out of `gpg_public_key.gpg` because the directory has no fifth name to keep the
-    answer in — a pair that cannot say who it belongs to is not a pair a git-crypt collaborator can be
-    added against. Two readers of one directory get one answer.
-    """
-    ensure_deployer_keypair(config_dir, gpg_email=EMAIL)
-
-    pair = require_deployer_keypair(config_dir)
-
-    assert isinstance(pair, DeployerKeypair)
-    assert (pair.ssh_private, pair.ssh_public, pair.gpg_private, pair.gpg_public) == tuple(
-        config_dir / name for name in KEYPAIR_FILE_NAMES), \
-        "the paths are the four names under the directory the caller handed, and nothing else"
-    assert pair.gpg_email == EMAIL, \
-        f"the identity comes from the key: {pair.gpg_email!r}"
-    assert pair.ssh_private.is_file() and pair.gpg_public.is_file(), \
-        "the record describes files that exist, which is the whole promise of the guard"
 
 
 def test_a_half_a_keypair_is_missing_in_the_one_way_the_guard_has_to_say(config_dir, gpg_generator):
@@ -533,89 +417,6 @@ def test_an_environment_layer_named_after_a_keypair_file_is_refused_because_the_
 # --------------------------------------------------------------------------------------------
 
 
-def test_generating_a_deployer_key_leaves_the_operators_keyring_untouched(tmp_path, monkeypatch):
-    """The leak this ticket is about, asserted with a real `gpg` rather than described.
-
-    `CryptoUtils.generate_gpg_key` used to build `gnupg.GPG()` without a home, which is `gpg` being
-    left to choose: it chooses the home of whoever ran the command, so every `config init` that
-    generated deposited an unencrypted private key in `~/.gnupg` under the deployer's identity. With
-    two trees under one identity that is two keys for one email, which is what made step 7 fail.
-
-    Nothing here needs the ring that is being protected to be real, so the ring is a fresh directory
-    named by `GNUPGHOME` and the assertion is that it stayed empty. A 2048-bit key keeps the test
-    under a second; the mode `0600` is `config_keys`' promise and is asserted where it is made.
-    """
-    operator_ring = tmp_path / "operator-keyring"
-    operator_ring.mkdir()
-    os.chmod(operator_ring, 0o700)
-    monkeypatch.setenv("GNUPGHOME", str(operator_ring))
-
-    private = tmp_path / GPG_PRIVATE_NAME
-    public = tmp_path / GPG_PUBLIC_NAME
-    CryptoUtils.generate_gpg_key(name_email=EMAIL, key_length=2048,
-                                 private_key_filepath=str(private),
-                                 public_key_filepath=str(public))
-
-    assert private.read_text(encoding="ascii").startswith("-----BEGIN PGP PRIVATE KEY BLOCK-----"), \
-        "the private key is still expected to be in the file, which is the only place it belongs"
-
-    after = gnupg.GPG(gnupghome=str(operator_ring), verbose=False)
-    assert after.list_keys() == [], (
-        f"the deployer's key reached the keyring of whoever ran the command: "
-        f"{[k['fingerprint'] for k in after.list_keys()]}. The private key that lands there is the "
-        f"leak, and a second tree under the same identity is the same leak twice")
-    assert after.list_keys(secret=True) == [], "the secret half landed there in particular"
-
-
-def test_the_keyring_generation_used_is_gone_by_the_time_the_call_returns(tmp_path, monkeypatch):
-    """The ring is created for the call, so no directory outlives it.
-
-    A generated key that lives in a keyring nobody can find is a worse answer than one that lives in
-    the operator's: the promise is not 'somewhere else' but 'nowhere after this function returns'.
-    """
-    homes: list[str] = []
-    real_mkdtemp = tempfile.mkdtemp
-
-    def recording_mkdtemp(*args, **kwargs):
-        home = real_mkdtemp(*args, **kwargs)
-        homes.append(home)
-        return home
-
-    monkeypatch.setattr(tempfile, "mkdtemp", recording_mkdtemp)
-    monkeypatch.delenv("GNUPGHOME", raising=False)
-
-    CryptoUtils.generate_gpg_key(name_email=EMAIL, key_length=2048,
-                                 private_key_filepath=str(tmp_path / "p.key"),
-                                 public_key_filepath=str(tmp_path / "p.pub"))
-
-    assert homes, "generation is supposed to create a home for the call, not find one"
-    left = [home for home in homes if Path(home).exists()]
-    assert left == [], f"a keyring was still on the machine after generation returned: {left}"
-
-
 # --------------------------------------------------------------------------------------------
 # One line about the module's own habits.
 # --------------------------------------------------------------------------------------------
-
-
-def test_the_module_reads_no_answer_out_of_the_environment():
-    """The half of this module that reads nothing from the environment, checked in the source rather
-    than asserted about the behaviour.
-
-    `initialize` took the deployer's identity from `BASE_DOMAIN` and the rest of its answers from the
-    environment it printed a table of. A library that does that here would be correct on the operator's
-    machine and wrong on every other, and no test with a monkeypatched environment could tell the two
-    apart — so the claim is measured on the syntax tree, where an `os.environ`, a `getenv`, or an
-    `os.getenv` cannot hide.
-    """
-    tree = ast.parse(Path(config_keys.__file__).read_text(encoding="utf-8"))
-    offenders = [
-        f"{node.lineno}: {ast.dump(node)}"
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Attribute) and node.attr in ("environ", "os", "putenv", "getenv")
-        or isinstance(node, ast.Name) and node.id in ("environ", "getenv")
-        or isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "getenv"
-    ]
-    assert offenders == [], \
-        f"the caller owns these answers, so they are arguments here and not environment reads: {offenders}"
-

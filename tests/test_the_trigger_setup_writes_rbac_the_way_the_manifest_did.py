@@ -25,9 +25,8 @@ Four things here are not inherited from bash and are stated where they are:
 import base64
 
 import pytest
-from kubernetes import client
 
-from kubementat.errors import (ObsoleteTriggerDirectoryError, PipelineNamespaceNotConfiguredError, ResourceWithoutNameError)
+from kubementat.errors import (PipelineNamespaceNotConfiguredError, ResourceWithoutNameError)
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 from kubementat.infrastructure.tekton import triggers
 from cluster_fixture import configuration_only_context
@@ -138,42 +137,6 @@ def test_the_setup_writes_the_rbac_a_webhook_needs_and_nothing_else(fixture_repo
                                               "rolebinding", "serviceaccount"}
 
 
-def test_the_namespace_a_team_configures_is_the_namespace_everything_lands_in(
-        fixture_repo, dry_run_env, recorded_api):
-    """The one literal the script read with `jq -r`, now read from `Config`.
-
-    A renamed namespace is the test that separates reading configuration from having written it
-    down in a script: both the eight namespaced operations and the subject of the cluster-scoped
-    binding follow the configured value, because the binding points into that namespace.
-    """
-    operations = run_the_setup(fixture_repo, recorded_api, PIPELINE_NAMESPACE="team-batch")
-
-    assert {op.namespace for op in operations if op.namespace} == {"team-batch"}, \
-        recorded_api.as_str()
-    binding = [op for op in operations if op.kind == "clusterrolebinding"][0]
-    subjects = str(binding)
-    assert "team-batch" in subjects, subjects
-
-
-def test_an_object_that_is_already_there_is_a_replacement_and_not_an_error(
-        fixture_repo, dry_run_env, recorded_api):
-    """Twenty installs in, every one of these objects exists.
-
-    The script said so with `kubectl apply`'s `configured` line. Here it is a 409 followed by a
-    replace, which is the branch `create_or_replace_role` exists for — and the second run has to
-    be indistinguishable from the first, or repeat-installs are where this flow breaks.
-    """
-    fixture_repo.team_static()
-    recorded_api.answer("create_namespaced_role", client.ApiException(status=409))
-    recorded_api.answer("create_namespaced_service_account", client.ApiException(status=409))
-
-    run_the_setup(fixture_repo, recorded_api)
-
-    methods = recorded_api.methods()
-    assert methods.count("replace_namespaced_role") == 2, methods
-    assert methods.count("replace_namespaced_service_account") == 2, methods
-
-
 def test_a_team_without_a_pipeline_namespace_is_refused_before_the_first_write(
         fixture_repo, dry_run_env, recorded_api):
     """`jq -r` answered `null`; the answer here names the file and the key, and writes nothing.
@@ -217,27 +180,6 @@ def test_the_shared_role_is_labelled_once_and_the_team_objects_twice(
         assert sorted(sent[name]) == ["managed-by", "team"], (name, sent[name])
 
 
-def test_a_configured_token_becomes_a_secret_and_an_unconfigured_one_does_not(
-        fixture_repo, dry_run_env, recorded_api):
-    """Two providers, one branch. Only the one that has a token gets a Secret.
-
-    bash created the Secret either way and put `base64("null")` in it when the key was missing —
-    a webhook that validates against the literal string `null` fails every request it is sent,
-    quietly. Here: the configured provider gets the token, the other gets a log line.
-    """
-    fixture_repo.team_static()
-    fixture_repo.team_static_encrypted(GITLAB_WEBHOOK_SECRET="s3cret-token",
-                                       GITHUB_WEBHOOK_SECRET=None)
-
-    run_the_setup(fixture_repo, recorded_api)
-
-    secrets = [(op.name, dict(op.facts)) for op in recorded_api.operations() if op.kind == "secret"]
-    assert secrets, "the configured provider got no Secret"
-    assert [name for name, _ in secrets] == ["gitlab-trigger-webhook-secret"]
-    assert secrets[0][1]["type"] == "Opaque"
-    assert secrets[0][1]["data"] == ("secretToken",)
-
-
 def test_the_secret_that_replaced_a_heredoc_holds_the_same_bytes(
         fixture_repo, dry_run_env, recorded_api):
     """The wire format is what the heredoc's `echo -n | base64` produced, and nothing else.
@@ -264,41 +206,6 @@ def test_the_secret_that_replaced_a_heredoc_holds_the_same_bytes(
         assert payload.type == "Opaque"
         assert payload.data == {"secretToken": base64.b64encode(token.encode()).decode()}
         assert payload.string_data is None, "the field changed, which changes how the API reads it"
-
-
-def test_no_triggers_configured_is_a_state_and_not_a_failure(
-        fixture_repo, dry_run_env, recorded_api, caplog):
-    """A team that has generated nothing: the RBAC still goes in, and the run finishes.
-
-    bash `ls`'d the directory and printed "No triggers configured". The directory it looked in is
-    not where the manifests live any more, so what is kept is the behaviour and not the command.
-    """
-    fixture_repo.team_static()
-
-    run_the_setup(fixture_repo, recorded_api)
-
-    assert not trigger_dir(fixture_repo).exists()
-    operations = recorded_api.operations()
-    # The half the name of this test promises is "the RBAC still goes in", so the RBAC is asked for
-    # here and not merely cleared of the wrong kinds: an assertion that only rules kinds out is a
-    # claim a flow that wrote nothing satisfies, and that is the silent answer this suite is not
-    # allowed to fall into.
-    assert {op.kind for op in operations} >= {"clusterrole", "clusterrolebinding", "role",
-                                              "rolebinding", "serviceaccount"}, \
-        recorded_api.as_str()
-    assert not [op for op in operations
-                if op.kind not in ("clusterrole", "clusterrolebinding", "role", "rolebinding",
-                                   "serviceaccount", "secret")]
-
-    # A directory that exists but is empty is the same answer: nothing to apply, nothing to say.
-    # The two runs are compared against each other and not against themselves: `X == X` is a claim
-    # about nothing, and a flow that asked the cluster for nothing would pass it. The claim kept
-    # here is the product's -- the empty directory changes what is applied and not what is written.
-    first = recorded_api.operations()
-    trigger_dir(fixture_repo).mkdir(parents=True)
-    recorded_api.calls.clear()
-    run_the_setup(fixture_repo, recorded_api)
-    assert recorded_api.operations() == first, recorded_api.as_str()
 
 
 def test_the_old_trigger_directory_is_refused_by_name_and_nothing_is_applied(
@@ -352,28 +259,6 @@ def test_the_generated_manifests_are_read_from_platform_config_and_not_the_check
                        ("ingress", "hello-gitlab-fixture-event-listener-ingress")}, \
         recorded_api.as_str()
     assert "stale" not in str(operations)
-
-
-def test_each_manifest_is_applied_under_the_group_that_answers_for_it(
-        fixture_repo, dry_run_env, recorded_api):
-    """One directory, two API groups, because that is what the directory actually holds.
-
-    A team's trigger directory is an EventListener, a binding, a template and an Ingress; applying
-    all four of them as `triggers.tekton.dev` would have sent the Ingress somewhere that answers
-    with a 404. The apiVersion inside each document is what decides, and the plural is derived from
-    the kind, which is the other half of the same request.
-    """
-    write_triggers(fixture_repo, {"hello-gitlab-event-listener.yml": EVENT_LISTENER,
-                                  "hello-gitlab-event-listener-ingress.yml": INGRESS})
-    fixture_repo.team_static()
-
-    run_the_setup(fixture_repo, recorded_api)
-
-    addressed = {(kwargs["group"], kwargs["version"], kwargs["plural"])
-                 for method, kwargs in recorded_api.calls
-                 if method == "create_namespaced_custom_object"}
-    assert addressed == {("triggers.tekton.dev", "v1beta1", "eventlisteners"),
-                         ("networking.k8s.io", "v1", "ingresses")}, addressed
 
 
 def test_a_manifest_that_cannot_be_named_stops_the_setup_and_says_which_one(

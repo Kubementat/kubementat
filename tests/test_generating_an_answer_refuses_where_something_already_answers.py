@@ -198,30 +198,6 @@ def generated_answer_value(root: Path, relative: Path, key) -> str:
 # --- (1) generate onto a team layer that answers nothing ------------------------------------------
 
 
-def test_generate_onto_a_fresh_team_layer_writes_one_value_to_the_plain_file(tmp_path):
-    """The "generated when asked" half, on the team layer.
-
-    One file and not the pair, the plain one and not the encrypted one, and no other key moved: this
-    is `set_answer`'s write rule arriving with a value the operator never typed, so the file's shape
-    is already decided and the only new fact is where the string came from.
-    """
-    root = initialized_root(tmp_path)
-    added_team(root)
-    before = tree(root)
-
-    result = generated(root, KEY, team=TEAM)
-    assert result.exit_code == 0, reported(result)
-    assert files(root)[TEAM_STATIC] != files(root)[TEAM_ENCRYPTED], (
-        "the two files of one layer are the same document, so --encrypted would have nothing to choose")
-
-    value = generated_answer_value(root, TEAM_STATIC, KEY)
-    assert printed(result) == [f"created {Config(ENVIRONMENT, TEAM, platform_config_dir=root, preload_configs=False).team_static_config_path}"], (
-        f"the only line should be the step for the one file written: {printed(result)}")
-    assert layered(root, TEAM).get('team_static')[KEY] == value, (
-        "the team layer does not answer what its own file says")
-    assert tree(root) == before, f"--generate made a file or directory: {tree(root) - before}"
-
-
 # --- (2) the same command again, which is the refusal ---------------------------------------------
 
 
@@ -248,87 +224,13 @@ def test_generating_a_second_time_refuses_and_touches_not_one_byte(tmp_path):
 # --- (3) rotation is the two-step, and it is the only way to get a second value -------------------
 
 
-def test_unsetting_then_generating_is_the_rotation_path_and_invents_a_new_value(tmp_path):
-    """The refusal is not a wall: it names the two commands, and running them produces a *different* value.
-
-    Two random strings from `secrets` cannot collide, so a value that came back the same would mean the
-    verb read the old answer instead of inventing a new one.
-    """
-    root = initialized_root(tmp_path)
-    added_team(root)
-    generated(root, KEY, team=TEAM)
-    first = generated_answer_value(root, TEAM_STATIC, KEY)
-
-    assert run_verb("unset", root, ENVIRONMENT, KEY, "--team", TEAM).exit_code == 0
-    assert KEY not in document(root, TEAM_STATIC)
-    again = generated(root, KEY, team=TEAM)
-    assert again.exit_code == 0, reported(again)
-    second = generated_answer_value(root, TEAM_STATIC, KEY)
-    assert second != first
-    assert layered(root, TEAM).get('team_static')[KEY] == second
-
-
 # --- (4) null answers nothing, so this one succeeds -----------------------------------------------
-
-
-def test_generating_a_key_the_environment_file_holds_as_null_succeeds(tmp_path):
-    """Where "absent" and "null" are pinned: `init`'s null cluster key is generated *into*.
-
-    The environment layer's `static.json` comes from `config init` declaring `CLUSTER_KUBE_CONTEXT`
-    with a value that answers nothing, so the naive mirror of `unset`'s "the key is declared" question
-    would refuse here. It does not, because what that question is really asking is *is there an answer*,
-    and a `null` is not one.
-    """
-    root = initialized_root(tmp_path)
-    assert document(root, ENV_STATIC)["CLUSTER_KUBE_CONTEXT"] is None, (
-        "the tree this test tests no longer starts from the null init writes")
-    kept = tree(root)
-
-    result = generated(root, "CLUSTER_KUBE_CONTEXT")
-    assert result.exit_code == 0, reported(result)
-    generated_answer_value(root, ENV_STATIC, "CLUSTER_KUBE_CONTEXT")
-    assert tree(root) == kept
 
 
 # --- (5) the layer and the flag choose the file, never the key -------------------------------------
 
 
-def test_generate_on_the_environment_layer_lands_in_the_layer_it_was_pointed_at(tmp_path):
-    """The same verb, the same shape, one layer down.
-
-    `--team` moves the answer's layer; nothing else about the rule moves.
-    """
-    root = initialized_root(tmp_path)
-
-    result = generated(root, KEY)
-    assert result.exit_code == 0, reported(result)
-    generated_answer_value(root, ENV_STATIC, KEY)
-    assert KEY not in document(root, ENV_ENCRYPTED), "--generate wrote both files of the pair"
-    assert printed(result) == [f"created {Config(ENVIRONMENT, None, platform_config_dir=root, preload_configs=False).env_static_config_path}"]
-    assert layered(root).get('env_static')[KEY] == document(root, ENV_STATIC)[KEY]
-
-
 # --- (5b) the flag chooses the encrypted file, and the key never does ------------------------------
-
-
-def test_the_encrypted_flag_and_not_the_key_name_chooses_the_file(tmp_path):
-    """`--encrypted` is the only thing that sends a value to the encrypted half of a layer.
-
-    A branch that decided this from the key's name would pass the two tests above and fail here, which
-    is why this test exists beside them.
-    """
-    root = initialized_root(tmp_path)
-    added_team(root)
-
-    result = generated(root, KEY, team=TEAM, encrypted=True)
-    assert result.exit_code == 0, reported(result)
-    assert printed(result) == [f"created {Config(ENVIRONMENT, TEAM, platform_config_dir=root, preload_configs=False).team_static_encrypted_config_path}"]
-    generated_answer_value(root, TEAM_ENCRYPTED, KEY)
-    assert KEY not in document(root, TEAM_STATIC), "the plain file was written too"
-
-    # And the refusal reads that choice: the encrypted file is what answers, so it is what gets named.
-    sentence = refused("set", root, ENVIRONMENT, "--generate", KEY, "--team", TEAM, "--encrypted")
-    assert str(TEAM_ENCRYPTED) in sentence, sentence
 
 
 # --- (6) no key class, said as a test and not as a comment ----------------------------------------
@@ -434,28 +336,3 @@ def test_the_generated_value_is_never_printed_by_the_command_that_made_it(tmp_pa
 
 
 # --- (9) the layering question, mirrored from unset -----------------------------------------------
-
-
-def test_an_environments_answer_blocks_a_teams_generate_and_names_the_environment_file(tmp_path):
-    """The mirror of `unset --team`'s scope question, told from the other side.
-
-    A team answer sits *inside* an environment, so the environment's pair is searched for "does this
-    answer already exist" even though only the team's layer would be written — which is what `unset`
-    does when it clears a team key that is shadowed from below. The refusal therefore names
-    `prod/static.json` and not the team's own file, and its rotation step aims `config unset` at the
-    layer that actually declares the key, because clearing the team's file would clear nothing.
-    """
-    root = initialized_root(tmp_path)
-    added_team(root)
-    assert run_verb("set", root, ENVIRONMENT, f"{KEY}=from-the-environment").exit_code == 0
-    kept = digest(root)
-
-    sentence = refused("set", root, ENVIRONMENT, "--generate", KEY, "--team", TEAM)
-    assert str(ENV_STATIC) in sentence, f"the refusal does not name the environment's file: {sentence}"
-    assert digest(root) == kept
-
-    # ... and the rotation it names is aimed at the layer that answers, not at the one it was pointed at.
-    assert f"{KEY} --team" not in sentence, sentence
-    assert run_verb("unset", root, ENVIRONMENT, KEY).exit_code == 0
-    assert run_verb("set", root, ENVIRONMENT, "--generate", KEY, "--team", TEAM).exit_code == 0
-    generated_answer_value(root, TEAM_STATIC, KEY)

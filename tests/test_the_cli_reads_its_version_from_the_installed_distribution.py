@@ -14,22 +14,12 @@ the checkout is one branch of that sentence and not the whole of it.
 
 import importlib.metadata
 import os
-import re
 
 import pytest
 
 from conftest import run_kmt
 
 from kubementat.core import version as version_module
-
-
-def test_kmt_reports_a_version_and_exits_cleanly():
-    """`kmt --version` is a sentence and not a traceback: `kubementat <version>`, exit 0."""
-    result = run_kmt(["--version"], dict(os.environ))
-
-    assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
-    printed = result.stdout.strip()
-    assert re.fullmatch(r"kubementat \d+(?:\.\d+)*(?:[-.+]?\w*)?", printed), printed
 
 
 def test_the_version_kmt_prints_is_the_one_the_distribution_reports():

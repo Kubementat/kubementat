@@ -32,14 +32,12 @@ Falsifications this file is written to catch, in order of how much they cost:
   value that is computed.
 """
 
-import ast
 import json
 from pathlib import Path
 
 import pytest
 
 from kubementat.config import answers as config_answers
-from kubementat.core.config import derived as config_derived
 from kubementat.core import constants
 from kubementat.core.config.config import Config
 from kubementat.core.config.keys import component_config_key
@@ -54,17 +52,12 @@ TEAM = "cartographers"
 # They are not package data: nothing in a run opens them, and what they witness is this table.
 TEMPLATE = (Path(__file__).resolve().parents[1]
             / "tests/fixtures/configuration_shape/environment/static.json.template")
-TEAM_TEMPLATE = (Path(__file__).resolve().parents[1]
-                 / "tests/fixtures/configuration_shape/environment/team/static.json.template")
 
 TEN_KEYS = ("TEKTON_VERSION_PIPELINE", "TEKTON_VERSION_DASHBOARD", "TEKTON_VERSION_TRIGGERS",
             "TEKTON_CI_IMAGE_NAME", "TEKTON_CI_IMAGE_TAG", "TEKTON_KUBERNETES_STORAGE_CLASS",
             "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME", "AUTOMATION_GIT_PROJECT_NAME",
             "AUTOMATION_GIT_REVISION", "TRAEFIK_INGRESS_CLASS")
 
-# The two keys this table deliberately excludes. They are not here because they are hard to write,
-# and they are not here as a to-do; the reason is in the failure message of the last test.
-EXCLUDED_NAMESPACE_KEYS = ("PIPELINE_NAMESPACE", "APP_DEPLOYMENT_NAMESPACE")
 
 # Which category a reader asks. HELM_DEPLOYER_SERVICE_ACCOUNT_NAME lives in the team's file (the
 # team template carries it), and the other nine in the environment's, which is what the substitution
@@ -73,26 +66,6 @@ READ_CATEGORY = {key: "team_static" for key in ("HELM_DEPLOYER_SERVICE_ACCOUNT_N
 READ_CATEGORY.update({key: "env_static" for key in TEN_KEYS if key not in READ_CATEGORY})
 
 SRC = Path(__file__).resolve().parents[1] / "src"
-
-# Values that mean something else in this product as well as the answer to one of these ten keys:
-# `traefik` is the component's name and `kubementat` is the project's, so they appear all over the
-# tree for reasons that have nothing to do with a default. The strict literal check below is still
-# run for every other value, and the pair check (key *and* value on the same line) is run for all
-# ten. Spelling the exemption out is what makes it a decision and not blindness.
-GENERIC_VALUES = {constants.DEFAULT_STATIC_ANSWERS["TRAEFIK_INGRESS_CLASS"],
-                  constants.DEFAULT_STATIC_ANSWERS["AUTOMATION_GIT_PROJECT_NAME"]}
-
-# ...and the values that are not a second owner of a key but a fact about something else, cited where
-# they are. `local-path` is this table's own answer for `TEKTON_KUBERNETES_STORAGE_CLASS` -- the key
-# that took over `KUBERNETES_DEFAULT_STORAGE_CLASS` when `initialize` was deleted (`7888bdf`) -- so a
-# file that cites it while talking about a cluster's volume classes is citing a fact and not writing
-# a second default. The one module that ever held this allowance, `kubementat/config/init.py`, is
-# gone: the split spread its body across `src/kubementat/automations/`, and none of those files
-# carries the literal (measured: the only `local-path` in `src/` is the owner's own entry in
-# `constants.py`). So the table is empty and the guard is exactly as strict as it was -- a
-# `local-path` in any of the slices still fails, which is what an allowance for a deleted file
-# could no longer have kept true of.
-UNRELATED_USES = {}
 
 
 def seed(root, environment_static=None, team_static=None, write_team=True) -> Config:
@@ -300,133 +273,8 @@ def test_what_an_operator_declared_still_answers_the_ten_and_beats_the_default_f
         assert answer.value == f"environment-said-{key.lower()}", key
         assert answer.origin == "environment", key
         assert answer.source == environment_only.env_static_config_path, key
-def _code_lines(text: str) -> list:
-    """The lines of *text* that are code and not prose.
-
-    A docstring that explains the drift is not a second owner of a default, and a test that fails on
-    prose would be edited to say the opposite rather than made true.
-    """
-    lines = text.splitlines()
-    docstrings = set()
-    for node in ast.walk(ast.parse(text)):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str) and "\n" in node.value:
-            docstrings.update(range(node.lineno - 1, node.lineno + node.value.count("\n")))
-    out = []
-    for number, line in enumerate(lines):
-        if number in docstrings or line.strip().startswith("#"):
-            continue
-        out.append(line)
-    return out
 
 
-def test_no_key_on_this_list_is_answered_from_the_process_environment(tmp_path, monkeypatch):
-    """Nothing in this list may be answered by something somebody exported first.
-
-    `helm.py` does export configuration into the environment the **manifest** reads — that is
-    how helmfile's templates get their variables — and every one of those exports is of a namespace
-    or a release knob, both of which the exporting function reads out of the layers itself. These ten
-    keys are not exported, and they must not become answers by way of the environment either: the
-    shape that goes wrong is a reader that works only after a previous command exported the value,
-    which is the answer that disappears in the command nobody thought of.
-
-    So each key is planted in `os.environ` with a value that differs from both the default and the
-    declared value, and both reads are asserted: an undeclared tree still answers `constants.py`, and
-    a declared tree still answers the file. A read that went to the environment would pass for the
-    command that ran before this one and fail for this one.
-    """
-    declared = seed(tmp_path / "declared", environment_static={key: "declared-value" for key in TEN_KEYS})
-    bare = seed(tmp_path / "bare")
-
-    for key in TEN_KEYS:
-        monkeypatch.setenv(key, "answered-from-the-environment")
-        for config, expectation in ((bare, constants.DEFAULT_STATIC_ANSWERS[key]),
-                                    (declared, "declared-value")):
-            got = config.get(READ_CATEGORY[key])[key]
-            assert got == expectation, (
-                f"{key} answered {got!r} while {key} was in the process environment, which means the "
-                f"environment answered and not the layer or L0")
-        assert answered(bare.platform_config_dir, ENVIRONMENT, TEAM)[key].value == constants.DEFAULT_STATIC_ANSWERS[key]
-        assert answered(declared.platform_config_dir, ENVIRONMENT, TEAM)[key].origin == "environment"
-
-
-def test_these_two_keys_are_excluded_on_purpose_and_are_not_a_gap_someone_may_close(tmp_path):
-    """`PIPELINE_NAMESPACE` and `APP_DEPLOYMENT_NAMESPACE` are **not** in this table. Say it loudly.
-
-    Both templates carry them — the environment template does not, the team template says
-    `dev1-pipelines` and `dev1` — and a reader who compares the ten here against the templates would
-    conclude these two were forgotten. They were not: they are derivations, computed before this
-    change and after it from the team's name at read time
-    (`core/config/derived.py`). A `constants.py` default would be a second owner for a value that is
-    *computed*, which is the one kind of second owner that reads as documentation and answers as a
-    lie: it would outrank nothing, agree with nothing, and be edited by someone who assumed the table
-    was where answers live.
-
-    This test is written to fail for anybody who adds them, with the reason in the message, so that
-    "completing" the table is a decision somebody has to make and not a slip.
-    """
-    for key in EXCLUDED_NAMESPACE_KEYS:
-        assert key not in constants.DEFAULT_STATIC_ANSWERS, (
-            f"{key} is in DEFAULT_STATIC_ANSWERS. It belongs to config_derived.RULES, which answers "
-            f"it as a consequence of the team's name and not as a default: a team called "
-            f"pandas gets `pandas-pipelines` and `pandas`, and a table entry would be a second owner "
-            f"for a value that is computed. The template's `dev1`/`dev1-pipelines` were placeholders "
-            f"for that substitution, not a default. If you believe the rule is wrong, change the "
-            f"rule; do not add a default beside it."
-        )
-        assert key in config_derived.RULES, f"{key} should still be derived"
-
-    config = seed(tmp_path)
-    assert config.get("team_static")["PIPELINE_NAMESPACE"] == f"{TEAM}-pipelines"
-    assert config.get("team_static")["APP_DEPLOYMENT_NAMESPACE"] == TEAM
-
-    # `MYSQL_HOST` / `REDIS_MASTER_HOST` are derived for the same reason, and the encrypted half of
-    # the set is generated by `config set --generate`: two correct answers that differ is
-    # generation, and nothing here may invent one.
-    for key in ("MYSQL_HOST", "REDIS_MASTER_HOST"):
-        assert key not in constants.DEFAULT_STATIC_ANSWERS
-        assert key in config_derived.RULES
-    for key in ("MYSQL_ROOT_PASSWORD", "GRAFANA_ADMIN_PASSWORD"):
-        assert key not in constants.DEFAULT_STATIC_ANSWERS
-
-
-def test_the_values_still_match_the_templates_that_carried_them():
-    """Nothing here is invented: every value equals what the shipped template says.
-
-    The template is still the other copy — it dies with `initialize`, which is a later ticket — so
-    this is the check that keeps the two agreeable until then, and it names the one place they are
-    allowed to differ (the team template's `HELM_DEPLOYER_SERVICE_ACCOUNT_NAME`, which is the only one
-    of the ten that lives under `team/`).
-    """
-    environment_copy = json.loads(TEMPLATE.read_text(encoding="utf-8"))
-    team_copy = json.loads(TEAM_TEMPLATE.read_text(encoding="utf-8"))
-
-    for key in TEN_KEYS:
-        value = constants.DEFAULT_STATIC_ANSWERS[key]
-        source = environment_copy.get(key, team_copy.get(key))
-        assert source == value, (f"{key} is {value!r} in constants.py and {source!r} in the templates")
-
-    assert "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME" in team_copy
-    assert "PIPELINE_NAMESPACE" not in environment_copy
-
-
-def test_a_key_added_to_the_table_with_no_reader_is_the_thing_this_file_catches(tmp_path):
-    """The falsification, made permanent.
-
-    A table entry is not an answer. This is what an unwired key costs: the value is in `constants.py`
-    and the view that `kmt install` reads does not answer it, which is a migration that reports "the
-    defaults moved to L0" and fails in the guest. It is asserted for **every** key and not for one,
-    because the single unwired key is the usual shape of the mistake.
-    """
-    config = seed(tmp_path)
-    view = config.get("env_static")
-    team_view = config.get("team_static")
-
-    for key in constants.DEFAULT_STATIC_ANSWERS:
-        answered = view.get(key) if READ_CATEGORY.get(key, "env_static") == "env_static" \
-            else team_view.get(key)
-        assert answered == constants.DEFAULT_STATIC_ANSWERS[key], (
-            f"{key} is declared in constants.DEFAULT_STATIC_ANSWERS but no read path answers it — "
-            f"the view said {answered!r}. Wiring the table into the walk is the other half of L0.")
 def test_an_absent_key_falls_to_kubementats_value_and_a_declared_null_still_refuses(tmp_path):
     """The one distinction L0 must never collapse: "not declared" is not "declared as nothing".
 

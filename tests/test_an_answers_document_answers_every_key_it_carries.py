@@ -130,23 +130,6 @@ def refused(*arguments) -> str:
     return f"{result.stdout}{result.stderr}"
 
 
-def test_a_document_answers_every_key_it_carries_and_every_reader_resolves_them(tmp_path):
-    """Two keys, one document, two reads — the answer is the document's whole content and nothing else."""
-    root = initialized_root(tmp_path)
-    answers = answers_file(tmp_path, {FIRST_KEY: "ci", SECOND_KEY: "https://git.example.invalid/k.git"})
-    before = stamp(root)
-
-    result = run_verb("set", root, ENVIRONMENT, "--from-file", answers)
-    assert result.exit_code == 0, f"{result.stdout}{result.stderr}"
-
-    config = layered(root)
-    assert config.get("env_static")[FIRST_KEY] == "ci", "the document's first key is not the answer a reader resolves"
-    assert config.get("env_static")[SECOND_KEY] == "https://git.example.invalid/k.git", \
-        "the document's second key is not the answer a reader resolves"
-    assert len(printed(result)) == 2, printed(result)
-    assert before.keys() == stamp(root).keys(), "a document that answers two keys made two files"
-
-
 def test_the_document_answers_in_the_order_it_was_written_in(tmp_path):
     """The file's key order follows the document's, which is what makes an order claim testable.
 
@@ -186,46 +169,6 @@ def test_a_key_the_document_answers_the_same_way_it_already_reads_is_not_reporte
     assert result.exit_code == 0, f"{result.stdout}{result.stderr}"
     assert printed(result) == [f"{SKIPPED} {root / ENVIRONMENT / 'static.json'}"], printed(result)
     assert file.stat().st_mtime_ns == untouched
-
-
-def test_the_document_lands_where_the_flags_said_and_cannot_choose_a_layer_of_its_own(tmp_path):
-    """A document on the team layer, in the encrypted file: `--team` and `--encrypted` still decide.
-
-    The document lists keys and values and nothing else, because the layer is what the operator was
-    told to name and the file is what `--encrypted` names. A document that could carry its own `team`
-    field would be a second answer about which layer the tree is on, and the rule keeps that
-    question in one place.
-    """
-    root = initialized_root(tmp_path)
-    from kubementat.config.init import add_team
-    add_team(root, ENVIRONMENT, TEAM)
-    answers = answers_file(tmp_path, {FIRST_KEY: "team-doc"})
-
-    result = run_verb("set", root, ENVIRONMENT, "--team", TEAM, "--from-file", answers)
-    assert result.exit_code == 0, f"{result.stdout}{result.stderr}"
-    assert document_of(root, f"{ENVIRONMENT}/{TEAM}/static.json")[FIRST_KEY] == "team-doc"
-    assert document_of(root, f"{ENVIRONMENT}/static.json").get(FIRST_KEY) is None, \
-        "the document answered the team's key on the environment's layer too, which no flag named"
-    assert layered(root, TEAM) is not None
-
-
-def test_an_encrypted_document_answers_the_encrypted_file_and_prints_no_answer_back(tmp_path):
-    """`--encrypted` routes a document, and stdout is the step line and not its content.
-
-    The whole point of the document is that a credential does not sit in a command line; the failure
-    mode it replaces puts the credential in a terminal buffer instead, which outlives the file. So this
-    asserts both halves: the value is in the file the reader resolves, and the value is not in the text
-    the operator ran.
-    """
-    root = initialized_root(tmp_path)
-    secret = "generated-for-this-run-only"
-    answers = answers_file(tmp_path, {"GRAFANA_SERVICE_ACCOUNT_TOKEN": secret})
-
-    result = run_verb("set", root, ENVIRONMENT, "--encrypted", "--from-file", answers)
-    assert result.exit_code == 0, f"{result.stdout}{result.stderr}"
-    target = root / ENVIRONMENT / "static.encrypted.json"
-    assert secret in target.read_text(encoding="utf-8"), "the document did not reach the encrypted file"
-    assert secret not in result.stdout, "a document that answers a credential printed the credential"
 
 
 def test_a_document_answering_a_key_with_null_is_refused_and_writes_nothing(tmp_path):

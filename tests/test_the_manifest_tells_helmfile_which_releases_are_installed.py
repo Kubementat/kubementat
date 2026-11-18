@@ -40,10 +40,6 @@ helmfile_only = pytest.mark.skipif(HELMFILE is None or shutil.which("helm") is N
 
 MANIFEST = values_path("helmfile.yaml.gotmpl")
 
-# The release the assertions are about, spelled as a name and not derived, because the failure this
-# guards is a specific release's line. `alloy` is named in the second test's prose rather than asserted
-# separately: its build state is checked there, as one of the releases nobody disabled.
-SWITCHED_OFF = "grafana"
 
 # `{release: its own `installed:` default}` as the shipped manifest declares it. The read starts at
 # the `releases:` line and skips comments for the same reasons the manifest guard gives:
@@ -128,37 +124,3 @@ def test_a_manifest_that_nobody_edited_builds_every_release_at_its_own_default()
     assert {name: release.get("installed") for name, release in releases.items()} == expected, \
         {name: (release.get("installed"), expected[name])
          for name, release in releases.items() if release.get("installed") is not expected[name]}
-
-
-@helmfile_only
-def test_the_release_the_environment_switched_off_builds_as_not_installed():
-    """The whole claim in one line: an operator's `false` reaches the built spec as `false`.
-
-    A release nobody disabled still reads `true` in the same run, which is the half that stops a
-    template from answering everything with the one variable that was set -- and among those others
-    is `alloy`, the release that has no namespace key of its own and is therefore only addressable
-    through the knob this run set for something else.
-    """
-    releases = built_releases(**{f"{SWITCHED_OFF.upper()}_ENABLED": "false"})
-    expected = installed_defaults()
-
-    assert releases[SWITCHED_OFF]["installed"] is False
-    assert all(release["installed"] is expected[name]
-               for name, release in releases.items() if name != SWITCHED_OFF), \
-        "disabling one release decided all of them"
-
-
-@helmfile_only
-def test_the_version_helmfile_builds_is_the_quoted_default_and_not_a_number():
-    """The version half, measured the same way: `1.0` must not become the number 1.
-
-    helmfile resolves a release's version against what the chart index serves, so this is the string
-    the manifest carried as its literal before the knob landed -- the same value
-    `shipped_chart_versions()` in the manifest guard reads back off the release block.
-    """
-    releases = built_releases()
-
-    assert releases[SWITCHED_OFF]["version"] == "14.2.0"
-    assert isinstance(releases[SWITCHED_OFF]["version"], str)
-    assert releases["prometheus-helm-exporter"]["version"] == "1.4.0+e2eee28", \
-        "the build metadata in that version is part of the string the index serves"

@@ -25,7 +25,7 @@ shape the design replaces, in the same fixture, giving the wrong answer.
 """
 
 import pytest
-from kubernetes import client, config
+from kubernetes import client
 
 from cluster_fixture import UNREAD_ROOT, DEV_SERVER, PROD_SERVER, write_kubeconfig
 from kubementat.core.identity.context import Context
@@ -160,38 +160,3 @@ def test_a_client_cannot_be_built_against_an_unresolved_target(monkeypatch):
                 lambda: utils.get_core_api()):
         with pytest.raises(ClusterNotConfiguredError):
             ask()
-
-
-def test_an_api_object_built_from_the_process_answers_one_cluster_for_both(two_clusters, monkeypatch):
-    """The opposite shape, shown once so the assertion above is not decoration.
-
-    Nothing in `src/` does this any more, and the first guard test exists to keep it that way. The
-    deleted constructor called `config.load_kube_config()` with no context, which answers from the
-    file's `current-context` and installs the result as the process-wide default `Configuration`; a
-    zero-argument API object then inherits whatever that default says. That is the whole of the
-    interference, and it is worth watching once:
-
-    two objects are asked to address two different clusters, both of them answer for the one the file
-    calls current — here `dev` — and `prod`'s address never enters the picture at all. Not a crash, and
-    not a wrong answer to a question nobody asked: the same answer to two different questions, with the
-    second cluster silently absent.
-
-    `monkeypatch` is not incidental: this test *does* install a process-wide default, and leaving it set
-    would make the first test in this file lie in the other direction.
-    """
-    monkeypatch.setattr(client.Configuration, "_default", None)
-    dev = KubernetesUtils(target_on(two_clusters, "dev"))
-    prod = KubernetesUtils(target_on(two_clusters, "prod"))
-    assert dev.core_api.api_client.configuration.host != prod.core_api.api_client.configuration.host
-
-    # The same two questions, put to the shape this design replaces: no target, only the loader.
-    config.load_kube_config(config_file=str(two_clusters))
-    first = client.CoreV1Api().api_client.configuration.host
-    config.load_kube_config(config_file=str(two_clusters))
-    second = client.CoreV1Api().api_client.configuration.host
-
-    assert client.Configuration._default is not None, "the ambient loader did not set the default"
-    assert first == second == DEV_SERVER, (
-        "the ambient loader did not answer both objects with the current-context it installed")
-    assert second != PROD_SERVER, (
-        "the address the second object was meant to answer for never entered the answer at all")

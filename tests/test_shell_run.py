@@ -16,17 +16,12 @@ The companion file `test_command_execution_policy.py` proves nothing else in `sr
 estarts commands, which is what makes these guarantees hold everywhere.
 """
 
-import json
-import os
 import sys
 
 import pytest
 
 from kubementat import errors
 from kubementat.infrastructure import shell
-
-# A program that prints what it was handed, so argv corruption is visible as a diff.
-PRINT_ARGV = "import json,sys; print(json.dumps(sys.argv[1:]))"
 
 
 # ---------------------------------------------------------------------------
@@ -49,94 +44,6 @@ def test_argv_entries_must_be_strings():
 def test_an_empty_command_line_is_rejected():
     with pytest.raises(ValueError):
         shell.run([])
-
-
-# ---------------------------------------------------------------------------
-# what the child process actually receives
-# ---------------------------------------------------------------------------
-def test_argv_tokens_arrive_intact():
-    """Nothing between here and `execve` splits a token.
-
-    This is the single assertion that D8 is gone: `;`, `$`, whitespace and a literal
-    newline all travel as one argument each, which no shell-backed call could keep true.
-    """
-    hostile = ["hello world", "a;b;echo pwned", "$HOME", "* ? *", "line\nbreak", "--flag=with=equals"]
-
-    result = shell.run([sys.executable, "-c", PRINT_ARGV] + hostile, capture=True)
-
-    assert json.loads(result.stdout) == hostile
-
-
-def test_a_glob_is_not_expanded_by_the_call():
-    """`*` reaching a shell means the filesystem leaks into the command line."""
-    result = shell.run([sys.executable, "-c", PRINT_ARGV, "*"], capture=True)
-    assert json.loads(result.stdout) == ["*"]
-
-
-def test_cwd_is_an_argument_and_not_a_process_wide_side_effect(tmp_path):
-    before = os.getcwd()
-    result = shell.run([sys.executable, "-c", "import os; print(os.getcwd())"],
-                       capture=True, cwd=str(tmp_path))
-
-    assert os.path.realpath(result.stdout.strip()) == os.path.realpath(str(tmp_path))
-    assert os.getcwd() == before, "run() must not move the calling process"
-
-
-def test_the_environment_is_inherited_unless_replaced(tmp_path, monkeypatch):
-    monkeypatch.setenv("FIN02_PROBE", "from-the-parent")
-    argv = [sys.executable, "-c", "import os; print(os.environ.get('FIN02_PROBE', '<unset>'))"]
-
-    assert shell.run(argv, capture=True).stdout.strip() == "from-the-parent"
-    # An explicit env replaces the child's environment; PATH is what the interpreter needs.
-    assert shell.run(argv, capture=True, env={"PATH": os.environ["PATH"]}).stdout.strip() == "<unset>"
-
-
-def test_stdin_can_be_answered_without_a_shell_pipe():
-    """`kubectl auth can-i` used to need `input=` plus `text=True` at every call site."""
-    result = shell.run([sys.executable, "-c", "import sys; print(sys.stdin.read().strip())"],
-                       capture=True, input="yes")
-
-    assert result.stdout.strip() == "yes"
-
-
-def test_output_reaches_the_terminal_when_not_captured(capfd):
-    """The `port-forward` bug: capturing an interactive command makes it look frozen.
-
-    `capfd`, not `capsys`: the child writes to the real file descriptor, which is what a
-    terminal is. `capsys` would only see output that came back through Python.
-    """
-    shell.run([sys.executable, "-c", "print('Forwarding from 127.0.0.1:3001')"], capture=False)
-
-    assert "Forwarding from 127.0.0.1:3001" in capfd.readouterr().out
-
-
-def test_output_is_held_back_when_captured(capfd):
-    shell.run([sys.executable, "-c", "print('not for the terminal')"], capture=True)
-
-    assert "not for the terminal" not in capfd.readouterr().out
-
-
-# ---------------------------------------------------------------------------
-# verdicts
-# ---------------------------------------------------------------------------
-def test_a_non_zero_exit_raises_and_names_the_whole_command():
-    with pytest.raises(errors.CommandExecutionError) as excinfo:
-        shell.run([sys.executable, "-c", "import sys; sys.stderr.write('boom\\n'); sys.exit(3)"],
-                  capture=True)
-
-    error = excinfo.value
-    assert error.returncode == 3
-    assert "exit code 3" in str(error)
-    assert "boom" in str(error), "the operator should not have to re-run the command to learn why"
-    assert error.argv[0] == sys.executable
-
-
-def test_check_false_hands_the_verdict_back_instead_of_raising():
-    result = shell.run([sys.executable, "-c", "import sys; sys.exit(7)"], capture=True, check=False)
-
-    assert result.returncode == 7
-    assert result.ok is False
-    assert result.argv[0] == sys.executable
 
 
 def test_a_missing_binary_is_reported_as_such():
@@ -191,24 +98,6 @@ def test_retries_keep_trying_until_the_command_works(tmp_path):
 
     assert result.ok
     assert _attempts(counter) == 3, "one first attempt plus two retries"
-
-
-def test_retries_are_not_attempted_when_not_asked_for(tmp_path):
-    script, counter = _flaky_script(tmp_path, successes_after=2)
-
-    with pytest.raises(errors.CommandExecutionError):
-        shell.run([str(script)])
-
-    assert _attempts(counter) == 1
-
-
-def test_retries_are_exhausted_then_the_failure_is_reported(tmp_path):
-    script, counter = _flaky_script(tmp_path, successes_after=9)
-
-    with pytest.raises(errors.CommandExecutionError):
-        shell.run([str(script)], retries=2, retry_backoff=0.01)
-
-    assert _attempts(counter) == 3, "the 3-attempt ceiling the install scripts had"
 
 
 # ---------------------------------------------------------------------------

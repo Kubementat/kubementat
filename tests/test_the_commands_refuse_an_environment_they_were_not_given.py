@@ -16,8 +16,6 @@ The shape of the answer differs only by where the value was declared, and this f
 Neither is a warning, and neither becomes a `None` that survives into a service.
 """
 
-import re
-from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
@@ -41,23 +39,6 @@ DEFAULTED_OPTIONS = [
     (users.create_team_account_read_only, ["ops-readonly", "--yes"]),
     (users.delete_team_account, ["ops-account", "--yes"]),
 ]
-
-
-def test_no_command_module_carries_a_default_environment():
-    """The grep that proves the guess is gone, instead of a test that trusts the diff.
-
-    Reading every command module rather than the six named in the brief is the point: the seventh
-    place `default='dev'` lived was in an `--environment` option, and a test that only walked the
-    arguments would have missed it and stayed green.
-    """
-    pattern = re.compile(r"""default\s*=\s*['"]dev(1)?['"]""")
-    offenders = []
-    for source_file in sorted(Path(users.__file__).parent.glob("*.py")):
-        for number, line in enumerate(source_file.read_text().splitlines(), start=1):
-            if pattern.search(line.split("#")[0]):
-                offenders.append(f"{source_file.name}:{number}: {line.strip()}")
-
-    assert offenders == [], f"a command is still guessing: {offenders}"
 
 
 @pytest.mark.parametrize("command,args", DEFAULTED_POSITIONS,

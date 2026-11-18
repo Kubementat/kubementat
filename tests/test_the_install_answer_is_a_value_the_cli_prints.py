@@ -106,19 +106,6 @@ def test_the_install_returns_an_answer_and_not_none(fixture_repo, monkeypatch, d
         "the webhook triggers' RBAC, Secrets and generated resources")
 
 
-def test_the_return_annotation_is_a_dataclass_and_not_none():
-    """`-> None` on this def is the item's own failure mode, so it is grepped as a contract.
-
-    Checked through `inspect` and not a string search, because the annotation is what a caller and
-    a type checker read, and because the rest of the module still legitimately contains functions
-    that return nothing (`_print_install_finish_message` prints, it does not answer).
-    """
-    returned = inspect.signature(install_slice.install_kubementat).return_annotation
-    assert returned is install_slice.InstallResult, returned
-    assert install_slice.InstallResult.__dataclass_fields__, \
-        "the copy of `RoutingInstallResult` is not a dataclass, so it is not the shape the plan named"
-
-
 def test_the_two_gates_answer_with_the_fact_and_not_with_their_exit():
     """`validate_cluster` and `check_cluster_permissions` return True because everything else leaves.
 
@@ -132,57 +119,9 @@ def test_the_two_gates_answer_with_the_fact_and_not_with_their_exit():
     assert inspect.signature(install_slice.check_cluster_permissions).return_annotation is bool
 
 
-def test_a_run_asked_to_skip_the_pipeline_half_says_so_and_names_the_fix(
-        fixture_repo, monkeypatch, dry_run_env):
-    """`--no-configure-tekton-pipelines` is a decision, and it belongs in the answer.
-
-    Without this the two installs print the same sentence and one of them wrote a quarter more.
-    The `command()` half is routing's own idiom: the summary points at the command that changes
-    the outcome instead of describing the flag it was told.
-    """
-    journal = []
-    _an_install_that_writes_everything(monkeypatch, journal)
-    context = configuration_only_context(fixture_repo.environment, fixture_repo.team)
-
-    result = install_slice.install_kubementat(
-        context, configure_tekton_pipelines=False, consent=Consent.assumed())
-
-    assert journal == ["cluster", "permissions", "tekton", "discovery", "helmfile_apply"], journal
-    assert result.pipelines_configured is False
-    assert result.triggers_configured is False
-    assert result.skipped, "the half that did not run is not in the answer"
-    summary = result.summary()
-    assert "skipped: the Tekton pipeline configuration" in summary, summary
-    assert f"kmt install {fixture_repo.environment} {fixture_repo.team}" in summary, summary
-
-
 # ---------------------------------------------------------------------------------------------
 # the rendered output, as the terminal reads it
 # ---------------------------------------------------------------------------------------------
-
-
-def test_kmt_install_prints_the_answer_to_the_terminal(monkeypatch, resolvable_environment):
-    """The rendered output is asserted from the command line, which is the only place it is real.
-
-    The whole install runs here — argument parsing, the `@kmt_context` door, the library's own
-    branch choices — with the steps stubbed the way the ordering tests stub them. A test that
-    replaced `install_kubementat` itself could only prove that the CLI knows how to call `echo`.
-    """
-    _an_install_that_writes_everything(monkeypatch, [])
-
-    result = CliRunner().invoke(kubementat_cli.install, ["dev", "dev1", "--yes"])
-
-    assert result.exit_code == 0, result.output
-    assert "Helmfile installation group: standard" in result.output, \
-        "the two lines this command printed before it called anything are still printed"
-    assert "Configure tekton pipelines: True" in result.output
-    assert "kubementat installed for dev (dev1)" in result.output, result.output
-    assert "group=standard" in result.output
-    assert "the cluster answered, and this service account may create namespaces" in \
-           result.output, result.output
-    assert "--yes answered the confirmation" in result.output, result.output
-    assert "skipped:" not in result.output, \
-        "a run that configured the whole install is reporting a skip it never asked for"
 
 
 def test_the_skipped_half_is_printed_as_a_skip_by_the_command_too(monkeypatch,

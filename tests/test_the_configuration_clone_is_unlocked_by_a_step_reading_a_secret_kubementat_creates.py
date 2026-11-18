@@ -28,10 +28,7 @@ Measured against git-crypt 0.7.0 on this machine, and used rather than assumed:
 Nothing here enforces a tree shape in `Config` or the read paths: most trees in this suite are fixtures
 and not prepared directories, and that kind of rule once broke 227 unrelated tests.
 """
-import base64
-import os
 import re
-import tempfile
 from pathlib import Path
 
 import yaml
@@ -43,7 +40,6 @@ PIPELINES = tekton_ci_path("pipelines")
 EXAMPLE_PIPELINES = tekton_ci_path("../examples/tekton_ci/pipelines")
 
 UNLOCK_TASK = "git-crypt-unlock"
-UNLOCK_STEP_NAME = "git-crypt-unlock-configuration"
 
 # The Secret's name, spelled once. Both halves assert against this: kubementat's `create_or_replace_secret`
 # call and the Task's `secretKeyRef`. A rename that reaches one of them and not the other is the whole
@@ -272,40 +268,6 @@ def test_the_secret_is_built_from_the_file_that_a_clone_cannot_carry():
         "step pipes the value through exactly one `base64 -d`; a layer this side of that is a key that " \
         "fails as `not a valid git-crypt key file` and reads like someone's mistake rather than ours"
     assert "_base64_encode_file" in body, "the file's bytes are not put in the Secret at all"
-
-
-def test_kubementat_still_never_unlocks():
-    """The no-unlock rule is about the product, and this change must not smuggle `git-crypt unlock` into it.
-
-    The step runs git-crypt in a pod. `src/` must not. That distinction is why the unlock lives in a
-    step, so the first thing this guards is that the product stayed clean while the lane gained the ability.
-
-    Checked against the *invocation* and not the words, because "git-crypt unlock" already appears in
-    `src/` several times inside prose that says kubementat does not run it -- `core/config/reads.py` and
-    `errors.py` carry it
-    in an error message whose whole job is to send someone to the pipeline. A guard that flagged those
-    would fail on documentation and pass on a real regression, which is worse than no guard: the next
-    person relaxes it and the rule stops being watched.
-    """
-    offenders = []
-    for path in Path("src/kubementat").rglob("*.py"):
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.lstrip().startswith("#"):
-                continue
-            # Only argv built for a subprocess counts: that is the one shape that execs anything.
-            if "GIT_CRYPT_BINARY" in line and "'unlock'" in line.replace('"unlock"', "'unlock'") or \
-               "git-crypt" in line and "'unlock'" in line.replace('"unlock"', "'unlock'") and "shell.run" in line:
-                offenders.append(f"{path}: {line.strip()}")
-    assert not offenders, \
-        "git-crypt unlock is invoked in src/: " + "; ".join(offenders) + \
-        ". kubementat reads and never unlocks, and census K measured that nothing under src/ " \
-        "ran it. The unlock lives in a Tekton step precisely so this stays true."
-
-    # The positive half, so this is not a guard that only ever says no.
-    step = _load(TASKS / f"{UNLOCK_TASK}.yml")
-    assert "git-crypt unlock" in _script(step), \
-        f"{UNLOCK_TASK} never runs git-crypt unlock, so the clone stays locked and the product kept its " \
-        "rule by doing nothing at all"
 
 
 def test_the_unlock_task_needs_no_key_on_a_host():

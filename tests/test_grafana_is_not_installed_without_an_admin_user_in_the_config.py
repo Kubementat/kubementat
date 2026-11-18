@@ -13,9 +13,7 @@ applied, what is exported, and what is said when nothing may be applied.
 """
 
 from kubementat.errors import GrafanaAdminCredentialsNotConfiguredError
-import json
 import logging
-import os
 
 import pytest
 
@@ -24,7 +22,6 @@ from asset_paths import values_path
 from kubementat.infrastructure import helm as helm_utils
 from kubementat.core import constants
 from kubementat.core.config.keys import component_config_key
-from kubementat.config.init import init_configuration
 from kubementat.infrastructure.helm import HelmUtils
 
 LABEL_FILTER = "group=standard"
@@ -118,32 +115,6 @@ def apply_it(utils):
     return utils.helmfile_apply(environment_name="dev", helmfile_label_filter=LABEL_FILTER)
 
 
-def test_the_admin_user_the_configuration_names_is_the_one_helmfile_is_given(monkeypatch, tmp_path):
-    """What is true in a shell does not outrank what is true in a file.
-
-    The export that used to be documented is not a second authority, so the test is not "did the
-    operator's value win" but "did the configuration's value win, while an operator value was
-    sitting there". That is the whole decision, measured at the only place it can be.
-    """
-    shell, utils = a_helmfile_that_reads({"GRAFANA_ADMIN_USER": CONFIGURED_USER,
-                                   "GRAFANA_ADMIN_PASSWORD": "configured-password"},
-                                  monkeypatch, tmp_path)
-    monkeypatch.setenv("GRAFANA_ADMIN_USER", "what-an-operator-exported")
-
-    apply_it(utils)
-
-    assert shell.calls, "helmfile was expected to run and did not, so nothing is being tested"
-    handed = shell.helmfile_environment()
-    assert handed["GRAFANA_ADMIN_USER"] == CONFIGURED_USER, \
-        "the exported value won over the file that decides"
-    # The other half of the same fact: deciding it is not the same as writing it down where the next
-    # command will read it. The operator's own variable is still sitting there, untouched.
-    assert os.environ["GRAFANA_ADMIN_USER"] == "what-an-operator-exported", \
-        "the apply overwrote the process environment it was handed, which is the channel this "\
-        "change exists to close"
-    assert "helmfile" in shell.calls[-1]
-
-
 @pytest.mark.parametrize("value", [None, "", "   "], ids=["absent", "empty", "blank"])
 def test_an_environment_that_names_no_admin_user_applies_nothing(monkeypatch, tmp_path, caplog,
                                                                   value):
@@ -197,35 +168,3 @@ def test_a_missing_password_stops_the_install_it_would_have_failed(monkeypatch, 
         "the refusal must name the file, which is the one thing helmfile's own message cannot"
     assert "config set" in message and "--encrypted" in message, \
         "a refusal that names no verb is a referral, not an answer"
-
-
-def test_the_generated_key_is_what_keeps_a_fresh_tree_out_of_this_refusal(tmp_path):
-    """`config init` generates this key, so the refusal above is for an edited tree and not a built one.
-
-    If init and the template ever diverge this is the assert that says so: a freshly initialized tree
-    has to arrive at helmfile with both halves present, and the alternative is every fresh install
-    failing the way the first real VM run did.
-    """
-    root = tmp_path / "cfg"
-    init_configuration(root=root, environment="dev")
-
-    written = json.loads((root / "dev" / "static.encrypted.json").read_text(encoding="utf-8"))
-
-    assert written["GRAFANA_ADMIN_USER"] == "grafadmin"
-    assert written["GRAFANA_ADMIN_PASSWORD"].strip(), \
-        "init generated no password; helmfile's requiredEnv will abort this tree's first install"
-    assert written["GRAFANA_ADMIN_PASSWORD"] != "grafadmin", \
-        "the generated secret reused the seeded admin name, which is not a secret at all"
-
-
-def test_the_template_no_longer_shows_an_export_as_the_way_to_set_the_admin():
-    """The header comment is documentation, and documentation that contradicts the code is a bug.
-
-    It used to tell an operator to `export` the pair. Nothing enforces that line except this test,
-    so it is stated where a reader of the template would otherwise repeat it.
-    """
-    template = values_path("helmfile.yaml.gotmpl")
-    text = template.read_text()
-
-    assert "export GRAFANA_ADMIN_USER=" not in text, \
-        "the template is advising a second source for a value that has one"

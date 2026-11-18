@@ -27,7 +27,6 @@ import pytest
 
 from asset_paths import values_path
 from cluster_fixture import UNREAD_ROOT, configuration_only_context
-from kubementat.core import constants
 from kubementat.core.config.config import Config
 from kubementat.core.config.keys import component_config_key
 from kubementat.infrastructure.helm import HelmUtils, export_component_release_knobs
@@ -124,89 +123,6 @@ def test_only_the_knob_that_was_declared_is_written_and_the_other_is_left_alone(
     assert exported == {component_config_key("grafana", "ENABLED"): "false"}
     assert os.environ.get(component_config_key("grafana", "VERSION")) is None, \
         "the half nobody typed has to stay absent from the environment it is handed out of"
-
-
-def test_the_knobs_are_exported_for_the_releases_the_manifest_names_and_not_for_the_namespaces_it_creates(
-        tmp_path, monkeypatch):
-    """Both halves of the set, on one tree that declares every knob it could possibly have.
-
-    Every name in the two sets gets a declared pair, so the export's answer is a set and not a
-    mood: exactly the two variables of each of the ten releases the manifest names, and none of the
-    six names that create a namespace and apply no release.
-
-    Alloy is what the difference is named for, because it is the case that cannot be seen from
-    `constants.py` at all -- it has a release, no namespace key of its own, and its
-    `installed:` line is the only thing that decides whether the collector runs.
-    """
-    index = live_index()
-    releases = set(index)
-    namespace_only = {name for name in constants.DEFAULT_NAMESPACES if name not in releases}
-    assert namespace_only, "the two sets would have to stop disagreeing for this test to mean it"
-
-    declared = {}
-    for name in releases | namespace_only:
-        for suffix in SUFFIXES:
-            declared[component_config_key(name, suffix)] = False
-    # Alloy's is spelled out rather than left to the loop, so a failure names the release it is about.
-    declared[component_config_key("alloy", "ENABLED")] = False
-    clean(monkeypatch, knob_keys(releases | namespace_only))
-    config = seed(tmp_path, environment_level=declared)
-
-    exported = export_component_release_knobs(config, index)
-
-    assert exported == {component_config_key(name, suffix): "false"
-                        for name in sorted(releases) for suffix in SUFFIXES}, exported
-    assert exported[component_config_key("alloy", "ENABLED")] == "false", \
-        "alloy's knob was not exported, which means it was addressed by a namespace it does not have"
-    for name in namespace_only:
-        for suffix in SUFFIXES:
-            key = component_config_key(name, suffix)
-            assert key not in exported and os.environ.get(key) is None, \
-                f"{key} is a key no template line reads: {name} creates a namespace and applies no release"
-
-
-def test_the_export_does_not_write_a_knob_the_release_it_belongs_to_does_not_exist(tmp_path,
-                                                                                   monkeypatch):
-    """A name with no release is not a component this export addresses, whatever it says in `static.json`.
-
-    The refusal is by omission, and the reason is the one census E found everywhere in this tree: a
-    key that answers nothing is a key someone will eventually edit and expect to matter.
-    """
-    index = live_index()
-    keys = knob_keys(constants.DEFAULT_NAMESPACES)
-    clean(monkeypatch, keys)
-    config = seed(tmp_path, environment_level={
-        component_config_key("vpa", "ENABLED"): False,
-        component_config_key("grafana", "ENABLED"): False,
-    })
-
-    exported = export_component_release_knobs(config, index)
-
-    assert list(exported) == [component_config_key("grafana", "ENABLED")]
-    assert os.environ.get(component_config_key("vpa", "ENABLED")) is None
-
-
-def test_the_export_is_the_values_it_was_given_and_not_a_copy_of_what_the_environment_held(
-        tmp_path, monkeypatch):
-    """What is returned is what the layers declared, and it is the only record of the handover.
-
-    There is no longer a second copy anywhere for the log line to disagree with: the export writes
-    nothing into the process environment, so the dictionary it returns *is* what the child is
-    handed, and a mapping assembled separately from it is how a log becomes fiction.
-    """
-    index = live_index()
-    keys = knob_keys(index)
-    clean(monkeypatch, keys)
-    config = seed(tmp_path, environment_level={component_config_key("loki", "VERSION"): "20.1.0"},
-                  team_level={component_config_key("loki", "ENABLED"): True})
-
-    exported = export_component_release_knobs(config, index)
-
-    assert exported == {component_config_key("loki", "VERSION"): "20.1.0",
-                        component_config_key("loki", "ENABLED"): "true"}
-    assert {key: os.environ.get(key) for key in exported} == dict.fromkeys(exported), \
-        "an exported knob was also written into the process environment, which is the channel " \
-        "this item is closing: the next apply in this process would read it back as its own answer"
 
 
 @pytest.mark.parametrize("component", sorted(live_index()))

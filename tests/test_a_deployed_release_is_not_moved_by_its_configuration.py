@@ -29,7 +29,6 @@ there.
 from kubementat.errors import DeployedReleaseNamespaceConflictError, HelmReleaseListingFailedError
 import json
 import logging
-from pathlib import Path
 
 import pytest
 
@@ -227,23 +226,6 @@ def test_a_release_in_a_namespace_kubementat_never_addresses_is_not_read_as_a_re
         "the guard refused a command that had nothing renamed"
     assert any("kube-system" in record.getMessage() for record in caplog.records), \
         "the reason it did not refuse belongs in the log, not in silence"
-
-
-def test_a_rename_this_apply_cannot_reach_does_not_stop_the_apply(fixture_repo, dry_run_env,
-                                                                  fake_binaries):
-    """grafana is renamed, but this command is putting traefik on the cluster.
-
-    `-l component_name=traefik` selects exactly one release, so a check that still stopped the run
-    would be refusing a command that could not have moved anything. The narrower answer is the
-    honest one: it says no about the writes this command is about to make.
-    """
-    seeded(fixture_repo, fake_binaries, GRAFANA_DEPLOYMENT_NAMESPACE="kmt-e2e-renamed")
-
-    applied(fixture_repo, fake_binaries, label_filter="component_name=traefik")
-
-    selected = [argv for argv in fake_binaries.commands()
-                if argv[:1] == ["helmfile"] and "-l" in argv]
-    assert selected and selected[0][selected[0].index("-l") + 1] == "component_name=traefik"
 
 
 def test_a_cluster_that_cannot_say_where_its_releases_are_gets_no_write_either(

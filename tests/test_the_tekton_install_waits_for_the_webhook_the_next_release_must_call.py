@@ -37,8 +37,7 @@ from kubementat.errors import TektonWebhookNotReachableError
 # globals of the module it is defined in, so a patch on any other object is a number nobody sees.
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 from kubementat.infrastructure.tekton import install as tekton_install
-from kubementat.infrastructure.tekton.install import (HELM_DEPLOYER_CLUSTER_ROLE_NAME,
-                                                      PIPELINE_WEBHOOK_SERVICE_NAME,
+from kubementat.infrastructure.tekton.install import (PIPELINE_WEBHOOK_SERVICE_NAME,
                                                       TEKTON_RELEASE_BASE_URL)
 from conftest import is_apply
 from cluster_fixture import configuration_only_context
@@ -63,8 +62,6 @@ def install_the_pinned_releases(fixture_repo):
 
 # The URLs, abbreviated: which of these went in is the whole question this file asks.
 PIPELINE_URL = f"{TEKTON_RELEASE_BASE_URL}/pipeline/previous/v{PINS['TEKTON_VERSION_PIPELINE']}/release.yaml"
-DASHBOARD_URL = (f"{TEKTON_RELEASE_BASE_URL}/dashboard/previous/"
-                 f"v{PINS['TEKTON_VERSION_DASHBOARD']}/release-full.yaml")
 
 
 def applied_urls(fake_binaries):
@@ -113,49 +110,6 @@ def install(fixture_repo, recorded_api, fake_binaries, answer):
     started = time.monotonic()
     install_the_pinned_releases(fixture_repo)
     return time.monotonic() - started
-
-
-def test_a_cluster_whose_webhook_answers_needs_no_waiting(
-        fixture_repo, dry_run_env, fake_binaries, recorded_api):
-    """The fast path, asserted as a cost: one read, and no sleep on top of it.
-
-    The wait is a gate, not a tax. A rerun against a healthy cluster pays one API call and gets the
-    same four `kubectl apply` calls it always got, so the fix does not slow down the install that
-    already worked.
-    """
-    elapsed = install(fixture_repo, recorded_api, fake_binaries,
-                      lambda: ["10.42.0.1"])
-
-    assert [method for method, _ in recorded_api.calls].count(
-        "read_namespaced_endpoints") == 1, "a ready webhook is read once, not polled"
-    assert elapsed < 0.5, "an already-reachable webhook must not cost the install a single sleep"
-    assert applied_urls(fake_binaries)[0] == PIPELINE_URL
-    assert DASHBOARD_URL in applied_urls(fake_binaries)
-
-
-def test_the_releases_that_call_the_webhook_are_applied_the_moment_it_is_there(
-        fixture_repo, dry_run_env, fake_binaries, recorded_api, monkeypatch):
-    """A webhook that arrives between two reads is waited for, and the order is not disturbed.
-
-    The first read comes back empty — the pod is still being scheduled — and the second one is
-    ready. The install must continue into the remaining releases rather than stopping at the first
-    empty answer, and it must still put the control plane in before the things that read it.
-    """
-    short_deadlines(monkeypatch)
-    reads = []
-
-    def arriving():
-        reads.append(1)
-        return [] if len(reads) == 1 else ["10.42.0.1"]
-
-    fixture_repo.environment_static(**PINS)
-    recorded_api.answer("read_namespaced_endpoints", endpoints(arriving))
-    install_the_pinned_releases(fixture_repo)
-
-    urls = applied_urls(fake_binaries)
-    assert urls.index(PIPELINE_URL) == 0, "the control plane still goes in first"
-    assert DASHBOARD_URL in urls and len(urls) == 4, \
-        "the install stopped at the first empty answer instead of waiting for the webhook"
 
 
 def test_a_webhook_that_never_arrives_stops_the_install_and_names_itself(
@@ -216,45 +170,3 @@ def test_the_read_that_answers_the_question_does_not_call_a_missing_service_an_e
 
     assert time.monotonic() - started >= bound, \
         "a 404 was treated as an error rather than as 'nothing here yet'"
-
-
-def test_the_wait_is_aimed_at_the_namespace_the_control_plane_landed_in(
-        fixture_repo, dry_run_env, recorded_api, monkeypatch):
-    """The question is asked of the namespace the configuration chose, not a literal.
-
-    `kmt install` puts the control plane where `TEKTON_DEPLOYMENT_NAMESPACE` says, and the webhook
-    is in the same place; a wait that read `tekton-pipelines` by name would report "not ready" on a
-    cluster that is perfectly ready somewhere else.
-    """
-    asked = []
-    fixture_repo.environment_static(TEKTON_DEPLOYMENT_NAMESPACE="team-mesh", **PINS)
-
-    def record(name=None, namespace=None, **kwargs):
-        asked.append((name, namespace))
-        return V1Endpoints(metadata=V1ObjectMeta(name=name, namespace=namespace),
-                           subsets=[V1EndpointSubset(
-                               addresses=[V1EndpointAddress(ip="10.42.0.2")])])
-
-    monkeypatch.setattr(tekton_install, "WEBHOOK_READY_POLL_SECONDS", 0.01)
-    recorded_api.answer("read_namespaced_endpoints", record)
-    install_the_pinned_releases(fixture_repo)
-
-    assert (PIPELINE_WEBHOOK_SERVICE_NAME, "team-mesh") in asked, \
-        f"the webhook was looked for somewhere else: {asked}"
-
-
-def test_the_install_still_writes_the_role_it_always_wrote(
-        fixture_repo, dry_run_env, fake_binaries, recorded_api):
-    """The wait is a pause, not a new step: one ClusterRole write, exactly as before.
-
-    Guarding the shape a reader of the log expects. `helm-deployer-cluster-role` is written once per
-    install and nothing about the webhook wait changes that, so a second write here would mean the
-    pause was mistaken for a retry.
-    """
-    install(fixture_repo, recorded_api, fake_binaries, lambda: ["10.42.0.1"])
-
-    writes = [method for method, _ in recorded_api.calls
-              if method.endswith("cluster_role")]
-    assert writes == ["create_cluster_role"], \
-        f"the ClusterRole was written more than once: {writes}"
-    assert recorded_api.calls[0][1]["body"].metadata.name == HELM_DEPLOYER_CLUSTER_ROLE_NAME

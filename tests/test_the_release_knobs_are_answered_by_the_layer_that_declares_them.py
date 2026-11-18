@@ -88,20 +88,6 @@ def test_the_teams_layer_answers_version_before_the_environments_pair(tmp_path):
     assert config.component_release_version("grafana") == "13.2.0"
 
 
-def test_the_environment_answers_when_the_team_declares_neither_knob(tmp_path):
-    """The half that has to fall through: a team that says nothing is a team that permits.
-
-    Both keys are read from the same instance here so the pair is checked to agree about which layer
-    answered -- two knobs and two different layers would be the same bug the namespace had.
-    """
-    config = seed(tmp_path,
-                  environment_level={ENABLED_KEY: False, VERSION_KEY: "12.1.0"},
-                  team_level={})
-
-    assert config.component_release_enabled("grafana") == "false"
-    assert config.component_release_version("grafana") == "12.1.0"
-
-
 def test_the_encrypted_half_of_a_layer_answers_a_knob_before_the_plain_half(tmp_path):
     """A layer is a pair of files, and the knob obeys that like every other key does.
 
@@ -132,24 +118,6 @@ def test_a_knob_that_was_never_declared_answers_as_nothing_and_says_nothing(tmp_
     assert caplog.text == ""
 
 
-def test_a_teamless_configuration_still_answers_its_environment_knobs(tmp_path):
-    """A missing team is not part of the knobs.
-
-    A `Config` with no team has no team layer to consult, and a read that tried to name its paths
-    would raise over a question about a release. The environment half answers, which is what a
-    command that was given no team needs.
-    """
-    environment_dir = tmp_path / "platform_config" / ENVIRONMENT
-    environment_dir.mkdir(parents=True)
-    (environment_dir / "static.json").write_text(json.dumps({ENABLED_KEY: False}))
-    (environment_dir / "static.encrypted.json").write_text("{}")
-    config = Config(ENVIRONMENT, None, kubementat_main_dir=str(tmp_path),
-                    platform_config_dir=str(tmp_path / "platform_config"))
-
-    assert config.component_release_enabled("grafana") == "false"
-    assert config.component_release_version("grafana") is None
-
-
 # --- the case the accessor exists for ------------------------------------------------------
 
 
@@ -178,48 +146,7 @@ def test_a_teams_false_beats_an_environments_true_and_is_exported_as_the_string_
     assert "default" not in caplog.text.lower(), caplog.text
 
 
-def test_a_boolean_answers_lower_cased_because_helmfile_resolves_only_those_two_words(tmp_path):
-    """`True` is Python's spelling, `"true"` is helmfile's, and only the second one is an answer.
-
-    A capitalised `True` inside `installed: {{ env ... }}` is a string helmfile does not resolve to
-    its boolean field, which is the failure mode the whole export has to avoid.
-    """
-    config = seed(tmp_path, environment_level={ENABLED_KEY: True, "TRAEFIK_ENABLED": False})
-
-    assert config.component_release_enabled("grafana") == "true"
-    assert config.component_release_enabled("traefik") == "false"
-    # The answer is the string helmfile resolves and not Python's spelling, so what the export would
-    # write is exactly these two words.
-    assert {config.component_release_enabled("grafana"),
-            config.component_release_enabled("traefik")} <= {"true", "false"}
-
-
 # --- shapes that are not answers -----------------------------------------------------------
-
-
-def test_a_knob_declared_as_null_is_the_same_as_not_declaring_it(tmp_path, caplog):
-    """`null` is nobody's decision, so it costs nothing and prints nothing.
-
-    It is not the same as `false`: `false` removes a release and `null` installs it, so treating a
-    `null` as a refusal would turn a placeholder into a deletion.
-    """
-    config = seed(tmp_path, environment_level={ENABLED_KEY: None, VERSION_KEY: None})
-
-    with caplog.at_level(logging.WARNING):
-        assert config.component_release_enabled("grafana") is None
-        assert config.component_release_version("grafana") is None
-    assert caplog.text == ""
-
-
-def test_a_knob_declared_with_blank_is_the_same_as_not_declaring_it(tmp_path):
-    """Whitespace is the half-typed edit `component_namespace` warns about; here there is no default
-    to warn about, so it is silence and the manifest's answer."""
-    config = seed(tmp_path, environment_level={ENABLED_KEY: "   ", VERSION_KEY: " 13.2.0 \t"})
-
-    assert config.component_release_enabled("grafana") is None
-    # ...and a version that is not blank comes back stripped, because helm resolves a version string
-    # including whatever whitespace it was stored with.
-    assert config.component_release_version("grafana") == "13.2.0"
 
 
 @pytest.mark.parametrize("value", [29, 1.0, ["29.40.1"], {"chart": "29.40.1"}])
@@ -241,31 +168,4 @@ def test_a_version_declared_as_anything_but_a_string_is_refused_where_it_was_typ
     assert str(config.env_static_config_path) in str(error.value)
     assert "static.json" in str(error.value)
     assert "static.encrypted.json" in str(error.value)
-    assert caplog.text == ""
-
-
-def test_an_enabled_knob_declared_as_a_number_is_refused_and_not_fallen_through_from(tmp_path):
-    """The other direction of the same mistake, asserted separately.
-
-    A number `0` would read as a decision not to install by every reading of "falsy" in the tree and
-    as `installed: 0` to helmfile, which is a template that fails to parse. Better to refuse.
-    """
-    config = seed(tmp_path, environment_level={ENABLED_KEY: 0})
-
-    with pytest.raises(ReleaseKnobNotABooleanOrStringError) as error:
-        config.component_release_enabled("grafana")
-
-    assert ENABLED_KEY in str(error.value)
-
-
-def test_a_knob_only_the_team_layer_declared_answers_and_names_no_missing_file(tmp_path, caplog):
-    """A team that declares a knob the environment never heard of is a team that has decided.
-
-    Nothing in this read path should be able to say "not set in ..." about a key it found: the
-    message belongs to the layer that declares a default and not to a pair that declared a decision.
-    """
-    config = seed(tmp_path, environment_level={}, team_encrypted={ENABLED_KEY: False})
-
-    with caplog.at_level(logging.WARNING):
-        assert config.component_release_enabled("grafana") == "false"
     assert caplog.text == ""

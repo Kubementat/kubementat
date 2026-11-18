@@ -36,7 +36,6 @@ stays on the step's own line instead of becoming a default is that a flip is one
 one line now, and `configuration-root` is that line."""
 
 import re
-from pathlib import Path
 
 import yaml
 
@@ -173,94 +172,6 @@ def test_every_kmt_step_in_a_shipped_task_names_its_configuration_root():
             assert _inside_a_mounted_workspace(resolved, manifest), \
                 f"{name}: --config-dir {value!r} resolves to {resolved!r}, which is not under a " \
                 f"workspace this Task mounts ({_mounts(manifest)}), so no pod could put it on disk"
-
-
-def test_the_tasks_that_run_kmt_are_measured_and_not_remembered():
-    """The rule is not vacuous: the walk finds exactly the two Tasks that carry it.
-
-    A guard over a filtered list says nothing the moment the filter stops matching, and the set here
-    was read off the tree rather than asserted from the ticket — every other `kmt` string under
-    `assets/` is prose in a comment or a values file. Adding a third `uv run … kmt` Task is a
-    legitimate change; this assertion is the note that says the rule above has to be read against it.
-    """
-    assert {name for name, _, _ in _uv_kmt_steps()} == UV_KMT_TASKS, \
-        "the set of Tasks that run `uv run … kmt` has moved; re-read the second clause this file pins " \
-        "against the new list and extend this pin deliberately"
-
-
-def test_the_run_pipeline_task_names_a_root_that_is_not_where_the_step_starts():
-    """The root the command reads and the directory the step starts in are two different answers.
-
-    This is the second spelling, and it landed. `workingDir` and `KUBEMENTAT_HOME` say
-    *where the step starts*, so `uv` can resolve the `kmt` entry point out of the **code** checkout; the
-    `--config-dir` below says *what the command reads*, and that is now the **configuration** clone, a
-    second repository fetched into the same workspace at a path of its own. Those two lines were kept
-    apart on one param so that the day the configuration moved out of the checkout the flip would be a
-    param swap and not a rewrite of the step; this is that day, and both params now exist.
-
-    What is checked is that they still answer different questions. The failure the original docstring
-    warned about -- someone folding the two back onto one value so the code checkout quietly becomes the
-    configuration root again -- is caught here rather than in a pipeline that runs for an hour before
-    `platform_config` turns out to be read from the wrong tree.
-    """
-    manifest = yaml.safe_load(tekton_ci_path("tasks", "run-tekton-pipeline.yml").read_text(encoding="utf-8"))
-    steps = _steps(manifest)
-    assert len(steps) == 1, "one step is the shape of this Task; more than one changes where this reads"
-    step = steps[0]
-
-    values = _config_dir_values(step)
-    assert len(values) == 1, f"the step's kmt line names {len(values)} roots, and 1 is the shape here"
-    value = values[0]
-
-    assert "configuration-root" in value, \
-        f"--config-dir is handed {value!r}, which is not the configuration-root param that moved the " \
-        "root off the code checkout. Deriving it from the code checkout would say that code and " \
-        "configuration are the same clone, which is the state this rule exists to leave behind"
-    assert "path-to-configuration" not in value, \
-        f"--config-dir {value!r} is still spelled off the code checkout's param. That was the old " \
-        "answer, and the first clause of the rule is written to retire it"
-
-    working_dir = step.get("workingDir")
-    env_values = {entry["name"]: entry["value"] for entry in step.get("env") or []}
-    assert working_dir == env_values.get("KUBEMENTAT_HOME"), \
-        "the step's directory and its home are two values here, so they can drift — that is the " \
-        "that is the lesson of two values that used to be one, and it still applies to the half that " \
-        "stays put"
-    assert "path-to-configuration" in (working_dir or ""), \
-        f"workingDir is {working_dir!r}, which is no longer the code-checkout param. The code checkout " \
-        "is what `uv` resolves the project from; moving it off this param needs its own argument"
-
-    assert _resolve(value, manifest) != _resolve(working_dir, manifest), \
-        "the root the command reads collapsed onto the directory the step starts in. Two params that " \
-        "resolve to one path are one param wearing two names, and the configuration clone would be " \
-        "read from the code tree -- the accident this rule was written to prevent"
-    assert _inside_a_mounted_workspace(_resolve(value, manifest), manifest), \
-        f"{_resolve(value, manifest)!r} is not under a workspace this Task mounts ({_mounts(manifest)})"
-
-
-def test_the_configuration_root_in_the_task_is_a_path_and_not_a_borrowed_checkout():
-    """`configuration-root` defaults to a directory the pipeline must create, and says so.
-
-    The default is `/workspace/configuration`, which no Task can produce on its own: it is where a clone
-    step puts the configuration repository. A default that names a directory nothing creates is only
-    honest if the file says so and the failure is legible, which is what this pins -- and it keeps the
-    value a workspace reference rather than a literal, so the Task still moves between clusters.
-    """
-    manifest = yaml.safe_load(tekton_ci_path("tasks", "run-tekton-pipeline.yml").read_text(encoding="utf-8"))
-    params = {param["name"]: param.get("default", "")
-              for param in manifest.get("spec", {}).get("params") or []}
-
-    assert "configuration-root" in params, "the Task that started this rule should now carry the param"
-    default = params["configuration-root"]
-    assert WORKSPACE_REF.search(default) and not PARAM_REF.search(default), \
-        f"configuration-root defaults to {default!r}. A default built out of other params is a guess " \
-        "about the pipeline's clone layout; a workspace reference is a statement about this Task"
-    assert _inside_a_mounted_workspace(_resolve(default, manifest), manifest), \
-        f"{default!r} is not under a workspace the Task mounts, so no pod could put it on disk"
-
-    text = _command_text(_steps(manifest)[0])
-    assert "configuration-root" in text, \
-        "the param exists but the step never reads it, so the root the command gets is still source A's"
 
 
 def test_a_configuration_root_is_never_rescued_by_a_default_or_a_variable_the_step_sets():

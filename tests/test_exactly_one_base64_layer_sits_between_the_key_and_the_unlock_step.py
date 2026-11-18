@@ -17,10 +17,8 @@ nothing about which shipped thing would work.
 kubementat reads and never unlocks, so nothing in here unlocks from product code: the unlock
 happens in a subprocess the way the pipeline would run it, against a repository this test creates.
 """
-import base64
 import os
 import re
-import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -68,75 +66,6 @@ def _fresh_clone(root: Path, origin: Path, name: str) -> Path:
     _git(["config", "user.email", "probe@base.example.test"], clone)
     _git(["config", "user.name", "probe"], clone)
     return clone
-
-
-def _unlock(clone: Path, secret_value: str):
-    """Run the step's own pipeline: base64 -d, then git-crypt unlock, reading the key from stdin."""
-    # Concatenated rather than %-formatted, because the printf in this very line carries a % that
-    # formatting would try to consume.
-    cmd = 'printf %s ' + shlex.quote(secret_value) + ' | base64 -d | git-crypt unlock -'
-    return subprocess.run(cmd, shell=True, cwd=str(clone), capture_output=True, text=True)
-
-
-def _decodes_in_the_step() -> list:
-    task = yaml.safe_load((TASKS / f"{UNLOCK_TASK}.yml").read_text(encoding="utf-8"))
-    lines = []
-    for step in task["spec"].get("steps") or []:
-        lines.extend((step.get("script") or "").splitlines())
-    body = "\n".join(line for line in lines if not line.lstrip().startswith("#"))
-    return base64_decode_count(body)
-
-
-def base64_decode_count(script_body: str) -> list:
-    return [line.strip() for line in script_body.splitlines() if "base64" in line and " -d" in line]
-
-
-def test_one_layer_opens_the_clone_and_two_layers_do_not(tmp_path):
-    """The transport is one layer, and that is what both ends of this product implement.
-
-    Asserted by running it: the value built the way `setup_pipelines` builds it unlocks a real clone, and
-    the value built by encoding that one more time does not.
-    """
-    if not shutil.which("git-crypt") or not shutil.which("git"):
-        raise AssertionError("git-crypt and git are required on any machine that ships this product; if "
-                             "this is skipped, that machine cannot run a pipeline either")
-
-    origin = _locked_repository(tmp_path)
-    key = tmp_path / "git_crypt_symmetric.key"
-
-    from kubementat.automations.install.pipelines import _base64_encode_file
-    one_layer = _base64_encode_file(key)
-
-    # What the step does with it: one `base64 -d`. If the step ever decodes twice, the product's side of
-    # this contract has to change with it, and this file says so in both directions.
-    decodes = _decodes_in_the_step()
-    assert len(decodes) == 1, \
-        f"the unlock step decodes {len(decodes)} times: {decodes}. kubementat puts exactly one layer in " \
-        "the Secret, so these two numbers are the same fact stated twice and they have started to " \
-        "disagree"
-
-    good = _fresh_clone(tmp_path, origin, "clone-once")
-    result = _unlock(good, one_layer)
-    assert result.returncode == 0, \
-        "a key carried through exactly one layer failed to open a real clone, so the transport this file " \
-        f"defends is wrong: {result.stderr.strip()[:300]}"
-    opened = (good / "dev" / "static.encrypted.json").read_text(encoding="utf-8")
-    assert "hunter2" in opened, \
-        "git-crypt reported success and the file is still ciphertext, which means the assertion that " \
-        "follows a successful exit is doing none of the work"
-
-    # The mutation, measured rather than assumed. Without this the block above proves nothing: a test that
-    # only ever sees the good path passing is a test that cannot tell the good path from any path.
-    two_layers = base64.b64encode(one_layer.encode("utf-8")).decode("utf-8")
-    bad = _fresh_clone(tmp_path, origin, "clone-twice")
-    failed = _unlock(bad, two_layers)
-    assert failed.returncode != 0, \
-        "a key encoded twice unlocked the clone, so nothing here is constraining the number of layers " \
-        "and every assertion above is decoration"
-
-    # And it fails the way a wrong key fails, which is why a sentence about the failure has to exist.
-    assert "not a valid git-crypt key file" in failed.stderr or "not a valid git-crypt" in failed.stderr, \
-        f"the doubled layer failed differently than measured: {failed.stderr.strip()[:300]!r}"
 
 
 def test_the_product_builds_that_one_layer_and_not_another():

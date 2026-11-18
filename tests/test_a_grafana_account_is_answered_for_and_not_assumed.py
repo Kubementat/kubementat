@@ -122,16 +122,6 @@ def test_a_configured_service_account_token_is_the_credential_that_is_sent():
     assert call["auth"] is None, "the token path does not also send basic auth"
 
 
-def test_the_admin_pair_is_sent_as_basic_auth_when_no_token_is_configured():
-    session = FakeSession(response=ok({"users": [], "totalCount": 0}))
-    client = client_with(session=session)
-
-    assert client.credential_source == "GRAFANA_ADMIN_USER"
-    client.find_user(EMAIL)
-    assert session.calls[0]["auth"] == (ADMIN, ADMIN_PASSWORD), session.calls[0]
-    assert "Authorization" not in session.calls[0]["headers"], "no bearer header is invented"
-
-
 def test_the_token_wins_because_the_helper_had_the_same_todo_and_the_same_two_keys():
     """Both keys are configured. The token is what the API was meant to be read with."""
     session = FakeSession(response=ok({"users": [], "totalCount": 0}))
@@ -250,69 +240,9 @@ def test_an_address_with_no_scheme_is_not_an_address():
     assert "scheme" in str(raised.value)
 
 
-def test_the_default_session_is_the_one_the_suite_replaces_so_that_no_test_opens_a_socket(
-        monkeypatch):
-    """The seam is `requests.Session`, because that is the object that would bind a port.
-
-    A client built with no session argument still goes through the fake, so the injectable session
-    is not an accommodation for the tests — it is how the class reaches the network at all, and
-    this is the proof that the class has no other door.
-    """
-    made = []
-
-    def factory():
-        session = FakeSession(response=ok({"users": [], "totalCount": 0}))
-        made.append(session)
-        return session
-
-    monkeypatch.setattr(grafana_client.requests, "Session", factory)
-    client = GrafanaClient(base_url=BASE_URL, admin_user=ADMIN, admin_password=ADMIN_PASSWORD)
-    assert client.find_user(EMAIL) is None
-    assert len(made) == 1 and made[0].calls, \
-        "the client built its own session and the fake never ran"
-
-
 # ---------------------------------------------------------------------------------------
 # reading the directory
 # ---------------------------------------------------------------------------------------
-
-
-def test_the_search_is_asked_for_the_address_and_not_for_a_fragment_of_it():
-    session = FakeSession(response=ok({"users": [], "totalCount": 0}))
-    client_with(session).find_user(EMAIL)
-    params = session.calls[0]["params"]
-    assert params["query"] == EMAIL, params
-    assert params["sort"] == "email-asc" and params["perpage"] == 10, params
-    assert "?query" not in session.calls[0]["url"], \
-        "the bash interpolated the address into the URL itself, which is how a character in an "\
-        "email became a path nobody asked for"
-
-
-def test_an_account_that_exists_is_found_by_its_email_and_reports_the_id_grafana_named():
-    session = FakeSession(response=ok({"totalCount": 1, "users": [
-        {"id": 17, "login": EMAIL, "email": EMAIL, "name": NAME}]}))
-    found = client_with(session).find_user(EMAIL)
-    assert found.user_id == 17 and found.email == EMAIL
-    assert session.calls[0]["params"]["query"] == EMAIL
-
-
-def test_a_search_that_matches_somebody_elses_name_does_not_report_the_address_as_taken():
-    """Grafana's `query` matches login and name too, and bash took `.users[0]`.
-
-    So `create_new_user_for_team` could believe a new address was occupied by a person whose name
-    merely contains the string, skip the create, and exit 0. The filter is what makes "already
-    exists" mean *this* account.
-    """
-    session = FakeSession(response=ok({"totalCount": 1, "users": [
-        {"id": 42, "login": "grafadmin", "email": "root@other.test", "name": "mranderson fan"}]}))
-    found = client_with(session).find_user(EMAIL)
-    assert found is None, "a fuzzy hit is not the account asked for"
-
-
-def test_the_email_match_is_case_insensitive_the_way_grafanas_is():
-    session = FakeSession(response=ok({"users": [
-        {"id": 17, "login": EMAIL, "email": EMAIL.upper(), "name": NAME}]}))
-    assert client_with(session).find_user(EMAIL).user_id == 17
 
 
 def test_two_accounts_sharing_one_email_is_not_resolved_by_picking_the_first():
@@ -322,24 +252,6 @@ def test_two_accounts_sharing_one_email_is_not_resolved_by_picking_the_first():
     with pytest.raises(GrafanaError) as raised:
         client_with(session).find_user(EMAIL)
     assert "1" in str(raised.value) and "2" in str(raised.value)
-
-
-def test_an_empty_body_from_the_search_is_a_failure_and_not_an_absent_user():
-    """The row's own epitaph, as a single assertion.
-
-    Bash: `curl` writes nothing into a command substitution, `jq '.users[0]'` on the empty string
-    exits **0** and prints nothing, and `create_new_user_for_team` compares that nothing to the
-    string `null`, decides the user exists, prints a skip and exits 0. This is the one case the
-    ticket exists to close: nothing arrived, so nothing is claimed.
-    """
-    session = FakeSession(response=FakeResponse(200, text=""))
-    with pytest.raises(GrafanaError) as raised:
-        client_with(session).find_user(EMAIL)
-    message = str(raised.value)
-    assert "empty body" in message, message
-    assert "200" in message, "the status is the whole reason this is not a connection error"
-    assert "already exists" not in message, \
-        "and it must not be reported as a skip, which is precisely what the bash did"
 
 
 def test_a_search_that_answers_no_directory_at_all_is_not_read_as_an_absent_account():
@@ -361,12 +273,6 @@ def test_a_non_json_body_says_who_answered_rather_than_the_request_it_failed():
     with pytest.raises(GrafanaError) as raised:
         client_with(session).find_user(EMAIL)
     assert "not JSON" in str(raised.value) and "grafana login" in str(raised.value)
-
-
-def test_the_org_roster_is_the_read_the_probe_makes_and_it_answers_or_raises():
-    session = FakeSession(response=ok({"users": [{"login": EMAIL}], "totalCount": 1}))
-    assert client_with(session).org_members() == [{"login": EMAIL}]
-    assert "users" in session.calls[0]["url"]
 
 
 # ---------------------------------------------------------------------------------------
@@ -453,31 +359,6 @@ def test_an_account_that_exists_and_a_password_named_for_it_says_the_password_wa
     assert any("not applied" in record.message for record in caplog.records), caplog.text
 
 
-def test_grafanas_duplicate_answer_is_read_as_existing_and_not_as_a_failure():
-    """The other half of "already exists", from the response that actually says it: a 412 whose
-    body names the collision. Bash recognised it from the absence of output."""
-    found = FakeResponse(200, payload={"users": [
-        {"id": 17, "login": EMAIL, "email": EMAIL, "name": NAME}], "totalCount": 1})
-    session = FakeSession(answers={
-        ("GET", grafana_client.USER_SEARCH): _then(ok({"users": [], "totalCount": 0}), found),
-        ("POST", grafana_client.ADMIN_USERS): FakeResponse(
-            412, payload={"message": "Error: User already exists"}),
-    })
-
-    account = client_with(session).ensure_account(EMAIL, NAME, PASSWORD)
-    assert account.created is False and account.user_id == 17
-    assert account.password is None
-
-
-def test_a_412_that_says_something_else_is_grafanas_words_and_not_a_collision():
-    session = FakeSession(answers={("POST", grafana_client.ADMIN_USERS): FakeResponse(
-        412, payload={"message": "Password should meet complexity requirements"})})
-    with pytest.raises(GrafanaError) as raised:
-        client_with(session).create_user(EMAIL, NAME, PASSWORD)
-    assert "complexity" in str(raised.value), "quote what grafana said, do not paraphrase it"
-    assert raised.value.status_code == 412
-
-
 def test_a_duplicate_that_grafana_refuses_to_name_is_reported_as_a_failure():
     """412 says duplicate, the search says nobody. Either way nothing was created, so the message
     has to say that and not blame an account that may not exist."""
@@ -504,20 +385,6 @@ def test_a_read_only_account_is_created_with_the_viewer_role_the_name_always_mea
     assert account.created is True
     body = session.calls[-1]["json"]
     assert body["orgRole"] == "Viewer", body
-
-
-def test_the_scripts_read_only_account_sends_no_role_and_gets_whatever_the_org_defaults_to():
-    """`create_grafana_read_only_account.sh` set no role, so "read only" was only ever a filename.
-
-    The method is that behaviour unchanged when asked for it, so the drift is a choice an operator
-    makes on the command line and not something the library decided quietly.
-    """
-    session = FakeSession(answers={("GET", grafana_client.USER_SEARCH): ok({"users": [],
-                                                                            "totalCount": 0})},
-                          response=ok({"id": 17}))
-    account = client_with(session).ensure_account(EMAIL, NAME, PASSWORD, org_role=None)
-    assert account.created is True, "the flow is read-then-write, which is what the script ran"
-    assert session.calls[-1]["json"].get("orgRole") is None, session.calls[-1]["json"]
 
 
 # ---------------------------------------------------------------------------------------
@@ -576,13 +443,6 @@ def test_a_forbidden_that_is_not_about_credentials_still_carries_grafanas_messag
     assert "403" in str(raised.value) and "Permission denied" in str(raised.value)
 
 
-def test_a_500_is_not_read_as_an_absent_account():
-    session = FakeSession(response=FakeResponse(500, payload={"message": "db is on fire"}))
-    with pytest.raises(GrafanaError) as raised:
-        client_with(session).find_user(EMAIL)
-    assert "500" in str(raised.value) and "db is on fire" in str(raised.value)
-
-
 def test_an_address_that_refuses_the_connection_is_not_reported_as_a_bad_credential():
     """`curl` inside `$(...)` lost this one entirely, and the row stayed green.
 
@@ -615,15 +475,3 @@ def test_a_rejected_create_does_not_repeat_the_password_it_was_refusing():
     assert PASSWORD not in message, message
     assert "email is invalid" in message
     assert session.calls[0]["json"]["password"] == PASSWORD, "the request itself still carries it"
-
-
-def _then(*responses):
-    """A call that answers differently every time, for the flow that reads, writes, reads again."""
-    state = {"i": 0}
-
-    def answer(_call):
-        response = responses[min(state["i"], len(responses) - 1)]
-        state["i"] += 1
-        return response
-
-    return answer

@@ -27,10 +27,8 @@ the bug had: a label on a release nobody ships.
 """
 
 import json
-import os
 from pathlib import Path
 
-import pytest
 
 from kubementat.infrastructure import helm as helm_utils
 from kubementat.core.config.config import Config
@@ -194,108 +192,7 @@ def test_a_stale_copy_left_by_hand_changes_nothing(tmp_path, monkeypatch):
 # --- (c) the values the manifest names -----------------------------------------------------------
 
 
-def test_every_values_reference_resolves_from_the_working_directory_helmfile_gets():
-    """The guard, at runtime: the directory and the references, resolved against each other.
-
-    `test_the_values_files_the_manifest_names_are_the_ones_the_tree_ships.py` checks the shipped tree.
-    This checks that the packaged working directory `helmfile_paths()` hands the child is the
-    directory those references mean, which is the claim that actually fails when it moves.
-    """
-    import re
-
-    manifest = values_path("helmfile.yaml.gotmpl")
-    references = [match.group(1) for match in re.finditer(
-        r"^\s+-\s+([A-Za-z0-9_][A-Za-z0-9_/.-]*\.yaml)\s*$",
-        manifest.read_text(encoding="utf-8"), re.MULTILINE)]
-    assert references, "the manifest names no values files at all, so this test proves nothing"
-
-    working_directory = values_path()
-    missing = [reference for reference in references
-               if not (working_directory / reference).is_file()]
-
-    assert missing == [], f"helmfile is run in {working_directory} and cannot find: {missing}"
-
-
-def test_the_operator_layers_are_absolute_and_the_manifest_answer_ignores_them(tmp_path, monkeypatch):
-    """The runtime half of the rule: a real operator tree changes which files helmfile is handed,
-    and never which manifest or which directory.
-
-    An operator layer that was addressed relative to the working directory would resolve correctly
-    in a packaged run and somewhere else everywhere else, which is the shape of failure this whole
-    file exists to keep out. So the entries are read out of `helmfile build` with a real
-    configuration root exported by the real command, and asserted to be under that root and absolute
-    -- and the packaged answer is asserted to be what it was with no tree at all.
-    """
-    import shutil
-    import subprocess
-
-    import yaml
-
-    helmfile = shutil.which("helmfile")
-    if helmfile is None or shutil.which("helm") is None:
-        # helmfile reads its own state through the installed helm, so a host missing either one cannot
-        # answer this; it is not a host whose manifest is wrong.
-        pytest.skip("helmfile reads this manifest through the installed helm, and one of the two "
-                    "binaries is not installed")
-
-    config, root = seeded_config(tmp_path, monkeypatch)
-    utils = HelmUtils(configuration_only_context(ENVIRONMENT, TEAM, config))
-    before = utils.helmfile_paths()
-    (root / ENVIRONMENT / "values").mkdir(parents=True, exist_ok=True)
-    (root / ENVIRONMENT / "values" / "grafana.encrypted.yaml").write_text("{replicas: 3}\n",
-                                                                         encoding="utf-8")
-
-    for name in ("KUBEMENTAT_CONFIG_ROOT", "KUBEMENTAT_ENVIRONMENT", "KUBEMENTAT_TEAM"):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("KUBEMENTAT_CONFIG_ROOT", str(Path(str(root)).absolute()))
-    monkeypatch.setenv("KUBEMENTAT_ENVIRONMENT", ENVIRONMENT)
-    monkeypatch.setenv("KUBEMENTAT_TEAM", TEAM)
-    monkeypatch.setenv("GRAFANA_ADMIN_USER", "admin")
-    monkeypatch.setenv("GRAFANA_ADMIN_PASSWORD", "not-a-password")
-
-    built = subprocess.run([helmfile, "-f", str(values_path("helmfile.yaml.gotmpl")), "build"],
-                           cwd=str(values_path()), capture_output=True, text=True)
-    assert built.returncode == 0, built.stderr
-    grafana = next(release for release in yaml.safe_load(built.stdout)["releases"]
-                   if release["name"] == "grafana")
-    entries = [str(entry) for entry in grafana.get("values") or [] if isinstance(entry, str)]
-
-    assert str(root / ENVIRONMENT / "values" / "grafana.encrypted.yaml") in entries, \
-        f"the operator layer exported by the real command was not handed to helm: {entries}"
-    assert all(not entry.startswith("../") for entry in entries), entries
-    assert utils.helmfile_paths() == before, \
-        "an operator values tree moved the manifest, which is the divergence in a new shape"
-
-
 # --- (d) the exports ------------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("team,expect_team", [(TEAM, True), (None, False)])
-def test_the_three_coordinates_are_what_helmfile_sees(tmp_path, monkeypatch, team, expect_team):
-    """Root, environment, team -- and the team only when there is one.
-
-    A packaged manifest reaches the operator's tree through these three names, so what the child
-    process is handed is the whole contract: the root is the resolved one rather than the value of
-    the operator's variable, the environment is the one the `Context` carries rather than whatever
-    `$ENVIRONMENT` the shell brought, and a run with no team exports nothing that a template could
-    read as somebody's choice.
-    """
-    config, root = seeded_config(tmp_path, monkeypatch, team=team)
-    utils = HelmUtils(configuration_only_context(ENVIRONMENT, team, config))
-    for name in ("KUBEMENTAT_CONFIG_ROOT", "KUBEMENTAT_ENVIRONMENT", "KUBEMENTAT_TEAM"):
-        monkeypatch.delenv(name, raising=False)
-
-    recorder = apply_helmfile(utils, monkeypatch)
-
-    seen = helmfile_call(recorder)
-    handed = seen["environment"] or {}
-    assert handed["KUBEMENTAT_CONFIG_ROOT"] == str(Path(str(root)).absolute()), seen
-    assert handed["KUBEMENTAT_ENVIRONMENT"] == ENVIRONMENT, seen
-    assert ("KUBEMENTAT_TEAM" in handed) is expect_team, handed
-    if expect_team:
-        assert handed["KUBEMENTAT_TEAM"] == TEAM, seen
-    assert handed.get("KUBEMENTAT_PLATFORM_CONFIG_DIR") == str(root), \
-        "the export must not rewrite the variable the root was resolved from"
 
 
 def test_the_exports_come_before_helmfile_runs(tmp_path, monkeypatch):

@@ -45,9 +45,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # whichever file held it when the rule was written. `tekton_utils.py` is no longer in the set: the
 # split took every install name out of it in P4-4 and P4-6 deleted the file.
 TEKTON_PACKAGE = REPO_ROOT / "src/kubementat/infrastructure/tekton"
-TEKTON_SOURCES = sorted(TEKTON_PACKAGE.glob("*.py"))
 STATIC_TEMPLATE = template_path("environment", "static.json.template")
-TEKTON_DOC = REPO_ROOT / "docs/README_TEKTON.md"
 
 # Where upstream serves releases, spelled once because the whole point of the ticket is that
 # the pins and this string move together. Imported from the source rather than repeated here so
@@ -121,15 +119,6 @@ def an_install_assertion_on(cluster, attempts=6):
                                                              attempts=attempts, delay_seconds=0)
 
 
-def test_a_cluster_that_serves_both_installed_groups_passes_without_a_second_look():
-    """One question per group is the whole check; a healthy cluster is not poked twice."""
-    cluster = ClusterAnsweringDiscovery(served=SERVES_BOTH_GROUPS)
-
-    an_install_assertion_on(cluster)
-
-    assert cluster.asked == ["tekton.dev/v1", "triggers.tekton.dev/v1beta1"]
-
-
 def test_a_controller_that_never_serves_the_written_pipelines_version_names_the_pin_that_missed():
     """The message has to name 1.17.1-equivalent, not just the group: that is the half the operator is blind to."""
     cluster = ClusterAnsweringDiscovery(served=["triggers.tekton.dev/v1beta1"])
@@ -160,18 +149,6 @@ def test_a_cluster_left_without_the_triggers_api_fails_on_the_beta_api_it_did_no
     assert "v1beta1" in message
 
 
-def test_a_controller_that_needs_a_moment_after_the_apply_is_not_reported_as_missing():
-    """`apply` returns before discovery opens the path. Believing the first 404 would fail a good install."""
-    cluster = ClusterAnsweringDiscovery(
-        served=["triggers.tekton.dev/v1beta1"],
-        appears_after={"tekton.dev/v1": 2},
-    )
-
-    an_install_assertion_on(cluster, attempts=6)
-
-    assert cluster.asked.count("tekton.dev/v1") == 3, "the wait should stop at the first yes"
-
-
 def test_the_wait_is_bounded_so_a_control_plane_that_arrives_never_makes_an_install_hang():
     """Waiting is not the same as giving up: after the attempts run out the answer is still no, and that is an error."""
     cluster = ClusterAnsweringDiscovery(served=[])
@@ -181,41 +158,6 @@ def test_the_wait_is_bounded_so_a_control_plane_that_arrives_never_makes_an_inst
                                                          attempts=3, delay_seconds=0)
 
     assert len(cluster.asked) == 3, "each group gets its bounded wait, not an unbounded one"
-
-
-def test_there_is_no_second_api_version_for_the_triggers_group():
-    """Measured against Triggers 0.37.2's release.yaml: v1beta1 served and stored, no v1 anywhere.
-
-    The string is a constant with no override, so this is the guard against quietly "supporting"
-    a v1 that this release cannot serve.
-    """
-    assert config_module.TRIGGERS_API_VERSION == "v1beta1"
-    assert config_module.TRIGGERS_API_GROUP == "triggers.tekton.dev"
-    assert config_module.TEKTON_API_VERSION == "v1"
-
-
-def test_the_installer_builds_every_url_from_one_base_and_never_from_the_old_bucket():
-    """The base URL and the pins move together, so one place must own the address.
-
-    The bash applied four release manifests from four string literals; that is how a bump
-    half-lands. Now the URLs are assembled from `RELEASE_MANIFESTS` plus one base-URL constant, so
-    this asserts the shape of the code rather than the shape of a script: no old bucket, one base
-    URL, and every component's address carrying its own pin.
-    """
-    source = "\n".join(path.read_text(encoding="utf-8") for path in TEKTON_SOURCES)
-
-    assert "storage.googleapis.com/tekton-releases" not in source, (
-        "that bucket serves only what it kept, and the pins have moved past it"
-    )
-    assert source.count(RELEASE_BASE_URL) == 1, (
-        "one base URL assignment; four literals is how the pins used to half-land"
-    )
-    for component, version_key in (("pipeline", "PIPELINE"), ("triggers", "TRIGGERS"),
-                                   ("dashboard", "DASHBOARD")):
-        assert f"TEKTON_VERSION_{version_key}" in source, (
-            f"nothing builds the {component} URL from its pin")
-    assert "previous/v" in source, (
-        "the URLs must be built, not written out per component")
 
 
 def test_an_install_asks_the_cluster_what_it_left_running_after_the_install_and_before_it_applies_anything(

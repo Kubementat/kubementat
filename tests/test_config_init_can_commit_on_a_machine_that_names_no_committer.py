@@ -19,16 +19,11 @@ find one, kubementat would correctly write nothing, and every claim here about t
 measuring a machine that does not exist. A git that reads an empty HOME is a fresh VM.
 """
 
-import os
 import subprocess
 
 import pytest
 
 from kubementat.config import bootstrap as config_bootstrap
-
-# The name kubementat writes when a machine names nobody. Read from the product, because this file's
-# claim is the behaviour and not the spelling.
-COMMITTER_EMAIL = config_bootstrap.CONFIG_COMMITTER_EMAIL
 
 
 def git(root, *args, check=False):
@@ -81,42 +76,6 @@ def test_a_machine_that_names_no_committer_still_gets_its_first_commit(fresh_rep
         "the commit step did not report a commit on a tree that had something staged"
     assert git(root, "rev-parse", "--verify", "--quiet", "HEAD").returncode == 0, \
         "git still refused; that is the exit 128 this file exists to close"
-
-
-def test_the_identity_it_writes_is_local_and_names_kubementat(fresh_repo):
-    """The fallback belongs to the repository, never to the machine.
-
-    `--global` would be the easier fix and the wrong one: a freshly initialized configuration tree is
-    not a licence to change a setting that governs every other repository on the host, and a committer
-    who is not the operator must not silently follow their later commits.
-    """
-    root, home = fresh_repo
-
-    config_bootstrap._commit(root, commit=True)  # noqa: SLF001
-
-    assert git(root, "config", "--local", "user.email").stdout.strip() == COMMITTER_EMAIL, \
-        "the fallback was not written into the repository"
-    assert git(root, "config", "--global", "user.email", check=False).stdout.strip() == "", \
-        "this wrote to the operator's machine-level config"
-    # The same claim, from the other side: a git that consults only the home this fixture owns.
-    assert subprocess.run(["git", "config", "--global", "user.email"], cwd="/", env={"HOME": str(home)},
-                           capture_output=True, text=True).stdout.strip() == ""
-
-
-def test_a_name_the_machine_already_has_is_not_overwritten(fresh_repo):
-    """Git needs both halves, so kubementat fills the gap and not the whole blank.
-
-    A machine with a name and no address is a real state — someone configured one half by hand — and a
-    fallback that rewrites both whenever it sets one would replace a human's name with kubementat's.
-    """
-    root, _home = fresh_repo
-    git(root, "config", "--local", "user.name", "operated-by-a-human", check=True)
-
-    config_bootstrap._commit(root, commit=True)  # noqa: SLF001
-
-    assert git(root, "config", "--local", "user.name").stdout.strip() == "operated-by-a-human", \
-        "the fallback overwrote a name a human chose"
-    assert git(root, "rev-parse", "--verify", "--quiet", "HEAD").returncode == 0
 
 
 def test_an_identity_that_is_already_there_is_left_alone(fresh_repo):

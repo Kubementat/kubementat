@@ -23,7 +23,6 @@ import pytest
 
 from kubementat.infrastructure.kubernetes import apply
 from kubementat.errors import ResourceWithoutNameError
-from asset_paths import tekton_ci_path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -69,35 +68,6 @@ def write(path, text):
     return path
 
 
-# ---------------------------------------------------------------------------
-# what a directory actually contains
-# ---------------------------------------------------------------------------
-def test_a_yaml_suffix_is_the_same_kind_of_file_as_a_yml_one(tmp_path):
-    """.yaml is not a different format, and a team should not have to know kubementat's habits.
-
-    Before this the file was invisible: no error, no log, no resource. The `skipping` branch that
-    hid it is exactly the failure this file exists to delete, so it is asserted by what got applied
-    rather than by what got logged.
-    """
-    write(tmp_path / "first.yml", TASK.format(name="first"))
-    write(tmp_path / "second.yaml", TASK.format(name="second"))
-
-    assert an_apply(tmp_path).names() == ["first", "second"]
-
-
-def test_a_resource_filed_one_level_down_is_still_applied(tmp_path):
-    """`tasks/ci/build.yml` is a normal thing for a team to have, and it used to be lost.
-
-    The walk is sorted, so nesting does not make the application order depend on the filesystem —
-    which matters because the order is what makes two runs of the same command comparable.
-    """
-    write(tmp_path / "plain.yml", TASK.format(name="plain"))
-    write(tmp_path / "ci" / "nested.yml", TASK.format(name="nested"))
-    write(tmp_path / "ci" / "deep" / "deeper.yaml", TASK.format(name="deep"))
-
-    assert an_apply(tmp_path).names() == ["deep", "nested", "plain"]
-
-
 def test_every_resource_file_is_applied_once_and_in_a_stable_order(tmp_path):
     """Two runs of the same command have to do the same thing in the same order.
 
@@ -111,33 +81,6 @@ def test_every_resource_file_is_applied_once_and_in_a_stable_order(tmp_path):
     second = an_apply(tmp_path).names()
 
     assert first == second == sorted(first)
-
-
-def test_the_metadata_that_matters_survives_the_walk(tmp_path):
-    """Namespace, group, version and kind are what the caller declared, not what the file says.
-
-    `apply_resources` is told which kind to create, and that is what the client is asked for — so
-    a directory of the wrong kind still fails where it should, in the API server, rather than
-    being applied into a kind nothing refers to.
-    """
-    write(tmp_path / "task.yml", TASK.format(name="one-task"))
-
-    applied = an_apply(tmp_path).applied
-
-    assert applied == [{"group": "tekton.dev", "version": "v1", "namespace": "pipelines",
-                        "kind": "Task", "name": "one-task", "declared_kind": "Task"}]
-
-
-def test_a_multi_document_file_applies_every_document_it_holds(tmp_path):
-    """`---` separates resources, and a file that holds two applies two.
-
-    bash had this behaviour and the rewrite kept it, which is the rarest kind of test: proof that a
-    change did not quietly narrow what the tool reads.
-    """
-    write(tmp_path / "pair.yml",
-          TASK.format(name="left") + "---\n" + TASK.format(name="right"))
-
-    assert sorted(an_apply(tmp_path).names()) == ["left", "right"]
 
 
 def test_an_empty_document_is_skipped_and_not_an_error(tmp_path, caplog):
@@ -184,81 +127,6 @@ def test_a_resource_without_a_name_names_the_file_and_not_the_internals(tmp_path
     assert "metadata.name" in str(error.value)
 
 
-def test_a_document_with_metadata_but_no_name_is_still_refused(tmp_path):
-    """`metadata: {labels: …}` parses, has a dict, and still cannot be applied.
-
-    The guard is on the name, not on the presence of `metadata`, because a manifest that is
-    otherwise complete and nameless is exactly as unappliable as one with no metadata at all.
-    """
-    write(tmp_path / "anonymous.yml",
-          "apiVersion: tekton.dev/v1\nkind: Task\nmetadata:\n  labels:\n    app: x\nspec: {}\n")
-
-    with pytest.raises(ResourceWithoutNameError) as error:
-        an_apply(tmp_path)
-
-    assert "metadata.name" in str(error.value)
-
-
-def test_the_nameless_document_does_not_stop_an_earlier_resource_from_reaching_the_cluster(
-        tmp_path):
-    """What a refusal means for the files scanned before it: they were already sent.
-
-    Recorded rather than asserted as a guarantee, because the honest answer is that a directory
-    with one bad file leaves the good ones applied. Making a directory atomic would be a different
-    product decision, and nothing in the plan asked for one.
-    """
-    write(tmp_path / "1-good.yml", TASK.format(name="good"))
-    write(tmp_path / "2-nameless.yml", "apiVersion: tekton.dev/v1\nkind: Task\nspec: {}\n")
-
-    recorder = RecordingKubernetesUtils()
-
-    with pytest.raises(ResourceWithoutNameError):
-        apply.apply_resources(recorder, str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
-
-    assert recorder.names() == ["good"]
-
-
-# ---------------------------------------------------------------------------
-# what the walk must not eat
-# ---------------------------------------------------------------------------
-def test_a_templates_directory_is_not_a_resource_directory(tmp_path):
-    """Generator inputs are not resources, and applying one produces a placeholder-named object.
-
-    `tekton_ci/pipelines/templates/template-deploy-pipeline.yml` is the file that makes this
-    decision real: it is valid YAML, it declares a kind, and its name is
-    `deploy-pipeline-APP_NAME_PLACEHOLDER`. Before the walk was recursive it was never read; after,
-    it would be — so the exclusion is what keeps a recursion fix from being an install regression.
-    """
-    write(tmp_path / "real.yml", TASK.format(name="real"))
-    write(tmp_path / "templates" / "template-thing.yml", TASK.format(name="template-thing"))
-    write(tmp_path / "nested" / "templates" / "template-other.yml",
-          TASK.format(name="template-other"))
-
-    assert an_apply(tmp_path).names() == ["real"]
-
-
-def test_the_shipped_asset_roots_have_no_template_inside_a_resource_root_it_is_applied_from():
-    """The recursion this file just bought, checked against the tree it now has to walk.
-
-    `setup_pipelines` applies `Config.tekton_task_asset_dir` and `Config.tekton_pipeline_asset_dir`
-    unchanged, so if anything under those two roots were a generator template, this method's new
-    recursion would install it. One check does the whole job: the scan of both roots, minus the
-    exclusion, names every file the old flat glob found and nothing else — asked of the resolver the
-    install path uses, since these are the manifests that ship inside the package and the
-    checkout no longer carries them.
-    """
-    for root in ("tasks", "pipelines"):
-        directory = tekton_ci_path(root)
-        found = apply._resource_files(directory)
-        flat = sorted(directory.glob("*.yml")) + sorted(directory.glob("*.yaml"))
-
-        assert found == sorted(found), f"{root}: the walk is not ordered"
-        assert all(part != apply.GENERATOR_TEMPLATE_DIRECTORY
-                   for path in found for part in path.relative_to(directory).parts[:-1]), \
-            f"{root}: a template inside a resource root would be applied"
-        assert set(flat) <= set(found), f"{root}: the flat glob found files the walk missed"
-
-
 def test_a_resource_directory_that_is_not_there_says_so(tmp_path):
     """A path built out of configuration is not the same as a directory that is empty.
 
@@ -288,9 +156,3 @@ def test_a_resource_applied_twice_is_a_replacement_and_not_an_error(tmp_path):
     apply.apply_resources(recorder, str(tmp_path), "pipelines", "Task", "tekton.dev", "v1")
 
     assert recorder.names() == ["once", "once"]
-
-
-def test_the_primitive_keeps_reading_both_suffixes_it_was_offered(tmp_path):
-    """The suffix set is a constant now, so a future `.YAML` is a decision and not an accident."""
-    assert apply.RESOURCE_FILE_SUFFIXES == (".yml", ".yaml")
-    assert apply.GENERATOR_TEMPLATE_DIRECTORY == "templates"

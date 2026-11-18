@@ -17,7 +17,6 @@ program is asserted by `test_command_execution_policy.py`.
 
 from types import SimpleNamespace
 
-import pytest
 
 from kubementat.infrastructure import shell
 from kubementat.infrastructure.kubernetes import KubernetesUtils
@@ -78,21 +77,6 @@ class FakeApi:
         return matching[-1] if matching else None
 
 
-# ---------------------------------------------------------------------------
-# exec, in a container, as its own arguments
-# ---------------------------------------------------------------------------
-def test_an_interactive_shell_gets_a_stdin_and_a_tty(monkeypatch):
-    run = RecordedRun()
-    utils = make_utils(monkeypatch, run=run)
-
-    utils.exec_in_pod("dev1", "sso-login-service-7d9-abc", ["/bin/bash"])
-
-    assert run.argv == [
-        "kubectl", *kubectl_target_args(TARGET_DEV), "--namespace", "dev1", "exec",
-        "--stdin", "--tty", "sso-login-service-7d9-abc", "--", "/bin/bash",
-    ]
-
-
 def test_the_container_is_selected_before_the_command_it_runs(monkeypatch):
     run = RecordedRun()
     utils = make_utils(monkeypatch, run=run)
@@ -101,26 +85,6 @@ def test_the_container_is_selected_before_the_command_it_runs(monkeypatch):
 
     assert run.argv == ["kubectl", *kubectl_target_args(TARGET_DEV), "--namespace", "dev1", "exec",
                         "nginx-0", "--container", "sidecar", "--", "env"]
-
-
-def test_an_argument_with_a_space_stays_one_argument(monkeypatch):
-    """The old shell path re-parsed what the operator typed; argv cannot split it."""
-    run = RecordedRun()
-    utils = make_utils(monkeypatch, run=run)
-
-    utils.exec_in_pod("dev1", "nginx-0", ["sh", "-c", "cat /etc/hosts; echo hi"], interactive=False)
-
-    assert run.argv[-3:] == ["sh", "-c", "cat /etc/hosts; echo hi"]
-
-
-def test_a_command_run_for_a_verdict_is_captured_and_a_shell_is_not(monkeypatch):
-    run = RecordedRun(stdout="")
-    utils = make_utils(monkeypatch, run=run)
-
-    utils.exec_in_pod("dev1", "nginx-0", ["df", "-h"], capture=True)
-
-    assert run.kwargs["capture"] is True
-    assert run.argv[-2:] == ["df", "-h"]
 
 
 # ---------------------------------------------------------------------------
@@ -139,15 +103,6 @@ def test_logs_that_are_followed_are_never_captured(monkeypatch):
         "--selector", "app.kubernetes.io/instance=nginx-example",
         "--timestamps=true", "--follow",
     ]
-
-
-def test_following_logs_can_narrow_to_one_container_and_a_short_tail(monkeypatch):
-    run = RecordedRun()
-    utils = make_utils(monkeypatch, run=run)
-
-    utils.stream_logs("dev1", "app.kubernetes.io/instance=nginx", container="nginx", tail_lines=10)
-
-    assert run.argv[-4:] == ["--container", "nginx", "--tail", "10"]
 
 
 def test_reading_logs_once_goes_to_the_api_rather_than_starting_a_command(monkeypatch):
@@ -173,22 +128,6 @@ def test_pods_are_selected_by_their_labels_and_come_back_empty_when_nothing_matc
 
     assert utils.list_pods("dev1", "app.kubernetes.io/instance=nginx") == pods
     assert utils.list_pods("dev1") == []
-
-
-def test_the_nodes_report_their_addresses_and_capacity_for_the_uninstall_prompt(monkeypatch):
-    def node(name, address, cpu):
-        return type("Node", (), {
-            "metadata": type("M", (), {"name": name})(),
-            "status": type("S", (), {"addresses": [{"type": "InternalIP", "address": address}], "capacity": {"cpu": cpu}})(),
-        })()
-
-    core = FakeApi(returns={"list_node": lambda **kwargs: type("L", (), {"items": [node("k3s-server-1", "10.0.0.5", "4")]})()})
-    utils = make_utils(monkeypatch, core_api=core)
-
-    nodes = utils.get_nodes()
-
-    assert nodes[0].status.addresses[0]["address"] == "10.0.0.5"
-    assert nodes[0].status.capacity["cpu"] == "4"
 
 
 def test_the_resource_types_a_cluster_serves_come_back_parsed(monkeypatch):

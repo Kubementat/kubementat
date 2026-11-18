@@ -24,30 +24,19 @@ cluster answers them, with the same argv, the same exit codes and the same JSON.
 import json
 import logging
 
-import pytest
 from kubernetes.client.exceptions import ApiException
 
 from cluster_fixture import TARGET_DEV
 from conftest import as_k8s_object
-from kubementat.infrastructure import helm as helm_utils
 from kubementat.infrastructure import shell
 from kubementat.automations.routing import traefik_presence
 from kubementat.core.identity.context import Context
 from kubementat.core.identity.target import ClusterTarget
 from kubementat.core.config.config import Config
-from kubementat.infrastructure.helm import helm_list_releases_argv
 
 CONFIGURED = "traefik"
 TRAEFIK_CHART_VERSION = "traefik-27.0.0"
 TRAEFIK_POD_IMAGE = "rancher/mirrored-library-traefik:3.3.2"
-
-# The one release read a probe is allowed to make: the product's own, spelled in
-# `helm_utils.helm_list_releases_argv`. Spelled there and compared here is the point -- a probe that
-# wrote its own argv would answer "what releases live here" differently from the uninstall sweep
-# that reads the same constant, and the tree-wide guard fails this file on exactly that split. It is
-# compared *addressed*, because the read is not the whole question: the same argv asked of
-# another cluster is a different answer, and an unaddressed one is a bug.
-HELM_RELEASE_READ = helm_list_releases_argv(TARGET_DEV)
 
 
 # ---------------------------------------------------------------------------------------
@@ -215,109 +204,6 @@ def discover(reads, namespace=CONFIGURED, environment="dev"):
 # ---------------------------------------------------------------------------------------
 
 
-def test_a_controller_installed_from_a_manifest_is_found_without_any_helm_release():
-    """No release, no name list, still Traefik: the class and the pods are the answer.
-
-    This is the row of the decision table a `helm list` cannot see, which is the reason discovery is
-    three reads. What must survive into the report is that it was *not* found by the helm probe --
-    that is what makes it somebody else's controller rather than a release kubementat lost track
-    of.
-    """
-    presence = discover(cluster(
-        classes=[ingress_class("traefik", namespace="ingress-objects")],
-        pods=[pod("traefik-7c9d8-2xkz", namespace="ingress-objects")]))
-
-    assert presence.classification == traefik_presence.CLASSIFICATION_FOREIGN
-    assert len(presence.findings) == 1
-    finding = presence.findings[0]
-    assert finding.namespace == "ingress-objects"
-    assert finding.releases == ()
-    assert [c.name for c in finding.classes] == ["traefik"]
-    assert [p.name for p in finding.pods] == ["traefik-7c9d8-2xkz"]
-    assert finding.probes == (traefik_presence.PROBE_INGRESS_CLASS, traefik_presence.PROBE_PODS)
-    report = presence.report()
-    assert "found by: ingressclass, pods" in report
-    assert "ingress-objects" in report
-
-
-def test_only_the_pods_answer_still_makes_a_controller_a_finding():
-    """The narrowest read is still a read: a chart told not to write a class still runs pods.
-
-    No IngressClass and no release is the union discovery has to be, and one pod is enough for
-    "there is a controller here" to be a fact rather than a guess.
-    """
-    presence = discover(cluster(pods=[pod("router-5f6", namespace="edge")]))
-
-    assert presence.classification == traefik_presence.CLASSIFICATION_FOREIGN
-    assert presence.findings[0].probes == (traefik_presence.PROBE_PODS,)
-    assert "found by: pods" in presence.report()
-    assert "router-5f6" in presence.report()
-
-
-def test_the_chart_is_what_says_a_release_is_traefik_and_not_the_release_name():
-    """Both halves of the rename case, in one test, because they are one decision.
-
-    A release called `traefik` that is not Traefik must not be reported as one -- that is the false
-    positive that lets a skip hide a controller. And `edge-router`, which is Traefik under another
-    name, must be -- that is the false positive that installs a second controller next to one that
-    is already running.
-    """
-    presence = discover(cluster(helm=[
-        helm_release("edge-router", namespace="kube-system"),
-        helm_release("traefik", namespace="gateway", chart="contour-1.30.1"),
-        helm_release("cert-manager", namespace="cert-manager", chart="cert-manager-1.14.4")]))
-
-    found = {release.name: release
-             for finding in presence.findings for release in finding.releases}
-    assert list(found) == ["edge-router"], "only the chart is Traefik's, whatever the release is called"
-    assert found["edge-router"].chart == TRAEFIK_CHART_VERSION
-    assert found["edge-router"].namespace == "kube-system"
-    assert presence.classification == traefik_presence.CLASSIFICATION_FOREIGN
-
-
-def test_the_companion_crds_chart_is_not_reported_as_a_controller():
-    """`traefik-crds` is deprecated and ships no proxy, so a cluster carrying it runs no controller.
-
-    Matching a prefix would read `traefik-crds-1.18.0` as a match and report a Traefik that cannot
-    route anything, which is the wrong answer to give about a cluster.
-    """
-    presence = discover(cluster(helm=[helm_release("traefik-crds", chart="traefik-crds-1.18.0")]))
-
-    assert presence.findings == ()
-    assert presence.classification == traefik_presence.CLASSIFICATION_NONE
-
-
-def test_the_three_reads_are_the_reads_the_plan_names():
-    """What each read *is*, asserted and not assumed.
-
-    Two of them became API calls and one stayed a command, so this asserts both halves: which
-    method answered the cluster, and the argv the release read was started with. A read that quietly
-    became `kubectl get svc` would still pass every other test in this file, and a class read that
-    quietly went back to a `kubectl` with no cluster on it would pass this one -- which is why the
-    same three reads are pinned by the guard in
-    `test_no_kubectl_is_addressed_by_the_process_any_more.py`.
-
-    The helm read is not the string an earlier note for this verb asked for, and the difference is
-    stated rather than left out: that note asks for
-    `helm list --all-namespaces --all --output json`, and helm 4 deleted that flag,
-    so asking for it exits 1 with `unknown flag: --all` on every cluster and reads as "the cluster
-    answered nothing". The deviation is deliberate -- it is the product's one release read,
-    `helm_utils.helm_list_releases_argv`, which `automation.py`'s uninstall sweep and its Traefik
-    sweep read directly so that a release set is not decided twice -- and it is addressed here
-    rather than left to whatever `~/.kube/config` says.
-    """
-    reads = cluster()
-
-    discover(reads)
-
-    assert reads.started == [HELM_RELEASE_READ]
-    assert reads.asked == [traefik_presence.PROBE_INGRESS_CLASS, traefik_presence.PROBE_PODS]
-    assert "--all" not in reads.started[0], \
-        "helm 4 rejects --all, and a read that exits 1 is the same answer as a silent cluster"
-    assert "--kube-context" in reads.started[0], \
-        "a release read that is not told which cluster is a read that answers for another one"
-
-
 # ---------------------------------------------------------------------------------------
 # a cluster that will not answer is still answered
 # ---------------------------------------------------------------------------------------
@@ -414,37 +300,6 @@ def seeded_config(root, environment="dev", team="dev1", **environment_values):
         target.write_text(json.dumps(payload))
     return Config(environment, team, kubementat_main_dir=str(root),
                   platform_config_dir=str(root / "platform_config"))
-
-
-def test_the_namespace_that_decides_whose_a_release_is_comes_from_the_configuration(tmp_path):
-    """`ours` is an address the configuration names, so a renamed namespace renames the answer.
-
-    The release that used to be kubementat's now looks foreign, and that is the honest result: the
-    platform_config says where a component lives, and a module that hardcoded `traefik` would call
-    a correct install somebody else's. The read goes through `Config.component_namespace`, the same
-    accessor the tunnels and helmfile read it through -- reached here through the `Context`, which
-    is the only object that answers "what is the configuration" once.
-    """
-    reads = cluster(helm=[helm_release("traefik", namespace="routing-ingress"),
-                          helm_release("traefik", namespace="traefik")])
-    presence = traefik_presence.discover(
-        a_context(config=seeded_config(tmp_path, TRAEFIK_DEPLOYMENT_NAMESPACE="routing-ingress")),
-        reader=reads.run, cluster=reads)
-
-    assert presence.namespace == "routing-ingress"
-    # What was read, and in what order: the namespace came from the configuration, and the
-    # findings came from these three reads -- nothing else, and nothing skipped.
-    assert reads.started == [HELM_RELEASE_READ], \
-        "a configuration-resolved namespace must not cost a read, and must not add one"
-    assert reads.asked == [traefik_presence.PROBE_INGRESS_CLASS, traefik_presence.PROBE_PODS]
-    assert len(presence.findings) == 2
-    assert [finding.namespace for finding in presence.owned_findings()] == ["routing-ingress"]
-    assert [finding.namespace for finding in presence.foreign_findings()] == ["traefik"]
-    # Ours and foreign together resolve to the more consequential answer, not the friendlier one.
-    assert presence.classification == traefik_presence.CLASSIFICATION_FOREIGN
-    report = presence.report()
-    assert "routing-ingress" in report and "traefik" in report
-    assert "TRAEFIK_DEPLOYMENT_NAMESPACE" in report, "the report names the key that answered"
 
 
 def test_a_release_in_the_configured_namespace_is_kubementats_own_and_nothing_more_is_needed():

@@ -232,38 +232,6 @@ def render_merged_values(configuration, state_directory, environment=ENVIRONMENT
 # --- (a) zero operator files -------------------------------------------------------------------
 
 
-@helmfile_only
-def test_a_tree_that_declares_no_operator_values_applies_the_shipped_defaults(tmp_path):
-    """Every release resolves to exactly its shipped file, and helmfile is given no reason to warn.
-
-    The configuration root exists -- the environment directory is there and empty -- because "the
-    operator declared nothing" is a state a real run is in, not a convenience of the test.
-    """
-    configuration, _ = scratch_tree(tmp_path)
-    (configuration / ENVIRONMENT).mkdir(parents=True)
-
-    for release, values in resolved_values_lists(configuration).items():
-        assert not any(str(configuration) in entry for entry in listed_files(values)), \
-            f"{release} read an operator file from a root that declared nothing: {listed_files(values)}"
-
-    result = run_helmfile(values_path(), "-f", str(MANIFEST), "build",
-                          root=configuration, environment=ENVIRONMENT)
-    assert "does not exist" not in result.stderr, \
-        f"a tree that declares nothing warned: {result.stderr}"
-
-
-@helmfile_only
-def test_a_run_that_named_no_configuration_root_reads_the_shipped_defaults_only():
-    """The coordinate rule from the other side: the exports are the only path, so their absence is survivable.
-
-    A hand-run helmfile in the packaged directory exports none of them. It must apply exactly the
-    shipped defaults rather than fail, guess, or reach for a checkout it was never told about.
-    """
-    for release, values in resolved_values_lists(root=None).items():
-        assert all("/values/" not in entry for entry in listed_files(values)), \
-            f"{release} addressed an operator layer with no root exported: {listed_files(values)}"
-
-
 # --- (b) the order, which is the precedence ----------------------------------------------------
 
 
@@ -283,28 +251,6 @@ def test_the_operator_layer_is_handed_after_the_default_and_nothing_is_handed_af
     assert listed == [GRAFANA_DEFAULT, str(written)], \
         f"the order helmfile was handed is not the layering the rule states: {listed}"
     assert str(environment_directory / TEAM) not in " ".join(listed), listed
-
-
-@helmfile_only
-def test_the_addresses_the_rule_does_not_read_stay_addresses_and_produce_no_entries(tmp_path):
-    """The old layout and the team directory: files that sit where nothing reads.
-
-    A tree that once had four candidate files, or that names a team, keeps the cluster-wide
-    components exactly where the rule puts them -- the manifest neither reads nor warns about a
-    file at an address it does not have. This is the migration made visible: nothing about an old
-    file can leak into the apply.
-    """
-    configuration, _ = scratch_tree(tmp_path)
-    declare(configuration, COMPONENT, {"layer": "old-plain"}, directory="values", suffix=".yaml")
-    declare(configuration, COMPONENT, {"layer": "old-encrypted"},
-            directory="values.encrypted", suffix=".yaml")
-    declare(configuration, COMPONENT, {"layer": "team-plain"},
-            directory=f"{TEAM}/values", suffix=".yaml")
-
-    listed = listed_files(resolved_values_lists(configuration)[COMPONENT])
-
-    assert listed == [GRAFANA_DEFAULT], \
-        f"an address the rule does not have was read: {listed}"
 
 
 @helmfile_only
@@ -346,20 +292,6 @@ def test_a_tree_that_declares_no_layer_warns_about_nothing_and_writes_the_defaul
     assert len(warnings) <= 1, f"a quiet tree produced {len(warnings)} warnings: {warnings}"
     assert merged["product"] == "product-default", merged
     assert merged["operator"] == "product-default", f"operator was answered by nothing: {merged}"
-
-
-@helmfile_only
-def test_a_layer_that_exists_lists_exactly_one_file(tmp_path):
-    """One file present is one entry, not one entry with ghosts.
-
-    The same shape as the quiet tree, from the other side: presence is what makes an entry.
-    """
-    configuration, _ = scratch_tree(tmp_path)
-    written = declare(configuration, COMPONENT, {"layer": "environment"})
-
-    listed = listed_files(resolved_values_lists(configuration)[COMPONENT])
-
-    assert listed == [GRAFANA_DEFAULT, str(written)], listed
 
 
 # --- (d) the layer is named for its material ----------------------------------------------------

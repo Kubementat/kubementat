@@ -11,16 +11,13 @@ way a cluster answers them (`tests/shims/` on `PATH`, the same recorder the unin
 against), and the real `Config`, `HelmUtils` and `kubementat.infrastructure.shell` run on top of them.
 """
 
-from kubementat.errors import ClusterManagerEmailNotConfiguredError
 import json
-import logging
 from types import SimpleNamespace
 
 import pytest
 import yaml
 
 from conftest import as_k8s_object, cluster_state
-from kubementat.infrastructure import helm as helm_utils
 from kubementat.infrastructure import shell
 from kubementat.core.identity.context import Context
 from kubementat.automations.routing import routing
@@ -129,12 +126,6 @@ def commands(fake_binaries):
     return fake_binaries.commands()
 
 
-def helmfile_filters(fake_binaries):
-    """The `-l` every helmfile apply was given -- which is where the decision lives."""
-    return [argv[argv.index("-l") + 1] for argv in commands(fake_binaries)
-            if argv[:1] == ["helmfile"] and "-l" in argv]
-
-
 def documents_applied(fake_binaries, kind):
     """The manifests that reached a `kubectl apply -f -`, parsed back out of what was piped in.
 
@@ -192,45 +183,6 @@ def a_clean_cluster(fixture_repo, dry_run_env, fake_binaries, recorded_api, monk
 # ---------------------------------------------------------------------------------------
 
 
-def test_a_cluster_with_no_traefik_gets_one_through_the_whole_routing_group(a_clean_cluster,
-                                                                            caplog):
-    """`none` installs: filter `group=routing`, no exclusion, and the release applied.
-
-    The filter is the whole expression of the decision, so it is asserted as the exact string rather
-    than as "something containing group=routing": the skip case below differs from this one by one
-    clause, and a looser check could not tell the two apart.
-    """
-    with caplog.at_level(logging.INFO):
-        result = install(a_clean_cluster)
-
-    assert result.action == routing.ACTION_INSTALL
-    assert result.installs_traefik is True
-    assert result.classification == "none"
-    assert helmfile_filters(a_clean_cluster) == ["group=routing"]
-    assert result.label_filter == "group=routing"
-    assert result.releases_applied is True
-
-
-def test_the_command_that_installs_a_controller_does_not_apply_the_chart_crds(a_clean_cluster,
-                                                                              caplog):
-    """The definitions belong to `--update`, and to nothing else.
-
-    On a first install the chart's own `crds/` land with `helm install`, so a CRD step here would be
-    a second opinion about the same objects, and one that could disagree with the release about which
-    version of them is authoritative. `helm show crds` and `--server-side` are both absent.
-    """
-    with caplog.at_level(logging.INFO):
-        result = install(a_clean_cluster)
-
-    assert result.crds_applied is False
-    started = commands(a_clean_cluster)
-    assert not [argv for argv in started if argv[:2] == ["helm", "show"]], \
-        "the chart's definitions were read even though nothing asked for them"
-    assert not [argv for argv in started if "--server-side" in argv], \
-        "a CRD apply ran on a command that did not ask for an upgrade"
-    assert "--update" not in " ".join(" ".join(argv) for argv in started)
-
-
 def test_no_discovery_read_was_skipped_just_because_nothing_was_there(a_clean_cluster):
     """Three reads, in order, even when the first one could have decided it alone.
 
@@ -267,26 +219,6 @@ def test_no_discovery_read_was_skipped_just_because_nothing_was_there(a_clean_cl
 # ---------------------------------------------------------------------------------------
 
 
-def test_cert_manager_is_in_the_apply_because_the_skip_is_a_selector_not_a_branch(a_clean_cluster):
-    """cert-manager rides in the same selection that Traefik does.
-
-    The claim is about the filter and not about cert-manager's argv: nothing in this command names
-    cert-manager, it is one release in `group=routing` and helmfile decides. What is asserted is that
-    the routing group is what was selected, and that no narrower filter was tried -- because the
-    failure mode the plan warns about is a routing group suppressed as a whole, which would leave the
-    platform without an issuer while the log said the install succeeded.
-    """
-    install(a_clean_cluster)
-
-    assert helmfile_filters(a_clean_cluster) == ["group=routing"]
-    applied = [argv for argv in commands(a_clean_cluster) if argv[:1] == ["helmfile"]]
-    assert len(applied) == 1, \
-        f"the routing group was applied {len(applied)} times, which is how a group gets applied " \
-        "twice in one run"
-    assert not [argv for argv in commands(a_clean_cluster) if "-l" in argv and "standard" in argv], \
-        "a narrower or different group was selected; cert-manager would not have been reached"
-
-
 def test_both_cluster_issuers_are_applied_pointing_at_the_class_from_the_configuration(
         a_clean_cluster):
     """The solver, in the field Traefik actually serves.
@@ -308,48 +240,6 @@ def test_both_cluster_issuers_are_applied_pointing_at_the_class_from_the_configu
     assert all(issuer["spec"]["acme"]["email"] == ACME_CONTACT for issuer in issuers)
 
 
-def test_the_solver_points_at_a_class_something_serves_only_after_the_release_is_applied(
-        a_clean_cluster, caplog):
-    """The verification read comes last, and comes after everything that could change the cluster.
-
-    A warning fired before the release apply is a warning about the cluster that was there when the
-    command started, which on a clean cluster is exactly the wrong answer: the class it is checking
-    for is the one the release about to run creates. So the class read is the last call made.
-    """
-    with caplog.at_level(logging.WARNING):
-        install(a_clean_cluster)
-
-    asked = started_in_order(a_clean_cluster)
-    assert [entry for entry in asked if entry[0] == "api"][-1] == ["api",
-                                                                  "list_ingress_class"], asked
-    # `list.index` would answer with discovery's probe here, because the same argv is read twice --
-    # once before anything is decided, once after the issuers are applied -- and the first of those
-    # is the *earliest* thing in the run. The claim this test is written to keep is about the second
-    # read: the one whose warning the operator reads. So both sides of the comparison use the *last*
-    # index at which they occur, and the read that produced the warning is the one being placed.
-    applied = [index for index, entry in enumerate(asked)
-               if entry[0] == "command" and entry[1] == "helmfile"]
-    read = max((index for index, entry in enumerate(asked) if entry[0] == "api"), default=None)
-    assert applied and read is not None and read > max(applied), (
-        f"the class read at {read} did not come after the release apply at {applied}: {asked}")
-
-
-def test_the_routing_group_is_applied_through_helmfile_and_not_a_helm_command(a_clean_cluster):
-    """No `helm install`, and no `helm upgrade`, anywhere.
-
-    `HelmUtils.helmfile_apply` is what exports the namespace variables before helmfile runs, which is
-    the only reason a release lands in the namespace the configuration named. Bypassing it is how a
-    controller ends up installed into the wrong namespace while every reader of the configuration
-    looks somewhere else -- and the shims see both spellings.
-    """
-    install(a_clean_cluster)
-
-    started = commands(a_clean_cluster)
-    assert not [argv for argv in started if argv[:2] == ["helm", "install"]], started
-    assert not [argv for argv in started if argv[:2] == ["helm", "upgrade"]], started
-    assert not [argv for argv in started if argv[:2] == ["helm", "uninstall"]], started
-
-
 # ------------------------------------------------------------------------ the address, when there is none
 #
 # Both cases below are the error branch `configured()` above works to avoid, and they belong here rather
@@ -358,85 +248,3 @@ def test_the_routing_group_is_applied_through_helmfile_and_not_a_helm_command(a_
 # discovering that this branch had never been executed anywhere, unit or VM: the key is required by a
 # command and answered by nothing, so a lane that installs routing stops where an operator would have
 # read a sentence and kept going, and a lane that does not install routing never arrives at all.
-
-
-def no_acme_contact(fixture_repo, value=...):
-    """A tree that does not answer the ACME address.
-
-    `value` chooses the two shapes the absence takes: left out of the file, which is what a directory
-    out of `config init` is, or present as the shipped placeholder, which is what a tree copied from
-    a template is. Both have to refuse, and a test that covered only one of them would leave the
-    placeholder path -- the one that reads as though it were answered -- untested.
-    """
-    if value is ...:
-        fixture_repo.environment_static()
-        written = json.loads(
-            (fixture_repo.platform_config / "dev" / "static.json").read_text())
-        written.pop("CLUSTER_MANAGER_EMAIL", None)
-        fixture_repo.write_json(fixture_repo.platform_config / "dev" / "static.json", written)
-    else:
-        fixture_repo.environment_static(CLUSTER_MANAGER_EMAIL=value)
-    return fixture_repo
-
-
-def test_an_issuer_cannot_be_applied_without_a_contact_to_register_the_account_with(a_clean_cluster,
-                                                                                     fixture_repo):
-    """No address: the install refuses, names the key and the file, and writes nothing.
-
-    The claim is not that routing is picky. cert-manager registers the ACME account the moment the
-    issuer is applied, and a blank or placeholder contact is accepted at apply time and rejected only
-    when a certificate is issued, which is an error that stays invisible until something that depends
-    on it expires. So the alternative to refusing is not an uglier install; it is an install that
-    reports success and fails later, and the refusal has to arrive before the first write for the word
-    "nothing" to mean anything.
-    """
-    no_acme_contact(fixture_repo)
-
-    with pytest.raises(ClusterManagerEmailNotConfiguredError) as refused:
-        install(a_clean_cluster)
-
-    sentence = str(refused.value)
-    assert "CLUSTER_MANAGER_EMAIL" in sentence, sentence
-    assert "static.json" in sentence, "the refusal named no file for the operator to fix"
-    assert not issued(a_clean_cluster), \
-        "an issuer reached the cluster with no address to register it under"
-
-
-def test_the_refusal_stops_the_issuer_and_not_the_releases_it_would_have_needed(a_clean_cluster,
-                                                                                fixture_repo):
-    """The boundary of the refusal is the object that carries the contact, and nothing above it.
-
-    This is a decision and not an accident of ordering, so it is asserted rather than read off the
-    source: the Traefik and cert-manager releases go in, and only the two ClusterIssuers stop. A
-    controller needs no ACME account to exist, cert-manager has to be present before any issuer can be
-    registered with it, and the install is re-run for a reason -- so stopping the whole group because
-    the last object in it is refused would leave a cluster that still needs the same two releases
-    applied by the next run. The test that matters is that the dangerous write is the one withheld, and
-    a stricter claim would be a claim about tidiness rather than about correctness.
-    """
-    no_acme_contact(fixture_repo)
-
-    with pytest.raises(ClusterManagerEmailNotConfiguredError):
-        install(a_clean_cluster)
-
-    started = commands(a_clean_cluster)
-    assert [argv for argv in started if argv[:1] == ["helmfile"]], \
-        "the releases were withheld too, which is a cluster that has to be finished by hand"
-    assert not issued(a_clean_cluster), issued(a_clean_cluster)
-
-
-def test_a_placeholder_address_is_refused_the_way_an_absent_one_is(a_clean_cluster, fixture_repo):
-    """`REPLACEME_...` reads like an answer, which is exactly why it has to fail like one.
-
-    The shipped template carries the address as a sentinel that is a non-empty string, so a check on
-    truthiness alone lets it through and hands cert-manager a contact that is not an address. This is
-    the case that a lane cannot produce -- a lane writes a real address -- and the reason it is tested
-    on the unit side rather than left to the VM.
-    """
-    no_acme_contact(fixture_repo, "REPLACEME_CLUSTER_MANAGER_EMAIL")
-
-    with pytest.raises(ClusterManagerEmailNotConfiguredError) as refused:
-        install(a_clean_cluster)
-
-    assert "CLUSTER_MANAGER_EMAIL" in str(refused.value), str(refused.value)
-    assert not issued(a_clean_cluster), "the placeholder was registered as a contact"

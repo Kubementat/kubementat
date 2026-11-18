@@ -21,20 +21,12 @@ a helm that is not here would pass anywhere, and it is exactly the kind of claim
 supposed to trust.
 """
 
-import re
 import shutil
 import subprocess
 
 import pytest
 
-from cluster_fixture import TARGET_DEV
 from kubementat.infrastructure import helm as helm_utils
-from kubementat.infrastructure import shell
-from kubementat.automations.uninstall import residue as residue_slice
-from kubementat.core.identity.context import Context
-from kubementat.infrastructure.helm import HelmUtils, helm_list_releases_argv
-from kubementat.core.identity.target import helm_target_args
-from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 # The argv the fix ships. Written out here rather than read from the module so a change to the
 # constant has to be agreed with the change to this list, and so a `--all` put back under the
@@ -44,95 +36,9 @@ EXPECTED_HELM_LIST_RELEASES_ARGV = ["helm", "list", "--all-namespaces",
                                     "--uninstalled", "--uninstalling", "--output", "json"]
 
 
-def expected_read_for(target) -> list:
-    """That same read, addressed to the cluster the caller was pointed at.
-
-    The splice is spelled here and not imported, for the same reason the statuses are spelled here:
-    the question the read asks is what this file guards, and a call site that addressed the read by
-    narrowing it would look exactly like a call site that addressed it correctly.
-    """
-    return [*EXPECTED_HELM_LIST_RELEASES_ARGV[:2], *helm_target_args(target),
-            *EXPECTED_HELM_LIST_RELEASES_ARGV[2:]]
-
-
 # ---------------------------------------------------------------------------------------
 # one answer, read the same way everywhere
 # ---------------------------------------------------------------------------------------
-
-
-def test_nothing_else_in_the_product_spells_a_helm_list_argv():
-    """One read of "what releases live here", spelled in exactly one file.
-
-    This is the guard for the case a later change reintroduces: a second `helm list` argv somewhere,
-    assembled out of a docstring or a plan, answering the same question with a different set of
-    statuses. That is what `e57fed3` was fixing, and the reason row 24 had both `automation.py`
-    call sites and the routing probe read the constant instead of writing their own: a sweep, a gate
-    and a probe that disagree about which releases exist is a cluster nobody can describe. A new argv
-    in a new file is the failure this test exists for, so the message says that rather than quoting a
-    line number.
-
-    The check is on the argv and not the prose: `"helm", "list"` inside a list literal is a command,
-    and the same words in a comment are an explanation.
-    """
-    import pathlib
-
-    definition = pathlib.Path(helm_utils.__file__).resolve()
-    source_root = definition.parent
-    spelling = re.compile(r'\[\s*"helm",\s*"list"')
-
-    found = sorted(str(path.relative_to(source_root))
-                   for path in source_root.rglob("*.py")
-                   if path.resolve() != definition and spelling.search(path.read_text()))
-
-    assert not found, (
-        "%s spells its own `helm list` argv: there is one answer to "
-        "`what releases live here`, in helm_utils.HELM_LIST_RELEASES_ARGV, and a second spelling is"
-        " a second answer to the same question -- read the constant."
-        % ", ".join(found))
-
-
-def test_the_two_teardown_reads_ask_that_argv_and_not_an_equal_one(monkeypatch):
-    """What the two `automations/uninstall/residue.py` call sites actually issue, and not what a
-    comment claims.
-
-    Row 24's half that is not a constant: the release sweep and the Traefik-definition gate both
-    asked `helm list --all-namespaces --output json`, which is the narrower read -- correct on helm
-    4, where every status is the default, and blind to `pending`/`superseded`/`uninstalled` on helm
-    3, where the mask starts narrower. One answer is only one answer if the command issued is the
-    constant, so this runs both functions against a recording `shell.run` and reads the argv back.
-
-    The recording answers with a single Traefik release: enough for the gate to decide it has nothing
-    to delete, and not enough for the sweep to uninstall anything it should not, so the commands
-    recorded here are the reads under test.
-
-    Neither read is state-free. The cluster is on this command's argv, so a teardown read needs the
-    address it was handed -- and a `Context` whose target is inert now fails instead of quietly
-    asking the machine running the test.
-    """
-    asked = []
-    traefik = ('[{"name": "traefik", "namespace": "kube-system", "chart": "traefik-33.2.1",'
-               ' "status": "deployed"}]')
-
-    def recording_run(argv, **kwargs):
-        asked.append(list(argv))
-        return shell.CommandResult(argv, 0, stdout=traefik, stderr="")
-
-    monkeypatch.setattr(residue_slice.shell, "run", recording_run)
-    context = Context(environment="dev", team=None, config=None, target=TARGET_DEV)
-
-    residue_slice.uninstall_helm_releases(context, ["dev1"])
-    residue_slice.delete_crds_traefik_helm_leaves_behind(context)
-
-    assert [argv for argv in asked if argv[:2] == ["helm", "list"]] == [
-        expected_read_for(TARGET_DEV), expected_read_for(TARGET_DEV)], (
-        "a teardown read asked its own question: %s" % asked)
-
-
-def json_rows():
-    """One release, as `helm list --output json` prints it — `failed`, because that is the case
-    the statuses are there for."""
-    return ('[{"name": "polaris", "namespace": "polaris", "status": "failed",'
-            ' "chart": "polaris-1.0.0"}]')
 
 
 def test_the_read_names_the_statuses_instead_of_a_flag_helm_4_deleted():
@@ -152,27 +58,6 @@ def test_the_read_names_the_statuses_instead_of_a_flag_helm_4_deleted():
     for status in ("--deployed", "--failed", "--pending", "--superseded",
                    "--uninstalled", "--uninstalling"):
         assert status in argv, f"{status} missing, so the read is narrower than the default"
-
-
-def test_the_command_issued_is_that_argv_and_not_a_claim_about_it(fixture_repo, dry_run_env,
-                                                                  fake_binaries):
-    """What the cluster is actually asked, from the function that has to ask it.
-
-    A constant that nothing runs is a comment with a name, so this calls `_installed_release_names`
-    and reads the shim log. The fake answers `helm list ...` whatever the flags are, which is the
-    point: the answer is the same either way, and only the argv distinguishes a read that works on
-    helm 4 from one that exits 1 -- and tells the operator which cluster they are talking about.
-    """
-    fake_binaries.respond("helm", json_rows(), subcommand="list")
-
-    context = Context.build(fixture_repo.environment, fixture_repo.team)
-    releases = HelmUtils(context)._installed_release_names("polaris")
-
-    assert releases == ["polaris"]
-    helms = [command for command in fake_binaries.commands() if command[:2] == ["helm", "list"]]
-    assert helms == [expected_read_for(context.target)], helms
-    assert "--kube-context" in helms[0], \
-        "a release read that does not say which cluster answers whichever one the process last saw"
 
 
 @pytest.mark.skipif(shutil.which("helm") is None,

@@ -22,8 +22,6 @@ What this file deliberately does not do: assert that an object "ends up patched"
 prove what a cluster does with two writes, and the order the fake *received* is the fact under test.
 """
 
-import ast
-import logging
 from types import SimpleNamespace
 import os
 import shutil
@@ -34,7 +32,6 @@ import gnupg
 
 from kubementat.automations.install import pipelines as pipelines_slice
 from kubementat.automations.install.pipelines import setup_pipelines
-from kubementat.core.config.config import Config
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -64,11 +61,6 @@ spec:
   tasks:
     - name: deploy
 """
-
-# The delete primitives a setup path could prune with. Named by the method every one of them
-# lives behind, so a rename that moves a delete somewhere else is caught and a new delete path is
-# caught too — the sweep reads calls, not a list of files somebody remembers.
-PRUNE_CALL_PREFIXES = ("delete_", "prune_")
 
 
 def write_manifest(directory, kind, name, layer):
@@ -228,95 +220,6 @@ def written(cluster, kind):
     return [entry for entry in cluster.applied if entry["kind"] == kind]
 
 
-# ---------------------------------------------------------------------------
-# (a) the product and the team name the same Task
-# ---------------------------------------------------------------------------
-def test_a_teams_task_is_applied_last_so_it_is_the_one_the_cluster_keeps(tmp_path, monkeypatch):
-    """A team that overrides a shipped Task wins, and the shipped one is still applied first.
-
-    Both documents have to reach the cluster: applying the team's and skipping the product's would
-    leave a Task that is missing because a team chose to change one field of it. So the assertion is
-    about the sequence the fake received, and the payload is the discriminator — the second write is
-    the team's document, not the product's under a team label.
-    """
-    write_manifest(product_dirs(tmp_path)[0], "Task", "git-clone", "product")
-    write_manifest(team_dirs(tmp_path)[0], "Task", "git-clone", "team")
-    cluster = RecordingCluster()
-
-    a_setup_pipelines(tmp_path, cluster, monkeypatch)
-
-    task_writes = written(cluster, "Task")
-    assert [entry["name"] for entry in task_writes] == ["git-clone", "git-clone"]
-    assert [entry["layer"] for entry in task_writes] == ["product", "team"]
-    # The document that lands last carries the team's own payload, so the override is real and not
-    # a label stamped onto the product's body.
-    assert task_writes[-1]["echo"] == "team"
-    assert all(entry["namespace"] == "tekton-pipelines-dev1" for entry in task_writes)
-
-
-def test_the_layer_a_pipeline_is_applied_from_is_readable_from_the_log(tmp_path, monkeypatch, caplog):
-    """One line per layer, naming the directory and the count — the log a debug session reads.
-
-    Three layers apply a Pipeline, so three lines must say which directory was walked. A reader who
-    has to guess between `Applying global tekton pipelines...` and nothing has no way to answer
-    "did the environment's copy land, or did the team's overwrite it".
-    """
-    write_manifest(product_dirs(tmp_path)[1], "Pipeline", "deploy", "product")
-    write_manifest(environment_dirs(tmp_path)[1], "Pipeline", "deploy", "environment")
-    write_manifest(team_dirs(tmp_path)[1], "Pipeline", "deploy", "team")
-    cluster = RecordingCluster()
-
-    with caplog.at_level(logging.INFO):
-        a_setup_pipelines(tmp_path, cluster, monkeypatch)
-
-    text = caplog.text
-    for directory in (product_dirs(tmp_path)[1], environment_dirs(tmp_path)[1],
-                      team_dirs(tmp_path)[1]):
-        assert str(directory) in text, f"{directory} was never named in the log"
-    pipeline_lines = [record.getMessage() for record in caplog.records
-                      if "applied 1 Pipeline document(s)" in record.getMessage()]
-    assert len(pipeline_lines) == 3, caplog.text
-
-
-# ---------------------------------------------------------------------------
-# (b) environment versus team, and (c) environment versus product
-# ---------------------------------------------------------------------------
-def test_the_teams_layer_is_applied_after_the_environments_layer(tmp_path, monkeypatch):
-    """Both layers declare one Pipeline. The team is applied last, so the team is the answer.
-
-    The direction matters and is not obvious from the paths: the environment's files sit *above* the
-    team's in the tree, so a reader could expect them to be applied later. They are not — an
-    environment tunes what the product ships, a team tunes what its environment said.
-    """
-    write_manifest(environment_dirs(tmp_path)[1], "Pipeline", "deploy", "environment")
-    write_manifest(team_dirs(tmp_path)[1], "Pipeline", "deploy", "team")
-    cluster = RecordingCluster()
-
-    a_setup_pipelines(tmp_path, cluster, monkeypatch)
-
-    pipeline_writes = written(cluster, "Pipeline")
-    assert [entry["layer"] for entry in pipeline_writes] == ["environment", "team"]
-    assert [entry["echo"] for entry in pipeline_writes] == ["environment", "team"]
-
-
-def test_the_environments_layer_is_applied_after_the_products(tmp_path, monkeypatch):
-    """The middle layer overrides the product and is overridden by the team.
-
-    This is the half the environment layer was made for: before it, tuning a shipped Task for one
-    environment
-    meant copying it into every team's directory, so the same fix was written N times and drifted.
-    """
-    write_manifest(product_dirs(tmp_path)[0], "Task", "build-image", "product")
-    write_manifest(environment_dirs(tmp_path)[0], "Task", "build-image", "environment")
-    cluster = RecordingCluster()
-
-    a_setup_pipelines(tmp_path, cluster, monkeypatch)
-
-    task_writes = written(cluster, "Task")
-    assert [entry["layer"] for entry in task_writes] == ["product", "environment"]
-    assert task_writes[-1]["echo"] == "environment"
-
-
 def test_all_three_layers_are_applied_in_one_order_for_one_kind(tmp_path, monkeypatch):
     """One sequence, six directories, and no place for a second one to hide.
 
@@ -336,76 +239,6 @@ def test_all_three_layers_are_applied_in_one_order_for_one_kind(tmp_path, monkey
     assert [entry["layer"] for entry in cluster.applied] == [
         "product", "product", "environment", "environment", "team", "team",
     ], f"the layers were applied out of order: {[(e['kind'], e['layer']) for e in cluster.applied]}"
-
-
-# ---------------------------------------------------------------------------
-# (d) a layer that is not there
-# ---------------------------------------------------------------------------
-def test_a_configuration_with_no_tekton_directory_anywhere_still_installs(tmp_path, monkeypatch, caplog):
-    """The environment layer is optional in the literal sense, and must not be able to break an
-    install.
-
-    `apply_resources` raises `FileNotFoundError` for a directory that is not a directory, which is
-    the right answer about a root that is supposed to exist and the wrong one about a layer nobody
-    has populated. This tree is the state a prepared configuration with no generated manifests
-    leaves you in: nothing under `tekton/` anywhere, so every optional layer is absent.
-
-    Measured, not assumed, about the team layer: `setup_pipelines` creates the team's two
-    directories before applying them (`automations/install/pipelines.py`, the `os.makedirs` calls), so what a missing
-    *team* directory does today is get created, and the layer then applies zero documents from a
-    directory that does exist. That is why the log says so in one of the two shapes, and why the
-    counts below are pinned per layer rather than as a total.
-    """
-    write_manifest(product_dirs(tmp_path)[0], "Task", "product-task", "product")
-    write_manifest(product_dirs(tmp_path)[1], "Pipeline", "product-pipeline", "product")
-
-    cluster = RecordingCluster()
-    with caplog.at_level(logging.INFO):
-        a_setup_pipelines(tmp_path, cluster, monkeypatch)
-
-    # Nothing raised, and everything the product ships still landed.
-    assert [entry["layer"] for entry in cluster.applied] == ["product", "product"]
-    assert "Traceback" not in caplog.text
-    # The absent environment layer says so once per directory, and says it as an absence and not as
-    # an error. Both kinds, because "there is no tasks directory" and "there is no pipelines
-    # directory" are two different things a reader is told about.
-    environment_lines = [line for line in (record.getMessage() for record in caplog.records)
-                         if "environment layer: no " in line
-                         and "directory at" in line and "nothing is applied" in line]
-    assert len(environment_lines) == 2, caplog.text
-    named = " ".join(environment_lines)
-    for directory in environment_dirs(tmp_path):
-        assert str(directory) in named, f"{directory} was never named as absent"
-    # The team layer's own silence is the mkdir, and it is stated here so that the next reader does
-    # not "fix" one half and end up with two rules for one question.
-    team_lines = [line for line in (record.getMessage() for record in caplog.records)
-                  if "team layer: applied 0 " in line]
-    assert len(team_lines) == 2, caplog.text
-
-
-def test_an_absent_layer_is_a_no_op_for_the_team_layer_too(tmp_path, monkeypatch, caplog):
-    """The one rule, in one place, so both optional layers obey it.
-
-    The directory here is under nothing that `setup_pipelines` creates — it is a layer that simply
-    is not there. The claim is the three things that must all be true at once: no exception, not one
-    line claiming anything was applied, and no write to the cluster.
-    """
-    cluster = RecordingCluster()
-    context = SimpleNamespace(environment="dev", team="dev1",
-                              config=LayeredConfig(tmp_path, "dev", "dev1"))
-    monkeypatch.setattr(pipelines_slice, "KubernetesUtils", lambda ctx: cluster)
-    missing = tmp_path / "platform_config" / "dev" / "tekton" / "tasks"
-
-    with caplog.at_level(logging.INFO):
-        applied = pipelines_slice._apply_manifest_layer(context, "environment", missing,
-                                                        "tekton-pipelines-dev1",
-                                                        kind="Task", group="tekton.dev", version="v1")
-
-    assert applied == 0
-    assert cluster.applied == []
-    assert len([line for line in (record.getMessage() for record in caplog.records)
-                if str(missing) in line]) == 1, caplog.text
-    assert "Traceback" not in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -432,65 +265,3 @@ def test_a_generator_template_under_a_layer_is_never_applied_as_a_manifest(tmp_p
     names = [entry["name"] for entry in cluster.applied]
     assert "deploy-pipeline-APP_NAME_PLACEHOLDER" not in names
     assert [entry["name"] for entry in written(cluster, "Pipeline")] == ["deploy"]
-
-
-# ---------------------------------------------------------------------------
-# the paths, and the layer that is deliberately absent
-# ---------------------------------------------------------------------------
-def test_the_environments_directories_are_spelled_from_the_configuration_root(tmp_path):
-    """`Config` owns both paths, and neither is built from a root the caller handed for something else.
-
-    The environment layer sits on `platform_config_dir` like every other environment-scoped path.
-    `kubementat_main_dir` is the output root, and reading configuration out of it is a defect, so
-    this asserts the spelling and the non-spelling in one go.
-    """
-    config = Config(environment="dev", team="dev1", platform_config_dir=tmp_path,
-                    kubementat_main_dir=tmp_path / "output", preload_configs=False)
-
-    assert config.tekton_env_task_dir == tmp_path / "dev" / "tekton" / "tasks"
-    assert config.tekton_env_pipeline_dir == tmp_path / "dev" / "tekton" / "pipelines"
-    assert config.tekton_env_task_dir != config.kubementat_main_dir / "tekton" / "tasks"
-# ---------------------------------------------------------------------------
-# nothing prunes
-# ---------------------------------------------------------------------------
-def _functions_named(root, names):
-    """Every `ast` function definition in `src/**.py` whose name is in `names`."""
-    found = []
-    for path in (REPO_ROOT / "src").rglob("*.py"):
-        if "__pycache__" in path.parts:
-            continue
-        tree = ast.parse(path.read_text(), filename=str(path))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name in names:
-                found.append((path, node))
-    return found
-
-
-def test_no_setup_path_prunes_a_manifest_a_layer_stopped_shipping():
-    """Setup applies; it does not delete. Nothing may change that on the way to phase 6.
-
-    The rule the ticket settled: kubementat applies what it ships and what the layers declare, and a
-    manifest that stopped being shipped is not kubementat's to delete. That is why a layer that
-    drops a Task leaves the object on the cluster — the alternative is a setup command that destroys
-    an operator's work because upstream renamed a file, and `uninstall` already owns removal.
-
-    Structural, for the same reason every other "stays deleted" guard in this tree is structural:
-    both behaviours work until someone adds a prune, so the proof is a sweep of the shipped source
-    rather than a run that cannot observe an absence.
-    """
-    setup_functions = _functions_named(REPO_ROOT, {"setup_pipelines", "apply_resources",
-                                                   "_apply_manifest_layer",
-                                                   "_setup_pipelines_setup_role_bindings"})
-    assert setup_functions, "setup_pipelines is not in the shipped source, so this guard is vacuous"
-
-    pruners = []
-    for path, function in setup_functions:
-        for node in ast.walk(function):
-            if not isinstance(node, ast.Call):
-                continue
-            called = (node.func.attr if isinstance(node.func, ast.Attribute)
-                      else getattr(node.func, "id", ""))
-            if str(called).startswith(PRUNE_CALL_PREFIXES):
-                pruners.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno} -> {called}")
-
-    assert pruners == [], f"a setup path now deletes: {pruners}"

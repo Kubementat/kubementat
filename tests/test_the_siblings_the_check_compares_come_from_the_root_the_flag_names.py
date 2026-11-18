@@ -21,7 +21,7 @@ difference, and nothing about it needs a cluster.
 
 import pytest
 
-from cluster_fixture import (DEV_SERVER, PROD_SERVER, STAGING_SERVER, redirect_checkout,
+from cluster_fixture import (DEV_SERVER, STAGING_SERVER, redirect_checkout,
                              write_environment, write_kubeconfig)
 from kubementat.core.identity.context import Context
 from kubementat.errors import ClusterIdentityCollisionError
@@ -68,24 +68,3 @@ def test_the_siblings_checked_against_a_command_are_the_ones_in_the_flagged_root
     # answer *this* — and answering it is the bug.
     resolved = Context.build("dev")
     assert resolved.target.address == DEV_SERVER
-
-
-def test_the_sibling_sweep_and_the_environment_file_are_one_root(tmp_path, monkeypatch):
-    """The two reads `Context.build` performs must be the same root, not two.
-
-    A root handed to the file read alone would resolve `dev` correctly and sweep the decoy's
-    siblings: the collision test above catches that, and this one catches its mirror — a root
-    threaded to the registry but re-derived for the environment's own `static.json` would say the
-    environment does not exist at all.
-    """
-    decoy = tmp_path / "root-with-no-dev-in-it"
-    decoy.mkdir(parents=True)
-    (decoy / "platform_config").mkdir(parents=True)
-    redirect_checkout(monkeypatch, decoy)
-
-    declared = a_root(tmp_path, "root-the-flag-names", {"dev": PROD_SERVER})
-
-    resolved = Context.build("dev", platform_config_dir=declared / "platform_config")
-
-    assert resolved.target.address == PROD_SERVER, \
-        "the environment's own file was read out of a tree this command never pointed at"

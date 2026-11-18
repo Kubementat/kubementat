@@ -10,7 +10,6 @@ import base64
 import json
 import re
 
-import yaml
 
 # The fake API transport's own record (`tests/apiserver_fake.py`) arrives in the same log as the
 # shims' calls, because a run that reads through the client and opens a `kubectl` session is one

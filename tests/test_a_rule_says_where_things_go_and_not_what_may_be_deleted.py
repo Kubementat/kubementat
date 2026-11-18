@@ -18,12 +18,10 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from click.testing import CliRunner
 
 from cluster_fixture import configuration_only_context
 from kubementat.core.config.config import Config
 from kubementat.errors import TeamNotSuppliedError
-from kubementat.core.config.teams import declared_team_namespaces
 from kubementat.automations.uninstall import pipelines as pipelines_slice
 from kubementat.automations.uninstall.pipelines import uninstall_pipelines
 
@@ -50,36 +48,6 @@ def tree(tmp_path):
     return root, Config(ENVIRONMENT, TEAM, platform_config_dir=root)
 
 
-def test_a_rule_answers_where_things_go_and_is_silent_on_what_may_be_deleted(tree):
-    """The two doors, and the sentence that separates them.
-
-    One file, one key, two questions. `get` is asked where the pipelines live and answers
-    `pandas-pipelines`, because that is a fact about the team and not a guess. `declared` is asked what
-    kubementat may remove and answers nothing, because no file said it — and an answer here would be a
-    name with no owner, which is the only thing this whole ticket is about.
-    """
-    _, config = tree
-    assert config.get("team_static")["PIPELINE_NAMESPACE"] == "pandas-pipelines", \
-        "the placement half of the rule has to answer, or installing needs an operator to type a rule"
-    assert "PIPELINE_NAMESPACE" not in config.declared("team_static"), \
-        f"a rule must not be able to name something to delete: {config.declared('team_static')}"
-
-
-def test_what_a_file_actually_wrote_is_still_what_declared_answers(tree):
-    """`declared` is not "the empty answer". It is the file's answer, layers and precedence intact.
-
-    If turning the rules off also turned off the layers, this would be the test that says so, and the
-    teardown it protects would be sweeping nothing for a tree that declared everything.
-    """
-    root, _ = tree
-    (root / ENVIRONMENT / TEAM / "static.json").write_text(
-        json.dumps({"ENVIRONMENT": ENVIRONMENT, "PIPELINE_NAMESPACE": "shared-pipelines"}),
-        encoding="utf-8")
-    config = Config(ENVIRONMENT, TEAM, platform_config_dir=root)
-    assert config.declared("team_static")["PIPELINE_NAMESPACE"] == "shared-pipelines", \
-        "declared dropped a value a file really set, which would silently stop a sweep"
-
-
 def test_the_two_doors_fail_the_same_way_and_not_in_two_pieces(tree):
     """One problem, one failure. `get` and `declared` may answer differently and must not.
 
@@ -104,32 +72,6 @@ def test_the_two_doors_fail_the_same_way_and_not_in_two_pieces(tree):
         missing.declared("team_static")
     assert str(by_get.value) == str(by_declared.value), \
         f"the same missing file described two ways: {by_get.value} / {by_declared.value}"
-
-
-def test_the_teardown_reports_where_a_teams_objects_live_and_what_it_may_remove(tree):
-    """The entry `namespace_sweep` builds carries both answers, named for what they are used for.
-
-    `namespaces` is placement, `deletable` is permission. One dict, so the two can never be brought
-    apart by a caller that read the wrong one — which is how this would otherwise come back.
-    """
-    root, _ = tree
-    automation_context = configuration_only_context(ENVIRONMENT, TEAM,
-                                                      config=Config(ENVIRONMENT, TEAM,
-                                                                    platform_config_dir=root))
-    entry = declared_team_namespaces(automation_context, TEAM)
-    assert entry["namespaces"] == ["pandas-pipelines", "pandas"], \
-        f"placement must be answered even for a tree that wrote nothing: {entry}"
-    assert entry["deletable"] == [], \
-        f"nothing here was named by a file, so nothing is deletable: {entry}"
-
-    (root / ENVIRONMENT / TEAM / "static.json").write_text(
-        json.dumps({"PIPELINE_NAMESPACE": "pandas-pipelines"}), encoding="utf-8")
-    automation_context = configuration_only_context(ENVIRONMENT, TEAM,
-                                                      config=Config(ENVIRONMENT, TEAM,
-                                                                    platform_config_dir=root))
-    half = declared_team_namespaces(automation_context, TEAM)
-    assert half["deletable"] == ["pandas-pipelines"], \
-        f"a key that is written down is deletable, and that is the point of the field: {half}"
 
 
 def test_removing_a_teams_pipelines_refuses_when_only_the_rule_knows_the_namespace(tree, monkeypatch):

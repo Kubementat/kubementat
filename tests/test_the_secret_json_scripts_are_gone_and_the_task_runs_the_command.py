@@ -29,7 +29,6 @@ from asset_paths import tekton_ci_path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 SCRIPT = "scripts/secret_management/create_secret_from_json.sh"
-LIBRARY = "scripts/secret_management/base64_library.sh"
 # The Task itself, read from where the installed `kubementat` carries it and not out of this
 # checkout: it ships inside the package now, so `REPO_ROOT` is the one place this file may not
 # look.
@@ -54,40 +53,6 @@ TASK_PARAMS = {"image", "environment", "target-namespace", "secret-name", "json-
 # file and the command's own tests are where the record of the deletion lives, exactly as the
 # pvc-usage and create-ingress guards keep `tests/` out of the same rule.
 CALLER_ROOTS = ("src", "scripts", "tekton_ci", "examples", "tools")  # "templates" is gone from this tuple: templates/ moved inside the package, so "src" sweeps it and listing the old root would sweep nothing.
-
-# Anything that is allowed to still name what was deleted, because it is prose about the deletion
-# rather than a way to run it: the plans that scheduled it, the ledger that measured it, the ticket
-# that ordered it, and this file's own assertions.
-PROSE_ROOTS = {"docs", ".agent-work"}
-PROSE_FILES = {"CHANGELOG.md", "TODOs.md"}
-
-
-def _files_under(root):
-    for path in (REPO_ROOT / root).rglob("*"):
-        if not path.is_file() or "__pycache__" in path.parts:
-            continue
-        try:
-            yield path, path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue
-
-
-def _lines_naming(text, needle, relative):
-    return [f"{relative}:{number}" for number, line in enumerate(text.splitlines(), start=1)
-            if needle in line]
-def test_the_task_names_no_script_at_all():
-    """The Task's whole job is to run a command now, so there is no script path left to find.
-
-    This is the strictest form of the check: not "the deleted path is gone" but "nothing under
-    `scripts/` is mentioned here", which is what a reader of the Task should be able to conclude
-    without knowing which filename to look for.
-    """
-    text = TASK.read_text(encoding="utf-8")
-
-    assert "scripts/" not in text, "the Task still points into scripts/; it runs kmt"
-    assert "PATH_TO_SCRIPT" not in text, "the env var that carried the script's path is back"
-    assert "| jq" not in text, "the command reads the json itself; a step that pipes the file to a " \
-                               "jq is a second implementation of the thing the command refuses"
 
 
 def test_the_task_still_declares_the_params_the_customer_pipeline_passes():

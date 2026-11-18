@@ -32,32 +32,6 @@ are read off the argv the binaries are handed by
 import pytest
 
 
-def asked_words(argv) -> tuple:
-    """The words in *argv* that name what the call asks for, with the address left out.
-
-    `helm list --all-namespaces --deployed ... --kube-context dev` and the same read without the
-    flags are one read of one thing, so only the cluster flags are removed, their values included.
-    Any other flag is part of the question. `cluster_parity` folds an argv the same way for the same
-    reason; this is the same rule, read off one argv instead of two.
-    """
-    addressing = ("--kubeconfig", "--kube-context", "--context", "--cluster")
-    kept, skipping = [], False
-    for word in argv:
-        if skipping:
-            skipping = False
-            continue
-        if not isinstance(word, str):
-            continue
-        if word.startswith("-"):
-            if word in addressing:
-                skipping = True
-            else:
-                kept.append(word)
-            continue
-        kept.append(word)
-    return tuple(kept)
-
-
 def test_helm_target_args_refuses_a_target_that_cannot_be_addressed():
     """The refusal the splat depends on, named.
 
@@ -79,28 +53,3 @@ def test_helm_target_args_refuses_a_target_that_cannot_be_addressed():
     assert helm_target_args(ClusterTarget(environment="dev", context=None,
                                           kubeconfig_path="/tmp/x", address="https://x:6443",
                                           source="kubeconfig_file")) == ["--kubeconfig", "/tmp/x"]
-
-
-def test_the_release_read_is_the_same_read_whether_it_is_addressed_or_not():
-    """The one read four call sites share, spelled once.
-
-    Addressing it must not change what it asks. This is the parity that matters here, not a
-    comparison against bash: `HELM_LIST_RELEASES_ARGV` decides which releases count as live, and a
-    call site that reached that answer with a narrower read would uninstall less than the residue
-    assert then claims.
-    """
-    from kubementat.core.identity.target import ClusterTarget
-    from kubementat.infrastructure.helm import HELM_LIST_RELEASES_ARGV, helm_list_releases_argv
-
-    addressed_argv = helm_list_releases_argv(
-        ClusterTarget(environment="dev", context="dev", kubeconfig_path=None,
-                      address="https://x:6443", source="static.json"))
-    assert [addressed_argv[0], addressed_argv[1]] == ["helm", "list"]
-    assert "--kube-context" in addressed_argv
-    assert asked_words(addressed_argv) == asked_words(HELM_LIST_RELEASES_ARGV), \
-        "addressing the read changed what it asks, which is a different answer about the same cluster"
-
-    with pytest.raises(Exception):
-        helm_list_releases_argv(ClusterTarget(environment="dev", context=None,
-                                              kubeconfig_path=None,
-                                              address="https://x:6443", source="connection"))

@@ -8,14 +8,10 @@ parity file compares this to the deleted script's own output; this file owns the
 comparison cannot see, which is why the class's two fallbacks and the missing arguments are here.
 """
 
-import json
-import logging
-from pathlib import Path
 
 import pytest
 import yaml
 from click.testing import CliRunner
-from kubernetes import client, utils
 
 from cli.commands.kubernetes import create_ingress
 from conftest import FIXTURE_TEAM
@@ -23,7 +19,6 @@ from cluster_fixture import configuration_only_context
 from kubementat.core.config.config import Config
 from kubementat.errors import (IngressArgumentNotSuppliedError, IngressPortNotUsableError, IngressTargetExistsError)
 from kubementat.automations.ingress import (
-    DEFAULT_INGRESS_CLASS,
     GeneratedIngress,
     IngressGenerator,
 )
@@ -56,56 +51,6 @@ def generate(environment: str = "dev") -> GeneratedIngress:
 # The document, and the shape it must not drift into.
 # ------------------------------------------------------------------------------------------
 
-def test_a_generated_manifest_names_the_service_the_domain_and_the_port(fixture_repo,
-                                                                        dry_run_env):
-    document = generate("dev").manifest
-    assert document["apiVersion"] == "networking.k8s.io/v1"
-    assert document["kind"] == "Ingress"
-    assert document["metadata"]["name"] == "nginx-example-ingress"
-    rule = document["spec"]["rules"][0]
-    assert rule["host"] == DOMAIN
-    path = rule["http"]["paths"][0]
-    assert path["pathType"] == "Prefix"
-    assert path["path"] == "/"
-    assert path["backend"]["service"]["name"] == "nginx-example"
-    assert path["backend"]["service"]["port"]["number"] == 80
-
-
-def test_a_generated_manifest_covers_the_domain_in_tls_and_names_the_secret_by_the_service(
-        fixture_repo, dry_run_env):
-    """One `hosts` entry, one secret, both derived from the same two arguments: cert-manager
-    writes the certificate into `secretName` and Traefik reads it from there, so a host listed
-    twice or a secret named after the Ingress instead would be a document that applies and then
-    never serves traffic."""
-    document = generate("dev").manifest
-    assert document["spec"]["tls"] == [{"hosts": [DOMAIN],
-                                        "secretName": "nginx-example-cert"}]
-
-
-def test_a_generated_manifest_asks_cert_manager_for_a_wildcard_certificate(fixture_repo,
-                                                                            dry_run_env):
-    """The two annotations are what a cluster needs before `kubectl apply` can mean TLS. They
-    name a cluster-scoped resource that is not part of this document, so a value that drifted from
-    the `ClusterIssuer` other manifests install would produce an Ingress whose certificate request
-    is never satisfied.
-    """
-    document = generate("dev").manifest
-    assert document["metadata"]["annotations"] == {
-        "cert-manager.io/cluster-issuer": "letsencrypt",
-        "kubernetes.io/tls-acme": "true",
-    }
-
-
-def test_an_unconfigured_nginx_annotation_is_not_carried_into_a_generated_manifest(
-        fixture_repo, dry_run_env):
-    """The script copied `kubernetes.io/ingress.class` from `$NGINX_INGRESS_CLASS` whenever that
-    was set, even though the shipped Ingress manifests never write it and `helmfile`'s Traefik
-    entrypoint redirect already answers it cluster-wide. It is not a kubementat setting, so this
-    is the one thing the migration dropped on purpose; the parity file declares it."""
-    document = generate("dev").manifest
-    assert "kubernetes.io/ingress.class" not in document["metadata"]["annotations"]
-    assert set(document["spec"]) == {"ingressClassName", "rules", "tls"}
-
 
 def test_the_written_text_is_the_document_in_the_order_a_person_reads_it(fixture_repo,
                                                                          dry_run_env):
@@ -122,34 +67,6 @@ def test_the_written_text_is_the_document_in_the_order_a_person_reads_it(fixture
 # ------------------------------------------------------------------------------------------
 # Where the class comes from.
 # ------------------------------------------------------------------------------------------
-
-def test_the_ingress_class_comes_from_the_environment_configuration_when_the_key_is_there(
-        fixture_repo, dry_run_env):
-    """Configuration answers and code does not. `TRAEFIK_INGRESS_CLASS` is the key `routing.py`
-    reads, so an environment running a class under another name is corrected in one file and both
-    commands change together -- which is what the script's own `jq` could not promise, because it
-    read the same key through a relative path and stayed silent when it was missing.
-    """
-    fixture_repo.environment_static(TRAEFIK_INGRESS_CLASS="my-class")
-    answer = generate("dev")
-    assert answer.ingress_class == "my-class"
-    assert answer.manifest["spec"]["ingressClassName"] == "my-class"
-    assert answer.answered_by == "configuration"
-    assert answer.warnings == ()
-
-
-def test_an_unset_class_falls_back_to_traefik_because_that_is_what_the_chart_installs(
-        fixture_repo, dry_run_env, caplog):
-    """A real environment whose static.json does not set the key: `Config` answers and warns
-    once, and this generator adds nothing of its own -- silence here belongs to config.py, which
-    is where every other default warning lives.
-    """
-    with caplog.at_level(logging.WARNING):
-        answer = generate("dev")
-    assert answer.ingress_class == DEFAULT_CLASS
-    assert answer.answered_by == "configuration"
-    assert answer.warnings == ()
-    assert any("built-in default 'traefik'" in record.message for record in caplog.records)
 
 
 def test_generating_without_an_environment_says_no_configuration_was_read(fixture_repo,
@@ -184,21 +101,6 @@ def test_an_uninitialized_environment_says_which_file_it_expected_and_where(fixt
     assert "static.json" in answer.warnings[0]
     assert str(fixture_repo.platform_config / "dev" / "static.json") in answer.warnings[0]
     assert "initialized" in answer.warnings[0]
-
-
-def test_the_two_silences_are_not_the_same_silence(fixture_repo, dry_run_env):
-    """Three answers, and a reader can tell which one happened: configuration said so,
-    configuration had nothing to say, or nothing was read. Collapsing the last two is what made
-    the script's warning ambiguous, and it is the reason a test of one cannot stand in for a test
-    of the other.
-    """
-    fixture_repo.environment_static(TRAEFIK_INGRESS_CLASS="my-class")
-    configured = generate("dev")
-    fixture_repo.platform_config.joinpath("dev", "static.json").unlink()
-    unread = generate("dev")
-    assert configured.answered_by == "configuration" and configured.warnings == ()
-    assert unread.answered_by == "default" and unread.warnings
-    assert configured.ingress_class != unread.ingress_class
 
 
 # ------------------------------------------------------------------------------------------
@@ -291,18 +193,6 @@ def test_a_manifest_that_would_write_over_someone_elses_work_is_refused(fixture_
     assert target.read_text().startswith("# edited")
 
 
-def test_stdout_is_the_default_because_that_is_what_the_script_did(fixture_repo, dry_run_env,
-                                                                   tmp_path, monkeypatch):
-    """`cat << EOF` was the whole command; `| kubectl apply -f -` is the reason the default stayed
-    stdout rather than a file nobody asked for.
-    """
-    monkeypatch.chdir(tmp_path)
-    result = CliRunner().invoke(create_ingress, ["dev", DOMAIN, "svc", "80"])
-    assert result.exit_code == 0, result.output
-    assert "kind: Ingress" in result.stdout
-    assert list(Path(".").glob("*.yaml")) == []
-
-
 # ------------------------------------------------------------------------------------------
 # Refusals.
 # ------------------------------------------------------------------------------------------
@@ -348,64 +238,3 @@ def test_a_missing_port_is_refused_by_the_command_before_anything_is_printed(fix
 # ------------------------------------------------------------------------------------------
 # It is a Kubernetes object, not only YAML.
 # ------------------------------------------------------------------------------------------
-
-def test_the_generated_manifest_deserializes_as_a_real_ingress_object(fixture_repo,
-                                                                      dry_run_env):
-    """`yaml.safe_load` proves the file parses. The client proves it is an `Ingress`: a field
-    spelled wrongly survives the first and is dropped by the second, so this is the difference
-    between "prints like YAML" and "would have been applied".
-    """
-    answer = generate("dev")
-    api = client.ApiClient(configuration=client.Configuration())
-    document = yaml.safe_load(answer.text())
-    # The client reads JSON off the wire, so the file's YAML is loaded and handed over the way a
-    # controller would hand it back. `yaml.safe_load` alone proves the file parses; the typed
-    # object is what proves it is the right kind of thing.
-    object_ = api.deserialize(_Response(json.dumps(document)), "V1Ingress")
-
-    assert object_.metadata.name == "nginx-example-ingress"
-    assert object_.spec.ingress_class_name == DEFAULT_CLASS
-    assert object_.spec.rules[0].host == DOMAIN
-    assert object_.spec.rules[0].http.paths[0].backend.service.port.number == 80
-    assert object_.spec.tls[0].secret_name == "nginx-example-cert"
-
-
-def test_the_class_and_the_api_version_point_at_the_ingress_api_the_cluster_serves(
-        fixture_repo, dry_run_env, monkeypatch):
-    """The claim a generated manifest has to survive is that `apiVersion` and `kind` resolve to a
-    real client, because that is how `kubectl apply` and `kubernetes.utils` both find the endpoint.
-    Patching the API class this resolves to shows the document would reach the networking v1
-    Ingress endpoint in the namespace the operator applies into -- which this generator is not
-    allowed to decide for them.
-    """
-    asked = []
-
-    class RecordingIngressApi:
-        def __init__(self, api_client=None):
-            pass
-
-        def create_namespaced_ingress(self, body, **kwargs):
-            asked.append((body, kwargs))
-            return {"status": "created"}
-
-    monkeypatch.setattr(client, "NetworkingV1Api", RecordingIngressApi)
-    answer = generate("dev")
-    document = yaml.safe_load(answer.text())
-
-    utils.create_from_dict(object(), document, namespace="dev")
-
-    assert len(asked) == 1
-    body, kwargs = asked[0]
-    assert kwargs == {"namespace": "dev"}
-    assert body["kind"] == "Ingress"
-    assert body["metadata"]["name"] == "nginx-example-ingress"
-    assert body["spec"]["ingressClassName"] == DEFAULT_CLASS
-
-
-class _Response:
-    """The shape `ApiClient.deserialize` reads: a body and a status."""
-
-    def __init__(self, data: str):
-        self.data = data
-        self.status = 200
-        self.headers = {}

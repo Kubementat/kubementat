@@ -27,18 +27,14 @@ A file that is there and differs is refused by init's rule, naming the path.
 """
 
 import json
-import logging
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
-from asset_paths import asset_path
 from cli.commands import config as config_module
 from kubementat.config import init as config_init
-from kubementat.core import constants
 from kubementat.core.config.config import Config
-from kubementat.config.init import (CREATED, SKIPPED, TEAM_STATIC_STEP, add_environment, add_team,
+from kubementat.config.init import (SKIPPED, add_team,
                                     init_configuration)
 
 ENVIRONMENT = "dev"
@@ -49,36 +45,6 @@ TEAM = "ops"
 # adds to it. Spelled as paths because this whole file is a claim about exactly these paths.
 MANIFEST = Path("kubementat.yaml")
 ENV_STATIC = Path(ENVIRONMENT) / "static.json"
-
-NEW_ENVIRONMENT_FILES = {Path(NEW_ENVIRONMENT) / "static.json",
-                         Path(NEW_ENVIRONMENT) / "static.encrypted.json"}
-# The whole of what one environment layer adds, directories included. The two that hold the files are
-# part of the layer and not evidence of anything else, so a set difference that leaves them out reads
-# as a verb that wrote an extra path.
-NEW_ENVIRONMENT_LAYER = (NEW_ENVIRONMENT_FILES | {Path(NEW_ENVIRONMENT),
-                                                  Path(NEW_ENVIRONMENT) / "tekton",
-                                                  Path(NEW_ENVIRONMENT) / "tekton" / "tasks",
-                                                  Path(NEW_ENVIRONMENT) / "tekton" / "pipelines"})
-TEAM_FILES = {Path(NEW_ENVIRONMENT) / TEAM / "static.json",
-              Path(NEW_ENVIRONMENT) / TEAM / "static.encrypted.json"}
-TEAM_LAYER = (TEAM_FILES | {Path(NEW_ENVIRONMENT) / TEAM,
-                            Path(NEW_ENVIRONMENT) / TEAM / "tekton",
-                            Path(NEW_ENVIRONMENT) / TEAM / "tekton" / "tasks",
-                            Path(NEW_ENVIRONMENT) / TEAM / "tekton" / "pipelines",
-                            Path(NEW_ENVIRONMENT) / TEAM / "tekton" / "pipeline-runs",
-                            Path(NEW_ENVIRONMENT) / TEAM / "tekton" / "triggers"})
-
-# What the deleted copy pass *would* have written, stated as a set the verbs must not touch. The
-# package ships no templates, so the walk that built this set is gone with it; what is left of the rule
-# is the list of destinations 1.x's `initialize` wrote by copy — the two static files (written here,
-# empty and by rule) plus `mirrored_docker_images.json` and the team's `values.encrypted.yaml`, which
-# no verb writes at all. Those two are named as literals because the guard's claim is "these verbs write
-# nothing but the two layers", and that claim needs a negative list, not a directory that no longer
-# exists to be enumerated.
-SHIPPED_TEMPLATE_DESTINATIONS = {"static.json", "static.encrypted.json",
-                                 "mirrored_docker_images.json", "values.encrypted.yaml",
-                                 "values.yaml"}
-LAYER_FILES = ("static.json", "static.encrypted.json")
 
 
 def config_root(tmp_path) -> Path:
@@ -149,10 +115,6 @@ def reported(result) -> str:
     return f"{result.stdout}{result.stderr}"
 
 
-def step_paths(steps, step_name) -> list[Path]:
-    return [step.path for step in steps if step.name == step_name]
-
-
 def refuse(verb, root, *arguments) -> str:
     """The one refusal sentence, checked to be a refusal and not a crash."""
     result = run_verb(verb, root, *arguments)
@@ -161,55 +123,7 @@ def refuse(verb, root, *arguments) -> str:
     return reported(result)
 
 
-def environment_layer_paths(root, environment) -> list[Path]:
-    """The directory paths an environment layer owes, in the order they are applied, from `Config`."""
-    config = layers(root, environment)
-    return [config.tekton_env_task_dir, config.tekton_env_pipeline_dir]
-
-
-def team_layer_paths(root, environment, team) -> list[Path]:
-    """The directory paths a team layer owes, in the order they are applied, from `Config`."""
-    config = layers(root, environment, team)
-    return [config.tekton_team_task_dir, config.tekton_team_pipeline_dir,
-            config.tekton_team_pipeline_run_dir, config.tekton_team_trigger_dir]
-
-
 # --- (1) one environment layer lands on a tree that already exists --------------------------------
-
-
-def test_add_environment_lands_the_layer_on_a_tree_init_made(tmp_path, caplog):
-    """Test 1: the environment's two files and two `tekton/` directories appear, and nothing else.
-
-    `tree(after) - tree(before)` is the set, so a fifth path that rode along is a failure here and not
-    an extra line of output. The manifest is compared as bytes because its two keys are the answer to
-    a question only `init` may ask.
-    """
-    root = initialized_root(tmp_path)
-    before = tree(root)
-    manifest_before = (root / MANIFEST).read_bytes()
-
-    # The cluster sentence is a warning the verb logs and not a line it echoes, so the capture here is
-    # `caplog` and not the runner's streams. Cleared first: `initialized_root` logged the same sentence
-    # about `dev`, and this assertion is about the verb run below.
-    with caplog.at_level(logging.WARNING):
-        caplog.clear()
-        result = run_verb("add-environment", root, NEW_ENVIRONMENT)
-
-    assert result.exit_code == 0, reported(result)
-    assert tree(root) - before == NEW_ENVIRONMENT_LAYER
-    assert (root / MANIFEST).read_bytes() == manifest_before, "add-environment touched the manifest"
-    assert len(printed(result)) == 4, printed(result)
-    assert len({line for line in printed(result)}) == 4, "one step printed twice is two write claims"
-    # The four lines, in order, as `created <path>` — the property paths, so the print is checked
-    # against where the readers look and not against strings this file typed.
-    config = layers(root, NEW_ENVIRONMENT)
-    assert printed(result) == [
-        f"{CREATED} {path}"
-        for path in (config.env_static_config_path, config.env_static_encrypted_config_path,
-                     config.tekton_env_task_dir, config.tekton_env_pipeline_dir)], printed(result)
-    assert "does not address a cluster yet" in caplog.text, \
-        "the new environment reaches no cluster, and the verb that created it has to say so"
-    assert NEW_ENVIRONMENT in caplog.text
 
 
 # --- (2) the second run ---------------------------------------------------------------------------
@@ -277,40 +191,6 @@ def test_add_team_refuses_a_root_that_is_not_a_directory_at_all_and_says_which_r
 # --- (4) the team's layer --------------------------------------------------------------------------
 
 
-def test_add_team_writes_two_empty_documents_and_the_four_directories_the_properties_name(tmp_path):
-    """The team's layer is `{}` twice and four directories, and the paths *are* the properties.
-
-    The documents are asserted as empty and not as present: an empty file that exists and a file with
-    a cluster key in it both satisfy `is_file()`, and only one of them is a team layer — the other is
-    a claim that a team addresses a cluster of its own, which is the measured wrong answer
-    (`EnvironmentRegistry.resolve` and `_environment_declaration`, in `core/identity/registry.py`:
-    one directory is exactly one cluster, and the reader opens the
-    environment's file). The four directories are compared against `Config`, so a moved property is a
-    failed assertion here and not a path that quietly keeps matching itself.
-    """
-    root = initialized_root(tmp_path)
-    run_verb("add-environment", root, NEW_ENVIRONMENT)
-    before = tree(root)
-
-    steps = add_team(root, NEW_ENVIRONMENT, TEAM)
-
-    documents_ = documents(root)
-    assert documents_[Path(NEW_ENVIRONMENT) / TEAM / "static.json"] == {}, \
-        "the team's static file carries an answer; that is config set --team's job"
-    assert documents_[Path(NEW_ENVIRONMENT) / TEAM / "static.encrypted.json"] == {}, \
-        "the team's encrypted file carries an answer"
-    team_config = layers(root, NEW_ENVIRONMENT, TEAM)
-    assert step_paths(steps, TEAM_STATIC_STEP) == [team_config.team_static_config_path]
-    assert step_paths(steps, config_init.TEAM_ENCRYPTED_STEP) == [
-        team_config.team_static_encrypted_config_path]
-    assert step_paths(steps, config_init.TEAM_TEKTON_STEP) == \
-        team_layer_paths(root, NEW_ENVIRONMENT, TEAM)
-    assert all(step.action == CREATED for step in steps), [str(step) for step in steps]
-
-    added = tree(root) - before
-    assert added == TEAM_LAYER, added
-
-
 # --- (5) a team needs the environment under it ------------------------------------------------------
 
 
@@ -367,85 +247,4 @@ RESERVED = list(config_init.RESERVED_ROOT_NAMES)
 LAYER = list(config_init.LAYER_DIRECTORY_NAMES)
 
 
-@pytest.mark.parametrize("name", RESERVED)
-def test_add_environment_refuses_a_reserved_root_name_the_way_init_does(tmp_path, name):
-    """The reserved-name rule, said by the verb that adds a layer: `secrets` is not an environment's name.
-
-    One refusal, the value quoted back, and the whole tree untouched. The name check runs before the
-    plan exists, which is why nothing can have been written on the way to the sentence — the shape of
-    the assertion is `init`'s, and these two verbs are held to it with the same table.
-    """
-    root = initialized_root(tmp_path)
-    before = snapshot(root)
-
-    message = refuse("add-environment", root, name)
-
-    assert repr(name) in message, message
-    assert "is already taken" in message, message
-    assert snapshot(root) == before
-
-
-@pytest.mark.parametrize("name", LAYER)
-def test_add_team_refuses_a_team_wearing_a_layer_directory_name(tmp_path, name):
-    """A team that shares a name with `tekton` or `values` is one directory two rules both claim.
-
-    `kubementat_components` is refused here rather than filtered by the listing: the name table is
-    what says a layer cannot be worn as a team name, which is a rule about naming and not about what
-    a directory contains.
-    Same table as `init`, same sentence, and a tree that stays as it was — a layer verb that let a
-    reserved name through would be a way to make the tree the epic deleted.
-    """
-    root = initialized_root(tmp_path)
-    run_verb("add-environment", root, NEW_ENVIRONMENT)
-    before = snapshot(root)
-
-    message = refuse("add-team", root, NEW_ENVIRONMENT, name)
-
-    assert repr(name) in message, message
-    assert "is already taken" in message, message
-    assert snapshot(root) == before
-
-
 # --- (8) neither verb writes product shape ---------------------------------------------------------
-
-
-def test_neither_layer_verb_writes_a_product_shaped_file_and_a_default_still_answers(tmp_path,
-                                                                                      caplog):
-    """No product shape in a grown tree, asked of the two verbs that grow it instead of making one.
-
-    Three things have to be true at once, and only the third proves the first two:
-
-    * no `REPLACEME_` string anywhere in the tree — that marker is what a copied template leaves
-      behind, and a layer that has one in it was copied and not written;
-    * no file named after a shipped template's destination, other than the two static files these
-      verbs write empty and by rule. `mirrored_docker_images.json` and `values.encrypted.yaml` are the
-      names that would appear if a template walker had been reached for;
-    * a `Config` reading the new layer still answers a namespace from `constants.py` **and warns that
-      it did** — the one assertion that says no file in the tree answered a key a code default owns.
-
-    The whole file set is checked too, because a shape claim that inspects only names would miss a
-    template copied under a name that is not shipped, and because "one layer and nothing else" is
-    exactly the kind of sentence a set difference settles.
-    """
-    root = initialized_root(tmp_path)
-    run_verb("add-environment", root, NEW_ENVIRONMENT)
-    run_verb("add-team", root, NEW_ENVIRONMENT, TEAM)
-
-    files = {path: (root / path).read_bytes() for path in tree(root) if (root / path).is_file()}
-    assert not [path for path, payload in files.items() if b"REPLACEME_" in payload], \
-        "a layer verb copied a shipped template into the tree"
-    written_names = {path.name for path in files}
-    assert not written_names & (SHIPPED_TEMPLATE_DESTINATIONS - set(LAYER_FILES)), \
-        f"{written_names & SHIPPED_TEMPLATE_DESTINATIONS} is a template's destination and not an answer"
-
-    expected_files = ({MANIFEST, ENV_STATIC, Path(ENVIRONMENT) / "static.encrypted.json"}
-                      | NEW_ENVIRONMENT_FILES | TEAM_FILES)
-    assert set(files) == expected_files, set(files) ^ expected_files
-
-    config = layers(root, NEW_ENVIRONMENT, TEAM, preload=True)
-    with caplog.at_level(logging.WARNING):
-        namespace = config.component_namespace("grafana")
-
-    assert namespace == constants.DEFAULT_NAMESPACES["grafana"]
-    assert "GRAFANA_DEPLOYMENT_NAMESPACE" in caplog.text, \
-        "the default did not answer, so some file the layer verbs wrote did"

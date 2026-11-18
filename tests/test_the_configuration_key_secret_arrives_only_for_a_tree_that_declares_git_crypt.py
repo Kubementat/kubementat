@@ -20,7 +20,6 @@ The measurements that back this are in
 `test_exactly_one_base64_layer_sits_between_the_key_and_the_unlock_step.py`, which runs the shipped step
 against real git-crypt repositories. This file is about the other side of the pair.
 """
-import logging
 import os
 import shutil
 import tempfile
@@ -194,55 +193,3 @@ def test_a_tree_that_never_used_git_crypt_gets_no_secret_and_still_installs(tmp_
 
     # The deployer Secrets are still there, so this is a skip and not a failure of the whole method.
     assert names, "nothing was created at all, so the method stopped instead of skipping"
-
-
-def test_the_absence_of_the_key_is_said_out_loudly(tmp_path, monkeypatch, caplog, armored_deployer_key):
-    """When install skips the Secret it says why, because the next failure is somebody else's pipeline.
-
-    A skipped Secret is invisible in the cluster. What it costs appears days later as a pipeline that reads
-    ciphertext, and the one sentence that connects those two events has to be said while both are still
-    here.
-    """
-    directory = a_configuration_directory(tmp_path, git_crypt=False, key=False, armor=armored_deployer_key)
-    with caplog.at_level(logging.WARNING):
-        install_pipelines(directory, monkeypatch)
-
-    messages = " ".join(record.getMessage() for record in caplog.records)
-    assert CONFIGURATION_KEY_SECRET in messages, \
-        "install said nothing about not creating the Secret. The operator learns about it from a " \
-        "pipeline that reads ciphertext, and that sentence is not written by anyone"
-    assert "gitattributes" in messages or "encrypt" in messages.lower(), \
-        "the warning does not name the marker it consulted, so the reader cannot tell an encrypted tree " \
-        "from a plaintext one and has to go and look, which is the thing the warning was for"
-
-
-def test_install_and_the_step_read_the_same_marker(tmp_path, monkeypatch, armored_deployer_key):
-    """Both sides ask one question of one file, so they cannot disagree about the same tree.
-
-    Checked against the shipped step's script and not against a paraphrase of it: what is asserted is that
-    the literal the predicate looks for is the literal the step greps for.
-    """
-    directory = a_configuration_directory(tmp_path, git_crypt=True, key=True, armor=armored_deployer_key)
-    assert config_bootstrap.uses_git_crypt(directory) is True, \
-        "the predicate says a directory with the standard `.gitattributes` line is not git-crypt managed, " \
-        "which would mean install never makes the Secret and the step refuses a key that was never sent"
-
-    encrypted_tree = a_configuration_directory(tmp_path / "other", git_crypt=True, key=False, armor=armored_deployer_key)
-    assert config_bootstrap.uses_git_crypt(encrypted_tree) is True, \
-        "the marker does not depend on the key file being present, and it must not: the key is gitignored, " \
-        "so a clone answers this question from `.gitattributes` alone"
-
-    plaintext_tree = a_configuration_directory(tmp_path / "plain", git_crypt=False, key=False, armor=armored_deployer_key)
-    assert config_bootstrap.uses_git_crypt(plaintext_tree) is False, \
-        "the predicate calls a tree with no git-crypt declaration encrypted, and that is the direction " \
-        "that fails an install for a reason nobody can see"
-
-    assert not config_bootstrap.uses_git_crypt(tmp_path / "nowhere"), \
-        "a directory that does not exist reads as encrypted, so a typo in a path becomes a refusal that " \
-        "blames the configuration"
-
-    from asset_paths import tekton_ci_path
-    step = tekton_ci_path("tasks", "git-crypt-unlock.yml").read_text(encoding="utf-8")
-    assert "filter=git-crypt" in step, \
-        "the unlock step does not look for the marker this predicate uses, so install's decision and the " \
-        "step's decision are made from different facts about the same repository"

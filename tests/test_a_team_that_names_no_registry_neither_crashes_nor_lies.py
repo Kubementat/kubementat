@@ -22,14 +22,12 @@ puts a credentials block into every fixture tree, so nothing in the suite ever a
 without one.
 """
 
-import json
 
 import pytest
 from types import SimpleNamespace
 
 from kubementat.automations.install import registry as registry_slice
 from kubementat.automations.install.registry import setup_docker_registry_access
-from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 
 class RecordingKubernetes:

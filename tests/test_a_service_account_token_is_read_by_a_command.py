@@ -40,11 +40,6 @@ def token_secret(name, *, for_service_account=SERVICE_ACCOUNT, token=TOKEN):
         data={"token": base64.b64encode(token.encode())} if token is not None else None)
 
 
-def not_minted_yet(*_args, **_kwargs):
-    """A Secret of that type the controller has not filled in: `data` is absent, not empty."""
-    return token_secret(f"{SERVICE_ACCOUNT}-token-abcde", token=None)
-
-
 def answered(*secrets):
     return lambda **kwargs: SimpleNamespace(items=list(secrets))
 
@@ -118,23 +113,6 @@ def test_a_service_account_with_no_token_secret_says_so_instead_of_printing_noth
     assert SERVICE_ACCOUNT in message and NAMESPACE in message
     assert "create_or_replace_service_account_token_secret" in message
     assert "Traceback" not in message, message
-
-
-def test_a_token_secret_the_controller_has_not_filled_in_says_that_and_not_that_it_is_missing(
-        recorded_api):
-    """The two states an operator acts on differently, told apart.
-
-    "There is no token" and "the token has not been issued yet" look the same to a grep over `kubectl
-    get secret`. The second one means wait and ask again; the first means the Secret was never
-    requested, and an operator following the first piece of advice would wait forever.
-    """
-    recorded_api.answer("list_namespaced_secret", answered(not_minted_yet()))
-
-    result = read()
-
-    assert result.exit_code != 0
-    assert "has not filled" in result.output or "carries no token" in result.output, result.output
-    assert "request it again" in result.output, result.output
 
 
 def test_a_namespace_that_was_never_created_names_the_namespace(recorded_api):

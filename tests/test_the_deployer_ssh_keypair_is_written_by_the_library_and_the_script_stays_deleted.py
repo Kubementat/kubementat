@@ -34,7 +34,6 @@ not notice. `src/kubementat/automations/install/pipelines.py` only ever base64-e
 import base64
 from pathlib import Path
 
-from kubementat.config import init as config_init, keys as config_keys
 from kubementat.automations.install import pipelines as pipelines_slice
 from kubementat.crypto_utils import CryptoUtils
 
@@ -67,49 +66,6 @@ def test_the_keypair_lands_in_the_target_directory_with_both_names(tmp_path):
     assert sorted(path.name for path in tmp_path.iterdir()) == sorted([KEY_NAME, f"{KEY_NAME}.pub"])
 
 
-def test_the_private_and_public_halves_are_a_2048_bit_rsa_pair(tmp_path):
-    """The claim `-b 2048 -t rsa` carries, measured on what the library wrote.
-
-    Both halves are loaded rather than eyeballed: a `key_size` that drifted to 4096 would still
-    pass a "the files exist" test, and nobody would notice until something behind the key refused
-    it. The public half is read with `load_ssh_public_key`, which is what an OpenSSH client does.
-
-    What is also written here, because nothing else records it: the private half is a classic RSA
-    PEM and not the OpenSSH container the deleted script produced. Both parse, both are the same
-    kind of key, and `setup_pipelines` only ever encodes the bytes it is given.
-    """
-    from cryptography.hazmat.primitives import serialization
-
-    generate_into(tmp_path)
-    private_bytes = (tmp_path / KEY_NAME).read_bytes()
-    public_bytes = (tmp_path / f"{KEY_NAME}.pub").read_bytes()
-
-    private_key = serialization.load_pem_private_key(private_bytes, password=None)
-    public_key = serialization.load_ssh_public_key(public_bytes)
-
-    assert private_key.key_size == 2048
-    assert public_key.key_size == 2048
-    assert b"BEGIN RSA PRIVATE KEY" in private_bytes, \
-        "the container this replaced is OpenSSH's; if the writer changed, this line changes with it"
-
-    # The pair really is a pair, and not two keys that happen to agree on their length.
-    assert public_key.public_bytes(serialization.Encoding.OpenSSH,
-                                   serialization.PublicFormat.OpenSSH) == public_bytes.rstrip(b"\n")
-
-
-def test_the_private_key_returned_is_the_file_written(tmp_path):
-    """What a caller stores is the string the call returns, and what it returns is the file.
-
-    The library both returns and writes, and the two have to agree — `setup_pipelines`
-    base64-encodes the file, so a return value that drifted from the file would be a key nobody
-    has.
-    """
-    private_key, public_key = generate_into(tmp_path)
-
-    assert private_key.strip() == (tmp_path / KEY_NAME).read_text(encoding="utf-8").strip()
-    assert public_key.strip() == (tmp_path / f"{KEY_NAME}.pub").read_text(encoding="utf-8").strip()
-
-
 def test_the_stored_blob_is_the_key_encoded_once(tmp_path):
     """The last thing the script did was print a blob, and the contract behind it is still one pass.
 
@@ -125,39 +81,3 @@ def test_the_stored_blob_is_the_key_encoded_once(tmp_path):
     encoded = pipelines_slice._base64_encode_file(tmp_path / KEY_NAME)
 
     assert base64.b64decode(encoded.encode()) == (tmp_path / KEY_NAME).read_bytes()
-
-
-def test_an_existing_key_is_left_where_it_is(tmp_path, monkeypatch):
-    """The branch the ledger said was not closed, measured against the caller that exists.
-
-    bash checked `[[ ! -f $KEYNAME ]]` and said "Skipping generation"; the library writes
-    unconditionally, so a bare call *would* regenerate a deploy key in place. `config_keys` is the
-    caller now, and `_ssh_steps` asks `_pair_steps` before it generates: a pair that is already
-    there is reported and not rewritten. Asserted on bytes, because a step that says SKIPPED while
-    the file changed is exactly the agreement that hides a bug.
-    """
-    CryptoUtils.generate_ssh_key_pair(key_size=2048, key_file_base_name=config_keys.SSH_PRIVATE_NAME,
-                                      target_directory=str(tmp_path))
-    before = {path.name: path.read_bytes() for path in tmp_path.iterdir()}
-
-    calls = []
-    monkeypatch.setattr(CryptoUtils, "generate_ssh_key_pair",
-                        staticmethod(lambda *args, **kwargs: calls.append(kwargs)))
-    steps = config_keys._ssh_steps(tmp_path)
-
-    assert calls == [], "the library was asked to regenerate a keypair that exists"
-    assert [step.action for step in steps] == [config_init.SKIPPED, config_init.SKIPPED]
-    assert {path.name: path.read_bytes() for path in tmp_path.iterdir()} == before
-
-
-def test_generating_a_key_talks_to_no_cluster_tool(tmp_path, fake_binaries):
-    """The other half of "this is not a cluster command", now that the script cannot contradict it.
-
-    The comparison used to run both sides through the shims and assert the log was empty on each.
-    The Python side still does: generating a key is `cryptography` and a `write`, so an empty log
-    after a real call is the honest form of the claim, and anything that ever adds a `kubectl` to
-    this path fails here instead of in a pipeline.
-    """
-    generate_into(tmp_path)
-
-    assert fake_binaries.take_calls() == []

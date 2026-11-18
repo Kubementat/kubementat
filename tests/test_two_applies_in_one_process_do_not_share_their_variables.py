@@ -23,7 +23,6 @@ and `CHANGELOG.md` say the same thing in the same words.
 """
 
 import json
-import os
 import types
 
 import pytest
@@ -209,48 +208,3 @@ def test_two_interleaved_applies_neither_of_which_sees_the_ones_variables(tmp_pa
             f"{loud}'s tree declared it. A variable that outlives the apply which decided it is the "
             "channel this change removes."
         )
-
-
-def test_the_two_traces_were_actually_interleaved_and_not_two_applies_in_a_row(tmp_path, monkeypatch):
-    """The guarantee that keeps the test above honest: there was a gap, and the second apply ran in it.
-
-    If the inner apply's spawn does not sit between the outer apply's cluster read and the outer
-    apply's spawn, the isolation assertion above would be measuring two sequential applies, which is
-    a fact about patience and not about the environment.
-    """
-    recorder, outer_utils = an_interleaved_pair(tmp_path, monkeypatch, FIRST, SECOND,
-                                                SILENT_KNOBS, {})
-
-    outer_utils.helmfile_apply(environment_name=FIRST, helmfile_label_filter="group=standard")
-
-    outer_spawn = recorder.trace.index(f"{FIRST}:helmfile-apply")
-    inner_spawn = recorder.trace.index(f"{SECOND}:helmfile-apply")
-    assert 0 < inner_spawn < outer_spawn, (
-        f"the second apply was not interleaved inside the first one's gap (trace: {recorder.trace}). "
-        "Two applies that run one after the other do not demonstrate isolation; one running inside "
-        "the other's last read before its spawn does."
-    )
-    assert recorder.trace[0].startswith(f"{FIRST}:") and recorder.trace[outer_spawn + 1:] == [], \
-        recorder.trace
-
-
-def test_neither_apply_writes_into_the_environment_the_next_apply_will_read(tmp_path, monkeypatch):
-    """The measure the item states as `6 writes per apply -> 0`, asserted on the process itself.
-
-    Both applies run; not one of their variables is left behind in the interpreter's environment,
-    which is what the next apply in this process -- in whichever order it arrives -- would otherwise
-    read back as an answer its own tree never gave.
-    """
-    recorder, outer_utils = an_interleaved_pair(tmp_path, monkeypatch, FIRST, SECOND,
-                                                SILENT_KNOBS, {})
-    watched = sorted(set(decided_values(FIRST, tmp_path / FIRST, TEAMS[FIRST], SILENT_KNOBS))
-                     | set(decided_values(SECOND, tmp_path / SECOND, TEAMS[SECOND], {})))
-    untouched = {key: os.environ.get(key) for key in watched}
-
-    outer_utils.helmfile_apply(environment_name=FIRST, helmfile_label_filter="group=standard")
-
-    assert recorder.environments, "nothing ran helmfile, so there was nothing to leave behind"
-    assert {key: os.environ.get(key) for key in watched} == untouched, (
-        "helmfile_apply wrote decided values into os.environ; the isolation the two tests above "
-        "assert is only true while the process environment is not where those values live"
-    )

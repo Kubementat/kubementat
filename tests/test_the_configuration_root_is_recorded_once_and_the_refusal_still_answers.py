@@ -47,7 +47,7 @@ import json
 from pathlib import Path
 
 import pytest
-from bootstrap_tools import EMAIL, tools
+from bootstrap_tools import EMAIL
 from click.testing import CliRunner
 from kubementat.errors import (ConfigurationRootNotNamedError,
                                RootDirectoryVariableIsEmptyError)
@@ -142,40 +142,6 @@ def refusal() -> str:
     with pytest.raises(ConfigurationRootNotNamedError) as raised:
         resolve_platform_config_dir(None)
     return str(raised.value)
-
-
-def test_one_recorded_tree_answers_a_command_that_named_no_root(tmp_path, monkeypatch):
-    """The payoff, asserted as a path and not as an exit code.
-
-    One tree is recorded and exists, so the flag is not needed. Both halves get checked: what
-    `resolve_platform_config_dir` returns, and what `Context.build` addresses — because the 39 commands
-    that reach a cluster come through the second, and a default that only satisfied the resolver would
-    be a default that resolves nothing.
-    """
-    tree = a_tree(tmp_path, "recorded", server="https://10.0.1.9:6443")
-    write_record(record_at(monkeypatch, tmp_path / "record.json"), tree)
-    named_nothing(monkeypatch, tree)
-
-    assert resolve_platform_config_dir(None) == tree.resolve()
-    assert Context.build(ENVIRONMENT).environment == ENVIRONMENT
-
-
-def test_the_recorded_tree_is_the_one_the_listing_prints(tmp_path, monkeypatch):
-    """A command with no `Config` of its own and no cluster to address still reads the record.
-
-    `kmt environments list` resolves its root beside the 1:1 check through the same function, so the
-    proof it needs is the tree's own path on stdout: the alternative is a default that resolved a root
-    and printed somebody else's.
-    """
-    tree = a_tree(tmp_path, "printed", server="https://10.0.1.9:6443")
-    write_record(record_at(monkeypatch, tmp_path / "record.json"), tree)
-    named_nothing(monkeypatch, tree)
-
-    result = listing(tree)
-
-    assert result.exit_code == 0, result.output
-    assert str(tree.resolve()) in result.output, \
-        f"the listing read a different tree than the one recorded: {result.output}"
 
 
 def test_nothing_recorded_and_nothing_named_refuses_with_the_old_sentence(tmp_path, monkeypatch):

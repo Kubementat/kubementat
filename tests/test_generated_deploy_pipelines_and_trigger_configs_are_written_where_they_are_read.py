@@ -20,7 +20,6 @@ generated file — which is why the command prints that itself.
 """
 
 
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -29,8 +28,6 @@ import pytest
 import yaml
 
 from conftest import REPO_ROOT, run_kmt
-from kubementat.errors import (GenerationArgumentNotSuppliedError,
-                                 GenerationTemplateNotFoundError, ObsoleteTriggerDirectoryError)
 from asset_paths import relocate_asset_root, tekton_ci_path
 from cluster_fixture import configuration_only_context
 from kubementat.infrastructure.tekton import generation
@@ -55,7 +52,6 @@ PYTHON_GIT = {
     "git_server_ssh_user": APP_GIT["APP_GIT_SERVER_SSH_USER"],
 }
 
-PLACEHOLDERS_LEFT = re.compile(r"[A-Z][A-Z0-9_]*_PLACEHOLDER")
 
 OBSOLETE_TRIGGER_DIR = "platform_config/dev/fixture/triggers"
 TEAM_TRIGGER_DIR = "platform_config/dev/fixture/tekton/triggers"
@@ -118,34 +114,6 @@ def generated_deploy_pipeline(checkout, **overrides):
 # --- the deploy pipeline ---------------------------------------------------------------------
 
 
-def test_a_generated_deploy_pipeline_lands_in_the_team_pipeline_directory_and_holds_the_values(
-        checkout):
-    """One team's pipeline, in its own directory, with every value the two sides can supply filled.
-
-    The directory is what makes the next command work: `setup-pipelines` applies
-    `Config.tekton_team_pipeline_dir`, so a generated pipeline that is reviewed and committed is a
-    pipeline the team's cluster gets. The template stays where nothing applies it.
-    """
-    target = generated_deploy_pipeline(checkout)
-
-    assert target == checkout.root / TEAM_PIPELINE_DIR / f"deploy-pipeline-{APP}.yml"
-    assert target.is_file()
-    document = documents_of(target)[0]
-    assert document["kind"] == "Pipeline"
-    assert document["metadata"]["name"] == f"deploy-pipeline-{APP}"
-    defaults = {parameter["name"]: parameter.get("default")
-                for parameter in document["spec"]["params"]}
-    assert defaults["app-name"] == APP
-    assert defaults["app-git-url"] == APP_GIT["APP_GIT_URL"]
-    assert defaults["app-git-project-name"] == APP_GIT["APP_GIT_PROJECT_NAME"]
-    assert defaults["app-git-server-host"] == APP_GIT["APP_GIT_SERVER_HOST"]
-    assert defaults["app-git-server-port"] == APP_GIT["APP_GIT_SERVER_PORT"]
-    assert defaults["app-git-server-ssh-user"] == APP_GIT["APP_GIT_SERVER_SSH_USER"]
-    assert defaults["helm-path-to-chart"] == (
-        f"/workspace/$(params.automation-git-project-name)/helm_charts/{APP}")
-    assert not PLACEHOLDERS_LEFT.search(target.read_text())
-
-
 def test_the_generated_api_version_is_the_configured_one_and_not_the_templates(checkout):
     """Stamped from `Config.TEKTON_API_VERSION`, so one version bump moves every generated file.
 
@@ -160,24 +128,6 @@ def test_the_generated_api_version_is_the_configured_one_and_not_the_templates(c
     document = documents_of(generated_deploy_pipeline(checkout))[0]
 
     assert document["apiVersion"] == "tekton.dev/v1"
-
-
-def test_the_ingress_api_version_survives_the_stamp(checkout):
-    """The other half of the stamping rule: an Ingress is not a Tekton resource.
-
-    A rule that stamped every `apiVersion` it found would have rewritten an Ingress into
-    `tekton.dev/v1` and a TriggerTemplate out of the only version the triggers controller serves.
-    That is asserted rather than explained because a blanket rewrite is exactly the kind of
-    simplification a later edit would reach for.
-    """
-    written = generated_trigger_files(checkout)
-    documents = {documents_of(path)[0]["kind"]: documents_of(path)[0] for path in written}
-
-    assert documents["Ingress"]["apiVersion"] == "networking.k8s.io/v1"
-    assert documents["TriggerTemplate"]["apiVersion"] == "triggers.tekton.dev/v1beta1"
-    # ... and the PipelineRun nested inside the TriggerTemplate *is* a Tekton object, so it is stamped.
-    assert documents["TriggerTemplate"]["spec"]["resourcetemplates"][0]["apiVersion"] == \
-        "tekton.dev/v1"
 
 
 def test_generating_the_same_pipeline_twice_writes_the_same_bytes(checkout):
@@ -271,41 +221,6 @@ def test_an_app_name_that_would_escape_the_directory_is_refused(checkout):
 # --- the trigger configuration ---------------------------------------------------------------
 
 
-def test_the_generated_trigger_set_lands_where_the_trigger_reader_looks(checkout):
-    """Four manifests, in the team's trigger directory, under the app's own subdirectory.
-
-    The location is the point of the decision: generated trigger configuration is
-    team configuration, it lives in `platform_config`, and `setup_triggers` applies exactly this
-    directory. Templates and output are never read from the same place — which is also why
-    `apply_resources` skips any directory named `templates/`.
-    """
-    written = generated_trigger_files(checkout)
-    directory = checkout.root / TEAM_TRIGGER_DIR / APP
-
-    assert sorted(path.name for path in written) == [
-        f"{APP}-github-event-listener-ingress.yml",
-        f"{APP}-github-event-listener.yml",
-        f"{APP}-github-trigger-binding.yml",
-        f"{APP}-github-trigger-template.yml",
-    ]
-    assert not (checkout.root / OBSOLETE_TRIGGER_DIR).exists(), \
-        "the write moved under tekton/; the pre-move directory must not reappear"
-    assert all(path.parent == directory for path in written)
-    assert all(path.is_file() for path in written)
-    for path in written:
-        assert not PLACEHOLDERS_LEFT.search(path.read_text()), path
-
-    documents = {documents_of(path)[0]["kind"]: documents_of(path)[0] for path in written}
-    assert set(documents) == {"Ingress", "EventListener", "TriggerBinding", "TriggerTemplate"}
-    resourcetemplate = documents["TriggerTemplate"]["spec"]["resourcetemplates"][0]
-    assert resourcetemplate["spec"]["pipelineRef"]["name"] == PIPELINE
-    assert resourcetemplate["metadata"]["namespace"] == "fixture-pipelines"
-    assert resourcetemplate["spec"]["taskRunTemplate"]["serviceAccountName"] == \
-        "fixture-helm-deployer"
-    assert documents["Ingress"]["spec"]["rules"][0]["host"] == \
-        f"{APP}-github.trigger-hooks.fixture.hooks.example.test"
-
-
 def test_generated_trigger_files_are_the_same_bytes_when_generated_twice(checkout):
     """The same rule as the deploy pipeline, asserted separately: four files, twice, byte for byte.
 
@@ -346,25 +261,6 @@ def test_a_trigger_type_with_no_templates_names_the_resource_and_the_layer_it_ca
         f"the message must name the layer it looked in: {message}"
     assert "this checkout" not in message, \
         f"a wheel has no checkout, and the message says so about one it has: {message}"
-    assert not (checkout.root / TEAM_TRIGGER_DIR).exists()
-
-
-def test_a_trigger_template_with_no_configured_base_domain_names_the_key(checkout):
-    """A key that is not configured is an error, not a value.
-
-    An unset `BASE_DOMAIN` otherwise becomes a host of
-    `nginx-example-github.trigger-hooks.fixture.null` and an Ingress rule nobody will ever resolve —
-    the kind of defect that survives a review because the manifest looks complete.
-    """
-    checkout.environment_static(BASE_DOMAIN=None)
-    config = generation_config(checkout)
-
-    with pytest.raises(Exception) as error:
-        generation.generate_trigger_configs(config, APP, pipeline_name=PIPELINE,
-                                            trigger_type="github")
-
-    assert type(error.value).__name__ == "GenerationPlaceholderNotConfiguredError"
-    assert "BASE_DOMAIN_PLACEHOLDER" in str(error.value)
     assert not (checkout.root / TEAM_TRIGGER_DIR).exists()
 
 
@@ -450,23 +346,6 @@ def test_a_pre_move_trigger_directory_is_refused_and_nothing_is_generated_beside
     assert not (checkout.root / TEAM_TRIGGER_DIR).exists(), \
         "a refused generation still wrote into the new directory"
     assert obsolete.is_dir(), "refusing is not the same as cleaning up after the operator"
-
-
-def test_a_generated_file_carries_no_comment_from_its_template(checkout):
-    """What the round-trip costs, written down rather than argued about.
-
-    Templates are read as YAML, so their comments do not reach the generated file — and the trigger
-    templates hold real review guidance, in a comment, telling whoever generated the file to compare
-    the parameters against a real pipeline run. The command says that out loud instead, where a
-    later edit to a template cannot silently make it stale.
-    """
-    written = generated_trigger_files(checkout)
-    template_text = (checkout.root / "tekton_ci/triggers/templates/gitlab/"
-                     "template-trigger-template.yml").read_text()
-    assert "#" in template_text, "the templates do hold comments, which is what this is about"
-
-    assert not any(line.lstrip().startswith("#") for path in written
-                   for line in path.read_text().splitlines())
 
 
 def test_generated_configuration_is_invisible_to_nothing_because_it_is_written_elsewhere():

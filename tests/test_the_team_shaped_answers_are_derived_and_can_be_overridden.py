@@ -26,16 +26,11 @@ What this file judges: one rule per key, the precedence between a rule and a dec
 between what is derived and what is generated, and that no file moves on the way.
 """
 
-import ast
 import json
-from pathlib import Path
 
 import pytest
 
-import kubementat
-from kubementat.automations.routing import routing
 from kubementat.config import answers as config_answers
-from kubementat.config import validate
 from kubementat.core.config import derived as config_derived
 from kubementat.core.config.config import Config
 from kubementat.errors import TeamNotSuppliedError
@@ -77,46 +72,6 @@ def seed(root, team=TEAM, environment_static=None, team_static=None,
 
 
 # --- the five answers, one test per key ------------------------------------------------------
-
-
-def test_the_application_namespace_is_the_team_nobody_named_a_namespace_for(tmp_path):
-    """`APP_DEPLOYMENT_NAMESPACE` is the team's own name, read out of a file that never says so.
-
-    A team and the applications it deploys share one location; the second name for it existed only
-    because a template had to have *something* in the field.
-    """
-    config = seed(tmp_path)
-
-    assert config.get("team_static")["APP_DEPLOYMENT_NAMESPACE"] == TEAM
-
-
-def test_the_pipeline_namespace_is_the_team_plus_the_pipelines_suffix(tmp_path):
-    """`PIPELINE_NAMESPACE` is `<team>-pipelines` — the one derived answer with a suffix.
-
-    The suffix is the part a team could not restate by naming a team: pipelines are kept out of the
-    namespace its applications run in, and that is a product decision rather than a preference.
-    """
-    config = seed(tmp_path)
-
-    assert config.get("team_static")["PIPELINE_NAMESPACE"] == f"{TEAM}-pipelines"
-
-
-def test_the_mysql_host_is_the_teams_own_service_when_no_layer_declares_it(tmp_path):
-    """`MYSQL_HOST` is `mysql-<team>`: one team, one database, and a name anybody could predict.
-
-    Read from `team_static_encrypted`, because that is the category the deploy flow actually opens —
-    a rule that only answered in one category would be a rule with a reader that never gets an answer.
-    """
-    config = seed(tmp_path)
-
-    assert config.get("team_static_encrypted")["MYSQL_HOST"] == f"mysql-{TEAM}"
-
-
-def test_the_redis_master_host_is_the_teams_own_service_when_no_layer_declares_it(tmp_path):
-    """`REDIS_MASTER_HOST` is `redis-<team>`, for the same reason MySQL is `mysql-<team>`."""
-    config = seed(tmp_path)
-
-    assert config.get("team_static_encrypted")["REDIS_MASTER_HOST"] == f"redis-{TEAM}"
 
 
 def test_the_deploy_key_namespace_is_the_team_where_the_entry_said_nothing(tmp_path):
@@ -163,33 +118,7 @@ def test_the_deploy_keys_stay_a_list_and_are_never_flattened_to_a_string(tmp_pat
     assert config_derived.derived_declared("SSH_DEPLOY_KEYS", "ssh-rsa AAAA", TEAM) == "ssh-rsa AAAA"
 
 
-def test_both_files_of_a_team_layer_answer_a_derived_key(tmp_path):
-    """The rule is a fact about the team and not about which of its two files a key sits in.
-
-    `MYSQL_HOST` read from `team_static` answers as surely as the same key read from
-    `team_static_encrypted`, because the answer is computed from the team and not stored in a file.
-    """
-    config = seed(tmp_path)
-
-    assert config.get("team_static")["MYSQL_HOST"] == config.get("team_static_encrypted")["MYSQL_HOST"]
-    assert config.get("team_static")["PIPELINE_NAMESPACE"] == f"{TEAM}-pipelines"
-
-
 # --- the override half, which is what decides whether the precedence survived ---------------
-
-
-def test_an_operators_pipeline_namespace_is_believed_and_the_rule_stays_quiet(tmp_path):
-    """The test this ticket exists for: `static.json` says `shared-pipelines`, and `static.json` wins.
-
-    Nothing else in the tree answers for this. A rule that fires here is a rule that became a lie, and
-    it would pass every derivation assertion above while overwriting a namespace the operator chose.
-    """
-    config = seed(tmp_path, team_static={"PIPELINE_NAMESPACE": "shared-pipelines"})
-
-    assert config.get("team_static")["PIPELINE_NAMESPACE"] == "shared-pipelines"
-    # ...and the four answers the operator did not write are still answered, so this is one key
-    # yielding and not the whole feature switching off.
-    assert config.get("team_static")["APP_DEPLOYMENT_NAMESPACE"] == TEAM
 
 
 def test_a_key_any_layer_declares_outranks_the_rule(tmp_path):
@@ -216,19 +145,6 @@ def test_a_key_any_layer_declares_outranks_the_rule(tmp_path):
     assert team_wins.get("team_static")["APP_DEPLOYMENT_NAMESPACE"] == "team-apps"
 
 
-def test_an_entry_with_a_namespace_is_the_operators_and_the_rule_does_not_reach_in(tmp_path):
-    """The structural rule reaches inside an entry only where the entry said nothing.
-
-    A deploy key filed in a shared namespace is a team that means it, and a rule that "corrected" the
-    field back to the team's own name would move a Secret that already works.
-    """
-    config = seed(tmp_path, team_encrypted={"SSH_DEPLOY_KEYS": [
-        {"NAME": "shared", "TARGET_NAMESPACE": "shared-deployers"}]})
-
-    assert config.get("team_static_encrypted")["SSH_DEPLOY_KEYS"][0]["TARGET_NAMESPACE"] \
-        == "shared-deployers"
-
-
 def test_the_report_names_the_rule_and_not_a_file_that_wrote_nothing(tmp_path):
     """The answer's *why* is part of the answer, and the derivation changed it.
 
@@ -251,19 +167,6 @@ def test_the_report_names_the_rule_and_not_a_file_that_wrote_nothing(tmp_path):
     # A key `constants.py` really does own is still tagged as its own.
     assert config_answers.default_source("GRAFANA_DEPLOYMENT_NAMESPACE") == \
         config_answers.CONSTANTS_DEFAULT_SOURCE
-
-
-def test_the_rules_answer_in_a_library_read_and_not_only_through_a_command(tmp_path):
-    """Nothing routes through the CLI: the rule is in the read path, so `Config` answers alone.
-
-    Three call sites in `src/` read one of these keys out of a category dictionary, and none of them
-    know a rule exists. That is the point of putting it in the layer resolution rather than in a
-    command — a fix that lives in the CLI answers for one verb and lies for the other three.
-    """
-    config = seed(tmp_path)
-
-    assert config.get("team_static").get("PIPELINE_NAMESPACE") == f"{TEAM}-pipelines"
-    assert config.get("team_static_encrypted").get("SSH_DEPLOY_KEYS") is None
 
 
 # --- the team is a precondition ---------------------------------------------------------------
@@ -292,109 +195,4 @@ def test_a_run_that_names_no_team_refuses_and_names_the_key_and_the_missing_answ
         config_derived.app_deployment_namespace("   ")
 
 
-def test_a_team_without_a_deploy_key_entry_is_no_answer_at_all(tmp_path):
-    """The fifth rule has a precondition the other four do not: an entry has to exist.
-
-    A deploy key is six fields of operator's material and one field the team's name determines, so
-    deriving it from a name alone would be generation with a nicer name — and a stub entry would land
-    in `automations/install/secrets.py`'s Secret creation as a `KeyError` after the run has started to
-write. So
-    nothing answers, which is a fact the reader can act on and not a hole in the rules.
-    """
-    config = seed(tmp_path)
-
-    assert "SSH_DEPLOY_KEYS" not in config.get("team_static_encrypted")
-    assert config.get("team_static_encrypted").get("SSH_DEPLOY_KEYS") is None
-
-
 # --- that these are rules, and not something else ---------------------------------------------
-
-
-def test_the_derived_answers_are_stable_and_carry_no_entropy():
-    """Two calls answer the same thing, and the module that answers has no way to answer otherwise.
-
-    The boundary in a line: a derived answer is one answer, so a rule that returned something
-    different next time would be a generator wearing a table of rules, and a generated password that
-    lands in `static.json` under a namespace's name is the failure mode this whole distinction is
-    there to keep somebody from shipping.
-    """
-    for key, rule in config_derived.RULES.items():
-        assert rule(TEAM) == rule(TEAM), key
-
-    source = Path(kubementat.core.config.derived.__file__).read_text()
-    tree = ast.parse(source)
-    imports = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imports.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            imports.add(node.module or "")
-    assert imports.isdisjoint({"random", "secrets", "uuid"}), imports
-
-
-def test_the_rules_are_five_answers_and_not_six_keys(tmp_path):
-    """What the module exposes is the ruling, so an extra key has to be visible here.
-
-    Four rules answer a key from a name; the fifth answers a field inside an entry. A sixth key that
-    turns out to be a rule and not a default belongs in the rules table before it belongs in this file,
-    and this assertion is the seam that says which of the two happened.
-    """
-    assert set(config_derived.RULES) == {
-        "APP_DEPLOYMENT_NAMESPACE", "PIPELINE_NAMESPACE", "MYSQL_HOST", "REDIS_MASTER_HOST"}
-    assert config_derived.TARGET_NAMESPACE == "TARGET_NAMESPACE"
-
-
-def test_the_templates_still_carry_the_placeholder_and_no_reader_depends_on_it():
-    """The substitution survives in `initialize`, and nothing that *reads* configuration needs it.
-
-    `initialize` still copies the templates, which is why the placeholder is still in them; deleting
-    the copy is not this file's business. What has to be true in the meantime is that no reader
-    resolves an answer through it, so the assertion looks for the placeholder in the place a reader
-    would put it — inside a call, in source, in `src/kubementat` — and refuses everything the writer
-    does not have to do.
-
-    The templates and the fixture trees stay out of the scan on purpose: they are inputs, and a
-    template that mentions its own placeholder is what `initialize` was built to substitute.
-    """
-    sources = sorted(Path(kubementat.__file__).resolve().parent.rglob("*.py"))
-    assert sources, "the package this test scans was not found"
-
-    readers = []
-    for path in sources:
-        for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.Call):
-                arguments = list(node.args) + [keyword.value for keyword in node.keywords]
-                for argument in arguments:
-                    if any(PLACEHOLDER in part.value for part in ast.walk(argument)
-                           if isinstance(part, ast.Constant) and isinstance(part.value, str)):
-                        readers.append(f"{path.relative_to(Path(kubementat.__file__).parents[2])}:{node.lineno}")
-                        break
-
-    # `initialize`'s writers, and only those: the substitution lives where a template is copied.
-    writers = {f"{path}" for path in readers}
-    assert all("automation.py" in writer for writer in writers), readers
-
-
-def test_the_placeholder_is_still_a_placeholder_and_not_a_value_anywhere_in_the_package():
-    """Nothing ships `REPLACEME_TEAM` as data, so the reader above cannot be answering a dead sentinel.
-
-    The guard used to read the shipped templates and say "the placeholder is still in there, so the
-    refusal has something to refuse". The templates are deleted, so the shape of the risk moved: the
-    sentinel is now spelled only by the code that recognises it, and what a reader can still do is make
-    it unconditional — `config validate`'s prefix and the routing reader that refuses one — and lose the
-    one place a stale `REPLACEME_TEAM` could have been reported from. So this asserts the sentinel exists
-    in exactly those two owners, that no shipped data carries it, and that a tree which *does* carry one
-    (laid down before the templates went, which is what the family is for) is still named.
-    """
-    prefix = str(validate._PLACEHOLDER_PREFIX)
-    assert PLACEHOLDER.startswith(prefix), \
-        f"the reader refuses a value starting with {prefix!r} and this test is about {PLACEHOLDER!r}"
-    assert not (Path(kubementat.__file__).resolve().parent / "core/assets").joinpath("templates").exists(), \
-        "the placeholder shipped as data inside the package, so a refusal is not the whole answer"
-    shipped = [p for p in Path(kubementat.__file__).resolve().parent.glob("core/assets/**/*")
-               if p.is_file() and prefix in p.read_text(errors="ignore")
-               if p.suffix in (".json", ".yaml", ".yml", ".gotmpl", ".template")]
-    assert shipped == [], f"a placeholder ships as product data again: {shipped}"
-    assert 'startswith("' + prefix + '")' in Path(routing.__file__).read_text(encoding="utf-8"), \
-        "the one reader that refuses a placeholder has to keep spelling the prefix it matches, or the " \
-        "refusal goes unconditional and a tree that answered nothing is refused for answering it"

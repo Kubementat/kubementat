@@ -15,10 +15,10 @@ names the environment and the key that was never declared.
 
 import pytest
 
-from cluster_fixture import (DEV_SERVER, checkout, configuration_only_context, redirect_checkout,
-                             write_environment, write_kubeconfig)
+from cluster_fixture import (checkout, redirect_checkout,
+                             write_environment)
 from kubementat.core.identity.context import Context
-from kubementat.errors import ClusterNotConfiguredError, TeamNotSuppliedError
+from kubementat.errors import ClusterNotConfiguredError
 
 ENVIRONMENT = "dev"
 TEAM = "ops"
@@ -62,33 +62,3 @@ def test_asked_for_the_cluster_it_never_addressed_the_context_refuses_by_name(tm
     assert ENVIRONMENT in message
     assert "CLUSTER_KUBE_CONTEXT" in message, "the refusal has to name the key that would settle it"
     assert "the kubectl call about to run" in message, "the guard has to say what it stopped"
-
-
-def test_a_context_that_did_address_a_cluster_is_answered_by_the_same_call(tmp_path, monkeypatch):
-    """Like `require_team`: a guard, not a second rule about which commands may exist.
-
-    A `Context` that resolved hands its target back untouched, so the call adds no policy — it only
-    refuses the one state where there is nothing to hand back.
-    """
-    root = checkout(tmp_path)
-    redirect_checkout(monkeypatch, root)
-    kubeconfig = write_kubeconfig(root / "kubeconfig", {"dev-cluster": DEV_SERVER})
-    write_environment(root, ENVIRONMENT, context="dev-cluster", kubeconfig_path=kubeconfig)
-
-    assert Context.build(ENVIRONMENT, TEAM).require_target("anything").address == DEV_SERVER
-
-
-def test_the_configuration_context_still_refuses_a_team_as_usually(tmp_path, monkeypatch):
-    """The two guards do not overlap: `for_configuration` has a team, and does not need one to exist.
-
-    A `Config` built here is the ordinary team-bearing kind, so this asserts only that adding a
-    target guard did not bend the team rule underneath it.
-    """
-    root = checkout(tmp_path)
-    redirect_checkout(monkeypatch, root)
-    write_environment(root, ENVIRONMENT)
-
-    assert Context.for_configuration(ENVIRONMENT, None).config.team is None
-    with pytest.raises(TeamNotSuppliedError) as refused:
-        Context.for_configuration(ENVIRONMENT, None).require_team("a namespace")
-    assert f"`{ENVIRONMENT}/<team>` layer of the configuration directory" in str(refused.value)

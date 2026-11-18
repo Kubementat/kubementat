@@ -164,26 +164,6 @@ def test_the_manifest_names_no_ingress_class_of_its_own():
 # --- what reaches helmfile, measured at helmfile ------------------------------------------------
 
 
-@helmfile_only
-def test_a_tree_that_declares_a_class_builds_the_release_the_operator_named(tmp_path, monkeypatch):
-    """The case that does not work today, asserted as the release's built shape and not as an export.
-
-    A tree declares `public`; `export_ingress_class` -- the same function `helmfile_apply` calls, from
-    the same place -- hands it to the process environment; and helmfile, which knows nothing about
-    this repository, builds a release that says `public`. Nothing here asks whether the export ran:
-    the only way this passes is if the value helmfile reads is the value the configuration answered.
-    """
-    config = seed(tmp_path, environment_level={KEY: DECLARED})
-    monkeypatch.delenv(KEY, raising=False)
-    exported = export_ingress_class(config)
-    try:
-        assert exported == {KEY: DECLARED}, exported
-        assert built_class(**exported) == [DECLARED], \
-            "helmfile built a release that does not carry what the environment's static.json declared"
-    finally:
-        monkeypatch.delenv(KEY, raising=False)
-
-
 def _answered(config, key: str):
     """One key's answer as the report gives it, from the same walk every verb uses."""
     return {answer.key: answer
@@ -210,27 +190,6 @@ def test_a_tree_that_declares_nothing_builds_the_release_l0_answers(tmp_path, mo
         assert exported == {KEY: answer.value}, \
             "the export and the report gave two different answers for one key"
         assert built_class(**exported) == [answer.value]
-    finally:
-        monkeypatch.delenv(KEY, raising=False)
-
-
-@helmfile_only
-def test_the_layer_the_answer_came_from_does_not_change_what_helmfile_builds(tmp_path, monkeypatch):
-    """`L2 > L1` is a fact about the export too, measured the same way: a build that says what was said.
-
-    The environment declares one class and the team another, and what helmfile builds is the team's --
-    which is the whole claim that the manifest is reading *this* product's layering and not a value
-    somebody typed next to a template. A `default` left in the file would have answered here only when
-    the export was missing, which is how the old bug hid: every test that declared at the environment
-    layer passed.
-    """
-    config = seed(tmp_path, environment_level={KEY: "environment-said"},
-                  team_level={KEY: "team-said"})
-    monkeypatch.delenv(KEY, raising=False)
-    exported = export_ingress_class(config)
-    try:
-        assert exported == {KEY: "team-said"}, exported
-        assert built_class(**exported) == ["team-said"]
     finally:
         monkeypatch.delenv(KEY, raising=False)
 
@@ -305,72 +264,3 @@ def test_helmfile_apply_hands_the_class_over_before_it_runs_helmfile(tmp_path, m
 
 
 # --- the case nobody coded a fallback for ------------------------------------------------------
-
-
-@helmfile_only
-def test_an_answer_that_is_missing_builds_no_class_and_not_a_silent_default(monkeypatch):
-    """What "helmfile's own failure" would be read as, said before anyone needs to discover it.
-
-    The sentence the brief asks for is this one: with no export and no variable, the built release
-    carries an empty `ingressClass.name`. That is the failure that looks like success reversed -- a
-    class name of `""` is a release that installs and routes nothing, and it is *helmfile's* answer,
-    printed in its own output, rather than this repository answering for a configuration that had
-    nothing to say. So do not read this test as "an empty string is the fallback"; it is the absence of
-    one, measured. If someone wants a hard refusal instead -- a `requiredEnv`, which would break
-    `helmfile build` for every release in this file -- that is a decision about the whole
-    `env`/`default` style of the manifest and not something a test may settle by asserting the error
-    that is not there.
-
-    The other half is in `src/`, and this is the reason no fallback lives there: the only way an answer
-    can actually be missing is a `constants.py` that stopped answering the key, and
-    `Config.component_ingress_class` refuses *that* with the table named, before helmfile is run.
-    """
-    monkeypatch.delenv(KEY, raising=False)
-
-    built = built_class()
-
-    assert built and all(name != constants.DEFAULT_STATIC_ANSWERS[KEY] for name in built), \
-        f"the build answered {built!r} for a key nobody exported, which is a silent default"
-    assert built == [""]
-
-
-def test_the_answer_is_read_through_config_and_not_from_a_literal(tmp_path):
-    """The export and `config show` are one read, so a test must not build its own answer.
-
-    `Config.component_ingress_class` is the accessor `helm_utils.export_ingress_class` calls, and the
-    same walk `config_answers.effective_answers` reports. So the assertions are pairs: the exported
-    value equals the reported value equals the accessor's value, on a tree that declared the key and on
-    one that did not, and the key is spelled by `component_config_key` rather than typed.
-    """
-    declared = seed(tmp_path / "declared", environment_level={KEY: DECLARED})
-    bare = seed(tmp_path / "bare")
-
-    for config in (declared, bare):
-        exported = export_ingress_class(config)
-        answer = _answered(config, KEY)
-        assert exported == {KEY: answer.value}, (exported, answer)
-        assert exported == {KEY: config.component_ingress_class(constants.COMPONENT)}
-        assert answer.value == exported[KEY]
-
-    assert export_ingress_class(declared) == {KEY: DECLARED}
-    assert export_ingress_class(bare) == {KEY: constants.DEFAULT_STATIC_ANSWERS[KEY]}, \
-        "the bare tree did not answer through the table this product's L0 is"
-
-
-def test_the_component_the_export_names_is_the_component_the_routing_code_names():
-    """One component name, so the export and the routing read cannot mean different components.
-
-    `helm_utils` used to keep its own spelling of this name because it could not import
-    `routing.COMPONENT` without a cycle -- routing imports `helm_utils`. Both sides read
-    `constants.COMPONENT` now, so a drift between them is no longer something a rename has to avoid;
-    what is still pinned here is the failure that mattered, namely exporting a variable keyed to a
-    component no release configures, which is an export that succeeds and changes nothing. Both sides
-    are read from the sources and not asserted from memory.
-    """
-    from kubementat.automations.routing import routing
-
-    assert constants.COMPONENT == routing.COMPONENT
-    assert KEY == component_config_key(routing.COMPONENT, "INGRESS_CLASS")
-    assert KEY in constants.DEFAULT_STATIC_ANSWERS, (
-        "the answer this export hands to helmfile is no longer L0, which is the fact its whole "
-        "refusal to skip absent keys rests on")

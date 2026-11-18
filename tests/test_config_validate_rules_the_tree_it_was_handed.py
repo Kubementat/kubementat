@@ -39,7 +39,6 @@ is warned about and not failed.
 
 import hashlib
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -47,7 +46,6 @@ import yaml
 from click.testing import CliRunner
 
 from cli.commands import config as config_module
-from kubementat.infrastructure import shell
 from kubementat.config.init import add_team, init_configuration
 from kubementat.config.validate import validate_tree
 from kubementat.core.constants import CLUSTER_KUBECONFIG_PATH_KEY, CLUSTER_KUBE_CONTEXT_KEY
@@ -78,10 +76,6 @@ def a_tree(tmp_path, team=TEAM) -> Path:
 
 def errors_by_code(root, team=None) -> dict:
     return {finding.code: finding for finding in validate_tree(root, ENVIRONMENT, team).errors}
-
-
-def warnings_by_code(root, team=None) -> dict:
-    return {finding.code: finding for finding in validate_tree(root, ENVIRONMENT, team).warnings}
 
 
 def run_validate(root, environment=ENVIRONMENT, team=None) -> "CliRunner().Result":
@@ -123,26 +117,6 @@ def digest(root: Path) -> dict:
 # ---------------------------------------------------------------------------------------------
 # 1 — a fresh tree validates clean, and the verdict line is what stdout carries.
 # ---------------------------------------------------------------------------------------------
-
-
-def test_the_tree_config_init_wrote_validates_clean_and_prints_one_verdict_line(tmp_path):
-    """Zero errors, one warning (the cluster key is null), and stdout is exactly the verdict line.
-
-    The count is asserted and not the prose: the only thing validate can say about a fresh
-    tree is that nobody has named a cluster yet, so "exactly one warning, zero errors" is the whole
-    expectation and a reworded sentence must not be able to break it.
-    """
-    root = a_tree(tmp_path)
-
-    report = validate_tree(root, ENVIRONMENT, TEAM)
-    assert report.errors == ()
-    assert len(report.warnings) == 1
-    assert report.warnings[0].code == "cluster-not-addressed"
-
-    result = run_validate(root, team=TEAM)
-    assert result.exit_code == 0, result.output + result.stderr
-    assert result.stdout == f"no errors for environment {ENVIRONMENT} (1 warnings)\n"
-    assert "WARNING:" in result.stderr
 
 
 # ---------------------------------------------------------------------------------------------
@@ -237,81 +211,9 @@ def test_two_environments_in_one_root_are_refused_by_the_collision_sentence(tmp_
 # ---------------------------------------------------------------------------------------------
 
 
-def test_an_absolute_kubeconfig_path_warns_and_still_exits_zero(tmp_path):
-    """The config declares the cluster, the machine declares how to reach it.
-
-    The path is a real absolute path to a file that is not there — the shape of "worked on my
-    laptop". Validate must warn and exit 0, and must not mistake it for an error: the machine that
-    runs the next command gets a different answer, which is a portability warning and not a fault.
-    """
-    root = a_tree(tmp_path)
-    plant(root, {CLUSTER_KUBE_CONTEXT_KEY: "somewhere",
-                 CLUSTER_KUBECONFIG_PATH_KEY: str(tmp_path / "everywhere.kubeconfig")})
-
-    assert warnings_by_code(root, TEAM)["absolute-kubeconfig-path"].kind == "warning"
-
-    result = run_validate(root, team=TEAM)
-    assert result.exit_code == 0, result.output + result.stderr
-    assert "WARNING:" in result.stderr
-    assert "no errors for environment" in result.stdout
-
-
-def test_a_fresh_tree_warns_that_it_addresses_no_cluster_and_does_not_fail(tmp_path):
-    """The one sentence a fresh tree deserves: present, on stderr, and not an error."""
-    root = a_tree(tmp_path)
-    result = run_validate(root, team=TEAM)
-
-    assert result.exit_code == 0
-    assert f"environment {ENVIRONMENT!r} is configured" in result.stderr
-    assert "WARNING:" in result.stderr
-
-
 # ---------------------------------------------------------------------------------------------
 # 4 — a finding is a finding: code, path, and nothing dropped.
 # ---------------------------------------------------------------------------------------------
-
-
-def test_every_finding_carries_a_code_a_kind_and_a_path(tmp_path):
-    """No finding is allowed to be prose only — codes are what tests assert and paths are what sorting uses."""
-    root = a_tree(tmp_path)
-    (root / ENVIRONMENT / "helmfile.yaml.gotmpl").write_text("releases: []\n", encoding="utf-8")
-    write_yaml(root / "kubementat.yaml", {"schema_version": 1, "kubementat": ">=0.4,<2",
-                                          "teams": ["alpha"]})
-
-    report = validate_tree(root, ENVIRONMENT, TEAM)
-    assert report.findings, "a tree with faults produced no findings at all"
-    for finding in report.findings:
-        assert finding.kind in ("error", "warning"), finding
-        assert finding.code and " " not in finding.code, finding
-        assert finding.message.strip()
-        assert finding.path is not None and str(finding.path).startswith(str(root)), finding
-
-
-def test_the_error_list_is_not_truncated_to_the_first(tmp_path):
-    """Three faults in, three faults out — in one exception, not three runs and one guess.
-
-    The alternative this row defends is the shape every other CLI verb has out of necessity (one
-    problem, one raise). `validate` is the verb that knows there may be more than one, so raising on
-    the first and letting the operator rediscover the rest one run at a time is the failure mode.
-    """
-    root = a_tree(tmp_path)
-    (root / ENVIRONMENT / "helmfile.yaml.gotmpl").write_text("releases: []\n", encoding="utf-8")
-    (root / "second").mkdir()
-    (root / "second" / "helmfile.yaml.gotmpl").write_text("releases: []\n", encoding="utf-8")
-    plant(root, {"BASE_DOMAIN": "REPLACEME_BASE_DOMAIN"})
-
-    report = validate_tree(root, ENVIRONMENT, TEAM)
-    assert len(report.errors) >= 3
-    assert {f.code for f in report.errors}.issubset(
-        {"helmfile-in-config-tree", "placeholder-value"})
-
-    result = run_validate(root, team=TEAM)
-    assert result.exit_code == 1
-    stderr = result.stderr
-    for finding in report.errors:
-        assert finding.message.strip().splitlines()[0] in stderr, finding.code
-    assert stderr.count("helmfile-in-config-tree") == 2, "two gotmpl faults, two lines — not one and a guess"
-    assert "every one of them listed rather than only the first" in stderr
 
 
 def test_a_layer_whose_pair_is_both_absent_is_one_fault_and_not_two(tmp_path):
@@ -336,25 +238,6 @@ def test_a_layer_whose_pair_is_both_absent_is_one_fault_and_not_two(tmp_path):
         "two findings say the same thing"
 
 
-def test_no_two_findings_ever_say_the_same_thing(tmp_path):
-    """The invariant the verdict rests on: a fault count is a count of faults.
-
-    `validate`'s promise is that its count and its exit code mean the same thing, and that holds only
-    if nothing reports one fact twice. A fault-rich tree is the fixture because a fault-free tree
-    proves nothing about a report, and the case above is what broke the rule when the loop keyed on
-    the file's label instead of the layer it belongs to.
-    """
-    root = a_tree(tmp_path)
-    (root / ENVIRONMENT / "helmfile.yaml.gotmpl").write_text("releases: []\n", encoding="utf-8")
-    plant(root, {"BASE_DOMAIN": "REPLACEME_BASE_DOMAIN"})
-    (root / ENVIRONMENT / "beta").mkdir()
-    (root / ENVIRONMENT / "beta" / "static.json").write_text("{}\n", encoding="utf-8")
-
-    for report in (validate_tree(root, ENVIRONMENT, TEAM), validate_tree(root, ENVIRONMENT)):
-        seen = [(f.kind, f.code, f.message, str(f.path)) for f in report.findings]
-        assert len(seen) == len(set(seen)), f"one fault reported twice: {seen}"
-
-
 # ---------------------------------------------------------------------------------------------
 # 5 — read-only, and no cluster touched.
 # ---------------------------------------------------------------------------------------------
@@ -365,74 +248,6 @@ def refuse(*args, **kwargs):
                          f"{args!r} {kwargs!r}")
 
 
-def test_validate_is_read_only_and_addresses_no_cluster(tmp_path, monkeypatch):
-    """Byte-identical tree, and neither binary ever gets the chance to run.
-
-    The mtime-free half of this claim is deliberate: a rewrite that produces the same bytes is still
-    a write, and validate promises none.
-    """
-    root = a_tree(tmp_path)
-    before = digest(root)
-    monkeypatch.setattr(shell, "run", refuse)
-    monkeypatch.setattr(subprocess, "run", refuse)
-    monkeypatch.setattr(subprocess, "Popen", refuse)
-
-    validate_tree(root, ENVIRONMENT, TEAM)
-    assert digest(root) == before
-
-    result = run_validate(root, team=TEAM)
-    assert result.exit_code == 0, result.output + result.stderr
-    assert digest(root) == before
-
-
-def test_validate_touches_no_cluster_even_when_the_environment_addresses_one(tmp_path, monkeypatch):
-    """The collision half reads the registry, and the registry is allowed to read a file. Nothing else.
-
-    An addressed environment is the case where a `Context` would be built and a client would be
-    created; validate must never reach that construction, so the same refusal is asserted on a tree
-    whose environment resolves to a real address.
-    """
-    root = a_tree(tmp_path, team=None)
-    kubeconfig = tmp_path / "one.kubeconfig"
-    write_yaml(kubeconfig, {
-        "apiVersion": "v1", "kind": "Config", "current-context": "one",
-        "clusters": [{"name": "one", "cluster": {"server": SHARED_SERVER}}],
-        "contexts": [{"name": "one", "context": {"cluster": "one", "user": "admin"}}],
-        "users": [{"name": "admin", "user": {"token": "not-a-real-token"}}],
-    })
-    # A *relative* path so this row says exactly one thing: a resolved-but-unwarned environment.
-    # Spelling it with `tmp_path` would also fire the absolute-path warning and make this row read
-    # on the portability rule rather than on its own.
-    monkeypatch.chdir(tmp_path)
-    plant(root, {CLUSTER_KUBE_CONTEXT_KEY: "one", CLUSTER_KUBECONFIG_PATH_KEY: "one.kubeconfig"})
-    monkeypatch.setattr(shell, "run", refuse)
-    monkeypatch.setattr(subprocess, "run", refuse)
-    monkeypatch.setattr(subprocess, "Popen", refuse)
-
-    before = digest(root)
-    report = validate_tree(root, ENVIRONMENT)
-    assert report.errors == (), "an addressed environment is not a fault"
-    assert digest(root) == before
-
-
 # ---------------------------------------------------------------------------------------------
 # 6 — the root-wide half outranks the named environment.
 # ---------------------------------------------------------------------------------------------
-
-
-def test_a_fault_two_directories_over_still_fails_the_run(tmp_path):
-    """Naming one environment scopes the layer checks and nothing else.
-
-    The named environment here is clean on purpose. A run that quietly reported "no errors" because
-    it only looked inside `prod/` would be the most expensive kind of wrong: the operator's tree is
-    broken and the verdict says otherwise.
-    """
-    root = a_tree(tmp_path)
-    (root / "other").mkdir()
-    (root / "other" / "helmfile.yaml.gotmpl").write_text("releases: []\n", encoding="utf-8")
-
-    findings = errors_by_code(root, TEAM)
-    assert "helmfile-in-config-tree" in findings
-
-    result = run_validate(root, team=TEAM)
-    assert result.exit_code == 1

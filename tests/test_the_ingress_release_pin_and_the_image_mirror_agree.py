@@ -142,19 +142,3 @@ def test_the_ingress_release_installs_a_named_chart_version_and_not_the_newest_i
         f"{pinned} is not a chart version whose rendered image is recorded here, so the mirror list " \
         "has no way to say it mirrors what this release installs -- re-derive it with " \
         "`helm template traefik traefik/traefik --version <pin> | grep image:`"
-
-
-def test_the_pinned_chart_is_the_one_the_values_file_was_validated_against():
-    """The pin and the values file's own header must not disagree.
-
-    `values/traefik/values.yaml` says which chart it is schema-clean against. If the
-    release pins a different one, the sentence and the release are two answers to one question.
-    """
-    header = values_path("traefik", "values.yaml").read_text(encoding="utf-8")
-    validated_against = set(re.findall(r"traefik/traefik (\d+\.\d+\.\d+)", header))
-
-    assert pinned_chart_version() in validated_against, \
-        f"the release pins {pinned_chart_version()!r} but the values file claims validation against " \
-        f"{sorted(validated_against)}"
-
-

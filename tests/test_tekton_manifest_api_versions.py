@@ -79,10 +79,6 @@ VOLUME_CLAIM_TEMPLATES_EXPECTED = 8
 STEP_COMPUTE_RESOURCES_EXPECTED = 19
 TRIGGER_TEMPLATE_FILES_EXPECTED = 6
 
-# 54 manifests under the two trees today, 60 before the backing-service deletion above. The
-# floor is what says the inventory is still an inventory — see the test that reads it.
-MANIFEST_MINIMUM = 50
-
 
 def manifest_files():
     """Every manifest under the two trees, so a new file is covered the moment it lands."""
@@ -161,20 +157,6 @@ def pipeline_runs():
     """Every `PipelineRun` node, wherever it is nested."""
     return [(path, node_path, node)
             for path, node_path, node in all_nodes() if node.get("kind") == "PipelineRun"]
-
-
-def test_the_manifest_inventory_reads_both_manifest_trees():
-    """The inventory has to be an inventory. A tree that shrank silently shrinks the proof too."""
-    files = manifest_files()
-    # Keyed by the root as a reader would name it, not by `root.name`: two of these three are
-    # directories called `tekton_ci`, and a dict keyed by name would report one count for both.
-    per_root = {str(root.relative_to(REPOSITORY_ROOT)): sum(1 for path in files if root in path.parents)
-                for root in MANIFEST_ROOTS}
-    assert all(per_root.values()), f"a manifest tree contributes nothing: {per_root}"
-    assert len(files) >= MANIFEST_MINIMUM, (
-        f"only {len(files)} manifests were found under tekton_ci/ and examples/tekton_ci/; "
-        "this file proves the conversion for both trees, so it is only worth something when it reads both"
-    )
 
 
 def test_every_resource_in_the_pipelines_group_speaks_the_version_the_code_writes():

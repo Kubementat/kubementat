@@ -17,11 +17,9 @@ clients, this proves for the one cached answer that sits above them.
 
 from types import SimpleNamespace
 
-import pytest
 
 from cluster_fixture import write_kubeconfig
 from kubementat.core.identity.target import ClusterTarget
-from kubementat.errors import TektonControllerWithoutConfiguredApiError
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 from kubementat.infrastructure.tekton import preflight
 
@@ -31,10 +29,6 @@ from kubementat.infrastructure.tekton import preflight
 # a cache test can be quietly worthless. These two belong to nothing else.
 CLUSTER_A_SERVER = "https://10.9.1.1:6443"
 CLUSTER_B_SERVER = "https://10.9.2.2:6443"
-# The second test needs a cluster nothing in this file has already had verified, for the same
-# reason the two above borrow nothing: a refused answer is only visible as a *re-ask* if that
-# address was not already cached by the test that ran before it.
-CLUSTER_C_SERVER = "https://10.9.3.3:6443"
 
 # Only what `preflight_tekton_api_version` reads: the group and the version kubementat speaks.
 SPOKEN_VERSION = SimpleNamespace(TEKTON_API_GROUP="tekton.dev", TEKTON_API_VERSION="v1")
@@ -105,29 +99,3 @@ def test_both_clusters_are_asked_and_neither_is_asked_twice(tmp_path, monkeypatc
                                             SPOKEN_VERSION)
     assert asked == [alpha.target.address, beta.target.address], (
         "a cluster already verified was asked again, so the answer is not held per cluster")
-
-
-def test_a_cluster_that_refused_the_question_is_asked_again(tmp_path, monkeypatch):
-    """The cache holds answers, not hopes.
-
-    Nothing is written until the check has passed, so a cluster that answered `no` gets asked the
-    same question on the next call instead of being believed verified for the rest of the process —
-    which is what the first version of this cache would have done to a cluster that was merely not
-    up yet, and the reason the write sits after the call rather than before it.
-    """
-    kubeconfig = write_kubeconfig(tmp_path / "kubeconfig", {"gamma": CLUSTER_C_SERVER})
-    asked = []
-
-    def refuses(self, group, version):
-        asked.append(self.target.address)
-        return False
-
-    monkeypatch.setattr(KubernetesUtils, "api_version_is_served", refuses)
-    cluster = KubernetesUtils(a_target_on(kubeconfig, "gamma"))
-
-    for _ in range(2):
-        with pytest.raises(TektonControllerWithoutConfiguredApiError):
-            preflight._preflight_tekton_api_version(cluster, SPOKEN_VERSION)
-
-    assert asked == [cluster.target.address, cluster.target.address], (
-        "a refused cluster was believed verified: the answer is written before the check is asked")

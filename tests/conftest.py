@@ -29,6 +29,9 @@ from types import SimpleNamespace
 import pytest
 from kubernetes import client
 
+# Fixtures the configuration-directory tests share, offered to every test module from here.
+from bootstrap_tools import deployer_secret_key, root, tools  # noqa: F401
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SHIM_SOURCE_DIR = Path(__file__).resolve().parent / "shims"
 
@@ -840,13 +843,12 @@ class FixtureRepo:
     of this working tree's.
     """
 
-    def __init__(self, root):
-        self.root = root
-        self.scripts = root / "scripts"
-        self.platform_config = root / "platform_config"
+    def __init__(self, checkout_root):
+        self.root = checkout_root
+        self.platform_config = checkout_root / "platform_config"
         self.environment = FIXTURE_ENVIRONMENT
         self.team = FIXTURE_TEAM
-        self.kubeconfig = root / "kubeconfig"
+        self.kubeconfig = checkout_root / "kubeconfig"
         self.kubeconfig.write_text(KUBECONFIG)
         # The stamp this fixture stands for. This class is the fixture's whole claim to be *a prepared
         # tree*, and a prepared tree says which product it was made for (`config init` writes
@@ -967,31 +969,23 @@ class FixtureRepo:
 @pytest.fixture
 def fixture_repo(tmp_path):
     """The throwaway checkout — scripts, a `tekton_ci/`, and a seeded `platform_config`."""
-    root = tmp_path / "checkout"
-    root.mkdir()
-    # `scripts/` is gone from the product and git cannot represent an empty directory, so a clean
-    # checkout has no `scripts/` at all while a developer's tree still has the husk. Copying fails
-    # there and silently succeeds here, which is the difference between a suite that measures the
-    # repository and one that measures one working tree. The fixture therefore gets the directory
-    # either way and takes what is in it if anything is.
-    (root / "scripts").mkdir()
-    if (REPO_ROOT / "scripts").is_dir():
-        shutil.copytree(REPO_ROOT / "scripts", root / "scripts", dirs_exist_ok=True)
-    (root / "tekton_ci" / "pipeline-runs").mkdir(parents=True)
+    checkout_root = tmp_path / "checkout"
+    checkout_root.mkdir()
+    (checkout_root / "tekton_ci" / "pipeline-runs").mkdir(parents=True)
     # No `templates/` here. The fixture used to scaffold one because a guard's subject was two
     # disagreeing copies and the shipped half had to stay writable; the product ships no templates any
     # more, so the directory was scaffolding for a file that no longer exists. What the relocating
-    # guard needs is the manifest's own root, which it writes itself
+    # guard needs is the manifest's own checkout_root, which it writes itself
     # (`tests/test_one_component_is_installed_by_the_label_the_environment_names_it_under.py`).
-    (root / "platform_config" / FIXTURE_ENVIRONMENT / "kubementat_components").mkdir(parents=True)
-    return FixtureRepo(root).all_static_files()
+    (checkout_root / "platform_config" / FIXTURE_ENVIRONMENT / "kubementat_components").mkdir(parents=True)
+    return FixtureRepo(checkout_root).all_static_files()
 
 
 @pytest.fixture
 def dry_run_env(fixture_repo, fake_binaries, monkeypatch):
     """The environment a fixture-run `kmt` needs: home, config dir, kubeconfig, shims."""
     monkeypatch.setenv("KUBEMENTAT_HOME", str(fixture_repo.root))
-    # The configuration root is named, never located, so a fixture that wants its own
+    # The configuration checkout_root is named, never located, so a fixture that wants its own
     # `platform_config` read has to name it. Pointing `KUBEMENTAT_HOME` at the checkout is not
     # enough any more, and pointing it there *and* clearing this variable would make every CLI
     # fixture fail on the refusal rather than on what the test is about.
@@ -1032,12 +1026,12 @@ def resolvable_environment(tmp_path, monkeypatch):
     """
     from cluster_fixture import checkout, redirect_checkout, write_environment, write_kubeconfig, DEV_SERVER
 
-    root = checkout(tmp_path)
-    redirect_checkout(monkeypatch, root)
-    write_kubeconfig(root / "kubeconfig", {"fixture": DEV_SERVER})
-    write_environment(root, FIXTURE_ENVIRONMENT, context=FIXTURE_KUBE_CONTEXT)
+    checkout_root = checkout(tmp_path)
+    redirect_checkout(monkeypatch, checkout_root)
+    write_kubeconfig(checkout_root / "kubeconfig", {"fixture": DEV_SERVER})
+    write_environment(checkout_root, FIXTURE_ENVIRONMENT, context=FIXTURE_KUBE_CONTEXT)
     # The commands that reach a cluster without declaring the argument — the `users` group is the
     # in-tree case, and the decorator answers for its environment because the command never names it
     # — read this; the ones that declare it ignore it, so setting it costs those nothing.
     monkeypatch.setenv("ENVIRONMENT", FIXTURE_ENVIRONMENT)
-    return root
+    return checkout_root

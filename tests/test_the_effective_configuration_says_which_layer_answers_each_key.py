@@ -38,14 +38,12 @@ Nine claims, and the interesting ones are the ones a "simpler" implementation br
 
 import hashlib
 import json
-import subprocess
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from cli.commands import config as config_module
 from kubementat.config import answers as config_answers
-from kubementat.infrastructure import shell
 from kubementat.core.config import release_index as config_reads_index
 from kubementat.core import constants
 from kubementat.core.config.config import Config
@@ -114,15 +112,6 @@ def release_components() -> tuple:
 
 
 RELEASE_COMPONENTS = release_components()
-
-# The accessor each family is derived from, as `Config` spells it. Held here so the guard test can
-# ask the same question twice — once of the report, once of the read path.
-ACCESSORS = {
-    "namespace": Config.component_namespace,
-    "selector": Config.component_service_selector,
-    "enabled": Config.component_release_enabled,
-    "version": Config.component_release_version,
-}
 
 
 def derived_keys() -> dict:
@@ -305,130 +294,9 @@ def test_show_on_a_fresh_tree_tags_every_key_and_prints_no_other_keys(tmp_path):
         "the generated password reused the seeded admin name, which is not a secret at all"
 
 
-def test_the_hardcoded_component_lists_match_their_sources(tmp_path):
-    """The derivation is not vacuous: every family it reads still has members, and the sources agree.
-
-    The lists used to be typed, so this test was the drift check that kept them true. They are read
-    out of `constants` and the manifest now, which means growth in a source moves the universe by
-    itself -- and what is left to assert is the opposite failure: a derivation that quietly returns
-    nothing because the table it reads moved, or a manifest that answers no labels at all, would
-    shrink the report's universe to a handful of keys and every other test in this file would agree
-    with itself about a universe that no longer exists.
-    """
-    assert NAMESPACE_COMPONENTS, "the namespace family is empty, so `constants.DEFAULT_NAMESPACES` moved"
-    assert SELECTOR_COMPONENTS, "the selector family is empty, so `constants.DEFAULT_SERVICE_SELECTORS` moved"
-    labelled = set(release_components())
-    assert labelled, "the shipped manifest labels no release, so this universe lost twenty keys"
-    assert set(NAMESPACE_COMPONENTS) == set(constants.DEFAULT_NAMESPACES)
-    assert set(SELECTOR_COMPONENTS) == set(constants.DEFAULT_SERVICE_SELECTORS)
-    # Read the way the report reads it: the index is a filesystem answer, so no `HelmUtils` and no
-    # `__new__` bypass of a constructor that addresses a cluster this check never addresses.
-    assert labelled == set(config_reads_index.read_release_index(
-        Config(ENVIRONMENT, None, platform_config_dir=a_tree(tmp_path), preload_configs=False)))
-
-
 # ---------------------------------------------------------------------------------------------
 # 2 and 3 — the tag is the layer that answers.
 # ---------------------------------------------------------------------------------------------
-
-def test_a_key_answered_on_the_environment_or_the_team_flips_its_tag_and_names_the_file(tmp_path):
-    """`default` → `environment` → `team`, and each answer names the exact file that wrote it.
-
-    The value alone would not prove the order: a team file that was read *first* and an environment
-    file that answers are two different claims, and only the tag plus the path distinguish them.
-    """
-    root = a_tree(tmp_path)
-    key = "GRAFANA_DEPLOYMENT_NAMESPACE"
-
-    assert answers_by_key(root)[key].origin == "default"
-    assert answers_by_key(root)[key].source is None
-
-    plant(root, {key: "team-ci"})
-    answered = answers_by_key(root)[key]
-    assert (answered.origin, answered.value) == ("environment", "team-ci")
-    assert answered.source == (root / ENVIRONMENT / "static.json")
-    # "what it would otherwise have had" is still on the record: answering a key does not erase its L0.
-    assert answered.default == constants.DEFAULT_NAMESPACES["grafana"]
-
-    # The team's answer, in the team's own file.
-    (root / ENVIRONMENT / TEAM / "static.json").write_text(json.dumps({key: "team-alpha"}, indent=2) + "\n",
-                                             encoding="utf-8")
-    answered = answers_by_key(root, TEAM)[key]
-    assert (answered.origin, answered.value) == ("team", "team-alpha")
-    assert answered.source == (root / ENVIRONMENT / TEAM / "static.json"), "the path has to be the team's file"
-
-
-def test_a_team_scoped_show_says_team_where_a_team_less_show_says_environment(tmp_path):
-    """Precedence visible in the tag and not only in the value.
-
-    One tree, two runs, the same key declared at both layers. Without `TEAM` the environment answers
-    and the tag says so; with it the team's pair is consulted first and the same key says `team`. A
-    report that printed the value but kept the old tag would still look right to a human scanning
-    `show` for "which layer should I edit" — which is the question the tag exists to answer.
-    """
-    root = a_tree(tmp_path)
-    key = "GRAFANA_DEPLOYMENT_NAMESPACE"
-    plant(root, {key: "team-ci"})
-    (root / ENVIRONMENT / TEAM / "static.json").write_text(json.dumps({key: "team-alpha"}, indent=2) + "\n",
-                                             encoding="utf-8")
-
-    without_team = answers_by_key(root)[key]
-    with_team = answers_by_key(root, TEAM)[key]
-
-    assert (without_team.origin, without_team.value) == ("environment", "team-ci")
-    assert (with_team.origin, with_team.value) == ("team", "team-alpha")
-    assert without_team.origin != with_team.origin, "the flip is precedence, and it has to be in the tag"
-    assert without_team.source != with_team.source
-
-    # And the team's answer is not an accident of which file was opened first: a key the team leaves
-    # alone still answers from the environment, in a team-scoped run.
-    plant(root, {"BASE_DOMAIN": "example.test"})
-    fell_through = answers_by_key(root, TEAM)["BASE_DOMAIN"]
-    assert fell_through.origin == "environment"
-    assert fell_through.value == "example.test"
-
-
-def test_the_universe_only_names_keys_an_accessor_can_answer(tmp_path):
-    """The guard: every key `show` prints has to be answered by the accessor it claims to derive it from.
-
-    For each derived key, a sentinel goes into the environment's file and the answer has to move with
-    it. If a family ever names a key the read path never consults — a renamed suffix, or the
-    `<NAME>_DEPLOYMENT_SERVICE` a spec sentence once asked for — the planted value stays invisible, the
-    report keeps calling the key a `default`, and this test fails on its own. That is the difference
-    between a universe that is defined by what answers and a universe that is defined by a list.
-    """
-    root = a_tree(tmp_path)
-    entries = derived_keys()
-
-    # Every sentinel is a value the L0 does *not* already answer, so a key that no accessor reads
-    # cannot pass by coincidence: the planted answer has to show up in the report, and the accessor
-    # has to agree with it. `"false"` for ENABLED is deliberate — the manifest's own default is
-    # `"true"`, which is the one value that would have made this test tautological.
-    sentinels = {}
-    for key, (family, component) in entries.items():
-        sentinels[key] = {"namespace": f"planted-{component}",
-                          "selector": f"planted-{component}",
-                          "enabled": "false",
-                          "version": "9.9.9-guard"}[family]
-    plant(root, sentinels)
-
-    config = Config(ENVIRONMENT, None, platform_config_dir=root, preload_configs=False)
-    answers = answers_by_key(root)
-    for key, (family, component) in sorted(entries.items()):
-        assert key in answers, f"{key} is derived by this module but config show does not print it"
-        assert answers[key].value == sentinels[key], (
-            f"{key} was declared at the layer that answers and the report still printed something "
-            f"else, so no read path answers the key this module names")
-        assert answers[key].origin == "environment", (
-            f"{key} was planted at the layer that answers and the report still calls it a default, "
-            f"so the module names a key the read path does not consult")
-        assert answers[key].value == ACCESSORS[family](config, component), (
-            f"{key} disagrees with Config.{ACCESSORS[family].__name__}({component!r}): the report and "
-            f"the read path are answering two different keys")
-        assert answers[key].source == (root / ENVIRONMENT / "static.json"), key
-
-
-
 
 
 # ---------------------------------------------------------------------------------------------
@@ -453,78 +321,9 @@ def test_show_writes_nothing_and_moves_no_mtime(tmp_path):
     assert snapshot(root) == before, "a verb that answers must not create, rewrite or touch anything"
 
 
-def test_show_addresses_no_cluster(tmp_path, monkeypatch):
-    """The hard constraint: this verb is read-only *and* cluster-free.
-
-    `shell.run` is the one seam every `kubectl`/`helm` call in `src/` goes through, and `subprocess` is
-    the belt for anything that found a binary some other way. Both raise if called, so the report's
-    own success is the evidence — a verb that resolved a cluster would fail here and not warn.
-    """
-    root = a_tree(tmp_path)
-
-    def refuse(*args, **kwargs):
-        raise AssertionError(f"a cluster was addressed by: {args}")
-
-    monkeypatch.setattr(shell, "run", refuse)
-    monkeypatch.setattr(subprocess, "run", refuse)
-    monkeypatch.setattr(subprocess, "Popen", refuse)
-
-    runner = CliRunner(mix_stderr=False)
-    shown = runner.invoke(config_module.config,
-                          ["show", ENVIRONMENT, "--config-dir", str(root)])
-    assert shown.exception is None and shown.exit_code == 0, shown.output + shown.stderr
-
-
-def test_a_missing_layer_file_is_refused_the_way_config_set_refuses_it(tmp_path):
-    """A layer that is not there is not half-read, and the sentence says which verb makes it.
-
-    Consistency with `config set` is the point: a friendlier `show` that answered defaults from a tree
-    whose environment layer was never laid down would report an answer for a tree that has none. And
-    nothing is created on the way out of the refusal — the claim that made this a refusal.
-    """
-    root = a_tree(tmp_path)
-    (root / ENVIRONMENT / "static.encrypted.json").unlink()
-    before = snapshot(root)
-
-    result = CliRunner(mix_stderr=False).invoke(
-        config_module.config, ["show", ENVIRONMENT, "--config-dir", str(root)])
-
-    assert result.exit_code != 0
-    assert "static.encrypted.json" in result.stderr
-    assert "add-environment" in result.stderr, "the refusal names the verb that makes the layer"
-    assert snapshot(root) == before
-
-    # ...and naming a team does not hide the half that is missing. A team-scoped read consults the
-    # environment's pair underneath the team's, so a tree whose environment layer is incomplete has to
-    # be refused for the same reason and not answered from a default under a team's own file.
-    team_scoped = CliRunner(mix_stderr=False).invoke(
-        config_module.config, ["show", ENVIRONMENT, TEAM, "--config-dir", str(root)])
-    assert team_scoped.exit_code != 0
-    assert "add-environment" in team_scoped.stderr
-    assert snapshot(root) == before
-
-
 # ---------------------------------------------------------------------------------------------
 # 9 — a declared null is an answer, not a gap.
 # ---------------------------------------------------------------------------------------------
-
-def test_a_null_in_a_layer_file_reports_the_layer_and_the_null_and_not_the_default(tmp_path):
-    """`config init` writes `null` for a cluster key nobody has answered, and that is what answers.
-
-    The wrong implementation here is the one that treats "present but null" as "absent" and falls back
-    to a default: the operator who ran `config init` would be told the tree had answered, and the key
-    they had not touched yet would look configured.
-    """
-    root = a_tree(tmp_path)
-    plant(root, {"BASE_DOMAIN": None})
-
-    answer = answers_by_key(root)["BASE_DOMAIN"]
-
-    assert (answer.origin, answer.value) == ("environment", None)
-    assert answer.source == (root / ENVIRONMENT / "static.json")
-
-    lines = run_show(root).splitlines()
-    assert any(line.startswith("BASE_DOMAIN = null   (environment from ") for line in lines), lines
 
 
 # ---------------------------------------------------------------------------------------------

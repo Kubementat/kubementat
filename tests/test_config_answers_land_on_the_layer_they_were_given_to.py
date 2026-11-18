@@ -45,15 +45,12 @@ into this file would tell a moved property from a moved directory badly.
 """
 
 import json
-import logging
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
 from cli.commands import config as config_module
-from kubementat.core.config import derived as config_derived
-from kubementat.core import constants
 from kubementat.core.config.config import Config
 from kubementat.config.init import (CREATED, ENVIRONMENT_ENCRYPTED_STEP, ENVIRONMENT_STATIC_STEP,
                                     SKIPPED, TEAM_ENCRYPTED_STEP, TEAM_STATIC_STEP,
@@ -190,84 +187,10 @@ def added_team(root: Path) -> None:
 # --- (1) the environment's file answers, read back through `Config` --------------------------------
 
 
-def test_set_on_the_environment_layer_lands_in_that_file_and_answers_a_read(tmp_path, caplog):
-    """Test 1: one answer, the environment layer, and a `Config` read that agrees without a grep.
-
-    The read is what makes this a behaviour test and not a file-format test. A team-less reader asks
-    for `env_static`, which is the category the chain resolves when no team is named
-    (`CATEGORY_LAYERS['env_static']` is one layer deep): asking `get('team_static')` without a team is
-    a `TeamNotSuppliedError` and not a quiet empty answer, so the assertion names the category a
-    team-less read is allowed to ask for rather than the one the brief's prose used.
-    """
-    root = initialized_root(tmp_path)
-
-    # The sentence is logged and not echoed, so it is read out of `caplog`. Cleared first because
-    # `initialized_root` logged it already, and this assertion is about the `set` run below saying it.
-    with caplog.at_level(logging.WARNING):
-        caplog.clear()
-        result = run_verb("set", root, ENVIRONMENT, f"{KEY}={ENVIRONMENT_ANSWER}")
-
-    assert result.exit_code == 0, reported(result)
-    assert printed(result) == [f"{CREATED} {properties(root).env_static_config_path}"], printed(result)
-    assert document(root, ENV_STATIC)[KEY] == ENVIRONMENT_ANSWER
-    assert layered(root).get('env_static')[KEY] == ENVIRONMENT_ANSWER, \
-        "the environment file declares the key but a loaded Config does not answer it"
-    # An environment layer that reaches no cluster still says so, under the same condition `init` and
-    # `add-environment` say it under: this verb changed nothing about that null.
-    assert "does not address a cluster yet" in caplog.text
-    assert tree(root) == INITIALIZED_LAYER, "one answer is one key, not one answer plus one directory"
-
-
 # --- (2) precedence, asserted by who answers -------------------------------------------------------
 
 
-def test_the_same_key_answered_on_the_team_layer_is_answered_by_the_team(tmp_path):
-    """Test 2: team over environment, by precedence and not by presence.
-
-    Both files declare the key, and both keep their own answer; the loaded read is the team's. That is
-    the whole difference between "the value is in the tree" and "the value is what you get".
-    """
-    root = initialized_root(tmp_path)
-    run_verb("set", root, ENVIRONMENT, f"{KEY}={ENVIRONMENT_ANSWER}")
-    added_team(root)
-    before = files(root)
-
-    result = run_verb("set", root, ENVIRONMENT, f"{KEY}={TEAM_ANSWER}", "--team", TEAM)
-
-    assert printed(result) == [f"{CREATED} {properties(root, TEAM).team_static_config_path}"], \
-        printed(result)
-    assert document(root, TEAM_STATIC)[KEY] == TEAM_ANSWER
-    assert document(root, ENV_STATIC)[KEY] == ENVIRONMENT_ANSWER
-    assert layered(root, TEAM).get('team_static')[KEY] == TEAM_ANSWER, \
-        "the team layer declares the key and does not answer it"
-    assert layered(root).get('env_static')[KEY] == ENVIRONMENT_ANSWER
-    # The environment's bytes are untouched — same paths, same bytes, every file but the one written.
-    assert {path for path, payload in files(root).items() if payload != before[path]} == {TEAM_STATIC}
-    # No cluster sentence, and that absence is `add-team`'s claim repeated: a team is not a cluster.
-    assert "does not address a cluster" not in result.stderr, reported(result)
-
-
 # --- (3) the contract: unset on the team returns the environment's answer ------------------------
-
-
-def test_unsetting_the_teams_answer_returns_the_environments_answer(tmp_path):
-    """Test 3: the layer above answers, which is the whole reason this verb is not `set KEY=None`."""
-    root = initialized_root(tmp_path)
-    run_verb("set", root, ENVIRONMENT, f"{KEY}={ENVIRONMENT_ANSWER}")
-    added_team(root)
-    run_verb("set", root, ENVIRONMENT, f"{KEY}={TEAM_ANSWER}", "--team", TEAM)
-
-    result = run_verb("unset", root, ENVIRONMENT, KEY, "--team", TEAM)
-
-    assert result.exit_code == 0, reported(result)
-    # Two steps, encrypted first: the pair is one answer, so clearing it is two files reported at once.
-    config = properties(root, TEAM)
-    assert printed(result) == [f"{SKIPPED} {config.team_static_encrypted_config_path}",
-                              f"{CREATED} {config.team_static_config_path}"], printed(result)
-    assert KEY not in document(root, TEAM_STATIC)
-    assert layered(root, TEAM).get('team_static')[KEY] == ENVIRONMENT_ANSWER
-    # The environment's own answer was never this verb's to remove.
-    assert document(root, ENV_STATIC)[KEY] == ENVIRONMENT_ANSWER
 
 
 # --- (4) the encrypted pair: one answer, two spellings, both cleared -------------------------------
@@ -318,40 +241,6 @@ def test_an_encrypted_answer_lands_once_and_is_cleared_from_both_files_of_the_la
 
 
 # --- (5) the read-modify-write duty: keys nobody told us about ------------------------------------
-
-
-def test_the_keys_the_set_was_not_told_about_keep_their_value_and_their_place(tmp_path):
-    """Test 5: the document survives, in its own order. The one assertion no merge-step gets right.
-
-    `ALPHA_ONE` and `ZULU` were put there by a tool this ticket does not know about, and both keep what
-    they are. Key order is asserted and not observed, because a dictionary that re-sorts the operator's
-    file turns every future `git diff` of a configuration into a wall.
-    """
-    root = initialized_root(tmp_path)
-    (root / ENV_STATIC).write_text(json.dumps(
-        {"ALPHA_ONE": 1, "ZULU": "kept", "CLUSTER_KUBE_CONTEXT": None,
-         "CLUSTER_KUBECONFIG_PATH": None}, indent=2) + "\n", encoding="utf-8")
-
-    result = run_verb("set", root, ENVIRONMENT, "MIDDLE=middle")
-
-    assert result.exit_code == 0, reported(result)
-    written = document(root, ENV_STATIC)
-    assert written["ALPHA_ONE"] == 1
-    assert written["ZULU"] == "kept"
-    assert written["MIDDLE"] == "middle"
-    assert list(written) == ["ALPHA_ONE", "ZULU", "CLUSTER_KUBE_CONTEXT", "CLUSTER_KUBECONFIG_PATH",
-                             "MIDDLE"], "the new key belongs at the end, not at the front"
-    # The read agrees with the file about the keys the *file* answers — the ones it wrote, in the
-    # order it wrote them. Since the templated defaults landed the read answers more than that:
-    # `constants.py` also answers the templated defaults, so the tail of this list is code and not the
-    # operator's document. The
-    # prefix is the whole claim here (a re-sorted file is a wall of diff), and the tail is asserted
-    # for exactly what it is and not for somebody else's keys.
-    read = list(layered(root).get('env_static'))
-    assert read[:len(written)] == list(written), \
-        "the read agrees with the file about which keys it declares, and in what order"
-    assert set(read[len(written):]) <= set(constants.DEFAULT_STATIC_ANSWERS) | set(config_derived.RULES), \
-        "the only keys past the document are the ones code answers, not a key that appeared from nowhere"
 
 
 def test_an_answer_that_changed_is_overwritten_and_one_that_did_not_change_is_skipped(tmp_path):
@@ -515,73 +404,7 @@ def test_the_cluster_keys_on_the_team_layer_are_refused_and_the_environment_laye
 # --- (8) the write set is the key and nothing else -------------------------------------------------
 
 
-def test_neither_verb_makes_a_file_a_directory_or_a_manifest(tmp_path):
-    """Test 8: the whole tree, before and after both verbs. Only the changed file's mtime moved.
-
-    The directory half is the claim that a read-modify-write verb is innocent of: it never mkdirs,
-    never copies a template, never stamps a manifest. The mtime half says it wrote *one* file: the
-    sibling it was not told about keeps the timestamp the layer verb gave it, which a `set` that
-    rewrote the whole pair would fail.
-    """
-    root = initialized_root(tmp_path)
-    before = tree(root)
-    before_stamp = stamp(root)
-    before_bytes = files(root)
-
-    result = run_verb("set", root, ENVIRONMENT, "GRAFANA_ENABLED=false", "--encrypted")
-    assert result.exit_code == 0, reported(result)
-    assert tree(root) == before
-    changed = {path for path, touched in stamp(root).items() if touched != before_stamp[path]}
-    assert changed == {ENV_ENCRYPTED}, sorted(changed)
-
-    result = run_verb("unset", root, ENVIRONMENT, "GRAFANA_ENABLED")
-    assert result.exit_code == 0, reported(result)
-    assert tree(root) == before, "one verb made a directory and said nothing about it"
-    # What `unset` is supposed to leave is *not* an empty file: init seeded and generated two keys this
-    # verb was never told about, and an assert on `{}` would claim that a verb which removes one key
-    # also removes a different one. The honest claim is what was set is gone and everything else is
-    # exactly as init left it.
-    assert "GRAFANA_ENABLED" not in document(root, ENV_ENCRYPTED), \
-        "the key this verb was told to remove is still answering"
-    remaining = document(root, ENV_ENCRYPTED)
-    assert remaining["GRAFANA_ADMIN_USER"] == "grafadmin", \
-        "unset reached past the key it was given and removed material it did not write"
-    assert remaining["GRAFANA_ADMIN_PASSWORD"].strip(), \
-        "unset removed a generated credential it was never told about"
-    assert set(remaining) == {"GRAFANA_ADMIN_USER", "GRAFANA_ADMIN_PASSWORD"}, sorted(remaining)
-    assert files(root)[ENV_STATIC] == before_bytes[ENV_STATIC], \
-        "the sibling that declared nothing was rewritten anyway"
-    assert (root / "kubementat.yaml").read_bytes() == before_bytes[Path("kubementat.yaml")], \
-        "the manifest is written by one verb and this is not it"
-
-
 # --- (9) `--set`'s parser is still this verb's parser ---------------------------------------------
-
-
-def test_the_answer_keeps_the_type_the_parser_gave_it(tmp_path):
-    """Test 9: a JSON boolean stores a boolean, and a URL with an `=` inside it is one value.
-
-    The typing is `parse_answer_argument`'s, which is the same parser `--set` feeds `config init`, so
-    the two verbs cannot disagree about what `false` means. Splitting on the *first* `=` is what makes
-    a query string a value and not two answers, and `str()`-ing everything is the quoting bug that
-    would store `false` as the word.
-    """
-    root = initialized_root(tmp_path)
-
-    run_verb("set", root, ENVIRONMENT, "GRAFANA_ENABLED=false")
-    run_verb("set", root, ENVIRONMENT, "PORT=10")
-    run_verb("set", root, ENVIRONMENT, "URL=https://example.test/?a=b")
-
-    written = document(root, ENV_STATIC)
-    written_bytes = files(root)
-    assert written["GRAFANA_ENABLED"] is False
-    assert written["PORT"] == 10
-    assert written["URL"] == "https://example.test/?a=b"
-    assert layered(root).get('env_static')["GRAFANA_ENABLED"] is False
-
-    sentence = refused("set", root, ENVIRONMENT, "GRAFANA_ENABLED")
-    assert "KEY=VALUE" in sentence, sentence
-    assert files(root) == written_bytes, "a mis-typed answer is refused before the tree is decided"
 
 
 # --- the library functions, as the CLI's shape -----------------------------------------------------

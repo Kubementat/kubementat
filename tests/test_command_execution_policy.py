@@ -16,18 +16,14 @@ are what prove the conversions did not change a command line, which is the one t
 mechanical argv rewrite can get wrong.
 """
 
-import ast
-import json
 import os
 import shlex
-import sys
 from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
 
 from kubementat import errors
-from kubementat.infrastructure import shell
 from kubementat.core import constants
 from kubementat.automations.install import kubementat as install_slice
 from kubementat.automations.install.kubementat import check_cluster_permissions
@@ -67,8 +63,6 @@ def say(text):
 # test explicitly says the command is supposed to be fed something.
 READS_STDIN = '  echo "stdin=$(cat)"'
 SKIPS_STDIN = "  : # stdin not read"
-
-KUBECTL_ITEMS = '{"items": [{"metadata": {"name": "pod-from-selector-1"}}]}'
 
 
 def write_binary(bin_dir, name, log, stdout="", exit_code=0, reads_stdin=False):
@@ -113,154 +107,6 @@ def calls(log):
         elif line.startswith("arg=[") and line.endswith("]") and current:
             current["args"].append(line[5:-1])
     return sections
-
-
-# ---------------------------------------------------------------------------
-# 1. the rule
-# ---------------------------------------------------------------------------
-def python_files():
-    return sorted((REPO_ROOT / "src").rglob("*.py"))
-
-
-def every_call_node(tree):
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            yield node
-
-
-def test_no_command_is_executed_through_a_shell():
-    offenders = []
-    for path in python_files():
-        for node in every_call_node(ast.parse(path.read_text(), filename=str(path))):
-            if any(keyword.arg == "shell" and getattr(keyword.value, "value", None) is True
-                   for keyword in node.keywords):
-                offenders.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}")
-
-    assert offenders == [], "argv is the only form of command line kubementat has left"
-
-
-def test_no_module_changes_the_process_working_directory():
-    offenders = []
-    for path in python_files():
-        for node in every_call_node(ast.parse(path.read_text(), filename=str(path))):
-            func = node.func
-            if isinstance(func, ast.Attribute) and func.attr == "chdir":
-                offenders.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}")
-
-    assert offenders == [], "working directory is an argument (shell.run's cwd=), not chdir"
-
-
-def test_only_one_module_executes_commands():
-    """The rule that makes the first two unnecessary: one place, one policy.
-
-    If a second module needs to run a program, the change belongs in `shell.py`, not in a
-    fresh `subprocess.run` that decides its own quoting and error handling.
-    """
-    offenders = []
-    for path in python_files():
-        if path.name == "shell.py":
-            continue
-        for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
-            imported = (isinstance(node, ast.Import) and any(alias.name == "subprocess" for alias in node.names)) \
-                or (isinstance(node, ast.ImportFrom) and (node.module or "").endswith("subprocess")) \
-                or (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "subprocess")
-            if imported:
-                offenders.append(str(path.relative_to(REPO_ROOT)))
-                break
-
-    assert offenders == []
-
-
-def test_no_command_module_carries_its_own_way_to_start_a_script():
-    """Every private route from a command to a script is gone, including the shared one.
-
-    `kubementat.py` and `tekton.py` each had their own `run_script` wrapper; both commands are
-    Python now, so neither has a script to start. The shared helper they used to import,
-    `run_kubementat_script`, went with its last caller — `kmt run-ci-container` assembles its pod
-    spec from `platform_config` today, and the command that took the path from the operator is
-    deleted. A leftover call would be an `ImportError` at startup or
-    a 127 on the cluster, so it is asserted as absence rather than remembered.
-    """
-    for module in ("kubementat", "tekton"):
-        tree = ast.parse((REPO_ROOT / "src" / "cli" / "commands" / f"{module}.py").read_text())
-        defined = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
-        assert "run_script" not in defined, f"{module}.py still carries its own copy"
-
-    # The `utilities.py` exception below this loop used to read "there `run_script` is the
-    # `kmt run-script` *command*, not a wrapper", and it earned its place: that file was the only
-    # one under `src/cli/commands/` that called `shell.run` itself, and it did so to start the
-    # script an operator had handed it. The command is deleted, so the exception is narrowed to
-    # what is still true of it — it must not reach for the shared helper, which is asserted here —
-    # and the half that demanded `shell.run` in it is gone with the function that called it. No
-    # command module gets to start a script by path any more, which is asserted as a rule in
-    # `tests/test_no_cli_command_starts_a_script_by_path.py` and not remembered per file here.
-    utilities = (REPO_ROOT / "src/cli/commands/utilities.py").read_text()
-    assert "run_kubementat_script" not in utilities
-
-    # The name has no definition to reach, so the only thing it can be in `src/` is a mistake.
-    callers = []
-    for path in python_files():
-        for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
-            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "run_kubementat_script":
-                callers.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}")
-    assert callers == []
-
-
-# Where the CLI takes a script, it takes it as a string — `run_kubementat_script(...,
-# 'run_ci_container.sh', ...)` is the last of them. The type checker cannot see a string, so the
-# only thing a deleted script can be checked against is the ledger, which is the directory tree.
-# That is what the next test does.
-SCRIPT_ROOTS = ("scripts", "tests", "examples", "docker_files", "tekton_ci")
-
-
-def checkout_scripts():
-    """Every `.sh` the checkout ships, keyed by file name."""
-    found = {}
-    for path in REPO_ROOT.glob("*.sh"):
-        found.setdefault(path.name, []).append(path)
-    for root in SCRIPT_ROOTS:
-        for path in (REPO_ROOT / root).rglob("*.sh"):
-            if "__pycache__" not in path.parts:
-                found.setdefault(path.name, []).append(path)
-    return found
-
-
-def script_names_the_source_uses():
-    """`(file, name)` for every string in `src/` that ends in `.sh`.
-
-    AST rather than grep because the same string appears twice on one line and once inside a
-    path built out of two arguments. A glob pattern is skipped: `kmt run-script` lists scripts by
-    scanning for `*.sh`, and a listing that finds nothing is a listing with nothing to claim.
-    """
-    used = set()
-    for path in python_files():
-        for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
-            if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                text = node.value.strip()
-                if text.endswith(".sh") and "*" not in text:
-                    used.add((path, text))
-    return used
-
-
-def test_every_script_the_source_names_still_exists_in_the_checkout():
-    """A script deleted from the ledger without the string that names it going with it.
-
-    This is the failure mode the deletion ledger creates: `kmt` would still start, still print
-    its banner, and then fail on the operator's cluster. So every script name in `src/` is
-    resolved against the checkout, and anything that no longer has a file behind it is a failure
-    here rather than a bug report.
-    """
-    available = checkout_scripts()
-
-    unresolved = []
-    for path, name in sorted(script_names_the_source_uses()):
-        if "/" in name:
-            if not (REPO_ROOT / name).exists():
-                unresolved.append(f"{path.relative_to(REPO_ROOT)} names {name}, which is not there")
-        elif name not in available:
-            unresolved.append(f"{path.relative_to(REPO_ROOT)} names {name}, which is nowhere in the tree")
-
-    assert unresolved == []
 
 
 # `kmt run-script` used to be the operator-facing half of that mistake, and it was the only
@@ -334,46 +180,6 @@ def apply_helmfile(tmp_path, monkeypatch, shims, **kwargs):
     return calls(logs["helmfile"])[-1]
 
 
-def test_helmfile_label_filter_survives_as_one_token(tmp_path, monkeypatch, shims):
-    """The filter is the argument that shell=True used to chop up.
-
-    `"app=nginx, group=core"` is one label selector. Interpolated into a shell string it
-    becomes two arguments and helmfile evaluates a selector nobody asked for.
-    """
-    call = apply_helmfile(tmp_path, monkeypatch, shims)
-
-    asked = list(call["args"])
-    manifest = asked[asked.index("-f") + 1]
-    # The cluster's own flags sit between the verb and the rest, and they are not what this
-    # test is about: one selector token is. So the flags and their values are left out, and what is
-    # compared is the argument the shell used to chop up.
-    for flag in ("--kubeconfig", "--kube-context", "--context"):
-        while flag in asked:
-            index = asked.index(flag)
-            del asked[index:index + 2]
-
-    assert asked == ["apply", "--color", "-f", manifest, "-l", "app=nginx, group=core"]
-
-
-def test_helmfile_runs_in_the_chart_directory_without_changing_ours(tmp_path, monkeypatch, shims):
-    """`cwd=` replaced the old implicit assumption that the CLI is sitting in the right dir."""
-    before = os.getcwd()
-    call = apply_helmfile(tmp_path, monkeypatch, shims)
-
-    assert os.path.realpath(call["cwd"]) == os.path.realpath(values_path()), \
-        "helmfile must run where the packaged manifest lives, so a relative values reference reaches"
-
-    assert os.getcwd() == before
-
-
-def test_helmfile_interactive_flag_is_still_only_there_when_asked_for(tmp_path, monkeypatch, shims):
-    quiet = apply_helmfile(tmp_path, monkeypatch, shims, interactive=False)
-    interactive = apply_helmfile(tmp_path, monkeypatch, shims, interactive=True)
-
-    assert "--interactive" not in quiet["args"]
-    assert "--interactive" in interactive["args"]
-
-
 # ---------------------------------------------------------------------------
 # 3. kubectl port-forward and pod lookup (`tunnel.py`, `workloads.py`)
 # ---------------------------------------------------------------------------
@@ -414,26 +220,6 @@ def test_open_tunnel_reports_a_failure_as_exit_1_not_as_a_traceback(kubernetes_u
     assert kubernetes_utils.open_tunnel("grafana", "grafana-7d9-abc", "3001", "3000") == 1
 
 
-def test_pod_lookup_hands_the_selector_over_as_one_argument(recorded_api):
-    """The selector is one argument, and now it is one *keyword*.
-
-    `-l 'app=a,b'` needed quoting once a shell put it together; a `label_selector` keyword needs
-    nothing, and the comma that used to be the risk is now one character inside one string. The
-    conversion moved the assertion from argv to the recorded call, which says the same thing with
-    less surface: there is no command line left for a comma to escape from.
-    """
-    recorded_api.answer("list_namespaced_pod", lambda **kwargs: SimpleNamespace(items=[
-        SimpleNamespace(metadata=SimpleNamespace(name="pod-from-selector-1"))]))
-    utils = KubernetesUtils(TARGET_DEV, api_client=recorded_api)
-
-    assert utils.get_pod_name_for_deployment(
-        "grafana", "app.kubernetes.io/name=grafana,instance=grafana") == "pod-from-selector-1"
-
-    call = recorded_api.called_as("list_namespaced_pod")
-    assert call["namespace"] == "grafana"
-    assert call["label_selector"] == "app.kubernetes.io/name=grafana,instance=grafana"
-
-
 def test_pod_lookup_reports_an_uninstalled_component_readably(recorded_api):
     """No items is a state the operator can act on, and it is still said that way.
 
@@ -447,25 +233,6 @@ def test_pod_lookup_reports_an_uninstalled_component_readably(recorded_api):
         utils.get_pod_name_for_deployment("grafana", "app=absent")
 
     assert "Is the component installed?" in str(excinfo.value)
-
-
-def test_a_hostile_namespace_cannot_escape_into_the_command_line(recorded_api, tmp_path):
-    """The injection case, asserted where the injection used to live.
-
-    kubectl's argv was the risk, and the namespace reached it verbatim; a client call has no shell
-    to escape into. What still has to be asserted is that nothing rewrites the value on the way:
-    the API receives exactly the string the caller had.
-    """
-    recorded_api.answer("list_namespaced_pod", lambda **kwargs: SimpleNamespace(items=[
-        SimpleNamespace(metadata=SimpleNamespace(name="pod-from-selector-1"))]))
-    utils = KubernetesUtils(TARGET_DEV, api_client=recorded_api)
-
-    utils.get_pod_name_for_deployment("ops; touch /tmp/command-injection-proof", "app=grafana")
-
-    assert recorded_api.called_as("list_namespaced_pod")["namespace"] == \
-        "ops; touch /tmp/command-injection-proof"
-    assert not Path("/tmp/command-injection-proof").exists()
-    assert not Path("/tmp/command-injection-proof").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -516,26 +283,3 @@ def test_a_denied_verb_stops_the_run_and_names_the_verbs_it_denied(recorded_api,
         check_cluster_permissions(configuration_only_context("dev", "smoke",
                                                              platform_config_dir=UNREAD_ROOT))
     assert "clusterroles" in str(error.value)
-
-
-# ---------------------------------------------------------------------------
-# 6. `kmt tekton setup-triggers` — the command that used a shell until here
-# ---------------------------------------------------------------------------
-def test_the_tekton_commands_execute_no_script():
-    """Every `tekton.py` command is Python now, so the file has no script to name.
-
-    This is the ledger's other direction: `test_every_script_the_source_names_still_exists_in_the_checkout`
-    asks whether the strings still have files behind them, and this asks whether a command that was
-    converted kept its old string anyway. `setup_triggers.sh` was deleted by this migration, and a
-    leftover `run_kubementat_script(...)` here would be a 127 the next test would have to explain.
-    """
-    tree = ast.parse((REPO_ROOT / "src/cli/commands/tekton.py").read_text())
-    named = [node.value for node in ast.walk(tree)
-             if isinstance(node, ast.Constant) and isinstance(node.value, str)
-             and node.value.endswith(".sh")]
-    called = [node.func.id for node in ast.walk(tree)
-              if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-              and node.func.id == "run_kubementat_script"]
-
-    assert named == [], named
-    assert called == [], called

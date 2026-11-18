@@ -22,8 +22,7 @@ What it deliberately does **not** fake:
 import json
 import os
 import re
-from types import SimpleNamespace
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 # One recorded call per request, in the shape the shim log already uses: `apiserver` is the program,
 # and its arguments are the method and the path. A parity test can then read both halves of a run

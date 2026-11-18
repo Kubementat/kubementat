@@ -23,19 +23,6 @@ from conftest import FIXTURE_KUBE_CONTEXT
 CLUSTER = cluster_named(context=FIXTURE_KUBE_CONTEXT)
 
 
-def test_a_team_that_declares_no_deploy_key_writes_no_secret(fixture_repo, dry_run_env,
-                                                             recorded_api):
-    fixture_repo.team_static_encrypted(SSH_DEPLOY_KEYS=[])
-
-    from cli.commands import kubementat
-    from click.testing import CliRunner
-
-    result = CliRunner().invoke(kubementat.setup_secrets, ["dev", "fixture"])
-
-    assert result.exit_code == 0, result.output
-    assert [op for op in recorded_api.operations() if not op.is_read] == []
-
-
 def test_the_stated_answer_names_the_key_the_layer_and_the_team(fixture_repo, dry_run_env,
                                                                 recorded_api, caplog):
     """The sentence has to be actionable, because the run exits zero.

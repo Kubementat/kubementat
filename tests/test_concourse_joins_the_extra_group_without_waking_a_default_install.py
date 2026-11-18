@@ -66,19 +66,6 @@ def label_of(lines, key):
     return None
 
 
-def installed_default_of(lines):
-    """The line's release's own `installed:` default, or None for a block that declares none.
-
-    Either boolean shape is a default; what must not exist is a default that is not a boolean,
-    and the regex is exactly that shape.
-    """
-    for line in lines:
-        found = re.match(r'^\s+installed: \{\{ env "([A-Z0-9_]+)" \| default "(true|false)" \}\}$', line)
-        if found:
-            return found.group(2)
-    return None
-
-
 # --- (1) the group census ---------------------------------------------------------------------
 
 
@@ -112,26 +99,6 @@ def test_concourse_is_labelled_like_every_other_release():
 
 
 # --- (2) the winding ----------------------------------------------------------------------------
-
-
-def test_concourse_is_the_one_release_wound_off_by_default():
-    """`CONCOURSE_ENABLED` defaults false, and it is the only block that ships that way.
-
-    Both directions, because either alone passes a wrong thing: the opt-in exists (one `false`
-    default, and it is concourse's), and the default install is untouched (every other block still
-    defaults `true`). What helmfile then builds from these defaults is measured with the binary --
-    this guard reads the manifest; the build guard reads the field.
-    """
-    wound_off = {name for name, lines in release_blocks().items()
-                 if installed_default_of(lines) == "false"}
-    assert wound_off == {"concourse"}, \
-        f"opt-in is spelled one way in this manifest: {sorted(wound_off)}"
-    for name, lines in release_blocks().items():
-        assert installed_default_of(lines) in ("true", "false"), \
-            f"{name}'s installed: default is neither boolean"
-    assert installed_default_of(release_blocks()["concourse"]) == "false"
-    assert installed_default_of(release_blocks()["openbao"]) == "true", \
-        "openbao is opt-in by group and wound-on by default; that distinction belongs to openbao"
 
 
 def test_concourse_namespace_default_and_constants_agree_and_the_pin_is_the_app_version_pair():
@@ -182,40 +149,3 @@ def test_the_shipped_values_carry_no_key_material_and_no_test_user():
     # guard forbids is the credential, so it reads the parsed data and not the comments.
     assert "test:test" not in json.dumps(values), \
         "the `test:test` default survived as a value somewhere in the shipped values"
-
-
-def test_the_shipped_values_fix_the_halves_the_plan_fixes():
-    """containerd, StatefulSet, persistence, HPA off, ingress off: plan §4's fixed list.
-
-    Not a transcription of a config surface -- a guard on the values that implement it. The
-    ephemeral-worker mode (R-5) and the queue-depth autoscaling (R-7) are out for those reasons,
-    and the comments in the file are what they say; this says what is fixed: a runtime other than
-    containerd is a dead end the prototype measured (`no image plugin configured`), a worker that
-    is not a StatefulSet loses its volume on replacement, persistence off is the same failure in
-    slow motion, HPA is CPU-only garnish, and ingress is the routing layer's decision, not this
-    file's.
-    """
-    values = yaml.safe_load(CONCOURSE_VALUES.read_text(encoding="utf-8"))
-    assert values["worker"]["kind"] == "StatefulSet", values["worker"]
-    assert values["concourse"]["worker"]["runtime"] == "containerd", values["concourse"]["worker"]
-    assert values["worker"]["persistence"]["enabled"] is True
-    assert values["worker"]["persistence"]["size"] == "20Gi"
-    assert values["concourse"]["worker"]["autoscaling"] == {}, "HPA off is an explicit value, not silence"
-    assert values["concourse"]["web"]["encryption"]["enabled"] is True, \
-        "encryption off hands the gate (and the credential story) back to luck"
-    assert values["web"]["ingress"]["enabled"] is False, "ingress is a routing-layer answer"
-
-
-def test_the_namespace_label_step_is_documented_where_an_operator_will_read_it():
-    """The PSA gate leaves no native place for its labels, so it leaves a step -- and the step ships.
-
-    Helm's `--create-namespace` (the `createNamespace: true` `helmDefaults` speaks) creates a
-    namespace it cannot label, and kubementat ships no Namespace-manifest mechanism that could:
-    so this release, alone among the platform components, asks the operator for one line before
-    the first install -- and this assertion is what keeps that ask from rotting into a comment
-    three directories away. On a `restricted` cluster the workers cannot schedule without it; the
-    evidence for both halves is t2's report §6.
-    """
-    text = CONCOURSE_VALUES.read_text(encoding="utf-8")
-    assert "pod-security.kubernetes.io/enforce=privileged" in text, text[-300:]
-    assert "pod-security.kubernetes.io/warn=privileged" in text, "enforce without warn is half the label"

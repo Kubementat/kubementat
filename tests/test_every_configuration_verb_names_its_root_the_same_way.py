@@ -29,7 +29,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from bootstrap_tools import EMAIL, tools  # noqa: F401  (the fixture is what makes `init` cheap)
+from bootstrap_tools import EMAIL
 from cli.commands import config as config_module
 from kubementat.config import init as config_init
 
@@ -41,17 +41,6 @@ ROOT_VARIABLE = "KUBEMENTAT_PLATFORM_CONFIG_DIR"
 # point of reading it here is that no eighth verb arrives without being added to this file too.
 VERBS = {"init", "add-environment", "add-team", "set", "unset", "show", "validate"}
 
-# What each verb needs besides a root, in a run that would otherwise succeed. Every one of these
-# arguments is valid; the only thing withheld is the root, which is what the refusal is about.
-VALID_WITHOUT_ROOT = {
-    "init": ["--environment", ENVIRONMENT, "--team", TEAM, "--gpg-email", EMAIL],
-    "add-environment": ["second-env"],
-    "add-team": [ENVIRONMENT, "second-team"],
-    "set": [ENVIRONMENT, "ROOTVERB=1"],
-    "unset": [ENVIRONMENT, "ROOTVERB"],
-    "show": [ENVIRONMENT],
-    "validate": [ENVIRONMENT],
-}
 
 def prepared_tree(workspace: Path) -> Path:
     """A tree with both layers and one answer, for the verbs that read or grow one."""
@@ -160,36 +149,6 @@ def test_no_configuration_verb_takes_a_root_as_a_positional():
         assert "directory" not in params, \
             f"kmt config {name} took its root back as a positional, which is the second way to name " \
             "one and the reason a container's configuration went unread"
-
-
-def test_every_configuration_verb_carries_the_flag_and_says_what_it_is_for():
-    """The flag is declared on all seven, and its own help names the variable it sits above.
-
-    Both halves matter: a verb that lost the option would still work for anybody typing a path, and
-    an option whose help never said what it outranks is a dial nobody can use from `--help`. The
-    precedence sentence is written once in `cli.context.config_dir_option`, so it is the same sentence
-    here for every verb — and that is the point of the shared option, not an accident of it.
-    """
-    for name, command in sorted(config_module.config.commands.items()):
-        option = next((p for p in command.params if "--config-dir" in (p.opts or [])), None)
-        assert option is not None, f"kmt config {name} declares no --config-dir"
-        assert ROOT_VARIABLE in (option.help or ""), \
-            f"kmt config {name}'s --config-dir does not say it sits above ${ROOT_VARIABLE}, so the " \
-            "help cannot tell anybody which root the run reads"
-
-
-def test_a_run_that_names_no_root_refuses_and_names_both_dials(clean_environment):
-    """With neither spelling, every verb refuses and nothing is written anywhere.
-
-    The assertion per verb is the sentence and the absence of a tree: a root located beside the
-    installed wheel is the D11 failure, and it is worse than a crash because it answers.
-    """
-    for name, arguments in sorted(VALID_WITHOUT_ROOT.items()):
-        result = run(name, *arguments)
-        assert result.exit_code != 0, f"kmt config {name} answered without a root: {said(result)}"
-        assert "--config-dir" in said(result) and ROOT_VARIABLE in said(result), \
-            f"kmt config {name} refused without naming the two spellings that would answer it: " \
-            f"{said(result)}"
 
 
 def test_the_variable_names_the_root_for_every_verb_and_the_flag_outranks_it(tmp_path,

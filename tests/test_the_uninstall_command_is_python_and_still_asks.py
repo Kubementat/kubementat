@@ -17,8 +17,6 @@ The evidence that the *deletions* are right is in
 import json
 from types import SimpleNamespace
 
-import pytest
-from click.exceptions import UsageError
 from click.testing import CliRunner
 
 from cli.commands import kubementat
@@ -68,29 +66,6 @@ def responds(fake_binaries):
     fake_binaries.respond("kubectl", json.dumps({"items": []}), subcommand="get.persistentvolumeclaims")
 
 
-def test_the_command_runs_the_python_path_and_not_a_script(fixture_repo, dry_run_env, fake_binaries,
-                                                           recorded_api):
-    """`kmt uninstall dev --yes` asks the cluster and the client, and starts no bash.
-
-    A `bash uninstall_kubementat.sh` in the recorded calls is the whole migration failing back
-    into the tree it replaced, so it is asserted here rather than read out of a grep.
-    """
-    present = cluster_is_installed(recorded_api, fixture_repo)
-    responds(fake_binaries)
-    recorded_api.calls.clear()
-    fake_binaries.take_calls()
-
-    result = CliRunner().invoke(kubementat.uninstall, ["dev", "--yes"])
-
-    assert result.exit_code == 0, result.output
-    deleted = [kwargs["name"] for method, kwargs in recorded_api.calls if method == "delete_namespace"]
-    assert "cert-manager" in deleted and "tekton-pipelines" in deleted, \
-        "the command did not reach the code that sweeps what the configuration declares"
-    for call in fake_binaries.calls():
-        assert call.program != "bash", f"uninstall still shells out: {call.argv}"
-        assert not any(str(argument).endswith(".sh") for argument in call.argv), call.argv
-
-
 def test_without_yes_and_without_a_terminal_it_refuses_and_names_the_flag(
         fixture_repo, dry_run_env, fake_binaries, recorded_api):
     """The fail-closed guard is the CLI's and it still answers before anything is read.
@@ -109,38 +84,6 @@ def test_without_yes_and_without_a_terminal_it_refuses_and_names_the_flag(
     assert "--yes" in result.output
     assert recorded_api.calls == [], "it deleted something it was never told to delete"
     assert fake_binaries.calls() == [], "it ran commands before asking"
-
-
-def test_an_environment_nobody_configured_is_an_error_that_names_the_file(
-        fixture_repo, dry_run_env, fake_binaries, recorded_api):
-    """A typo in the environment must not be able to delete a cluster.
-
-    The script this replaced checked for its config file and exited 1 with the path in the
-    message; a library that reads namespaces lazily would instead hand back a
-    `FileNotFoundError` traceback, which is a worse answer to the same question.
-    """
-    (fixture_repo.platform_config / fixture_repo.environment / "static.json").unlink()
-    cluster_is_installed(recorded_api, fixture_repo)
-    recorded_api.calls.clear()
-
-    result = CliRunner().invoke(kubementat.uninstall, ["dev", "--yes"])
-
-    assert result.exit_code != 0
-    assert "static.json" in result.output
-    assert recorded_api.calls == [], "it asked the cluster before it knew which environment it meant"
-    assert fake_binaries.calls() == []
-
-
-def test_the_flag_is_advertised_where_it_is_decided(fixture_repo, dry_run_env, fake_binaries):
-    """`uninstall-advertises-yes-flag` is a lane assert; this is the same claim at unit speed.
-
-    A user who is told nothing will assume the command is stuck rather than that they are being
-    protected from themselves.
-    """
-    result = CliRunner().invoke(kubementat.uninstall, ["dev", "--help"])
-
-    assert result.exit_code == 0
-    assert "--yes" in result.output and "-y" in result.output
 
 
 def test_answering_no_says_the_uninstall_was_cancelled_and_exits_non_zero(

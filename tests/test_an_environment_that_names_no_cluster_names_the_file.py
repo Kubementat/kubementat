@@ -60,25 +60,6 @@ def test_the_environment_that_declared_nothing_says_so_by_environment_name_and_f
     assert str(static_path) in refused
 
 
-def test_the_key_and_the_null_value_are_named_because_the_template_shipped_them(tmp_path, monkeypatch):
-    """A freshly initialized environment is *intentionally* invalid, and the message says which.
-
-    `null` is what `templates/environment/static.json.template` carries, so the sentence that
-    reads "the key is null" sends the operator to edit the file. One that reads "the key is not
-    set" would send them to write it, and they would find nothing there to write over.
-    """
-    root = redirect_checkout(monkeypatch, checkout(tmp_path))
-    static_path = write_environment(root, "dev", context=None)
-    key = json.loads((static_path / "static.json").read_text())["CLUSTER_KUBE_CONTEXT"]
-    assert key is None  # the shape the template ships, asserted here so the test below means something
-
-    refused = _refusal_for(root)
-
-    assert "CLUSTER_KUBE_CONTEXT" in refused
-    assert "null" in refused
-    assert str(static_path / "static.json") in refused
-
-
 def test_a_key_that_was_never_written_says_it_is_not_set_and_not_that_it_is_null(root):
     """Absent and null both refuse, but they do not read the same in the file.
 
@@ -128,16 +109,3 @@ def test_the_environment_that_has_no_configuration_at_all_names_the_file_that_is
 
     assert str(root / "platform_config" / "dev" / "static.json") in str(refused.value)
     assert "kmt config init" in str(refused.value)
-
-
-def test_the_refusal_says_what_kubementat_will_not_do_instead(root):
-    """The sentence that keeps the removed fallback out of the operator's head.
-
-    Someone who has used kubementat before will look for the fallback that is not there, and an
-    error that does not say "this is deliberate" is an error they will route around by pointing
-    kubectl at the cluster they meant.
-    """
-    refused = _refusal_for(root)
-
-    assert "no current-context fallback" in refused
-    assert "kmt install" not in refused

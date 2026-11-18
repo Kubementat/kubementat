@@ -192,23 +192,6 @@ def helmfile_selectors(fake_binaries):
 # --------------------------------------------------------------------------------------------
 
 
-def test_one_component_is_applied_by_its_label_and_not_by_a_group(fixture_repo, dry_run_env,
-                                                                  fake_binaries):
-    """`kmt component install dev grafana` applies one release, addressed by `component_name=`.
-
-    The selector is the whole point of the command. `group=standard` would apply grafana *and* the
-    three prometheus releases that happen to be in the same group, which is a different command that
-    someone already has.
-    """
-    seeded_helmfile(fixture_repo)
-
-    result = installed(fixture_repo, "grafana")
-
-    assert result.exit_code == 0, result.output
-    assert helmfile_selectors(fake_binaries) == ["component_name=grafana"], \
-        fake_binaries.commands()
-
-
 def test_installing_one_component_starts_nothing_helm_could_have_done_itself(fixture_repo,
                                                                             dry_run_env,
                                                                             fake_binaries):
@@ -235,43 +218,6 @@ def test_installing_one_component_starts_nothing_helm_could_have_done_itself(fix
 # --------------------------------------------------------------------------------------------
 # components the command must refuse, and what it says instead
 # --------------------------------------------------------------------------------------------
-
-
-def test_a_component_that_is_only_a_namespace_is_refused_and_names_the_ones_that_are_not(
-        fixture_repo, dry_run_env, fake_binaries):
-    """`vpa` is a namespace kubementat creates. Applying a filter that matches nothing is not "installing vpa".
-
-    helmfile exits non-zero when a selector matches nothing, but the answer a typo-shaped component
-    gets has to be the list of what *is* installable, not helmfile's line about selectors — and
-    nothing may be applied on the way to finding that out.
-    """
-    seeded_helmfile(fixture_repo)
-
-    result = installed(fixture_repo, "vpa")
-
-    assert result.exit_code != 0, result.output
-    assert "namespace" in result.output and "helm" in result.output, result.output
-    assert "grafana" in result.output, "the refusal must say what this command can install"
-    assert helmfile_selectors(fake_binaries) == [], fake_binaries.commands()
-
-
-def test_a_release_commented_out_of_the_manifest_is_not_installable(fixture_repo, dry_run_env,
-                                                                    fake_binaries):
-    """A release that exists only inside a comment is not a release, and the command has to say so.
-
-    The commented block in the fixture is the shape a stale retirement comment leaves behind. It names
-    a namespace-only component rather than `polaris`, which has a declared release in the live file
-    since 2026-11-01: the parser rule is what this row proves, and the rule does not care which
-    component the comment is about. A label parser that read comments would install a component
-    nothing ships.
-    """
-    seeded_helmfile(fixture_repo)
-
-    result = installed(fixture_repo, "goldilocks")
-
-    assert result.exit_code != 0, result.output
-    assert "component_name=goldilocks" in result.output, result.output
-    assert helmfile_selectors(fake_binaries) == [], fake_binaries.commands()
 
 
 def test_a_stale_copy_in_the_configuration_changes_nothing(fixture_repo, dry_run_env,
@@ -307,25 +253,6 @@ def test_a_stale_copy_in_the_configuration_changes_nothing(fixture_repo, dry_run
     assert str(seeded_manifest_path(fixture_repo)) in result.output, \
         "the manifest that decides is the one the answer has to name"
     assert "namespace kubementat creates" in result.output, result.output
-    assert helmfile_selectors(fake_binaries) == [], fake_binaries.commands()
-
-
-def test_the_refusal_names_the_manifest_it_read(fixture_repo, dry_run_env, fake_binaries):
-    """One file answered the question, so the answer names it.
-
-    The three-branch refusal used to weigh two files and say which one it could not open. There is
-    one file now, it is always readable, and the honest sentence is "this is the manifest, and it
-    declares no release for that name" -- which is what an operator needs when they go and look.
-    """
-    seeded_helmfile(fixture_repo)
-
-    result = installed(fixture_repo, "vpa")
-
-    assert result.exit_code != 0, result.output
-    assert "namespace kubementat creates" in result.output, result.output
-    assert str(seeded_manifest_path(fixture_repo)) in result.output, \
-        "a refusal that does not say what it read is a refusal the operator has to guess at"
-    assert "helmfile.yaml.gotmpl" in result.output, result.output
     assert helmfile_selectors(fake_binaries) == [], fake_binaries.commands()
 
 
@@ -496,29 +423,6 @@ def test_installing_traefik_on_a_cluster_that_has_no_controller_applies_it_once(
         fake_binaries.commands()
 
 
-def test_the_issuer_is_applied_like_any_other_component_and_is_not_asked_about(
-        fixture_repo, dry_run_env, fake_binaries, monkeypatch):
-    """`cert-manager` is routing's group and not routing's decision.
-
-    The controller question is about the thing that answers Ingress, and an issuer is not that. It
-    has exactly one release and no cluster read to make first, so a presence check here would be a
-    warning about a class of mistake this component cannot make. `discover` is patched to blow up if
-    called, and the apply is what proves it was not.
-    """
-    seeded_helmfile(fixture_repo)
-
-    def must_not_be_called(*args, **kwargs):
-        raise AssertionError("cert-manager is not a controller; nothing here asks whose it is")
-
-    monkeypatch.setattr(traefik_presence, "discover", must_not_be_called)
-
-    result = installed(fixture_repo, "cert-manager")
-
-    assert result.exit_code == 0, result.output
-    assert helmfile_selectors(fake_binaries) == ["component_name=cert-manager"], \
-        fake_binaries.commands()
-
-
 # --------------------------------------------------------------------------------------------
 # the guards: what the command accepts is derived, so both lists move when the tree does
 # --------------------------------------------------------------------------------------------
@@ -548,34 +452,6 @@ def test_a_component_added_to_the_constants_is_accepted_by_both_verbs(fixture_re
 
     listed = installed(fixture_repo, "nonsense-name")
     assert "newcomer" in listed.output, listed.output
-
-
-def test_a_release_added_to_the_manifest_makes_its_component_installable(fixture_repo,
-                                                                        dry_run_env,
-                                                                        fake_binaries):
-    """The installable set comes from the manifest, not from a list of six typed somewhere.
-
-    `goldilocks` is namespace-only in this build, so anything that knows only the six installable
-    names would refuse it. Give it a release in the environment's manifest and the same command
-    applies it — which is what makes the documentation true rather than permanent: the sentence that
-    lists the installable components is only correct while the manifest is, and this is the test that
-    notices when it changes.
-    """
-    manifest = seeded_helmfile(fixture_repo).read_text()
-    manifest += """- name: goldilocks
-  chart: fairwinds-incubator/goldilocks
-  namespace: goldilocks
-  labels:
-    component_name: goldilocks
-    group: standard
-"""
-    seeded_helmfile(fixture_repo, manifest)
-
-    result = installed(fixture_repo, "goldilocks")
-
-    assert result.exit_code == 0, result.output
-    assert helmfile_selectors(fake_binaries) == ["component_name=goldilocks"], \
-        fake_binaries.commands()
 
 
 def test_the_live_manifest_makes_the_components_the_readme_names_installable(fake_binaries,

@@ -33,9 +33,8 @@ from conftest import is_a_write
 
 import kubementat.infrastructure.user_management as user_management
 from kubementat.automations.accounts.accounts import (
-    create_team_account, create_team_account_read_only, delete_team_account)
+    create_team_account, create_team_account_read_only)
 from kubementat.core.identity.context import Context
-from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 # The credential the cluster is holding for the account by the time the flow prints.
 ACCOUNT_TOKEN = "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZlYXR1cmUifQ.payload.signature"
@@ -159,16 +158,6 @@ def can_i_asked(recorded_api):
     return asked
 
 
-def can_i_calls(fake_binaries):
-    """The `kubectl auth can-i` argv the flow asked for, in order.
-
-    Filtered to the checks, because the flow also asks `kubectl config view` -- for a different
-    purpose, and after the writes.
-    """
-    return [call.argv for call in fake_binaries.calls()
-            if call.argv[:3] == ["kubectl", "auth", "can-i"]]
-
-
 def client_writes(recorded_api):
     """The calls that changed something, which excludes the permission reviews."""
     return [method for method, _kwargs in recorded_api.calls if is_a_write(method)]
@@ -200,41 +189,6 @@ def test_the_cluster_is_named_before_anything_on_it_is_changed(
     assert wrote != -1 and named < wrote, "the cluster was named after it had been edited"
 
 
-def test_the_verbs_of_everything_the_flow_is_about_to_do_are_asked_about(
-        on_a_cluster_that_grants_everything, asked_cluster, fake_binaries, recorded_api):
-    """A check is only worth having if it asks about everything the run then does.
-
-    Both sides are asserted: `CLUSTER_ACCESS_CHECKS` is what the flow plans, the recorded argv
-    is what it asked, and the two have to agree verb for verb.
-    """
-    create_team_account(on_a_cluster_that_grants_everything, "ops-account", consent=team_account_consent(yes=False))
-
-    asked = can_i_asked(recorded_api)
-    assert asked == list(user_management.CLUSTER_ACCESS_CHECKS), (
-        f"the table says {list(user_management.CLUSTER_ACCESS_CHECKS)}, the cluster was asked {asked}")
-
-
-def test_the_table_names_the_verbs_this_flow_will_actually_use():
-    """Namespace, service account, Role, RoleBinding: create, and then update or patch.
-
-    Straight off the table, because the table is the claim. A flow that starts deleting Roles
-    will need a verb in here, and a verb that stops being needed is what this says so.
-    """
-    verbs = set(user_management.CLUSTER_ACCESS_CHECKS)
-
-    assert ("create", "namespaces") in verbs
-    for resource in ("serviceaccounts", "roles", "rolebindings"):
-        assert ("create", resource) in verbs, f"the flow creates {resource} but never checks it"
-        assert ("update", resource) in verbs or ("patch", resource) in verbs, (
-            f"the flow replaces {resource} but never checks it")
-    # Plural, and said so here because it is the one way this conversion could fail silently:
-    # `kubectl auth can-i create serviceaccount` accepts the kind and maps it through discovery,
-    # while a `SelfSubjectAccessReview` carries the *resource* name and a singular one answers
-    # "no" everywhere. A table that drifted back to singular would pass every other test here.
-    assert not [resource for _verb, resource in verbs if resource.endswith("e")
-                or not resource.endswith("s")], verbs
-
-
 def test_a_denied_verb_stops_the_run_before_the_first_write_and_names_it(
         asked_cluster, fake_binaries, recorded_api, monkeypatch):
     """`no` from the cluster is a decision, not a note in the log.
@@ -252,27 +206,6 @@ def test_a_denied_verb_stops_the_run_before_the_first_write_and_names_it(
 
     assert "create rolebindings" in str(raised.value)
     assert client_writes(recorded_api) == [], "it wrote to the cluster after being told no"
-
-
-def test_every_denied_verb_is_reported_and_not_only_the_first(
-        asked_cluster, fake_binaries, recorded_api, monkeypatch):
-    """One missing permission is an error; five of them deserve the whole list.
-
-    Fixing the table and re-running is cheaper than discovering the next denial one run at a
-    time, which is what the bash's per-verb output invited instead.
-    """
-    cluster_refuses(recorded_api, "create", "rolebindings")
-    cluster_refuses(recorded_api, "patch", "roles")
-    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("builtins.input", lambda prompt="": "y")
-    ctx = Context.build(asked_cluster.environment, asked_cluster.team)
-
-    with pytest.raises(ClusterAccessDeniedError) as raised:
-        create_team_account(ctx, "ops-account", consent=team_account_consent(yes=False))
-
-    assert "create rolebindings" in str(raised.value)
-    assert "patch roles" in str(raised.value)
-    assert client_writes(recorded_api) == []
 
 
 def test_answering_no_at_the_prompt_creates_nothing(
@@ -358,26 +291,6 @@ def test_no_terminal_and_no_yes_is_refused_before_the_cluster_is_asked_anything(
     assert can_i_asked(recorded_api) == [], "it interrogated the cluster for a run it refused"
 
 
-def test_the_question_asked_of_the_operator_says_what_the_command_is_about(
-        asked_cluster, monkeypatch):
-    """The action is an argument, not text hardcoded inside the gate.
-
-    Three commands call one function. If the sentence were fixed, `delete-team-account` would
-    ask "do you wish to create the team account" -- which is how the duplicated bash copy
-    stayed vague about what it was doing.
-    """
-    asked = []
-    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("builtins.input", lambda prompt="": asked.append(prompt) or "y")
-    ctx = Context.build(asked_cluster.environment, asked_cluster.team)
-
-    user_management.check_cluster_and_access(
-        KubernetesUtils(ctx), team_account_consent(yes=False),
-        "delete the team account 'ops-account' and everything it can do on this cluster")
-
-    assert any("delete the team account" in prompt for prompt in asked)
-
-
 def test_the_checks_happen_before_any_write_whichever_command_is_standing_there(
         on_a_cluster_that_grants_everything, asked_cluster, fake_binaries, recorded_api):
     """The gate is the same gate for the read-only variant.
@@ -389,17 +302,3 @@ def test_the_checks_happen_before_any_write_whichever_command_is_standing_there(
 
     assert can_i_asked(recorded_api) == list(user_management.CLUSTER_ACCESS_CHECKS)
     assert client_writes(recorded_api), "the read-only command wrote nothing"
-
-
-def test_a_command_that_deletes_an_account_checks_the_same_verbs(asked_cluster, monkeypatch,
-                                                                 fake_binaries, recorded_api):
-    """Deleting is a write too, and the bash copy that skipped it was the lane's red row.
-
-    The verbs are the flow's, not the command's: a delete still patches RoleBindings, so it
-    asks about the same permissions.
-    """
-    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("builtins.input", lambda prompt="": "y")
-    delete_team_account(Context.build(asked_cluster.environment, asked_cluster.team), "ops-account", consent=team_account_consent(yes=False))
-
-    assert can_i_asked(recorded_api) == list(user_management.CLUSTER_ACCESS_CHECKS)

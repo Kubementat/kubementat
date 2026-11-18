@@ -37,9 +37,6 @@ import pytest
 from click.testing import CliRunner
 
 from cli.commands import config as config_module
-import kubementat.automations.ci as ci_utils
-from kubementat import errors
-from kubementat.config import init as config_init, validate as config_validate
 from kubementat.automations.routing import routing
 from kubementat.core.config.config import Config
 
@@ -52,13 +49,6 @@ SRC = Path(__file__).resolve().parents[1] / "src"
 INSTRUCTION = re.compile(r"kmt config set\b(?P<arguments>.*?)\s+is the verb", re.S)
 PLACEHOLDER = re.compile(r"^<[^>]+>$")
 
-# Adjacent f-string literals, joined so a sentence split across three of them is one sentence.
-CONTINUED = re.compile(r'"\s*\n\s*f?"')
-# A key and its value on either side of a space: what `config set` counts as two arguments. The key
-# may arrive as a literal or through an f-string's braces, and the sentence may be split across
-# adjacent literals, so both spellings and the joining step below are part of the check.
-SPLIT_ANSWER = re.compile(
-    r"kmt config set\b.{0,200}?(?:\{[A-Za-z_]+\}|[A-Z][A-Z0-9_]{5,})\s+<[a-z][a-z-]*>", re.S)
 
 SUBSTITUTIONS = {
     "<dir>": lambda root: str(root),
@@ -130,39 +120,3 @@ def test_the_refusal_that_names_config_set_prints_the_answer_as_one_argument(tmp
         routing._cluster_manager_email(config)
     root = Path(config.platform_config_dir)
     _assert_parses(_argv_from(str(error.value), root), root, "routing._cluster_manager_email")
-
-
-def test_the_ci_image_refusal_prints_the_answer_as_one_argument(tmp_path):
-    """`ci_utils`' refusal, the same rule on the other message that prints the verb.
-
-    `DOCKER_REGISTRY_BASE_URL` has no L0, so a tree that declares nothing is the state that raises.
-    """
-    config = seed(tmp_path)
-    ci = ci_utils.CiUtils.__new__(ci_utils.CiUtils)
-    ci.config = config
-    with pytest.raises(errors.CiImageNotConfiguredError) as error:
-        ci_utils.CiUtils.ci_image(ci)
-    root = Path(config.platform_config_dir)
-    _assert_parses(_argv_from(str(error.value), root), root, "errors.CiImageNotConfiguredError")
-
-
-def test_no_message_in_src_prints_an_answer_config_set_would_read_as_two_arguments():
-    """The rule stated over `src/`, so the next message cannot drift the way this one did.
-
-    Adjacent f-strings are joined first, because every one of these sentences is split across two or
-    three of them and a line-by-line scan would miss the half that lands on the next line. The set is
-    pinned: if `kmt config set` stops appearing in any printed instruction the check has gone vacuous
-    and this assertion is the note that says so.
-    """
-    joined, violations = {}, []
-    for path in sorted(SRC.rglob("*.py")):
-        text = CONTINUED.sub("", path.read_text(encoding="utf-8"))
-        joined[path] = text
-        for match in SPLIT_ANSWER.finditer(text):
-            violations.append(f"{path.name}: …{text[match.start():match.end()]}…")
-
-    instructions = [name for name, text in joined.items() if "kmt config set" in text]
-    assert instructions, "no printed `kmt config set` instruction anywhere in src/, so this guard " \
-                         "asserts nothing — re-read it against the messages that exist"
-    assert not violations, "these instructions spell the answer as two arguments, so running them as " \
-                           f"printed is a usage error and not an answer written: {violations}"

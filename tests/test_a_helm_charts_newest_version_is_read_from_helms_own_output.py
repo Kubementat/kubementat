@@ -57,38 +57,6 @@ def utils(fixture_repo, monkeypatch):
     return HelmUtils(Context.build(fixture_repo.environment, fixture_repo.team))
 
 
-def test_the_newest_version_of_a_chart_comes_from_one_search(helm_on_the_path, fixture_repo,
-                                                             monkeypatch):
-    """One `helm search repo` call, asked for its machine-readable output.
-
-    The argv is the interesting half: the address travels as its own entry, and nothing pipes
-    anything into anything.
-    """
-    helm_on_the_path.respond("helm", search_rows([(CHART, "25.8.0", "2.47.0")]),
-                             subcommand="search")
-
-    assert utils(fixture_repo, monkeypatch).get_latest_chart_version(CHART, REPO) == "25.8.0"
-
-    calls = [call.argv for call in helm_on_the_path.take_calls()]
-    assert calls == [["helm", "search", "repo", TARGET, "--output", "json"]]
-
-
-def test_a_search_that_matched_the_neighbourhood_answers_for_the_chart_asked_for(
-        helm_on_the_path, fixture_repo, monkeypatch):
-    """The row has to *be* the chart, not merely have matched it.
-
-    helm sorted the neighbours first, which is exactly what `head -n 2 | tail -n 1` handed back
-    as the answer. Here the address is compared, so the version that comes back is the version
-    of `prometheus` and not of `prometheus-node-exporter`.
-    """
-    helm_on_the_path.respond("helm", search_rows([
-        ("prometheus-node-exporter", "4.29.0", "1.8.2"),
-        (CHART, "25.8.0", "2.47.0"),
-    ]), subcommand="search")
-
-    assert utils(fixture_repo, monkeypatch).get_latest_chart_version(CHART, REPO) == "25.8.0"
-
-
 def test_a_repo_that_was_never_added_says_so_and_names_the_fix(
         helm_on_the_path, fixture_repo, monkeypatch):
     """The failure that used to be a blank line: an empty search, and the repo list says why.

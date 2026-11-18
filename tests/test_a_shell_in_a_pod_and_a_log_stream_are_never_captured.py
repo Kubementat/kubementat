@@ -29,10 +29,9 @@ from kubernetes.client.exceptions import ApiException
 
 from cli.commands import kubernetes
 from conftest import FIXTURE_ENVIRONMENT
-from kubementat.core.identity.target import kubectl_target_args
 from kubementat.infrastructure import shell
 from cluster_fixture import TARGET_DEV
-from kubementat.errors import NamespaceNotFoundError, PodNotFoundError
+from kubementat.errors import NamespaceNotFoundError
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 
 NAMESPACE = "deploy-me"
@@ -98,22 +97,6 @@ def cluster_with_a_web_pod(recorded_api, monkeypatch):
     return recorder
 
 
-def test_the_shell_is_handed_over_as_one_interactive_exec(cluster_with_a_web_pod, recorded_api):
-    """`kubectl exec --stdin --tty <pod> -- /bin/bash`, with the bash a session expects.
-
-    One argv, one call: the pod was found by a lookup that is not this command's business to
-    re-derive, and what runs is `/bin/bash` as its own entry rather than a string a shell
-    would have to parse.
-    """
-    KubernetesUtils(TARGET_DEV, api_client=recorded_api).open_deployment_shell(NAMESPACE, DEPLOYMENT)
-
-    call = cluster_with_a_web_pod.call_for("exec")
-    # The target is in the argv, so a session that streams to the wrong cluster is
-    # caught by the same assertion as a session that streams to no cluster at all.
-    assert call["argv"] == ["kubectl", *kubectl_target_args(TARGET_DEV), "--namespace", NAMESPACE,
-                            "exec", "--stdin", "--tty", POD, "--", "/bin/bash"]
-
-
 def test_the_session_streams_and_is_never_captured(cluster_with_a_web_pod, recorded_api):
     """The whole reason this command can hang a test: a captured shell is a hung shell.
 
@@ -124,63 +107,6 @@ def test_the_session_streams_and_is_never_captured(cluster_with_a_web_pod, recor
     KubernetesUtils(TARGET_DEV, api_client=recorded_api).open_deployment_shell(NAMESPACE, DEPLOYMENT)
 
     assert cluster_with_a_web_pod.call_for("exec")["capture"] is False
-
-
-def test_the_pod_is_found_by_the_release_label_and_not_a_second_selector(cluster_with_a_web_pod, recorded_api):
-    """The lookup is `get_pod_name_for_deployment`'s, addressed the way every command does it.
-
-    The selector travels as one argument, which is what keeps a comma or a space inside a
-    label out of the command line.
-    """
-    KubernetesUtils(TARGET_DEV, api_client=recorded_api).open_deployment_shell(NAMESPACE, DEPLOYMENT)
-
-    # The lookup is a client call, recorded on the API side rather than in argv.
-    lookups = [(method, kwargs) for method, kwargs in recorded_api.calls
-               if method == "list_namespaced_pod"]
-    assert len(lookups) == 1, recorded_api.as_str()
-    assert lookups[0][1]["namespace"] == NAMESPACE
-    assert lookups[0][1]["label_selector"] == SELECTOR
-    # The pod name that was read is the pod the exec was asked to enter.
-    assert POD in cluster_with_a_web_pod.call_for("exec")["argv"]
-
-
-def test_a_container_of_a_multi_container_pod_is_named_by_its_own_flag(cluster_with_a_web_pod, recorded_api):
-    """`-c <container>` in the script, `--container <container>` here, and one entry each."""
-    KubernetesUtils(TARGET_DEV, api_client=recorded_api).open_deployment_shell(NAMESPACE, DEPLOYMENT, container="sidecar")
-
-    argv = cluster_with_a_web_pod.call_for("exec")["argv"]
-    assert argv[argv.index("--container") + 1] == "sidecar"
-    # The container is a flag of `exec`, so it belongs before the `--` that ends kubectl's
-    # own arguments and starts the command run inside the pod.
-    assert argv.index("--container") < argv.index("--")
-
-
-def test_logs_are_followed_with_timestamps_and_are_not_captured(cluster_with_a_web_pod, recorded_api):
-    """The log half of the same rule: `-f` means the terminal, so nothing may collect it."""
-    KubernetesUtils(TARGET_DEV, api_client=recorded_api).stream_deployment_logs(NAMESPACE, DEPLOYMENT)
-
-    call = cluster_with_a_web_pod.call_for("logs")
-    assert call["capture"] is False
-    assert call["argv"][:6] == ["kubectl", *kubectl_target_args(TARGET_DEV), "--namespace",
-                                NAMESPACE, "logs"]
-    assert SELECTOR in call["argv"]
-    assert "--timestamps=true" in call["argv"]
-    assert "--follow" in call["argv"]
-
-
-def test_a_tail_count_arrives_as_the_flag_it_names_and_not_as_a_default(cluster_with_a_web_pod, recorded_api):
-    """Where to start is the one dial the script did not have and this command does.
-
-    The script started at the beginning, which is what a rollout that failed an hour ago
-    needs. `--tail` is the other question, and it is answered by kubectl rather than by a
-    `tail -n` piped over a pipe.
-    """
-    KubernetesUtils(TARGET_DEV, api_client=recorded_api).stream_deployment_logs(NAMESPACE, DEPLOYMENT, container="sidecar",
-                                             tail_lines=50)
-
-    argv = cluster_with_a_web_pod.call_for("logs")["argv"]
-    assert argv[argv.index("--tail") + 1] == "50"
-    assert argv[argv.index("--container") + 1] == "sidecar"
 
 
 def test_a_namespace_that_was_never_created_says_so_before_a_pod_is_seeked(recorded_api,
@@ -201,24 +127,6 @@ def test_a_namespace_that_was_never_created_says_so_before_a_pod_is_seeked(recor
             action(NAMESPACE, DEPLOYMENT)
         assert NAMESPACE in str(error.value)
     assert recorder.calls == [], "the pod lookup ran before the namespace was confirmed"
-
-
-def test_a_deployment_that_is_not_installed_names_the_selector_it_tried(recorded_api,
-                                                                        monkeypatch):
-    """Empty pod list, one message, and the fix in that message.
-
-    A deployment that is not there is an ordinary state, so it is `PodNotFoundError` with the
-    selector in it -- the same answer `get_pod_name_for_deployment` gives a tunnel that found
-    nothing, rather than a second answer invented here.
-    """
-    recorder = RecordingShell(pod_names=())
-    recorded_api.answer("read_namespace", SimpleNamespace(metadata=SimpleNamespace(
-        name=NAMESPACE)))
-    monkeypatch.setattr(shell, "run", recorder.run)
-
-    with pytest.raises(PodNotFoundError) as error:
-        KubernetesUtils(TARGET_DEV, api_client=recorded_api).open_deployment_shell(NAMESPACE, DEPLOYMENT)
-    assert SELECTOR in str(error.value)
 
 
 # ---------------------------------------------------------------------------

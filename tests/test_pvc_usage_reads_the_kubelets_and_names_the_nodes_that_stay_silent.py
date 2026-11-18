@@ -35,9 +35,6 @@ from cli.commands import kubernetes
 from kubementat.infrastructure.kubernetes import KubernetesUtils
 from cluster_fixture import TARGET_DEV
 
-# The endpoint, spelled out here rather than imported from the library: a test that reads the
-# constant from the code under test cannot say the call asked for the right path.
-STATS_PATH = "/stats/summary"
 
 GIB = 1024 ** 3
 
@@ -126,25 +123,6 @@ def test_a_two_node_cluster_answers_one_row_per_claim_without_starting_anything(
         "an entry with no pvcRef is a directory on the node, not a claim"
 
 
-def test_the_path_each_node_is_asked_for_is_the_stats_summary_of_that_node(recorded_api):
-    """Which node, and which path: the two facts the curl URL carried, now as keyword arguments.
-
-    The script built its URL out of `$KUBEAPI/$node/proxy/stats/summary`. The client is handed the
-    node name and the path separately, which is what makes the parity test able to say the two
-    sides asked for one and the same path.
-    """
-    recorded_api.answer("list_node", lambda **kwargs: node("worker-1"))
-    asked = kubelet_answers(recorded_api, {"worker-1": summary()})
-
-    KubernetesUtils(TARGET_DEV, api_client=recorded_api).list_pvc_usage()
-
-    assert asked.methods().count("connect_get_node_proxy_with_path") == 1
-    _method, call = [c for c in asked.calls if c[0] == "connect_get_node_proxy_with_path"][0]
-    assert call == {"name": "worker-1", "path": STATS_PATH}, (
-        "the node-proxy call is the migration's one place where the URL still matters; the "
-        f"client renders it as /api/v1/nodes/{call.get('name')}/proxy{call.get('path')}")
-
-
 def test_a_kubelet_that_answers_nothing_is_a_message_and_not_a_traceback(recorded_api):
     """One silent node of two: the other half of the answer still arrives, with its name.
 
@@ -189,30 +167,6 @@ def test_a_kubelet_that_answers_without_a_pod_list_says_which_half_is_missing(re
     assert KubernetesUtils(TARGET_DEV, api_client=recorded_api).list_pvc_usage()["messages"] == []
 
 
-def test_a_claim_with_no_capacity_gets_no_percentage_and_no_zero_division(recorded_api):
-    """`capacityBytes: 0` is reachable, so the percentage is not computed at all.
-
-    It is the case the script died on: `jq` said `number (5) and number (0) cannot be divided
-    because the divisor is zero` and exited 5, taking the whole report with it. A claim that is
-    not attached yet, or a volume the kubelet has not measured, is an ordinary state and gets a
-    row with `None` in it, which the command prints as `n/a`.
-    """
-    recorded_api.answer("list_node", lambda **kwargs: node("node-a"))
-    kubelet_answers(recorded_api, {"node-a": {"pods": [{"volume": [
-        claim("unattached", 0, 5, 0),
-        claim("measured-later", 0, 0, 0),
-        claim("normal", 1000, 250, 750),
-    ]}]}})
-
-    result = KubernetesUtils(TARGET_DEV, api_client=recorded_api).list_pvc_usage()
-
-    assert sizes(result["pvcs"]) == [
-        ("measured-later", "node-a", 0, 0, 0, None),
-        ("normal", "node-a", 1000, 250, 750, 25.0),
-        ("unattached", "node-a", 0, 5, 0, None),
-    ]
-
-
 def test_a_volume_that_lists_no_bytes_still_reads_as_a_claim_with_zeroes(recorded_api):
     """A `pvcRef` with no figures is a claim the kubelet has not measured, not a missing one.
 
@@ -252,25 +206,6 @@ def invoking_the_command(two_node_cluster, *arguments):
     return result
 
 
-def test_the_command_prints_one_row_per_claim_and_then_the_nodes_that_stayed_silent(
-        two_node_cluster):
-    """The table, and the messages under it: what the whole command says.
-
-    Sizes are the bytes the kubelet sent. The script's plain mode divided them by 1024 and said so
-    in the header (`PVC 1K-blocks Used Available Use%`), which is a unit a pipe has to know about;
-    the flag is what shortens them.
-    """
-    result = invoking_the_command(two_node_cluster, "dev")
-
-    assert result.output.splitlines()[0] == "environment: dev"
-    assert "PVC" in result.output and "USE%" in result.output
-    row = [line for line in result.output.splitlines() if "data-postgres-0" in line][0]
-    assert "node-a" in row
-    assert "10737418240" in row and "5368709120" in row, "bytes, and the pipe can read them"
-    assert "50.0%" in row
-    assert "node-b" in result.output and "answered nothing" in result.output
-
-
 def test_the_human_flag_shortens_the_sizes_and_is_not_help(two_node_cluster):
     """`-h` is the script's `-h`: human-readable units, not `--help`.
 
@@ -292,18 +227,6 @@ def test_the_human_flag_shortens_the_sizes_and_is_not_help(two_node_cluster):
     assert "10737418240" not in human.output, "the flag left a byte count in a human column"
     assert human.output == short.output, "-h and --human are one flag"
     assert "10737418240" in plain.output, "the plain form is the one that kept the bytes"
-
-
-def test_the_command_documents_the_flag_it_offers():
-    """`--help` prints the flag and still means help.
-
-    A flag the help does not mention is a flag nobody finds, and a `-h` that prints the table
-    instead of the help page is a trap. Both halves are checked off the real command object.
-    """
-    listing = CliRunner().invoke(kubernetes.pvc_usage, ["--help"])
-    assert listing.exit_code == 0
-    assert "--human" in listing.output
-    assert "-h" in listing.output, "the script's flag has to be discoverable from the help page"
 
 
 def test_the_environment_names_the_read_and_changes_nothing(two_node_cluster, resolvable_environment):

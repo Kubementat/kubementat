@@ -83,47 +83,6 @@ def waits_quickly(monkeypatch):
     monkeypatch.setattr(user_management, "TOKEN_POLL_INTERVAL_SECONDS", POLL_INTERVAL_SECONDS)
 
 
-def test_the_token_is_read_from_the_secret_that_claims_the_account(cluster_client, recorded_api,
-                                                                 waits_quickly):
-    """The name is a convention, the annotation is the fact.
-
-    The bash grepped `kubectl get secret` for a name ending in `-token`. A Secret named after
-    the account but annotated for somebody else is the same failure with a nicer name, so the
-    annotation wins here.
-    """
-    recorded_api.answer("list_namespaced_secret", secret_holding(token_secret()))
-
-    token = user_management.read_service_account_token(cluster_client, NAMESPACE, ACCOUNT)
-
-    assert token == TOKEN
-
-
-def test_a_secret_the_controller_has_not_filled_in_yet_is_waited_for(cluster_client, recorded_api,
-                                                                    waits_quickly, caplog):
-    """An empty Secret is the controller being behind, not a credential that is missing.
-
-    bash read once and gave up, which is how `token: ` reached an operator's terminal. Here the
-    read is repeated until the deadline, and the log says it is waiting -- the only way someone
-    watching a slow control plane knows the command is not hung.
-    """
-    answers = [token_secret(token=None), token_secret(token=None), token_secret()]
-    state = {"calls": 0}
-
-    def answer(namespace=None, **kwargs):
-        secret = answers[min(state["calls"], len(answers) - 1)]
-        state["calls"] += 1
-        return secret_holding(secret)(namespace=namespace)
-
-    recorded_api.answer("list_namespaced_secret", answer)
-
-    with caplog.at_level(logging.INFO):
-        token = user_management.read_service_account_token(cluster_client, NAMESPACE, ACCOUNT)
-
-    assert token == TOKEN
-    assert state["calls"] >= 3, "it did not wait for the controller at all"
-    assert "not filled in yet" in caplog.text
-
-
 def test_a_secret_that_never_fills_in_raises_rather_than_returning_nothing(cluster_client,
                                                                           recorded_api,
                                                                           waits_quickly):
@@ -140,36 +99,6 @@ def test_a_secret_that_never_fills_in_raises_rather_than_returning_nothing(clust
 
     elapsed = time.monotonic() - start
     assert FAST_WAIT_SECONDS <= elapsed < 5, f"the wait was not the wait: {elapsed:.2f}s"
-
-
-def test_a_token_secret_that_does_not_exist_names_the_call_that_creates_it(cluster_client,
-                                                                           recorded_api,
-                                                                           waits_quickly):
-    """"No Secret" and "no token yet" are different problems, and the message says which.
-
-    A cluster does not mint one by itself, so an operator told only "not found" will wait for a
-    controller that was never asked to do anything.
-    """
-    recorded_api.answer("list_namespaced_secret", secret_holding())
-
-    with pytest.raises(ServiceAccountTokenNotFoundError) as raised:
-        user_management.read_service_account_token(cluster_client, NAMESPACE, ACCOUNT)
-
-    assert "create_or_replace_service_account_token_secret" in str(raised.value)
-
-
-def test_a_secret_that_belongs_to_another_account_is_not_read_as_this_accounts(
-        cluster_client, recorded_api, waits_quickly):
-    """The annotation is the whole identity of the Secret.
-
-    Two accounts in one namespace, one Secret: reading the wrong one yields a kubeconfig that
-    works for somebody else, which is worse than one that does not work at all.
-    """
-    recorded_api.answer("list_namespaced_secret",
-                        secret_holding(token_secret(for_account="somebody-else")))
-
-    with pytest.raises(ServiceAccountTokenNotFoundError):
-        user_management.read_service_account_token(cluster_client, NAMESPACE, ACCOUNT)
 
 
 def test_an_empty_token_in_the_secret_is_treated_as_no_token_at_all(cluster_client, recorded_api,

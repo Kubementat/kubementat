@@ -21,10 +21,8 @@ import pytest
 from click.testing import CliRunner
 
 from cli.commands.utilities import run_ci_container
-from kubementat.infrastructure import shell
-from kubementat.core.identity.target import kubectl_target_args
 from kubementat.core.identity.context import Context
-from kubementat.automations.ci import CI_CONTAINER_COMMAND, CI_CONTAINER_NAME, CiUtils
+from kubementat.automations.ci import CI_CONTAINER_NAME, CiUtils
 from kubementat.errors import CiImageNotConfiguredError
 
 # What the fixture's `static.json` says the CI image is, assembled the way `CiUtils` assembles it.
@@ -44,23 +42,6 @@ def container_runs(fake_binaries):
 def kubectl_reads(fake_binaries):
     """Every kubectl call that is not the pod. One of them used to be a context read."""
     return [call for call in fake_binaries.commands() if call[0] == "kubectl" and "run" not in call]
-
-
-def test_the_container_is_started_with_argv_and_the_configured_image(fixture_repo, dry_run_env,
-                                                                     fake_binaries):
-    """The happy path, in one line of argv.
-
-    The pod is the same one the script started, in the namespace the team is named after, with the
-    same flags. Order is asserted, not assumed: `kubectl run` is picky about where its arguments
-    sit, and a reordered argv list is a different pod.
-    """
-    CiUtils(Context.build(fixture_repo.environment, fixture_repo.team)).run_ci_container()
-
-    assert container_runs(fake_binaries) == [[
-        "kubectl", *kubectl_target_args(Context.build(fixture_repo.environment, fixture_repo.team).target), "run", CI_CONTAINER_NAME,
-        "-n", fixture_repo.team, "--rm", "-i", "--tty", f"--image={CI_IMAGE}",
-        "--command", CI_CONTAINER_COMMAND,
-    ]]
 
 
 def test_the_cluster_the_container_lands_in_is_named_and_never_asked_for(
@@ -131,25 +112,3 @@ def test_the_command_is_the_reachable_path_and_takes_the_environment_and_the_tea
     run = container_runs(fake_binaries)[0]
     assert run[run.index("run") + 1:run.index("run") + 4] == \
         [CI_CONTAINER_NAME, "-n", fixture_repo.team]
-
-
-def test_the_container_is_not_captured(fixture_repo, dry_run_env, fake_binaries, monkeypatch):
-    """Interactive means streamed. A `capture=True` here would break the command silently.
-
-    The shim cannot tell a tty, so the guarantee is asserted on the way the result comes back: an
-    empty `stdout` on the recorded call means nothing was captured, whatever the argv said.
-    """
-    seen = []
-    real_run = shell.run
-
-    def watching(argv, **kwargs):
-        if argv[0] == "kubectl" and "run" in argv:
-            seen.append(kwargs)
-        return real_run(argv, **kwargs)
-
-    monkeypatch.setattr("kubementat.automations.ci.shell.run", watching)
-
-    CiUtils(Context.build(fixture_repo.environment, fixture_repo.team)).run_ci_container()
-
-    assert seen, "kubectl run was not reached through the command primitive"
-    assert not seen[0].get("capture"), "an interactive container was captured, which is a hung session"

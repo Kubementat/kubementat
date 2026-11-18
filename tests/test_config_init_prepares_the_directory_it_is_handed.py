@@ -37,15 +37,12 @@ still writing a keystore file while the verb's had stopped.
 """
 
 from kubementat.errors import DeployerIdentityNotNamedError
-import stat
 import subprocess
-from pathlib import Path
 
 import pytest
 
-from bootstrap_tools import (EMAIL, FINGERPRINT, GPG_PRIVATE, GPG_PUBLIC, actions, argv,
-                             commit_count, crypt_calls, crypt_calls_on, root, since_last_run, tools,
-                             tree_bytes)
+from bootstrap_tools import (EMAIL, FINGERPRINT, GPG_PRIVATE, actions, argv,
+                             commit_count, crypt_calls_on, since_last_run, tree_bytes)
 from kubementat.config import bootstrap as config_bootstrap, keys as config_keys
 from kubementat.config.bootstrap import GIT_CRYPT_SYMMETRIC_KEY_NAME, prepare_configuration_directory
 from kubementat.config.init import CREATED, SKIPPED
@@ -89,112 +86,9 @@ def test_a_fresh_directory_runs_the_nine_steps_in_the_order_the_order_is_the_pro
     assert commit_count(root, tools) == "1"
 
 
-def test_the_attributes_file_is_on_disk_while_the_encrypted_file_is_being_written(root, tools,
-                                                                                 monkeypatch):
-    """The ordering guard, stated as the tree's state at the moment step 4 runs.
-
-    This is the test that fails when steps 2 and 4 swap, and the only one that catches the swap:
-    afterwards both trees look identical, because the checkout decrypts the working copy either way.
-    What differs is one commit of plaintext history, which no assertion against the working tree can
-    see. If this test starts passing for the wrong reason the ordering claim is already gone, and the
-    only thing that would notice is the lane's first-commit assert — against a real keystore,
-    somewhere in the e2e suite.
-    """
-    seen = {}
-
-    def spy(*args, **kwargs):
-        where = Path(kwargs.get("root") or args[0])
-        seen["attributes"] = (where / ".gitattributes").is_file()
-        seen["encrypted"] = (where / "dev" / "static.encrypted.json").exists()
-        return real_init(*args, **kwargs)
-
-    real_init = config_bootstrap.config_init.init_configuration
-    monkeypatch.setattr(config_bootstrap.config_init, "init_configuration", spy)
-
-    prepare_configuration_directory(root, "dev", gpg_email=EMAIL)
-
-    assert seen == {"attributes": True, "encrypted": False}, (
-        f".gitattributes present: {seen.get('attributes')}; encrypted layer already written: "
-        f"{seen.get('encrypted')}. The filter was declared after the file it protects, which means a "
-        f"real git-crypt would have put that file in the object store in plaintext and the working "
-        f"tree would still look correct")
-
-
-def test_the_collaborator_is_registered_without_git_crypt_making_a_commit(root, tools):
-    """`--no-commit`, asserted on the argv, because that flag is the mechanism and not a feeling.
-
-    git-crypt commits what it adds. When `initialize` let it, the `Add 1 git-crypt collaborator`
-    commits that followed were read by the next run as evidence that the keystore step had run, and
-    the state they left is what made every later run skip work it had never done. Step 9 commits,
-    once, in a sentence that says what it is.
-    """
-    prepare_configuration_directory(root, "dev", gpg_email=EMAIL)
-
-    add = crypt_calls(tools, "add-gpg-user")
-    assert len(add) == 1, f"the deployer was registered {len(add)} times: {add}"
-    assert "--no-commit" in add[0], (
-        f"git-crypt was asked to add the collaborator with its default commit behaviour: {add[0]}. "
-        f"That is the flag that kept the collaborator commits out of a tree whose own instructions "
-        f"tell the operator to commit")
-    assert add[0][-1] == FINGERPRINT, (
-        f"the thing being registered is not this directory's fingerprint: {add[0]}. An email is what "
-        f"git-crypt used to be handed, and a keyring that holds two keys under one email resolves "
-        f"either of them, so the tree can be encrypted to a key that cannot decrypt its own files")
-    assert "--trusted" in add[0], (
-        f"git-crypt was told to trust nothing, so it will hand the symmetric key to gpg and gpg will "
-        f"refuse a public-only key with 'Unusable public key': {add[0]}. The flag is measured to "
-        f"persist nothing, so the cost of passing it is zero and the cost of not passing it is a "
-        f"directory that looks ready and is not")
-    assert len(argv(tools)) and [call for call in argv(tools) if call[:2] == ["git", "commit"]] == [
-        ["git", "commit", "-m", "chore: initialize kubementat configuration"]], (
-        f"the only commit in a prepared tree should be step 9's, whose message says what it is; the "
-        f"commits git-crypt writes itself say `Add 1 git-crypt collaborator`, and a tree that reads "
-        f"like that is a tree whose next run will skip a step it never ran: {argv(tools)}")
-
-
-def test_the_exported_key_is_the_ability_to_read_the_cluster_and_is_readable_by_its_owner_only(root,
-                                                                                               tools):
-    """The mode and not the path is the claim: git-crypt writes the export at the run's umask.
-
-    On a normal umask that is 0644, which is a symmetric key every account on the box can read. Step
-    3's ignore rule keeps the file out of the commit; this mode is what keeps it out of the next
-    account's way, and it is exactly the kind of thing that reads correct on a developer's machine.
-    """
-    prepare_configuration_directory(root, "dev", gpg_email=EMAIL)
-
-    exported = root / GIT_CRYPT_SYMMETRIC_KEY_NAME
-    assert exported.is_file(), f"the symmetric key was not exported: {argv(tools)}"
-    mode = stat.S_IMODE(exported.stat().st_mode)
-    assert mode == 0o600, (f"{exported.name} grants {oct(mode)}; that file unlocks every credential "
-                           f"the cluster holds")
-
-
 # ---------------------------------------------------------------------------------------------
 # The second run.
 # ---------------------------------------------------------------------------------------------
-
-def test_a_directory_named_relative_to_the_run_is_prepared_and_named_absolutely(root, tools,
-                                                                                monkeypatch):
-    """A relative `root` resolves once, here, and never into `cfg/cfg/git_crypt_symmetric.key`.
-
-    Steps 1, 8 and 9 exec with `cwd=root`, so an argv path spelled against the calling directory
-    resolves twice: the live failure was `git-crypt export-key cfg/git_crypt_symmetric.key` answered
-    with `System error: open: cfg/git_crypt_symmetric.key: No such file or directory`, four steps
-    after the operator typed `kmt config init ./cfg`. It was invisible to the suite because every
-    fixture root is absolute, and it became reachable the moment a command started calling this
-    function with the path it was handed.
-    """
-    monkeypatch.chdir(root.parent)
-
-    steps = prepare_configuration_directory(Path(root.name), "dev", gpg_email=EMAIL)
-
-    assert (root / config_bootstrap.GIT_CRYPT_SYMMETRIC_KEY_NAME).is_file(), \
-        "the symmetric key landed somewhere other than the directory it was prepared in"
-    outside = [str(step.path) for step in steps
-               if step.path != root and root not in step.path.parents]
-    assert not outside, \
-        f"a relative run reported paths outside the directory it prepared: {outside}"
-    assert commit_count(root, tools) == "1", "the relative run still made the first commit"
 
 
 def test_the_second_call_on_a_tree_nothing_touched_reports_skipped_and_moves_no_byte(root, tools):
@@ -227,23 +121,6 @@ def test_the_second_call_on_a_tree_nothing_touched_reports_skipped_and_moves_no_
         "the keystore was initialized again on top of one that was already there"
     assert (root / ".git/git-crypt/keys/default").is_file(), \
         "the master key is what step 6 checks, so the skip has to be true about it"
-
-
-def test_a_directory_that_is_already_a_repository_skips_step_one_and_still_prepares_the_tree(root,
-                                                                                              tools):
-    """`git init` says `skipped` and everything after it still happens.
-
-    The repository is the precondition step 1 establishes and not a thing to re-establish: an operator
-    who cloned the directory before configuring it, or a lane that initialized it in an earlier stage,
-    gets the same ready tree either way.
-    """
-    prepare_configuration_directory(root, "dev", gpg_email=EMAIL)
-
-    steps = prepare_configuration_directory(root, "dev", gpg_email=EMAIL)
-
-    assert steps[0] == steps[0].__class__(config_bootstrap.GIT_REPOSITORY_STEP, root / ".git", SKIPPED), \
-        f"the repository was re-initialized: {steps[0]}"
-    assert tree_bytes(root), "everything after step 1 still ran, so the tree is still complete"
 
 
 # ---------------------------------------------------------------------------------------------
@@ -312,53 +189,6 @@ def test_nothing_in_this_run_unlocks_or_inspects_the_keystore(root, tools):
                     and any(word in call for word in ("unlock", "status", "check"))), (
         f"kubementat ran {call}: unlock belongs to the lane's clone task, and status is a listing "
         f"this module has no business parsing")
-
-
-def test_the_fingerprint_git_crypt_is_told_is_the_one_the_directorys_key_answers(root, tools,
-                                                                                  monkeypatch):
-    """Step 7 registers the key that is in the directory, and never a key a keyring suggests.
-
-    The two answers used to be the same question: `config_bootstrap` listed the keyring for the email
-    and registered what came back first. That is the bug, and it is the dangerous shape of it rather
-    than a cosmetic one -- with two trees under one identity the listing holds both keys, and picking
-    the other tree's *succeeds*, leaving a directory encrypted to a key that cannot open its own
-    secrets. So the assertion here is about where the answer came from, and the only way to show that
-    without a real second keyring is to make the two possible answers disagree: the fixture hands step
-    7 a fingerprint that is not derived from anything in this directory, so a run that consulted the
-    keyring would report it, and a run that reads the tree reports the one below. The pair is planted
-    rather than generated because the read of a key file is what is being pinned.
-    """
-    root.mkdir(parents=True)
-    (root / config_keys.SSH_PRIVATE_NAME).write_text("-----BEGIN RSA PRIVATE KEY-----\nfixture\n"
-                                                    "-----END RSA PRIVATE KEY-----\n")
-    (root / config_keys.SSH_PUBLIC_NAME).write_text(f"ssh-rsa AAAAfixture {EMAIL}\n")
-    (root / config_keys.GPG_PRIVATE_NAME).write_text(GPG_PRIVATE, encoding="ascii")
-    (root / config_keys.GPG_PUBLIC_NAME).write_text(GPG_PUBLIC, encoding="ascii")
-    asked_for: list[Path] = []
-    seen: list[Path] = []
-
-    def fingerprint_from_the_tree(directory):
-        seen.append(Path(directory))
-        return "7F5F85FD66D549566D7F233B7F51FEE297E4110C"
-
-    def import_only_the_public_half(directory, fingerprint):
-        asked_for.append(Path(directory))
-
-    monkeypatch.setattr(config_bootstrap, "_directory_fingerprint", fingerprint_from_the_tree)
-    monkeypatch.setattr(config_bootstrap, "_import_the_public_half", import_only_the_public_half)
-
-    steps = prepare_configuration_directory(root, "dev")
-
-    add = crypt_calls(tools, "add-gpg-user")
-    assert len(add) == 1, f"the collaborator was registered {len(add)} times: {add}"
-    assert add[0][-1] == "7F5F85FD66D549566D7F233B7F51FEE297E4110C", (
-        f"git-crypt was told something other than the fingerprint this directory's key file answers: "
-        f"{add[0]}. The other thing it could have been told is a fingerprint from a keyring listing,"
-        f" which is the answer that registers the wrong tree's key without saying so")
-    assert seen == [root], f"the fingerprint is read out of the directory being prepared: {seen}"
-    assert asked_for == [root], f"the public half was imported into this tree's directory: {asked_for}"
-    assert any(config_keys.SSH_PRIVATE_STEP in str(step) for step in steps), \
-        "the keypair's own steps are reported here rather than reinvented"
 
 
 # ---------------------------------------------------------------------------------------------

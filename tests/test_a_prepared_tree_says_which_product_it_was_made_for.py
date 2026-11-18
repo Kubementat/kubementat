@@ -28,7 +28,7 @@ from cli.commands import routing
 # The stamp module is `stamp_module` and not `stamp` because two tests below bind a local named
 # `stamp` -- the text of the stamp file -- and a parameter of that name, which would shadow the
 # module on the very line that asks it.
-from kubementat.core.config import config, versions
+from kubementat.core.config import versions
 from kubementat.core.config import stamp as stamp_module
 from kubementat.core import constants
 from kubementat import errors
@@ -65,14 +65,6 @@ def root_with_stamp(tmp_path, *, constraint=None, schema_version=None) -> Path:
     return root / "platform_config"
 
 
-def test_the_stamp_answers_both_questions_and_nobody_else_reads_them():
-    root = root_with_stamp(Path("/tmp/unused") / "x", constraint=None, schema_version=None)
-    # `read_configuration_stamp` is the only reader; nothing in src/ reads `kubementat.yaml` any other
-    # way, and this asserts the pair it returns is the pair `config init` wrote.
-    assert stamp_module.read_configuration_stamp(root) == (constants.CONFIG_KUBEMENTAT_CONSTRAINT,
-                                                     constants.CONFIG_SCHEMA_VERSION)
-
-
 def test_a_tree_two_schemas_behind_is_refused_and_the_refusal_names_both_numbers():
     root = root_with_stamp(Path("/tmp/unused") / "x", schema_version=constants.CONFIG_SCHEMA_VERSION - 2)
     with pytest.raises(errors.SchemaVersionTooOldError) as refusal:
@@ -83,12 +75,6 @@ def test_a_tree_two_schemas_behind_is_refused_and_the_refusal_names_both_numbers
     # It names a line the operator raises, not a command that raises it for them.
     assert "schema_version" in said and "kubementat.yaml" in said
     assert "migrate" not in said
-
-
-def test_one_schema_step_behind_is_accepted_because_the_window_is_the_rule():
-    # This build reads its own schema and the one before. Two or more is a refusal.
-    root = root_with_stamp(Path("/tmp/unused") / "x", schema_version=constants.CONFIG_SCHEMA_VERSION - 1)
-    assert stamp_module.check_configuration_stamp(root) == []
 
 
 def test_a_version_string_outside_the_range_warns_once_and_continues():

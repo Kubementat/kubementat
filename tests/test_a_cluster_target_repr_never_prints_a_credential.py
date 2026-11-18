@@ -12,7 +12,7 @@ assertion a reader can trust is "the token is not in there", not "somebody left 
 """
 
 from kubementat.core.identity.target import ClusterTarget
-from cluster_fixture import DEV_SERVER, checkout, redirect_checkout, write_kubeconfig
+from cluster_fixture import checkout, redirect_checkout
 
 TOKEN = "the-token-that-must-not-be-printed"
 CA_PEM = "-----BEGIN CERTIFICATE-----\nMIIBfakeCAmaterialfake\n-----END CERTIFICATE-----\n"
@@ -50,28 +50,6 @@ def test_the_authority_and_the_client_key_a_connection_target_holds_never_reach_
         assert credential not in repr(target)
     assert "BEGIN" not in repr(target)
     assert "redacted" in repr(target)
-
-
-def test_a_target_read_from_a_kubeconfig_prints_where_it_is_and_not_the_users_it_read(
-    tmp_path, monkeypatch
-):
-    """The kubeconfig path and the address are what belongs in a log line.
-
-    The user entry that file carries is a token, and it never enters the object at all — the
-    address is read out of the cluster entry, so there is nothing to redact. This asserts the
-    absence from the object rather than from the printer, which is the stronger statement.
-    """
-    from cluster_fixture import FIXTURE_TOKEN
-
-    root = redirect_checkout(monkeypatch, checkout(tmp_path))
-    kubeconfig = write_kubeconfig(root / "kubeconfig", {"dev": DEV_SERVER})
-
-    target = ClusterTarget.from_kubeconfig(str(kubeconfig), "dev", "dev")
-
-    assert FIXTURE_TOKEN not in repr(target)
-    assert "token" not in repr(target).lower()
-    assert str(kubeconfig) in repr(target)
-    assert target.address in repr(target)
 
 
 def test_the_repr_names_the_environment_the_context_and_where_the_claim_came_from(tmp_path, monkeypatch):

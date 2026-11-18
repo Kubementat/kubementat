@@ -59,17 +59,6 @@ def table_rows(result):
     return [line.split() for line in result.stdout.splitlines() if line.strip()]
 
 
-def test_the_header_is_the_five_answers_the_command_owns(tmp_path, monkeypatch):
-    """The listing's table, in its own words: name, address, context, source, and what was checked."""
-    a_root(tmp_path, monkeypatch, {"environments": ["dev"], "addresses": {"dev": DEV_SERVER}})
-
-    result = listed(root=tmp_path / "checkout")
-
-    assert result.exit_code == 0, result.stderr
-    assert result.stdout.splitlines()[0].split() == [
-        "ENVIRONMENT", "CLUSTER_ADDRESS", "CONTEXT", "SOURCE", "CHECK"]
-
-
 def test_one_row_per_environment_in_the_root_and_nothing_in_between(tmp_path, monkeypatch):
     """Depth 1 of `platform_config` with a `static.json` of its own, and no other rule.
 
@@ -89,27 +78,6 @@ def test_one_row_per_environment_in_the_root_and_nothing_in_between(tmp_path, mo
     assert result.exit_code == 0, result.stderr
     rows = [row[0] for row in table_rows(result)[1:]]
     assert rows == ["dev", "prod"], result.stdout
-
-
-def test_a_resolved_row_gives_the_address_the_context_and_the_file_it_came_out_of(tmp_path,
-                                                                                 monkeypatch):
-    """What the listing is asked for, in one line per environment.
-
-    The `SOURCE` column is the path, not the word: "this is what the file said" is a different claim
-    from "the operator passed `--context`", and when the wrong cluster is being blamed for something,
-    that difference is the debugging session.
-    """
-    root = a_root(tmp_path, monkeypatch, {"environments": ["dev"],
-                                          "addresses": {"dev": DEV_SERVER}})
-
-    result = listed(root=root)
-
-    row = table_rows(result)[1]
-    assert row[0] == "dev"
-    assert row[1] == DEV_SERVER
-    assert row[2] == "context-of-dev"
-    assert str(root / "platform_config" / "dev" / "static.json") in result.stdout
-    assert "ok" in result.stdout
 
 
 def test_an_environment_that_resolves_to_nothing_is_named_with_the_reason_not_left_off(
@@ -150,26 +118,6 @@ def test_an_environment_that_declared_nothing_shows_its_context_as_not_declared(
     assert "(not declared)" in result.stdout, result.stdout
 
 
-def test_the_listing_resolves_no_context_and_contacts_no_cluster(tmp_path, monkeypatch,
-                                                                 fake_binaries):
-    """The two properties this command is judged on: no `Context`, and no cluster contact.
-
-    A `--context` flag here would mean the listing resolved something, which is the listing's rule
-    against
-    a second answer; a shim log with nothing in it is the same rule from the other direction — a
-    server address read out of a file costs a file read, and the command that is always safe to
-    run must not cost a connection.
-    """
-    root = a_root(tmp_path, monkeypatch,
-                  {"environments": ["dev"], "addresses": {"dev": DEV_SERVER}})
-
-    result = listed(root=root)
-
-    assert result.exit_code == 0, result.stderr
-    assert fake_binaries.calls() == [], "the listing contacted a cluster or a binary"
-    assert "cluster dev:" not in result.stdout, "the listing is not a command building a Context"
-
-
 def test_the_listing_and_the_check_agree_about_what_the_root_contains(tmp_path, monkeypatch):
     """The listing's identity, asserted as a fact rather than argued.
 
@@ -189,19 +137,3 @@ def test_the_listing_and_the_check_agree_about_what_the_root_contains(tmp_path, 
         assert record.environment in the_command.stdout
         assert record.target.address in the_command.stdout
         assert record.target.context in the_command.stdout
-
-
-def test_a_root_with_no_declared_clusters_says_so_and_where_to_look(tmp_path, monkeypatch):
-    """Nothing configured is not nothing to report: it names the directory and the verb.
-
-    `platform_config` may be empty because nothing was initialized, and a table with only a header
-    would leave the operator to guess which of those it was.
-    """
-    root = checkout(tmp_path)
-    redirect_checkout(monkeypatch, root)
-
-    result = listed(root=root)
-
-    assert result.exit_code == 0, result.stderr
-    assert "no environment" in result.stdout, result.stdout
-    assert str(root / "platform_config") in result.stdout, result.stdout

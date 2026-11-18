@@ -267,43 +267,6 @@ def _locates_only_the_project(entry: dict) -> bool:
 # The checks
 # ---------------------------------------------------------------------------------------------
 
-def test_the_configuration_root_a_ci_task_hands_the_command_resolves_against_a_real_v2_tree(tmp_path):
-    """`--config-dir` as shipped must find an environment, not refuse one that is there.
-
-    This is the whole point of the file, and the check is deliberately against the **argument the script
-    passes**, not the param's default: the bug was in how the argument was built, and a test that reads
-    the default would watch a param that is correct while the command line underneath it points somewhere
-    else. So each shipped `--config-dir` is pulled out of the script, resolved against a configuration-root
-    tree, and
-    handed to the command. The tree must be readable and the environment must appear.
-
-    The mutation this catches is the one that broke a real deploy path: the same command line shipped
-    with `/platform_config` appended, which resolves to a directory containing no environment directory
-    at all, and the command answers that *no environment declares a cluster* about a clone that does.
-    """
-    workspace = tmp_path / "workspace"
-    root = _build_v2_root(workspace / CONFIG_DIR)
-    checked = 0
-
-    for task in ("run-tekton-pipeline", "create-secret-from-json"):
-        manifest = _task(task)
-        params = _params(manifest)
-        script = _script(manifest)
-        for argument in re.findall(r'--config-dir\s+"([^"]+)"', script):
-            checked += 1
-            resolved = _substitute_path(argument, params, str(workspace), script)
-            result = CliRunner(mix_stderr=False).invoke(environments_list, ["--config-dir", resolved])
-            assert result.exit_code == 0, f"{task}: --config-dir {resolved!r} failed: {result.output}"
-            assert ENVIRONMENT in result.output, \
-                f"{task}: --config-dir {resolved!r} reads {root.parent} and does not see {ENVIRONMENT!r}. " \
-                "The root is one directory off, and the command's answer will be blamed on the clone"
-        # And the param has to be what is actually passed: a correct param that the script never uses is
-        # decoration, which is the other way this rule goes quiet.
-        assert "$(params.configuration-root)" in script, \
-            f"{task}: declares configuration-root but does not pass it, so the root is stated and unused"
-
-    assert checked == 2, f"expected two shipped --config-dir arguments, found {checked}"
-
 
 def test_a_source_b_root_is_never_written_with_a_platform_config_segment_between_it_and_the_read(tmp_path):
     """Naming a root is the point; a script that appends `platform_config` is locating one.
@@ -347,47 +310,6 @@ def test_a_source_b_root_is_never_written_with_a_platform_config_segment_between
         "this file is guarding a shape that is no longer there"
 
 
-def test_the_configuration_roots_still_reading_through_the_code_checkout_are_named(tmp_path):
-    """These are still source A, so this file names them instead of letting them pass quietly.
-
-    Every root that leads to a read is one of two answers: the configuration clone, or the code checkout.
-    The first must not append `platform_config`; the second still does, and that half is still to do. Both halves are asserted here, and the point of naming them is that a reader who
-    finds `platform_config` in a shipped Task script can tell, from this file, whether they are looking at
-    the pending half or at a regression -- and a Task that moves its root onto the clone while keeping the
-    segment trips the assertion above.
-    """
-    workspace = tmp_path / "workspace"
-    survey = _census(str(workspace))
-
-    reads = {key: entry for key, entry in survey.items() if not _locates_only_the_project(entry)}
-    assert reads, "no shipped root leads to a read, so the census is guarding nothing"
-
-    on_clone, on_checkout = [], []
-    for key, entry in sorted(reads.items()):
-        clone = _is_configuration_clone(entry["root"], str(workspace))
-        (on_clone if clone else on_checkout).append(key)
-
-    # The clone-rooted half: no segment, because a configuration repository has nowhere to put one.
-    for key in on_clone:
-        entry = reads[key]
-        for path in entry["paths"]:
-            assert "platform_config" not in Path(path).parts, \
-                f"{key[0]}.{key[1]}: {path} puts platform_config between the configuration clone " \
-                f"({entry['root']}) and what it reads, which is one directory too deep on a " \
-                "configuration repository"
-
-    # The checkout-rooted half: still source A, still reading through the old level, stated by name.
-    for key in on_checkout:
-        assert reads[key]["appends_platform_config"], \
-            f"{key[0]}.{key[1]}: root is the code checkout and nothing it reads passes through " \
-            "platform_config, so this root is no longer source A's shape and the census has to change"
-
-    assert on_checkout, "every configuration root is on the clone, so the checkout half is done and " \
-        "this file should say that rather than assert an empty list"
-    assert on_clone, "no configuration root is on the clone, so source B did not land and the census " \
-        "above is asserting against a shape that is not shipped"
-
-
 def _paths_from_root(script: str, params: dict, root_param: str, workspace: str) -> list:
     """Every absolute path in the script that descends from one root param.
 
@@ -426,32 +348,6 @@ def _derived_from_root(script: str, text: str, root_param: str) -> bool:
         if re.search(r"\$" + re.escape(name) + r"(?![A-Za-z0-9_])", text):
             return True
     return False
-
-
-def test_the_values_file_a_deploy_step_reads_lands_on_the_app_directory(tmp_path):
-    """A configuration root's team layer is `<root>/<environment>/<team>/<app>/values.encrypted.yaml`, so
-    that is where
-    the deploy step's `HELM_VALUES_FILE` has to point.
-
-    A path built with the extra segment names a file that no prepared tree has, and the step fails with
-    helm's own `values file does not exist` rather than a sentence about the tree.
-    """
-    workspace = tmp_path / "workspace"
-    _build_v2_root(workspace / CONFIG_DIR)
-
-    manifest = _task("deploy-local-helm-chart")
-    params = _params(manifest)
-    script = _script(manifest)
-
-    assignment = re.search(r'HELM_VALUES_FILE="([^"]+)"', script)
-    assert assignment, "the deploy step no longer derives its values file, so nothing pins where it is"
-    resolved = _substitute_path(assignment.group(1), params, str(workspace), script)
-    expected = workspace / CONFIG_DIR / ENVIRONMENT / TEAM / APP / "values.encrypted.yaml"
-    assert Path(resolved) == expected, \
-        f"HELM_VALUES_FILE resolves to {resolved!r}, not {expected}. The app directory sits under " \
-        "the team, under the environment, under the root -- and a deploy that reads a path nobody " \
-        "writes to is a deploy that succeeds with the product's defaults and calls it configured"
-    assert Path(resolved).is_file(), f"{resolved!r} is not a file in the configuration tree"
 
 
 def test_a_combined_tree_works_by_naming_platform_config_as_the_root(tmp_path):

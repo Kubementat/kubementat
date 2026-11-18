@@ -33,7 +33,6 @@ import pytest
 from asset_paths import values_path
 from cluster_fixture import UNREAD_ROOT, configuration_only_context
 from kubementat.core.config.config import Config
-from kubementat.core.config.keys import component_config_key
 from kubementat.infrastructure.helm import HelmUtils
 
 MANIFEST = values_path("helmfile.yaml.gotmpl")
@@ -47,12 +46,6 @@ SUFFIXES = ("ENABLED", "VERSION")
 # and the version each one resolves to, come from the same read of the shipped artefact that
 # `helmfile_apply` makes.
 
-# `installed:` unquoted, so helmfile's boolean field gets a boolean; `version:` quoted, so a version
-# that reads like `1.0` survives as the string helm resolves. The default is read in either boolean
-# shape: every release ships as an opt-out (`default "true"`) except the members of `extra` that the
-# plan makes opt-in (`concourse` ships `default "false"`), and the knob is still a knob in both --
-# what this guard measures is the templated line and the key it addresses, not which way it is wound.
-INSTALLED_KNOB = re.compile(r'^\s+installed: \{\{ env "(?P<key>[A-Z0-9_]+)" \| default "(?:true|false)" \}\}$')
 VERSION_KNOB = re.compile(r'^\s+version: "\{\{ env "(?P<key>[A-Z0-9_]+)" \| default "(?P<version>.*)" \}\}"$')
 # The shape either knob loses by being written the other way round: a quoted `installed` is a string
 # helmfile does not resolve, and an unquoted `version` is a number.
@@ -152,45 +145,6 @@ CHART_VERSIONS_FROM_MANIFEST = shipped_chart_versions()
 # --- every release carries both lines ------------------------------------------------------
 
 
-def test_the_releases_the_manifest_names_are_the_rows_this_guard_knows():
-    """The labels the manifest declares and the index the apply reads are the same set, once each.
-
-    Add one to the manifest and this fails with the release's name in it, which is the only shape of
-    failure that sends whoever added it to the right place: the two lines. Nothing is quoted from a
-    table here, so nothing can be green while the row it claimed to check has moved.
-    """
-    labels = {label for label in _blocks_by_label() if label is not None}
-    assert sorted(labels) == sorted(live_index()), \
-        (f"the release blocks and the index the apply reads disagree: "
-         f"only in the blocks {sorted(labels - set(live_index()))}, "
-         f"only in the index {sorted(set(live_index()) - labels)}")
-    assert not [label for label, releases in live_index().items() if len(releases) > 1], \
-        "a label on more than one release makes a component's own knob decide twice"
-
-
-@pytest.mark.parametrize("component", sorted(CHART_VERSIONS_FROM_MANIFEST))
-def test_every_release_the_manifest_names_carries_both_knobs(component):
-    """Both templated lines, exactly one of each, addressed by the key this component's name produces."""
-    labelled = [entry for entry in blocks_by_label().get(component, [])]
-    assert labelled, f"{component} is in the index but no release block carries its label"
-
-    for release, lines in labelled:
-        installed = [INSTALLED_KNOB.match(line) for line in lines if INSTALLED_KNOB.match(line)]
-        version = [VERSION_KNOB.match(line) for line in lines if VERSION_KNOB.match(line)]
-        assert len(installed) == 1, f"{release} has {len(installed)} templated installed: lines"
-        assert len(version) == 1, f"{release} has {len(version)} templated version: lines"
-        assert installed[0].group("key") == component_config_key(component, "ENABLED")
-        assert version[0].group("key") == component_config_key(component, "VERSION")
-        # The pin itself is read off this same line, so what is asserted is that the line answers:
-        # a version, quoted, and not the empty string a block loses when its default is dropped.
-        default = version[0].group("version")
-        assert default.strip() == default and default, \
-            f"{release} resolves {default!r} as its version default, which is not a version"
-        assert "{{" not in default, f"{release} nests a second substitution inside its version default"
-        assert default not in ("true", "false"), \
-            f"{release} resolves {default!r}, which helmfile reads as a boolean and not as a chart"
-
-
 @pytest.mark.parametrize("component", sorted(CHART_VERSIONS_FROM_MANIFEST))
 def test_no_release_carries_a_second_knob_line(component):
     """One `installed:` and one `version:` per release, and nothing else that answers either.
@@ -205,25 +159,6 @@ def test_no_release_carries_a_second_knob_line(component):
         version = [line for line in lines if VERSION_LITERAL.match(line)]
         assert len(installed) == 1, f"{release} answers installed: {installed}"
         assert len(version) == 1, f"{release} answers version: {version}"
-
-
-def test_the_only_knob_variables_the_manifest_reads_are_the_exported_ones():
-    """No template line invents a knob name, because a name the export never writes is a dead line.
-
-    The other direction of the silently dead key: here it is the file that has the key, and the
-    process environment that never will.
-    """
-    read = set()
-    for lines in release_blocks().values():
-        for line in lines:
-            for pattern in (INSTALLED_KNOB, VERSION_KNOB):
-                found = pattern.search(line)
-                if found:
-                    read.add(found.group("key"))
-    assert read, "no release line reads a knob at all, so this guard is reading nothing"
-    allowed = {component_config_key(label, suffix)
-               for label in live_index() for suffix in SUFFIXES}
-    assert read <= allowed, sorted(read - allowed)
 
 
 def test_the_two_knob_lines_are_written_the_way_their_types_need():

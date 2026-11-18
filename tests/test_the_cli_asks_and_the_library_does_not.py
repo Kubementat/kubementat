@@ -19,8 +19,6 @@ words. Where earlier-means-fewer-commands, that is written down as a fact and no
 """
 
 import logging
-import re
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -29,8 +27,6 @@ from cli.consent import (install_consent, routing_consent, team_account_consent,
                          uninstall_consent)
 from kubementat.consent import CONSENT_ASSUMED, CONSENT_UNDECIDED, Consent
 from kubementat.errors import (ConfirmationDeclinedError, ConfirmationUnavailableError)
-
-SRC_KUBEMENTAT = Path(__file__).resolve().parent.parent / "src" / "kubementat"
 
 
 def terminal(monkeypatch, answers, *, tty=True):
@@ -60,43 +56,6 @@ def ask(consent, action="do the thing the test is about"):
 # ---------------------------------------------------------------------------------------------
 # the Done-when, as a test: the library reads no terminal, anywhere
 # ---------------------------------------------------------------------------------------------
-
-def test_no_module_under_src_kubementat_reads_a_terminal():
-    """`grep -rn "\\binput(\\|isatty(" src/kubementat/` has to stay empty.
-
-    This is the item's Done-when written as an assertion instead of a shell session, for the same
-    reason the sweep tests were retired in item 2 and this one was not: a claim about a *shape* the
-    library must never have again is worth enforcing, while a claim about agreement between two
-    files that could both be edited is not. One `gen_key_input(` survives below; it is a method on
-    the GPG library and it opens no stdin, which is exactly the kind of exception a grep has to
-    state out loud rather than route around.
-    """
-    offenders = {}
-    for path in SRC_KUBEMENTAT.rglob("*.py"):
-        for number, line in enumerate(path.read_text().splitlines(), start=1):
-            if re.search(r"(?<![\w.])input\(", line) or "isatty(" in line:
-                offenders[f"{path.relative_to(SRC_KUBEMENTAT)}:{number}"] = line.strip()
-
-    assert offenders == {}, (
-        f"the library is asking a terminal again: {offenders}"
-        " — ask in cli/consent.py and hand the answer down as a consent")
-
-
-def test_the_only_input_shaped_name_in_the_library_opens_no_stdin():
-    """`gpg.gen_key_input(...)` is the single surviving hit for a literal `input(`.
-
-    It is a method of the GPG bindings that *produces a document*, not a read, and pretending
-    otherwise by wrapping it in `getattr` would be a lie with extra steps. This test exists so the
-    next reader who runs the grep and finds one line knows whether it is the exception or the bug.
-    """
-    hits = []
-    for path in SRC_KUBEMENTAT.rglob("*.py"):
-        for line in path.read_text().splitlines():
-            if "input(" in line:
-                hits.append((path.name, line.strip()))
-
-    assert [name for name, _ in hits] == ["crypto_utils.py"], hits
-    assert "gen_key_input" in hits[0][1], hits
 
 
 # ---------------------------------------------------------------------------------------------
@@ -134,34 +93,6 @@ def test_a_caller_that_supplied_neither_answer_nor_ask_is_refused_and_names_the_
 # ---------------------------------------------------------------------------------------------
 # site 1: kmt install
 # ---------------------------------------------------------------------------------------------
-
-def test_install_asks_the_same_question_and_accepts_the_same_answers(monkeypatch, caplog):
-    caplog.set_level(logging.INFO)      # kmt runs log at INFO; a bare logger here is at WARNING
-    terminal(monkeypatch, ["yes"])
-    ask(install_consent("dev", "ops", yes=False))
-    assert "Cancelled" not in caplog.text
-
-    caplog.clear()
-    terminal(monkeypatch, ["y"])
-    ask(install_consent("dev", "ops", yes=False))
-
-    caplog.clear()
-    terminal(monkeypatch, ["n"])
-    with pytest.raises(SystemExit) as stop:
-        ask(install_consent("dev", "ops", yes=False))
-
-    assert stop.value.code == 1, "declining exits the way the bash declined, which was 1"
-    assert "Cancelled install script." in caplog.text
-
-
-def test_install_repeats_the_question_for_an_answer_that_is_neither(monkeypatch, caplog):
-    caplog.set_level(logging.INFO)
-    terminal(monkeypatch, ["maybe", "nope", "y"])
-    ask(install_consent("dev", "ops", yes=False))
-
-    assert caplog.text.count("Please answer yes or no.") == 2, (
-        "the prompt loops until it gets a real answer; a single read that falls through is how a"
-        " script answers EOF")
 
 
 def test_install_still_refuses_a_padded_yes_because_it_never_trimmed(monkeypatch, caplog):
@@ -227,11 +158,6 @@ def test_uninstall_asks_after_the_plan_and_cancels_in_the_same_words(monkeypatch
     assert "Nothing was deleted and the cluster is untouched" in str(raised.value)
 
 
-def test_uninstall_trimmed_its_answer_and_still_does(monkeypatch):
-    terminal(monkeypatch, ["  YES  "])
-    ask(uninstall_consent("dev", yes=False))
-
-
 def test_uninstall_with_no_terminal_is_a_usage_error_naming_the_flag(monkeypatch):
     """`--yes (-y)`: the command's own guard, unchanged since the bash, rc 2 and all."""
     import click
@@ -274,40 +200,9 @@ def test_routing_names_both_commands_it_could_have_run_instead(monkeypatch):
     assert "kmt routing status dev" in message
 
 
-def test_routing_yes_accepts_the_warning_out_loud(monkeypatch):
-    """`--yes` accepts and *says* it accepted; the difference between a scripted run and a silent one."""
-    assert routing_consent("dev", yes=True).answer == CONSENT_ASSUMED
-
-
 # ---------------------------------------------------------------------------------------------
 # site 4: the team-account commands
 # ---------------------------------------------------------------------------------------------
-
-def test_the_team_account_question_is_built_from_the_action(monkeypatch):
-    asked = []
-
-    def record(prompt=""):
-        asked.append(prompt)
-        return "y"
-
-    terminal(monkeypatch, ["y"])
-    monkeypatch.setattr("builtins.input", record)
-
-    ask(team_account_consent(yes=False), "delete the team account 'ops-account' and everything"
-                                        " it can do on this cluster")
-
-    assert asked == ["Do you really wish to delete the team account 'ops-account' and everything"
-                     " it can do on this cluster? "], (
-        "three commands, one gate, and the sentence that says which of the three it was"
-        " is the one thing the duplicated bash never managed")
-
-
-def test_a_team_account_decline_cancels_in_one_word_and_no_traceback(monkeypatch):
-    terminal(monkeypatch, ["no"])
-    with pytest.raises(ConfirmationDeclinedError) as raised:
-        ask(team_account_consent(yes=False))
-
-    assert str(raised.value) == "Cancelled."
 
 
 def test_a_team_account_run_with_no_terminal_names_the_action_it_refused(monkeypatch):

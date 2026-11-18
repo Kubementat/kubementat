@@ -18,7 +18,6 @@ Two conventions make the tests readable:
 """
 
 import json
-import os
 from pathlib import Path
 
 import yaml

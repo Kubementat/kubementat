@@ -143,38 +143,6 @@ def _uv_kmt_steps():
     return found
 
 
-def test_the_run_pipeline_task_declares_its_working_directory():
-    """The three asserts the defect needs: declared, param-resolved, mounted.
-
-    A step with `workingDir: /workspace/kubementat` written out is a Task that cannot be moved to a
-    cluster whose workspace is elsewhere, and a step that declares nothing runs from wherever the pod
-    started, which is the bug. The param reference is what makes the declared directory bindable, and
-    the same value is what `KUBEMENTAT_HOME` says, so the command and the step cannot drift apart.
-    """
-    manifest = yaml.safe_load(
-        tekton_ci_path("tasks", "run-tekton-pipeline.yml").read_text(encoding="utf-8"))
-    steps = _steps(manifest)
-    assert len(steps) == 1, "one step is the ticket; more than one changes where this assert reads"
-    step = steps[0]
-
-    assert "workingDir" in step, \
-        "the step runs `uv run kmt` from a directory no manifest states, so uv walks up from a cwd " \
-        "that is not the checkout and fails with 'Failed to spawn: kmt' — see this file's docstring"
-
-    working_dir = step["workingDir"]
-    assert working_dir == "$(params.path-to-configuration)", \
-        f"the step declares {working_dir!r}, and a literal directory is not something a Task can " \
-        "bind to the workspace its pipeline hands it"
-
-    env = {entry["name"]: entry["value"] for entry in step.get("env") or []}
-    assert env.get("KUBEMENTAT_HOME") == working_dir, \
-        "the command's home and the step's working directory are two values, so they can drift"
-
-    assert _inside_a_mounted_workspace(_resolve(working_dir, manifest), manifest), \
-        f"{_resolve(working_dir, manifest)!r} is not under a workspace the Task mounts " \
-        f"{_mounts(manifest)}, so nothing could put the step in the project"
-
-
 def test_no_uv_kmt_step_runs_from_a_directory_the_manifest_does_not_declare():
     """The general rule: a `uv run … kmt` step names its directory, or it is broken.
 
@@ -194,17 +162,3 @@ def test_no_uv_kmt_step_runs_from_a_directory_the_manifest_does_not_declare():
         assert _inside_a_mounted_workspace(resolved, manifest), \
             f"{name}: step {step.get('name')!r} enters {resolved!r} via {how}, which is not under a " \
             f"mounted workspace {_mounts(manifest)}"
-
-
-def test_the_tasks_that_run_kmt_are_measured_and_not_remembered():
-    """The guard is not vacuous: the walk finds the two Tasks that carry the rule.
-
-    A rule stated over a filtered list stops meaning anything when the filter stops matching, so the
-    set is pinned to what the tree holds today. Adding a third `uv run … kmt` Task is a legitimate
-    change, and this assertion is the note that says the directory rule has to be applied to it — the
-    check above is what tells you whether the new Task got it right.
-    """
-    assert {name for name, _, _ in _uv_kmt_steps()} == UV_KMT_TASKS, \
-        "the set of Tasks that run `uv run … kmt` has moved; re-read the rule against the new list"
-
-

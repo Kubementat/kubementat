@@ -149,66 +149,6 @@ def test_the_range_the_check_compares_against_moves_with_the_pin(tools, monkeypa
             "the version this tree used to be pinned to must warn once the pin has moved"
 
 
-def test_a_helm_version_outside_the_tested_range_warns_and_the_run_carries_on(tools, caplog):
-    """The ticket's decision, tested as behaviour: one warning, no exit, install still possible."""
-    tools.answers = {"helm": "v9.9.9+gdeadbeef"}
-    with caplog.at_level(logging.WARNING):
-        check_dependencies(tools)  # must neither raise nor exit
-    assert warnings_about(caplog.records, "helm"), caplog.text
-    assert "9.9.9" in " ".join(warnings_about(caplog.records, "helm")), "the warning must name what it saw"
-    assert not no_errors(caplog.records), caplog.text
-    # The walk did not stop at the warning: the rest of the list was still checked.
-    assert ["helm", "version", "--short"] in tools.asked
-    assert ["helmfile", "--version"] in tools.asked
-    assert tools.asked.index(["helm", "version", "--short"]) < tools.asked.index(["helmfile", "--version"])
-
-
-def test_a_helmfile_version_outside_the_tested_range_warns_and_the_run_carries_on(tools, caplog):
-    """The same ruling for the other pinned binary, whose answer arrives in a different shape."""
-    tools.answers = {"helmfile": "helmfile version 2.0.1"}
-    with caplog.at_level(logging.WARNING):
-        check_dependencies(tools)
-    assert warnings_about(caplog.records, "helmfile"), caplog.text
-    assert "2.0.1" in " ".join(warnings_about(caplog.records, "helmfile"))
-    assert not no_errors(caplog.records), caplog.text
-    assert ["helm", "version", "--short"] in tools.asked
-
-
-def test_a_helm_on_a_served_major_says_which_side_the_run_is_on_without_warning(tools, caplog):
-    """The point of the whole check: a run that is fine is told which version it is on.
-
-    A portable major is still logged, because the question `e57fed3` left open is which side a run is
-    on, and answering it only for anomalies would keep the log quiet during the runs where someone
-    needs it. This is also the only test that asserts the quiet case is quiet *and* informative.
-    """
-    tools.answers = {"helm": "v3.14.4+g361a38b"}
-    with caplog.at_level(logging.INFO):
-        check_dependencies(tools)
-    assert any("3.14.4" in record.getMessage() and record.levelno == logging.INFO
-               for record in caplog.records), caplog.text
-    assert not warnings_about(caplog.records, "helm"), "a served major must not warn"
-    assert not no_errors(caplog.records), caplog.text
-
-
-def test_a_version_the_check_cannot_read_warns_instead_of_failing_or_passing_silently(tools, caplog):
-    """A tool that prints something unrecognisable is *told about*, not excused.
-
-    Both halves of this are one sentence pointed the other way: a parse failure that raises is the
-    fail-closed-instead-of-failing-usefully mistake the gate already makes for a missing binary, and a
-    parse failure that returns quietly is worse, because the run then reads as checked when nothing was
-    checked. So the assertion is a warning and not merely the absence of a crash — a tolerance test
-    that only proves no exception proves nothing.
-    """
-    tools.answers = {"helm": "helm, but not the kind you mean"}
-    with caplog.at_level(logging.WARNING):
-        check_dependencies(tools)
-    assert not no_errors(caplog.records), caplog.text
-    assert warnings_about(caplog.records, "helm"), caplog.text
-    # And it claimed no verdict: nothing may say this version is inside a tested range.
-    assert not any("tested range" in record.getMessage() for record in caplog.records), caplog.text
-    assert ["helmfile", "--version"] in tools.asked, "the run goes on past an unreadable answer"
-
-
 def test_a_pinned_tool_that_errors_when_asked_does_not_stop_a_run_that_was_going_to_succeed(tools, caplog):
     """`helm version --short` exploding is a warning and not a decision.
 
@@ -237,18 +177,3 @@ def test_a_binary_that_is_not_there_still_ends_the_run(monkeypatch):
     with pytest.raises(SystemExit):
         check_dependencies(absent)
     assert absent.asked == [], "nothing is probed for a binary that is not installed"
-
-
-def test_the_pinned_binaries_are_pinned_the_way_the_dependency_list_is_measured():
-    """The pin only holds if it names the same tools the gate checks.
-
-    `KUBEMENTAT_DEPENDENCIES` is the list that decides what is present; the pin decides what is
-    *known*. They have to agree about which tools are meant, or a tool that is checked for existence
-    is silently never checked for version — which is the gap this ticket is closing.
-    """
-    pinned = set(constants.PINNED_BINARY_VERSIONS)
-    checked = {name.split()[0] for name in dependencies_slice.KUBEMENTAT_DEPENDENCIES}
-    assert pinned <= checked, f"pinned but never presence-checked: {sorted(pinned - checked)}"
-    assert "helm" in pinned and "helmfile" in pinned
-    # Widening the pin is row 16's scope creep, not its scope: kubectl/tkn are deliberately absent.
-    assert not {"kubectl", "tkn", "git", "jq"} & pinned

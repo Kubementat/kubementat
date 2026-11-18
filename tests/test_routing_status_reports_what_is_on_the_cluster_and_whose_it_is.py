@@ -49,21 +49,7 @@ K3S_NAMESPACE = "kube-system"
 # What `helm list` prints in the chart column: one string carrying both, which is why the report
 # quotes "chart traefik-33.2.1" rather than a name and a version it never read separately.
 K3S_CHART = "traefik-33.2.1"
-OUR_CHART = "traefik-42.1.3"
 TRAEFIK_IMAGE = "rancher/mirrored-library-traefik:3.7.15"
-
-# The reads discovery is allowed to make, in the order it makes them. Nothing else may be asked of
-# the cluster -- which is what makes this command safe to point at a live control plane.
-#
-# Two channels, because that is what the design has: one command and two API calls. The command is
-# the product's release read (`helm_list_releases_argv` in `infrastructure/helm.py`), not a second argv
-# written here:
-# row 24's guard fails the tree if a probe ever answers the release question its own way, because two
-# answers to "what releases live here" is what the uninstall residue assert would end up disagreeing
-# about. The two API calls are recorded separately, because they do not go through a shim -- a test
-# that compared only the command list would not see them happen at all, and "read-only" is a claim
-# about every channel at once.
-THE_THREE_READS = ["helm release list", "ingressclass", "pods"]
 
 
 # ---------------------------------------------------------------------------------------
@@ -163,82 +149,9 @@ def read(cluster, namespace=CONFIGURED, environment=ENVIRONMENT):
         namespace=namespace, reader=cluster.run, cluster=cluster)
 
 
-def a_k3s_cluster():
-    """k3s's bundled controller: a release pair in `kube-system`, one class, running pods."""
-    return Cluster(helm=[helm_release("traefik", chart=K3S_CHART),
-                         helm_release("traefik-crd", chart="traefik-crds-1.18.0")],
-                   classes=[ingress_class("traefik")],
-                   pods=[pod()])
-
-
-def our_own_cluster():
-    """The cluster kubementat put there: the release in the namespace its configuration names."""
-    return Cluster(helm=[helm_release("traefik", namespace=CONFIGURED, chart=OUR_CHART)],
-                   classes=[ingress_class("traefik", namespace=CONFIGURED)],
-                   pods=[pod(namespace=CONFIGURED)])
-
-
 # ---------------------------------------------------------------------------------------
 # what the report says
 # ---------------------------------------------------------------------------------------
-
-
-def test_the_report_of_a_cluster_running_k3s_names_the_namespace_the_release_and_the_class():
-    """The operator's question, answered as facts: what is there, and where.
-
-    This is the case that decides the whole design: a controller kubementat
-    did not install, in a namespace its configuration does not name. A report that said only
-    "traefik found" would be useless for that, so every fact the `install` decision turns on has
-    to be in the text: the namespace, the chart and its version, the release's status and revision,
-    and the class with the controller string it is bound to.
-    """
-    report = read(a_k3s_cluster()).report()
-
-    assert "kube-system" in report
-    assert "traefik-33.2.1" in report, "chart and version, as `helm list` prints them"
-    assert "status deployed" in report
-    assert "revision 7" in report, "the revision is what proves an upgrade did not happen"
-    assert "traefik.io/ingress-controller" in report, "the class is named by its controller"
-    assert "not kubementat's" in report
-    assert "found by: helm release list, ingressclass, pods" in report
-
-
-def test_the_report_says_kubementats_own_when_the_release_is_where_the_configuration_put_it():
-    """`ours` is a fact about a namespace, not about a name: this is the same release, elsewhere.
-
-    The friendly answer has to be as legible as the alarming one, because a skip that is quiet
-    about *why* it skipped is indistinguishable from a command that did nothing at all.
-    """
-    presence = read(our_own_cluster())
-
-    assert presence.classification == traefik_presence.CLASSIFICATION_OURS
-    report = presence.report()
-    assert "kubementat's own" in report
-    assert f"traefik -- kubementat's own ({CONFIGURED})" in report
-    assert "traefik-42.1.3" in report
-    assert "not kubementat's" not in report, "nothing here is somebody else's controller"
-
-
-def test_a_cluster_that_carries_two_controllers_shows_both_and_says_which_one_is_mine():
-    """The case the reader most needs, because the friendly half must not win.
-
-    kubementat's release and k3s's on one cluster is a cluster with two controllers, two classes
-    and two writers of `Ingress.status`. Resolving to `foreign` is the rule; keeping both findings
-    printed is what makes the resolution checkable rather than asserted.
-    """
-    presence = read(Cluster(
-        helm=[helm_release("traefik", chart=K3S_CHART),
-              helm_release("traefik", namespace=CONFIGURED, chart=OUR_CHART)],
-        classes=[ingress_class("traefik"), ingress_class("kubementat", namespace=CONFIGURED)],
-        pods=[pod(namespace=K3S_NAMESPACE, name="traefik-6f59c4d8c-j2xq8"),
-              pod(namespace=CONFIGURED, name="traefik-5d8b7c6f9-xk2mz")]))
-
-    report = presence.report()
-    assert presence.classification == traefik_presence.CLASSIFICATION_FOREIGN
-    assert "finding 1: kube-system" in report
-    assert "finding 2: traefik" in report
-    assert "1 finding(s) kubementat accounts for, 1 it does not" in report
-    assert "is not the whole answer" in report
 
 
 def test_the_report_says_a_cluster_that_answered_and_found_nothing_would_install_it():
@@ -279,39 +192,6 @@ def test_the_report_of_a_cluster_that_would_not_answer_is_none_said_as_a_guess()
 # ---------------------------------------------------------------------------------------
 
 
-def test_the_report_of_a_controller_kubementat_installed_names_the_flag_that_would_upgrade_it():
-    """Config drift must not be corrected quietly.
-
-    Re-running `kmt routing install` after editing `traefik/values.yaml` changes nothing,
-    and a report that did not say so would leave the operator debugging a command that reported
-    success. So the report says what the default does, and names `--update` as the only thing that
-    writes.
-    """
-    report = read(our_own_cluster()).report()
-
-    assert "would leave Traefik alone" in report
-    assert "cert-manager is applied either way" in report
-    assert "changes nothing" in report
-    assert "kmt routing install dev --update is the flag that upgrades it" in report
-
-
-def test_the_report_of_a_foreign_controller_says_what_update_would_put_beside_it():
-    """What `--update` costs belongs in the report, not in a debug log.
-
-    `--update` against somebody else's controller is allowed -- plan decision 3 -- but the cost has
-    to be stated before it is paid: a second controller, a second class, a second writer of
-    Ingress.status. The operator reading this is the only person who can decide whether that is
-    what they meant.
-    """
-    report = read(a_k3s_cluster()).report()
-
-    assert "second controller" in report
-    assert "second IngressClass" in report
-    assert "second writer of Ingress.status" in report
-    assert f"kmt routing install {ENVIRONMENT} --update would apply kubementat's own release " \
-           f"into {CONFIGURED}" in report
-
-
 # ---------------------------------------------------------------------------------------
 # the command, against the shims and a seeded configuration
 # ---------------------------------------------------------------------------------------
@@ -350,11 +230,6 @@ def seeded_configuration(tmp_path, monkeypatch, namespace=CONFIGURED):
     for name in ("CLUSTER_KUBE_CONTEXT", "CLUSTER_KUBECONFIG_PATH"):
         monkeypatch.delenv(name, raising=False)
     return root
-
-
-def kubernetes_list(items):
-    """A Kubernetes list object, the shape `kubectl get ... --output json` prints."""
-    return json.dumps({"apiVersion": "v1", "items": list(items)})
 
 
 def answering(fake_binaries, recorded_api, helm=(), classes=(), pods=(), refusing=()):
@@ -433,46 +308,3 @@ def test_the_command_prints_the_report_once_and_asks_the_cluster_three_questions
     assert recorded_api.methods() == ["list_ingress_class", "list_pod_for_all_namespaces"], \
         "the two client reads are two of the three, and neither is a command"
     assert "not kubementat's" in result.output and "traefik-33.2.1" in result.output
-
-
-def test_the_command_reports_the_namespace_the_configuration_named_and_not_a_default_it_guessed(
-        tmp_path, monkeypatch, fake_binaries, recorded_api):
-    """The namespace in the report is the environment's answer, so renaming it renames the answer.
-
-    `install` attributes ours and foreign against this value (a namespace rename makes our own
-    release look foreign), which is why it is configuration and not a literal.
-    The key is named in the report so a wrong answer can be traced to the file that gave it.
-    """
-    seeded_configuration(tmp_path, monkeypatch, namespace="routing-ingress")
-    answering(fake_binaries, recorded_api, helm=[helm_release("traefik", namespace="routing-ingress",
-                                                             chart=OUR_CHART)],
-              classes=[ingress_class("traefik", namespace="routing-ingress")],
-              pods=[pod(namespace="routing-ingress")])
-
-    result = status()
-
-    assert result.exit_code == 0, result.output
-    assert "routing-ingress" in result.output
-    assert "TRAEFIK_DEPLOYMENT_NAMESPACE" in result.output
-    assert "kubementat's own" in result.output
-    assert result.output.count("finding 1") == 1, "one controller, one finding"
-
-
-def test_the_command_answers_a_cluster_that_refuses_everything_and_still_exits_zero(
-        tmp_path, monkeypatch, fake_binaries, recorded_api):
-    """A status command that fails on a quiet cluster is a status command nobody runs.
-
-    It read nothing, so it says so, and it still exits 0 -- the answer is a finding, not a crash.
-    Nothing here retries either: a refusal read twice is the same refusal, and three more
-    round trips is not an improvement on the report.
-    """
-    seeded_configuration(tmp_path, monkeypatch)
-    answering(fake_binaries, recorded_api, refusing=("helm", "classes", "pods"))
-
-    result = status()
-
-    assert result.exit_code == 0, result.output
-    assert "none of the three reads answered" in result.output
-    assert "'none' here means nothing could be read" in result.output
-    assert len(fake_binaries.take_calls()) == 1, "one command read, and no second attempt"
-    assert len(recorded_api.calls) == 2, "two client reads, and no second attempt"

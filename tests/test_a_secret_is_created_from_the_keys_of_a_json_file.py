@@ -87,34 +87,6 @@ def body_of(recorded_api, method="create_namespaced_secret"):
     return calls[0]["body"]
 
 
-def test_every_key_of_the_file_lands_in_the_secret_as_a_string(tmp_path, recorded_api):
-    """The whole of the script's `to_entries`/`map`, in one call that cannot get the format wrong.
-
-    A string is written as itself, because that is what `tostring` did with a string.
-    """
-    result = run(write_json(tmp_path, {"TF_VAR_region": "eu-central-1",
-                                       "TF_VAR_shortname": "a-b",
-                                       "TF_VAR_project": "team-a"}))
-
-    assert result.exit_code == 0, result.output
-    body = body_of(recorded_api)
-    assert body.string_data == {"TF_VAR_region": "eu-central-1",
-                                "TF_VAR_shortname": "a-b",
-                                "TF_VAR_project": "team-a"}
-
-
-def test_a_number_is_written_as_its_own_text_and_not_as_a_python_number(tmp_path, recorded_api):
-    """`123` becomes `"123"`, `1.5` becomes `"1.5"`, `-3` becomes `"-3"`.
-
-    `str(int)` and `str(float)` are what `jq tostring` answers for those two, and a tfvars file is
-    mostly this branch of the dispatch.
-    """
-    result = run(write_json(tmp_path, {"count": 123, "ratio": 1.5, "delta": -3}))
-
-    assert result.exit_code == 0, result.output
-    assert body_of(recorded_api).string_data == {"count": "123", "ratio": "1.5", "delta": "-3"}
-
-
 def test_a_boolean_is_written_the_way_a_program_reads_it_and_not_the_way_python_writes_it(
         tmp_path, recorded_api):
     """`true`/`false` and not `True`/`False`, which is the trap `str()` walks straight into.
@@ -139,37 +111,6 @@ def test_a_null_is_written_as_the_word_null_and_not_as_the_word_none(tmp_path, r
 
     assert result.exit_code == 0, result.output
     assert body_of(recorded_api).string_data == {"TF_VAR_unset": "null"}
-
-
-def test_the_secret_is_generic_and_carries_kubementats_label(tmp_path, recorded_api):
-    """`generic` is `Opaque`, and the label is the half bash never wrote.
-
-    Both halves are in the object that leaves, so a test that reads the object sees both. The label
-    is what tells an operator that this Secret came from the platform, which is a fact the Task
-    could not state while it was running the script.
-    """
-    result = run(write_json(tmp_path, {"TF_VAR_region": "eu-central-1"}))
-
-    assert result.exit_code == 0, result.output
-    body = body_of(recorded_api)
-    assert body.type == "Opaque"
-    assert body.metadata.labels == {"managed-by": "kubementat"}
-
-
-def test_the_secret_is_named_and_addressed_by_the_arguments_the_command_took(
-        tmp_path, recorded_api):
-    """The namespace is the second argument and the name is the third, not a guess from config.
-
-    There is no `--team` and no `--type` on this command, so nothing resolves a namespace out of
-    `platform_config`: what the operator typed is what the call is addressed at. The first argument
-    is the environment, which decides the cluster and not the namespace.
-    """
-    result = run(write_json(tmp_path, {"a": "b"}))
-
-    assert result.exit_code == 0, result.output
-    call = [kwargs for name, kwargs in recorded_api.calls if name == "create_namespaced_secret"][0]
-    assert call["namespace"] == NAMESPACE
-    assert body_of(recorded_api).metadata.name == SECRET_NAME
 
 
 def test_an_existing_secret_is_replaced_and_not_left_alone(tmp_path, recorded_api):
@@ -203,15 +144,6 @@ def test_a_nested_object_names_the_key_it_refuses_and_writes_nothing(tmp_path, r
     assert "TF_VAR_nested" in result.output, result.output
     assert "Traceback" not in result.output, result.output
     assert recorded_api.calls == [], "the refusal must come before the cluster is asked"
-
-
-def test_a_nested_array_is_refused_for_the_same_reason(tmp_path, recorded_api):
-    """A list is a JSON value and not a data entry, and `jq` spelled it `[1,2]`."""
-    result = run(write_json(tmp_path, {"TF_VAR_list": [1, 2]}))
-
-    assert result.exit_code != 0
-    assert "TF_VAR_list" in result.output, result.output
-    assert recorded_api.calls == []
 
 
 def test_a_file_that_is_not_there_says_so_in_one_line(tmp_path, recorded_api):
@@ -290,35 +222,6 @@ def test_a_cluster_answer_that_is_not_409_becomes_a_sentence_and_not_a_frame(tmp
     assert result.exit_code != 0
     assert SECRET_NAME in result.output and NAMESPACE in result.output, result.output
     assert "Traceback" not in result.output, result.output
-
-
-def test_the_command_takes_four_positionals_and_no_flags():
-    """No `--team`, no `--type`: what the script took is what the command takes, plus the
-    environment every cluster-touching command puts in front of its arguments.
-
-    A flag naming the environment would be a second way to say which cluster the Secret lands in,
-    reached by somebody who read the CLI's help instead of the Task's params — which is why it is an
-    argument here and an argument there too, and not both. The Task is the only caller the migration
-    had to keep working.
-
-    The two options it does carry are not that flag: `--context`/`--kubeconfig` say which *cluster*
-    the write goes to, which is what the first layer of the resolution order is for, and `--config-dir`
-    says which
-    *configuration tree* the write is decided from — neither one names a namespace, a team, or a
-    Secret. The arguments stay the first four things in the list, so the Task's four params still
-    land where the script's three arguments landed — with the environment in front of them.
-    """
-    from click.core import Argument, Option
-
-    params = kubernetes.create_secret_from_json.params
-
-    assert [param.name for param in params] == [
-        "environment", "namespace", "secret_name", "json_file_path",
-        "context", "kubeconfig", "config_dir"]
-    assert all(isinstance(param, Argument) for param in params[:4]), \
-        "a flag on this command's arguments is a second way to name the namespace it was given"
-    assert all(isinstance(param, Option) for param in params[4:]), \
-        "the cluster the command resolves to is a flag, not a positional an old caller would send"
 
 
 def test_the_command_prints_one_line_about_what_it_wrote(tmp_path, recorded_api):

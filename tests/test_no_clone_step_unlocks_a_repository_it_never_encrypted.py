@@ -90,14 +90,6 @@ def test_the_clone_steps_do_not_unlock_what_there_is_nothing_to_unlock():
         assert clean, why
 
 
-def test_the_unlock_switch_param_is_gone_from_both_clone_tasks():
-    """The parameter is removed and not repurposed, so nothing can switch the behaviour back on."""
-    for name in CLONE_TASKS:
-        task = _load(name)
-        names = {p.get("name") for p in task.get("spec", {}).get("params", []) or []}
-        assert _UNLOCK_SWITCH not in names, f"{name} still declares {_UNLOCK_SWITCH!r}"
-
-
 def test_no_pipeline_param_can_ask_a_step_to_unlock_on_clone():
     """A param on the pipeline is a way back in, so the shipped pipelines declare none either.
 

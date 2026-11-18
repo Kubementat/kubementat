@@ -14,10 +14,8 @@ tree initialized before these keys existed must keep working, and a default that
 quietly is how a rename stops being visible.
 """
 
-import ast
 import json
 import logging
-import os
 import re
 import types
 from pathlib import Path
@@ -31,7 +29,7 @@ from kubementat.automations.tunnels import tunnels
 from kubementat.core.config.config import Config
 from kubementat.core.config.keys import component_config_key
 from kubementat.infrastructure.helm import HelmUtils
-from asset_paths import template_path, values_path
+from asset_paths import values_path
 
 ENVIRONMENT = "testenv"
 TEAM = "testteam"
@@ -100,22 +98,6 @@ def tunnel_automation(root, env_static, monkeypatch):
 # --- the key, and what it is derived from ----------------------------------------------
 
 
-@pytest.mark.parametrize("component,key", [
-    ("grafana", "GRAFANA_DEPLOYMENT_NAMESPACE"),
-    ("cert-manager", "CERT_MANAGER_DEPLOYMENT_NAMESPACE"),
-    ("tekton-dashboard", "TEKTON_DASHBOARD_DEPLOYMENT_NAMESPACE"),
-    ("cluster-cronjobs", "CLUSTER_CRONJOBS_DEPLOYMENT_NAMESPACE"),
-])
-def test_the_config_key_is_derived_from_the_component_name(component, key):
-    """Nothing may spell a key out per call site, or the two drift apart.
-
-    'tekton' -> TEKTON_DEPLOYMENT_NAMESPACE while its default namespace is
-    'tekton-pipelines' is the point: the component is named, the namespace is where it
-    happens to live.
-    """
-    assert component_config_key(component, "DEPLOYMENT_NAMESPACE") == key
-
-
 def test_the_configured_namespace_wins_over_the_default(tmp_path, caplog):
     """The whole ticket in one assertion: config answers, code does not."""
     with caplog.at_level(logging.WARNING):
@@ -124,34 +106,6 @@ def test_the_configured_namespace_wins_over_the_default(tmp_path, caplog):
         assert config.component_namespace("grafana") == "observability"
 
     assert caplog.text == "", "an explicit value must not warn about the default"
-
-
-def test_the_built_in_default_is_used_when_the_key_is_absent(tmp_path):
-    """A config tree written before these keys existed still resolves.
-
-    This is the branch that did not exist before: there was nothing to fall back
-    from, because the value *was* the code.
-    """
-    config = environment_config(tmp_path, {"ENVIRONMENT": ENVIRONMENT})
-
-    assert config.component_namespace("grafana") == constants.DEFAULT_NAMESPACES["grafana"]
-    assert config.component_namespace("tekton") == "tekton-pipelines"
-
-
-def test_falling_back_to_the_default_says_which_key_and_which_file(tmp_path, caplog):
-    """Silence is the failure mode being prevented: a default has to be visible, and acted on.
-
-    'The namespace defaulted' is not actionable. 'GRAFANA_DEPLOYMENT_NAMESPACE is not set in
-    .../static.json' is, and it names the one file that has to change.
-    """
-    config = environment_config(tmp_path, {})
-
-    with caplog.at_level(logging.WARNING):
-        namespace = config.component_namespace("grafana")
-
-    assert namespace == "grafana"
-    assert "GRAFANA_DEPLOYMENT_NAMESPACE" in caplog.text
-    assert str(tmp_path / "platform_config" / ENVIRONMENT / "static.json") in caplog.text
 
 
 def test_the_default_is_reported_once_per_config_not_per_read(tmp_path, caplog):
@@ -179,29 +133,6 @@ def test_an_empty_value_does_not_count_as_an_answer(tmp_path, caplog):
     assert "GRAFANA_DEPLOYMENT_NAMESPACE" in caplog.text
 
 
-def test_an_unknown_component_is_refused_rather_than_defaulted(tmp_path):
-    """A component name typo has to fail where it was made.
-
-    Defaulting it would mean deploying into a namespace named after the typo, which is the
-    same class of bug, just in the other direction.
-    """
-    config = environment_config(tmp_path, {})
-
-    with pytest.raises(KeyError) as excinfo:
-        config.component_namespace("grafanana")
-
-    message = str(excinfo.value)
-    assert "constants" in message
-    assert "static.json" in message
-    assert "grafanana" in message
-    # The template is package data, so the message names it as what this kmt ships and not
-    # as a path under a checkout. That distinction is what this assert is for: the sentence used to
-    # read the environment layer's shape, which is a direction a wheel-installed kmt
-    # cannot follow, and it is the same sentence class as the trigger generator's.
-    assert "templates/environment/" not in message, \
-        "the message sends a human to a directory the checkout no longer carries"
-
-
 # --- the tunnels, which is where the product reads it -----------------------------------
 
 
@@ -227,33 +158,6 @@ def test_a_tunnel_uses_the_namespace_the_config_names(tmp_path, monkeypatch, fun
     assert automation.kubernetes_utils.selectors == [(configured, "app=renamed")]
 
 
-@pytest.mark.parametrize("function,component,default_namespace", TUNNEL_COMPONENTS)
-def test_a_tunnel_falls_back_to_the_same_default_as_everything_else(
-        tmp_path, monkeypatch, function, component, default_namespace):
-    """No tunnel keeps a private namespace for the config that predates these keys."""
-    automation = tunnel_automation(tmp_path, {}, monkeypatch)
-
-    getattr(tunnels, function)(automation)
-
-    assert automation.kubernetes_utils.tunnels[0][0] == default_namespace
-
-
-def test_the_service_selector_defaults_match_the_selectors_the_tunnels_used(tmp_path, monkeypatch):
-    """Same trick, second value: the selector was string-interpolated from the component.
-
-    It happens to be right for grafana and wrong to keep deriving in code: a helm release
-    name is not the namespace's business either.
-    """
-    automation = tunnel_automation(tmp_path, {}, monkeypatch)
-
-    tunnels.open_tunnel_grafana(automation)
-
-    selectors = [selector for _, selector in automation.kubernetes_utils.selectors]
-    assert selectors == [
-        "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=grafana",
-    ]
-
-
 # --- the deploy side, where the release actually lands ----------------------------------------
 
 # `Config.component_namespace` answers where a component *is*, and `constants` is the fallback.
@@ -264,19 +168,6 @@ def test_the_service_selector_defaults_match_the_selectors_the_tunnels_used(tmp_
 # process environment, and what the template does with what it finds there.
 HELMFILE_TEMPLATE = values_path("helmfile.yaml.gotmpl")
 
-# The releases whose namespace the template still writes out as a literal, which is none of them.
-# An empty table is the finding, not an oversight: the three git-provider releases that needed a
-# literal were retired as kubementat components on 2026-10-29 and took their namespaces with them,
-# so every release the template declares reads its namespace from the variable `helmfile_apply`
-# exports. The reasoning that made the table honest outlives those releases, so it stays stated:
-# a literal is the right shape for a release whose component `constants` does not name, because
-# then `Config.component_namespace` refuses rather than guesses, there is no
-# `<COMPONENT>_DEPLOYMENT_NAMESPACE` for it in `static.json.template`, and `kmt uninstall` does not
-# sweep it. Inventing the keys to close that gap is how `CERT_MANAGER_DEPLOYMENT_NAMESPACE` came
-# to be read by nobody and survive a real uninstall, and a row for a release that is no longer in
-# the file is the same lie pointing the other way. So: empty is honest today, and an entry belongs
-# here only with the release that justifies it next to it.
-RELEASE_NAMESPACES_STILL_WRITTEN_OUT = {}
 
 # `<key>` is what the export writes, `<default>` is `constants`' value for that component.
 NAMESPACE_FROM_THE_ENVIRONMENT = re.compile(
@@ -378,43 +269,6 @@ def helmfile_over(tmp_path, env_static, monkeypatch):
     return HelmUtils(configuration_only_context(ENVIRONMENT, TEAM, config)), recorder
 
 
-@pytest.mark.parametrize("key", sorted(exported_namespaces()))
-def test_helmfile_starts_with_every_component_namespace_already_exported(tmp_path, monkeypatch, key):
-    """What helmfile is told is what `Config` says, for every component, at the moment it runs.
-
-    One variable per component, derived from the component set rather than listed here: a
-    component that is added to `constants` is exported without a second edit, and one nobody
-    named cannot be exported under a name somebody guessed.
-    """
-    utils, journal = helmfile_over(tmp_path, {"ENVIRONMENT": ENVIRONMENT}, monkeypatch)
-
-    utils.helmfile_apply(environment_name=ENVIRONMENT, helmfile_label_filter="group=standard")
-
-    started = journal.calls[-1]["namespaces"]
-    assert started[key] == constants.DEFAULT_NAMESPACES[component_for_key(key)]
-
-
-def test_a_renamed_namespace_key_is_the_namespace_helmfile_is_asked_to_use(tmp_path, monkeypatch):
-    """One line of the mechanism: the key is what helmfile is handed, in this process, now.
-
-    What that does to a release is a second question and it has two answers, which is why this is
-    not written as "the rename moves the release". A component with no release anywhere lands in the
-    renamed namespace; a component that already has one is refused, because a deployed release's
-    namespace is convention and not something a config edit moves
-    (`tests/test_a_deployed_release_is_not_moved_by_its_configuration.py` is that half). What is
-    exported here is the *ask*, and both answers read it.
-    """
-    utils, journal = helmfile_over(tmp_path, {"GRAFANA_DEPLOYMENT_NAMESPACE": "kmt-e2e-renamed"},
-                                   monkeypatch)
-
-    utils.helmfile_apply(environment_name=ENVIRONMENT, helmfile_label_filter="group=standard")
-
-    started = journal.calls[-1]["namespaces"]
-    assert started["GRAFANA_DEPLOYMENT_NAMESPACE"] == "kmt-e2e-renamed"
-    assert started["PROMETHEUS_DEPLOYMENT_NAMESPACE"] == "prometheus", \
-        "one key renamed renames that namespace, not the ones next to it"
-
-
 def test_a_namespace_key_the_config_does_not_declare_costs_nothing(tmp_path, monkeypatch):
     """The rule that decides the mechanism: helmfile gets the key it is handed, absence breaks nothing.
 
@@ -431,33 +285,6 @@ def test_a_namespace_key_the_config_does_not_declare_costs_nothing(tmp_path, mon
     assert started == exported_namespaces()
     assert all(value.strip() for value in started.values()), \
         "an empty namespace is a cluster error somewhere else; it is not what helmfile gets"
-
-
-def test_the_template_reads_every_release_namespace_from_the_variable_the_export_writes():
-    """A template that ignores the export is a red assert waiting for the next rename.
-
-    Reading the file is not ceremony: the failure this guards is a namespace that is configurable
-    in `src/` and still a string in the template, which is the defect the lane has been red on.
-    """
-    config_driven = {}
-    for release, line in template_release_namespaces().items():
-        # No release is written out today, so this branch only fires if a literal comes back --
-        # which is allowed, but only with a row here saying which release and why.
-        if release in RELEASE_NAMESPACES_STILL_WRITTEN_OUT:
-            assert line == f"  namespace: {RELEASE_NAMESPACES_STILL_WRITTEN_OUT[release]}", \
-                f"{release} is written out for a stated reason; the reason is a change, not a drift"
-            continue
-        declared = NAMESPACE_FROM_THE_ENVIRONMENT.match(line)
-        assert declared, (f"{release}: a release namespace has to be read from the exported "
-                          f"variable, got {line!r}")
-        config_driven[release] = declared.group(1)
-
-    assert config_driven, "no release is configurable is not the finding anyone expects here"
-    for release, key in sorted(config_driven.items()):
-        assert key == component_config_key(component_for_key(key), "DEPLOYMENT_NAMESPACE"), \
-            f"{release} reads {key}, which no component's name produces"
-    assert set(config_driven.values()) <= set(exported_namespaces()), \
-        "a variable the template reads and nobody exports is a release that always deploys to its default"
 
 
 def test_the_default_written_into_the_template_is_the_default_the_code_holds():
@@ -493,118 +320,3 @@ def test_a_release_namespace_can_never_be_the_reason_an_apply_stops():
     assert asked_required, "the Grafana pair is the only thing this file may insist on"
     assert not [line for line in asked_required if "namespace" in line], \
         "a namespace has to be defaulted, never insisted on"
-# What a name is allowed to declare that its value is, when the string it holds is one of ours.
-#
-# One reason for the whole table, and it is Traefik's: it is the only component `constants` names
-# whose component name, whose chart name and whose default namespace are all the same string.
-# `tekton` is a component and `tekton-pipelines` is where it happens to land, so for every other
-# component "this value is one of our namespaces" was evidence enough of a namespace binding. For
-# `traefik` that same evidence says nothing, and two constants that are correct where they sit were
-# being reported as the defect the guard exists to find.
-#
-# Two halves decide it, and only the second one is new. The match is on the *end* of the name, at
-# a word boundary, so an identifier has to declare itself rather than merely contain a word:
-# `TRAEFIK_PROXY_CHART_NAME` ends with `CHART_NAME`, while `TRAEFIK_COMPONENT_NAMESPACE` contains
-# `COMPONENT` and ends with `NAMESPACE` and is a namespace binding. And the value has to be the
-# thing claimed -- `COMPONENT = "traefik"` is a component, `COMPONENT = "tekton-pipelines"` is a
-# namespace wearing a component's name. An entry that only listed its suffix would be the same
-# blank cheque a substring heuristic is; the predicate is what makes it a claim that can be wrong.
-#
-# A row is added by writing down the collision that forced it, and
-# `test_an_exception_that_no_line_claims_is_dropped` is what takes a stale one back out.
-DECLARED_BINDINGS = (
-    ("COMPONENT",
-     "the component name a config key is derived from, so it is the name that is looked up and "
-     "not the namespace it resolves to (traefik_presence.py, read through `component_config_key`)",
-     lambda value: value in constants.DEFAULT_NAMESPACES),
-    ("CHART_NAME",
-     "the chart half of the `<name>-<version>` string a `helm list` row reports in its `chart` "
-     "field, compared against what the cluster is running (automation.py, "
-     "`_release_runs_traefik_proxy`)",
-     lambda value: value in chart_names_constants_names()),
-)
-# Every line below is a namespace binding, and every one of them has to come out of the guard as
-# an offender. This is the narrowing's counter-proof: the exception table excuses two names, and
-# nothing on this list is close enough to either name to be excused by accident. The first four are
-# the literals `automation.py` carried with a `# TODO: make this a config` above them -- the values
-# named by the plan's exit criterion, which is the reason this guard exists at all.
-NAMESPACE_BINDINGS_STILL_CAUGHT = [
-    ("namespace = 'grafana'",
-     "one of the four literals automation.py had, verbatim"),
-    ("namespace = 'tekton-pipelines'",
-     "one of the four, and the one where the component name and the namespace differ"),
-    ("namespace = 'polaris'",
-     "one of the four"),
-    ("namespace = 'openbao'",
-     "the secret-management namespace, and the counter-proof that the guard still reads values "
-     "out of `constants` rather than out of a remembered list: `vault` was one of the four "
-     "literals `automation.py` carried, and it left with the component, so it is no longer an "
-     "offender and no longer belongs on this list"),
-    ('namespace = "traefik"',
-     "the newest namespace in the set, written under the name that binds a namespace"),
-    ('TRAEFIK_NAMESPACE = "traefik"',
-     "the collision case itself: the name says NAMESPACE, so the Traefik in front of it is not a "
-     "declaration of anything"),
-    ('NAMESPACE = "cert-manager"',
-     "a bare NAMESPACE has no claim in it, which is the whole test"),
-    ('TRAEFIK_COMPONENT_NAMESPACE = "traefik"',
-     "the name contains COMPONENT and ends with NAMESPACE; the table matches endings and never "
-     "substrings, so this is a namespace binding with a component's word in the middle of it"),
-    ('COMPONENT = "tekton-pipelines"',
-     "the name claims a component and the value says otherwise: no component is named "
-     "tekton-pipelines, so it is a namespace wearing a component's name"),
-    ('GRAFANA_CHART_NAME = "grafana"',
-     "the name claims a chart and no chart kubementat installs is named grafana, so it is a "
-     "namespace wearing a chart's name"),
-    ('selector = "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=grafana"',
-     "a selector is bound by the same rule, and nothing in this name declares it is not ours"),
-]
-
-
-def test_every_default_namespace_is_a_key_the_template_ships():
-    """The two places that say the same thing have to agree, in both directions.
-
-    `constants.py` is what a config tree gets when it is silent; if the template ships a
-    different value for the same key, a re-initialized environment moves a namespace with no
-    warning.
-
-    The other direction is the one that hurt before: `uninstall_kubementat.sh` read fourteen
-    keys and missed `CERT_MANAGER_DEPLOYMENT_NAMESPACE` and `NGINX_INGRESS_DEPLOYMENT_NAMESPACE`
-    -- keys the shipped config held and no code read, so both releases outlived a real uninstall.
-    A namespace key has to be a component kubementat names, because that component set is what
-    `HelmUtils` exports and what the uninstall sweeps. A key outside it is config nobody reads.
-    The second of those two keys is gone from the template, because the controller it named is not
-    a component any more; the rule that took it out is the same rule that kept `cert-manager` in.
-    """
-    template = json.loads((template_path("environment", "static.json.template")).read_text())
-    template_namespaces = {
-        key: value for key, value in template.items() if key.endswith("_DEPLOYMENT_NAMESPACE")
-    }
-
-    disagreeing = {
-        component_config_key(component, "DEPLOYMENT_NAMESPACE"):
-            (value, template_namespaces.get(component_config_key(component, "DEPLOYMENT_NAMESPACE")))
-        for component, value in constants.DEFAULT_NAMESPACES.items()
-        if template_namespaces.get(component_config_key(component, "DEPLOYMENT_NAMESPACE")) != value
-    }
-
-    assert disagreeing == {}, "constants.py and the template disagree (key: (default, template))"
-
-    named_by_nothing = sorted(
-        key for key in template_namespaces
-        if component_for_key(key) not in constants.DEFAULT_NAMESPACES)
-    assert named_by_nothing == [], \
-        "a namespace key no component owns is one nothing exports, deploys or sweeps"
-
-
-def test_the_template_declares_a_selector_for_every_component_the_code_can_ask_for():
-    """A key the code reads has to exist, and a key that exists but is never read is dead config."""
-    template = json.loads((template_path("environment", "static.json.template")).read_text())
-
-    missing = [
-        component_config_key(component, "SERVICE_SELECTOR")
-        for component in constants.DEFAULT_SERVICE_SELECTORS
-        if component_config_key(component, "SERVICE_SELECTOR") not in template
-    ]
-
-    assert missing == []

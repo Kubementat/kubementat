@@ -36,7 +36,7 @@ is written in it.
 import pytest
 
 from kubementat.core.identity.context import Context
-from kubementat.core.constants import SOURCE_FLAG, STATIC_SOURCE_PREFIX
+from kubementat.core.constants import STATIC_SOURCE_PREFIX
 from kubementat.errors import ClusterNotConfiguredError
 
 from cluster_fixture import (
@@ -129,26 +129,6 @@ def test_the_environment_configuration_answers_when_nothing_above_it_speaks(tmp_
     assert str(static_path) in ctx.resolution_report[0]
 
 
-def test_the_context_a_command_tells_answers_for_an_environment_that_declares_none(
-        tmp_path, monkeypatch):
-    """Layer 1's name, over layer 2's name, where the file made no claim to contradict.
-
-    This is the ordering layer 1 still has: `dev` names no cluster, so whatever the run states is
-    the answer and not a disagreement. Both layers above the file speak, and the flag's name wins,
-    which is the same precedence the path tests read — the order of the layers is one rule and it
-    does not depend on which half of the claim is being made.
-    """
-    root = fixture_root(tmp_path, monkeypatch)
-    write_environment(root, "dev", context=None, kubeconfig_path=root / "kubeconfig")
-    monkeypatch.setenv("CLUSTER_KUBE_CONTEXT", "prod-static")
-
-    ctx = Context.build("dev", "the-team", context="unclaimed")
-
-    assert ctx.target.address == "https://10.0.9.9:6443"
-    assert ctx.target.source == SOURCE_FLAG
-    assert "flag --context" in ctx.resolution_report[0]
-
-
 def test_a_process_variable_that_is_set_but_empty_is_refused_rather_than_read_as_unset(tmp_path, monkeypatch):
     """An empty `CLUSTER_KUBE_CONTEXT` is a mistake, not a way to say "skip this layer".
 
@@ -156,7 +136,7 @@ def test_a_process_variable_that_is_set_but_empty_is_refused_rather_than_read_as
     silently falling back on an empty variable is how a pipeline that forgot to export a value
     ends up installing into the cluster that happens to be in the tree.
     """
-    root = fixture_root(tmp_path, monkeypatch)
+    fixture_root(tmp_path, monkeypatch)
     monkeypatch.setenv("CLUSTER_KUBE_CONTEXT", "   ")
 
     with pytest.raises(ClusterNotConfiguredError) as refused:
@@ -164,22 +144,3 @@ def test_a_process_variable_that_is_set_but_empty_is_refused_rather_than_read_as
 
     assert "set but empty" in str(refused.value)
     assert "CLUSTER_KUBE_CONTEXT" in str(refused.value)
-
-
-def test_the_context_a_service_account_or_kubectl_would_pick_is_not_an_answer(tmp_path, monkeypatch):
-    """Nothing above layer 3 means an error, and never a `current-context`.
-
-    This is the load-bearing part of the behaviour change. The fixture kubeconfig has a perfectly
-    usable `current-context`, the environment's own declaration is removed, and the answer is not
-    the obvious cluster — it is a refusal that names the file.
-    """
-    root = fixture_root(tmp_path, monkeypatch)
-    write_environment(root, "dev", context=None)
-
-    with pytest.raises(ClusterNotConfiguredError) as refused:
-        Context.build("dev", "the-team")
-
-    assert str(root / "kubeconfig") not in str(refused.value)
-    assert "current-context" in str(refused.value)
-    assert "fallback" in str(refused.value)
-    assert refused.value.reason

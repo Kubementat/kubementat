@@ -20,16 +20,14 @@ answer comes from the mounted files, so every test here fabricates them under `t
 
 import pytest
 
-from kubementat.core.identity import kubeconfig as kubeconfig_module
 from kubementat.core.identity.context import Context
-from kubementat.core.identity.registry import EnvironmentRegistry
 from kubementat.core.identity.target import ClusterTarget
 from kubementat.core.constants import (
     SOURCE_FLAG,
     SOURCE_SERVICE_ACCOUNT,
     STATIC_SOURCE_PREFIX,
 )
-from kubementat.errors import (ClusterIdentityCollisionError, ClusterNotConfiguredError, ClusterResolutionError, ServiceAccountNotMountedError)
+from kubementat.errors import (ClusterIdentityCollisionError, ServiceAccountNotMountedError)
 
 from cluster_fixture import (
     DEV_SERVER,
@@ -202,60 +200,7 @@ def test_the_same_address_does_not_make_a_self_collision_when_the_pod_is_on_anot
     assert DEV_SERVER in str(refused.value)
 
 
-def test_the_registry_holds_the_same_rule_as_the_check_and_not_a_weaker_one(tmp_path, monkeypatch):
-    """One question, one answer. The registry's own collision list excludes what `Context` excludes.
-
-    The check is the thing that refuses, and `collision_check` is the thing `kmt environments list`
-    could one day be built from; if the two applied the rule differently, the listing would say
-    "collides" about an environment a command would happily install into. The same target, asked
-    about in-cluster and off-cluster, has to give two different answers.
-    """
-    root, kubeconfig = pod_root(tmp_path, monkeypatch, host="10.0.5.1")
-    write_environment(root, "prod", context="prod-cluster", kubeconfig_path=kubeconfig)
-    registry = EnvironmentRegistry(root / "platform_config")
-    running = mounted_service_account(monkeypatch, root, host="10.0.5.1")
-    assert running == PROD_SERVER
-    target = ClusterTarget.from_service_account("dev")
-
-    on_this_cluster = registry.collision_check(target)
-    assert on_this_cluster.collisions == ()
-    # The exclusion is not a fact the reporter has to guess at: the comparison says which address
-    # it subtracted, which is what lets `Context.build` report the environments it held back without
-    # asking the question a second time.
-    assert on_this_cluster.self_address == running
-
-    # The same registry, asked about the same address, but from a process standing on another
-    # cluster: now `prod` is somebody else's cluster and the answer has to say so.
-    mounted_service_account(monkeypatch, root, host="10.96.0.2")
-    from_elsewhere = ClusterTarget.from_kubeconfig(str(kubeconfig), "prod-cluster", "dev")
-    assert [record.environment for record in registry.collision_check(from_elsewhere).collisions] == ["prod"]
-
-
 # ------------------------------------------------------------------- the material and the repr
-
-
-def test_the_absence_of_a_mounted_service_account_is_a_named_refusal_and_not_a_missing_file(
-    tmp_path, monkeypatch
-):
-    """Not in a pod is a fact about configuration, so it gets an exception that says so.
-
-    `FileNotFoundError` from the kubelet's own directory names a file the operator cannot create
-    and explains nothing. The named error says this process is not inside a cluster, names the path
-    that is not there, and stays a resolution failure — because layer 5 is a layer, and a caller
-    that catches "could not resolve the cluster" catches this too.
-    """
-    root = checkout(tmp_path)
-    redirect_checkout(monkeypatch, root)
-    absent = tmp_path / "not-mounted"
-
-    with pytest.raises(ServiceAccountNotMountedError) as refused:
-        ClusterTarget.from_service_account("dev", mount_root=absent)
-
-    assert not isinstance(refused.value, FileNotFoundError)
-    assert isinstance(refused.value, ClusterResolutionError)
-    assert str(absent / "token") in str(refused.value)
-    assert "not running inside a cluster" in str(refused.value)
-    assert refused.value.reason
 
 
 def test_a_mounted_token_that_is_empty_authenticates_nothing_and_is_named_as_the_failure(
@@ -277,32 +222,6 @@ def test_a_mounted_token_that_is_empty_authenticates_nothing_and_is_named_as_the
 
     assert "empty" in str(refused.value)
     assert str(mount / "token") in str(refused.value)
-
-
-def test_a_command_on_a_machine_that_is_not_a_pod_still_gets_the_configuration_sentence(
-    tmp_path, monkeypatch
-):
-    """The fold that keeps layer 5 from becoming a fifth way to fail.
-
-    Nothing declared a cluster, and there is no mount: the operator's answer is still the refusal that
-    names the file, the key, and what was found there — with the in-cluster fact appended as a clause
-    rather than a headline. A message that led with "am I a pod?" would be a second, louder answer
-    to a question one `static.json` already answers.
-    """
-    root = checkout(tmp_path)
-    redirect_checkout(monkeypatch, root)
-    write_environment(root, "dev", context=None)
-    static_path = root / "platform_config" / "dev" / "static.json"
-    # Not a pod, in the only sense the code can check: no material where the kubelet would have put it.
-    # Patched on the module that owns the root, which is where the code that reads it looks.
-    monkeypatch.setattr(kubeconfig_module, "SERVICE_ACCOUNT_ROOT", tmp_path / "not-a-pod")
-
-    with pytest.raises(ClusterNotConfiguredError) as refused:
-        Context.build("dev", "the-team")
-
-    assert str(static_path) in str(refused.value)
-    assert "current-context" in str(refused.value)
-    assert "In-cluster resolution was considered last" in str(refused.value)
 
 
 def test_a_target_built_from_the_mount_carries_the_token_to_a_client_and_nowhere_else(

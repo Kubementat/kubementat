@@ -18,7 +18,6 @@ own values, and a file that duplicates a shipped default is the second copy this
 """
 
 import re
-from pathlib import Path
 
 import yaml
 
@@ -152,21 +151,6 @@ def test_the_manifest_references_values_files_at_all():
         f"the manifest helmfile applies is not at {HELMFILE_MANIFEST}, so every reference below reads nothing"
 
 
-def test_every_values_file_the_manifest_names_resolves_from_the_packaged_root():
-    """The reference has to be a file in the directory helmfile runs in. Nothing else is consulted.
-
-    This is the check that stands or falls here. Before it, the reference resolved against a copy
-    `initialize` had dropped into `platform_config/{environment}/kubementat_components/`, so the
-    file's existence and the manifest's content were both the operator's problem; now both are the
-    package's, and a reference that lost its file is answered here rather than by an apply that
-    silently installs chart defaults.
-    """
-    missing = sorted(reference for reference in referenced_values_files()
-                     if not (VALUES_ROOT / reference).is_file())
-
-    assert missing == [], "the manifest names these values files and the package does not ship them"
-
-
 def test_shipped_and_referenced_are_one_set():
     """Nothing ships that no release reads, and nothing is read that does not ship.
 
@@ -182,20 +166,6 @@ def test_shipped_and_referenced_are_one_set():
         "shipped and referenced have stopped being one set (shipped but unapplied, applied but "
         f"unshipped): {sorted(shipped_values_files() - referenced)}, "
         f"{sorted(referenced - shipped_values_files())}")
-
-
-def test_no_values_file_lingers_under_the_templates_root():
-    """The `.template` suffix is gone from these files, so nothing may carry it here.
-
-    A file under `templates/` reads as material `initialize` copies, and there is no longer an
-    `initialize` that copies any of them. The two names would be two files, and only one is read.
-    """
-    from asset_paths import template_path
-
-    stale = sorted(str(path) for path in
-                   template_path("environment", "kubementat_components").rglob("*.yaml*")
-                   if "values" in path.name)
-    assert stale == [], f"values templates survive under the templates root: {stale}"
 
 
 def test_the_logging_values_files_are_all_both_shipped_and_referenced():

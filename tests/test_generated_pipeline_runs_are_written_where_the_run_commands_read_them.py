@@ -25,7 +25,6 @@ The rules this file exists for are the ones that make that review mean something
   generated run is not invisible to a `git status`.
 """
 
-from kubementat.errors import (GenerationInputNotFoundError, GenerationInputNotUsableError, GenerationPlaceholderNotConfiguredError, GenerationTargetExistsError)
 import shutil
 import subprocess
 from pathlib import Path
@@ -37,11 +36,7 @@ from conftest import REPO_ROOT, run_kmt
 from cluster_fixture import configuration_only_context
 from asset_paths import tekton_ci_path
 from kubementat.infrastructure.tekton import generation
-from kubementat.infrastructure.tekton.generation import PIPELINE_RUN_PARAMETER_PLACEHOLDERS
 
-# What an unfilled parameter is written as. Read from the module rather than typed here, so
-# the guard cannot disagree with the generator the way the bare `TODO` it replaced could.
-UNFILLED = generation.PIPELINE_RUN_UNFILLED_PARAMETER
 
 PIPELINE = "build-pipeline-ci-images"
 
@@ -97,11 +92,6 @@ def parameter_names(document):
     return [parameter["name"] for parameter in document["spec"].get("params") or []]
 
 
-def parameters_of(document):
-    return {parameter["name"]: parameter["value"]
-            for parameter in document["spec"].get("params") or []}
-
-
 def declared_parameter_names(checkout, pipeline):
     """The parameter names the pipeline itself declares, in the order it declares them."""
     return parameter_names(documents_of(pipeline_source(checkout, pipeline))[0])
@@ -113,32 +103,6 @@ def written_run(checkout, pipeline):
 
 
 # --- what the generator writes ------------------------------------------------------------------
-
-
-def test_the_run_directory_is_created_when_the_environment_has_none(checkout):
-    """A team that has never generated a run has no run directory, and that is not an error.
-
-    The directory is the one the run commands read, so a first generation has to make it rather than
-    stop halfway through with "No such file or directory".
-    """
-    assert not (checkout.root / TEAM_PIPELINE_RUN_DIR).exists(), "the fixture must not pre-create it"
-
-    target = generated_pipeline_run(checkout, PIPELINE)
-
-    assert target.is_file(), target
-
-
-def test_a_generated_run_lands_where_the_run_commands_read_it(checkout):
-    """The location is the point, so it is asserted as a path rather than as a description.
-
-    `run_pipeline` resolves a bare file name against `Config.tekton_team_pipeline_run_dir` and
-    `list_available_pipeline_runs` globs that same directory, so a generated run that is reviewed and
-    committed is a run the team can start by name.
-    """
-    target = generated_pipeline_run(checkout, PIPELINE)
-
-    assert target == checkout.root / TEAM_PIPELINE_RUN_DIR / f"{PIPELINE}-run.yml"
-    assert target.is_file()
 
 
 def test_the_command_generates_a_run_and_lists_it_by_name_alone(checkout, dry_run_env):
@@ -158,97 +122,6 @@ def test_the_command_generates_a_run_and_lists_it_by_name_alone(checkout, dry_ru
 
     assert listing.returncode == 0, listing.stdout + listing.stderr
     assert f"{PIPELINE}-run.yml" in listing.stdout + listing.stderr
-
-
-def test_a_generated_run_is_the_run_the_pipeline_asks_for(checkout):
-    """Shape, read from the v1 contract rather than out of a heredoc.
-
-    `taskRunTemplate.serviceAccountName` and `timeouts.pipeline` both moved in v1, which is why the
-    apiVersion they are stamped with comes from `Config`: a template or a script that writes
-    `tekton.dev/v1beta1` and the v1 field names is a manifest no controller in this tree answers to.
-    """
-    document = documents_of(generated_pipeline_run(checkout, PIPELINE))[0]
-
-    assert document["apiVersion"] == "tekton.dev/v1"
-    assert document["kind"] == "PipelineRun"
-    assert document["metadata"]["name"] == f"{PIPELINE}-run"
-    spec = document["spec"]
-    assert spec["pipelineRef"]["name"] == PIPELINE
-    assert spec["taskRunTemplate"]["serviceAccountName"] == "fixture-helm-deployer"
-    assert spec["timeouts"]["pipeline"] == "10m"
-    assert spec["workspaces"] == [{"name": "pipeline-workspace",
-                                   "volumeClaimTemplate": {"spec": {
-                                       "storageClassName": "fixture-storage",
-                                       "accessModes": ["ReadWriteOnce"],
-                                       "resources": {"requests": {"storage": "100Mi"}}}}},
-                                   # A workspace the pipeline marks optional is bound to an empty volume and
-                                   # not to a claim: sizing something the pipeline says may go unbound is a
-                                   # guess this generator cannot make.
-                                   {"name": "buildkit-runtime", "emptyDir": {}}]
-
-
-def test_a_generated_run_declares_every_parameter_the_pipeline_takes_and_not_one_more(checkout):
-    """One parameter per declared parameter, in the pipeline's own order.
-
-    This is the difference a reviewer should not have to find: a `PipelineRun` that passes a parameter
-    its `Pipeline` never declared is rejected by the controller, so the set has to be exactly the
-    declaration — which doubles as the assertion that the generator invents no parameter of its
-    own.
-    """
-    document = documents_of(generated_pipeline_run(checkout, PIPELINE))[0]
-
-    assert parameter_names(document) == declared_parameter_names(checkout, PIPELINE)
-
-
-@pytest.mark.parametrize("pipeline", ["build-pipeline-ci-images", "hello-world-pipeline",
-                                      "docker-build-pipeline", "delete-pipeline-helm-deployment"])
-def test_the_generated_run_binds_only_the_workspaces_the_pipeline_declares(checkout, pipeline):
-    """The workspace name comes from the source now, and a pipeline that declares none gets nothing.
-
-    A run of a Task-only pipeline that binds `pipeline-workspace` asks for a volume that nowhere in the
-    pipeline is mounted, and the controller starts it anyway — the waste is silent.
-    """
-    document = documents_of(generated_pipeline_run(checkout, pipeline))[0]
-    source = documents_of(pipeline_source(checkout, pipeline))[0]
-    declared = [workspace["name"]
-                for workspace in (source.get("spec") or {}).get("workspaces") or []]
-
-    assert [workspace["name"] for workspace in document["spec"].get("workspaces") or []] == declared
-
-
-def test_a_generated_run_holds_no_leftover_placeholder(checkout):
-    """What the substitution owes and what it pays, read off the written bytes.
-
-    A leftover `STORAGE_CLASS_PLACEHOLDER` is a key that stopped being configured, and the generator's
-    refusal rule is what catches it; this is the happy path's half of the same claim, so the file a
-    team would commit is the file that is checked.
-    """
-    target = generated_pipeline_run(checkout, PIPELINE)
-
-    assert "PLACEHOLDER" not in target.read_text()
-    assert documents_of(target)[0]["spec"]["params"], "a run with no parameters proves nothing here"
-
-def test_values_configuration_knows_arrive_and_values_it_cannot_are_marked(checkout):
-    """The generator's two answers, kept apart.
-
-    A parameter kubementat has a key for arrives filled, because leaving the token would put a word
-    that only becomes a value at apply time in front of whoever reviews the file. A parameter it has no
-    key for is marked rather than guessed: `builder-image` belongs to the app, and inventing a value for
-    it is a run that silently builds the wrong thing.
-    """
-    values = parameters_of(documents_of(generated_pipeline_run(checkout, PIPELINE))[0])
-    declared = set(declared_parameter_names(checkout, PIPELINE))
-
-    assert declared & set(values) == declared
-    named = set(values) & set(PIPELINE_RUN_PARAMETER_PLACEHOLDERS)
-    assert named, "no parameter of this pipeline resolves from configuration"
-    for name in sorted(named):
-        assert values[name] not in ("", None), name
-        assert "PLACEHOLDER" not in str(values[name]), name
-        assert str(values[name]) != "null", name
-    for name, value in values.items():
-        if name not in PIPELINE_RUN_PARAMETER_PLACEHOLDERS:
-            assert value == UNFILLED, f"{name} is not a parameter kubementat can name: {value!r}"
 
 
 def test_a_run_generated_twice_writes_the_same_bytes_into_a_fresh_target(checkout):

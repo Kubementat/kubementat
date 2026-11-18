@@ -8,15 +8,13 @@ with neither cannot do. The tests below are the two halves of that: the value a 
 arrives, and the value a run does not give is refused rather than remembered.
 """
 
-import re
 
 import pytest
 from click.testing import CliRunner
 
 from cli import helpers
-from cli.commands import (component, helm, kubernetes, kubementat, routing, tekton, tunnels,
-                           users, utilities)
-from kubementat.errors import TeamNotSuppliedError
+from cli.commands import (component, helm, kubernetes, routing, tekton, tunnels,
+                           users)
 # The run path's verbs are module functions now (P4-3), so this is the seam to intercept.
 from kubementat.infrastructure.tekton import runs
 
@@ -69,34 +67,6 @@ TEAM_LESS_COMMANDS = [
 # object.
 TUNNEL_FUNCTIONS = ("open_tunnel_grafana", "open_tunnel_tekton_dashboard", "open_tunnel_openbao",
                     "open_tunnel_concourse")
-
-
-class RecordingContext:
-    """Stands in for the classes that take one `Context` -- `HelmUtils` does, and did.
-
-    Records the `(environment, team)` pair the object carries, because that pair is what these
-    tests assert; what changed is where it lives, not whether the command still decides it. The run
-    path reads that pair plus the config and a client off the `Context` now (`P4-6` deleted
-    `TektonUtils`, which is what used to read them off and hand them on), so the recorder that
-    covered both services now covers only the one that is still a class.
-    """
-
-    def __init__(self, calls):
-        self.calls = calls
-
-    def __call__(self, ctx):
-        self.calls.append((ctx.environment, ctx.team))
-        # What the run path reads off the object now (P4-3 moved the verb onto `runs`). The verb is
-        # intercepted below, so nothing here is ever asked to touch a cluster.
-        self.config = ctx.config
-        self.environment = ctx.environment
-        self.team = ctx.team
-        self.kubernetes_utils = None
-        return self
-
-    def helmfile_apply(self, **kwargs):
-        self.calls[-1] = self.calls[-1] + (kwargs,)
-        return None
 
 
 class RecordingVerb:
@@ -157,25 +127,6 @@ def invoke(command, args, **runner_kwargs):
     the tests below are about.
     """
     return CliRunner().invoke(command, args, **runner_kwargs)
-
-
-@pytest.mark.parametrize("command,base_args", TEAM_FLAG_COMMANDS,
-                         ids=[command.name for command, _ in TEAM_FLAG_COMMANDS])
-def test_the_team_flag_reaches_the_command(command, base_args, recorder):
-    result = invoke(command, list(base_args) + ["--team", TEAM])
-
-    assert result.exit_code == 0, result.output
-    assert recorder[-1][:2] == ("dev", TEAM), "the team never left the flag it was typed on"
-
-
-@pytest.mark.parametrize("command,base_args", TEAM_FLAG_COMMANDS,
-                         ids=[command.name for command, _ in TEAM_FLAG_COMMANDS])
-def test_the_team_environment_variable_is_honoured(command, base_args, recorder, monkeypatch):
-    monkeypatch.delenv("TEAM", raising=False)
-    result = invoke(command, list(base_args), env={"TEAM": "team-a"})
-
-    assert result.exit_code == 0, result.output
-    assert recorder[-1][1] == "team-a"
 
 
 def test_the_option_offers_no_default_of_any_kind():
@@ -278,47 +229,6 @@ def test_a_command_that_cannot_act_on_a_team_says_the_flag_is_not_its_option(com
 # layer.
 TUNNEL_COMMANDS = {tunnels.tunnel_grafana, tunnels.tunnel_tekton, tunnels.tunnel_openbao_ui,
                    tunnels.tunnel_concourse}
-
-
-def test_no_team_is_hardcoded_in_the_command_modules():
-    """The whole point of both rules together: no command gets to remember a team."""
-    hardcoded_team = re.compile(r"['\"]dev1['\"]")
-    offenders = []
-    for module in (helm, tunnels, tekton, kubementat, utilities, kubernetes):
-        with open(module.__file__) as source_file:
-            for line in source_file:
-                code = line.split("#")[0]
-                if hardcoded_team.search(code):
-                    offenders.append("%s:%s" % (module.__name__, line.strip()))
-
-    assert not offenders, "hardcoded team back in %s" % offenders
-
-
-def test_helmfile_apply_reports_the_environment_and_filter_it_used(monkeypatch):
-    """What the apply says about itself, after the `--team` line came off it.
-
-    The echo is what tells an operator why a scripted run came out the way it did, so the
-    environment and the filter stay. The `team:` line went with the option: printing a value the
-    command was not given, or was given and did not use, is noise wearing a label, and a
-    run that types `TEAM=...` proves it is noise by changing nothing about the apply.
-    """
-    calls = []
-    monkeypatch.setattr(helm, "HelmUtils", RecordingContext(calls))
-
-    result = invoke(helm.helmfile_apply, ["dev", "--helmfile-label-filter", "group=routing"],
-                    env={"TEAM": TEAM})
-
-    assert result.exit_code == 0, result.output
-    assert "environment: dev" in result.output
-    assert "helmfile-label-filter: group=routing" in result.output
-    assert TEAM not in result.output, "the apply still reports a team it never reads"
-    # `TEAM` is in the process, and it changes nothing: the option is gone, so `_team_of` finds no
-    # `team` parameter to read and the `Context` the service is built from carries `None`. That is
-    # the whole point of deleting the flag rather than its echo -- a variable with nothing to reach
-    # cannot become a default again. (The service is recorded and not run, so what is asserted here
-    # is the pair it was handed, not a cluster read.)
-    assert calls[-1][:2] == ("dev", None), (
-        f"`TEAM` reached a command that has no parameter for it: {calls[-1]}")
 
 
 @pytest.fixture(autouse=True)

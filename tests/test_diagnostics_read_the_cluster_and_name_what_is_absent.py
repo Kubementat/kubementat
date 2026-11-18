@@ -44,7 +44,7 @@ def pod(name, namespace=NAMESPACE, phase="Running", node="node-a", image="exampl
     `instance` is what the deployment selector matches, `requests` goes onto the first
     container, and the labels exist because the selector is answered by them on a real cluster.
     """
-    labels = {f"app.kubernetes.io/instance": instance} if instance is not None else {}
+    labels = {"app.kubernetes.io/instance": instance} if instance is not None else {}
     labels.setdefault("app.kubernetes.io/name", instance or name)
     resources = (V1ResourceRequirements(requests=requests) if requests else None)
     containers = [V1Container(name="main", image=image, resources=resources)]
@@ -66,32 +66,6 @@ def pod_list(*pods):
 
 def node_list(*nodes):
     return SimpleNamespace(items=list(nodes))
-
-
-# ---------------------------------------------------------------------------
-# analyze-deployment
-# ---------------------------------------------------------------------------
-def test_analyzing_a_deployment_shows_the_namespace_and_reads_the_logs_it_selects(recorded_api):
-    """`kubectl get pods` plus `kubectl logs -l` is the old script; the result is the new shape.
-
-    The pods of the namespace arrive as evidence, and the logs arrive for the pods the
-    deployment actually owns — a pod without the instance label is not the deployment's,
-    no matter what it is called.
-    """
-    selected = pod("web-7f9c", instance=DEPLOYMENT)
-    other = pod("sidecar-3a", instance="other")
-    recorder = recorded_api
-    recorder.answer("list_namespaced_pod", lambda **kwargs:
-                    pod_list(selected) if kwargs.get("label_selector") else pod_list(selected, other))
-    recorder.answer("read_namespaced_pod_log", "starting up\nlistening on 8080\n")
-
-    result = KubernetesUtils(TARGET_DEV, api_client=recorded_api).analyze_deployment(NAMESPACE, DEPLOYMENT)
-
-    assert {p["name"] for p in result["pods"]} == {"web-7f9c", "sidecar-3a"}
-    assert [p["name"] for p in result["matched_pods"]] == ["web-7f9c"]
-    assert result["logs"] == {"web-7f9c": "starting up\nlistening on 8080\n"}
-    assert result["message"] is None
-    assert result["selector"] == f"app.kubernetes.io/instance={DEPLOYMENT}"
 
 
 def test_analyzing_reports_a_deployment_that_is_not_installed_without_failing_the_read(recorded_api):

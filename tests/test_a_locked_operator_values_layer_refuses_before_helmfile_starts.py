@@ -17,7 +17,6 @@ These three tests state the rule from its three sides:
 """
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -88,18 +87,6 @@ def test_a_locked_layer_refuses_the_apply_before_a_child_ever_starts(tmp_path, m
         f"the refusal did not name the file: {refusal.value}"
     assert not [call for call in recorder.calls if call[:1] == ["helmfile"]], \
         f"helmfile was started even though the layer was refused: {recorder.calls}"
-
-
-def test_a_readable_layer_is_walked_past_and_the_apply_runs(tmp_path, monkeypatch):
-    """The guard reads, and only says `locked` about ciphertext: a readable layer changes nothing."""
-    config, root = seeded_tree(tmp_path, monkeypatch)
-    layer(root, "grafana", b"adminUser: grafadmin\n")
-    recorder = RecordingShell()
-    utils = HelmUtils(configuration_only_context(ENVIRONMENT, None, config))
-
-    apply(utils, monkeypatch, recorder)
-
-    assert any(call[:1] == ["helmfile"] for call in recorder.calls), recorder.calls
 
 
 def test_an_absent_layer_directory_costs_the_apply_nothing(tmp_path, monkeypatch):

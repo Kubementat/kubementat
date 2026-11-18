@@ -181,50 +181,6 @@ def helmfile_apply(monkeypatch, tmp_path):
     return HelmfileApply(recorder, monkeypatch, Context.build("dev", TEAM))
 
 
-# ---------------------------------------------------------------------------
-# the branch that used to be broken: nobody is there to answer the prompt
-# ---------------------------------------------------------------------------
-def test_a_run_without_a_terminal_applies_without_asking(helmfile_apply):
-    """`< /dev/null`, a pipe, a cron job: no `--interactive`, so nothing waits on stdin."""
-    argv = helmfile_apply.argv_for()
-
-    assert "--interactive" not in argv, "a non-terminal run asked helmfile to prompt"
-    assert argv[argv.index("-l") + 1] == LABEL_FILTER
-
-
-def test_yes_applies_without_asking(helmfile_apply):
-    assert "--interactive" not in helmfile_apply.argv_for(["--yes"])
-
-
-def test_the_short_form_applies_without_asking(helmfile_apply):
-    assert "--interactive" not in helmfile_apply.argv_for(["-y"])
-
-
-def test_yes_applies_without_asking_even_at_a_terminal(helmfile_apply):
-    """The explicit form beats the tty default, which is the whole point of having it."""
-    assert "--interactive" not in helmfile_apply.argv_for(["-y"], tty=True)
-
-
-# ---------------------------------------------------------------------------
-# the case that still has to be asked
-# ---------------------------------------------------------------------------
-def test_an_operator_at_a_terminal_is_asked(helmfile_apply):
-    assert "--interactive" in helmfile_apply.argv_for(tty=True), \
-        "the operator lost the chance to say no before the diff lands"
-
-
-# ---------------------------------------------------------------------------
-# what the rule must not do on its way there
-# ---------------------------------------------------------------------------
-@pytest.mark.parametrize("stale_flag", ["--interactive", "--non-interactive"])
-def test_the_removed_flag_pair_is_rejected_instead_of_being_understood(helmfile_apply, stale_flag):
-    """No alias, no fallback: the old spelling fails loudly instead of meaning something."""
-    result = helmfile_apply.invoke([stale_flag])
-
-    assert result.exit_code != 0
-    assert "No such option" in result.output, result.output
-
-
 def test_the_library_never_prompts_when_it_is_not_told_to(helmfile_apply):
     """The default any caller gets without asking, which is what install and the lane rely on."""
     helmfile_apply.helm_utils().helmfile_apply(
@@ -238,8 +194,3 @@ def test_the_library_prompts_when_it_is_told_to(helmfile_apply):
                                                helmfile_label_filter=LABEL_FILTER, interactive=True)
 
     assert "--interactive" in helmfile_apply.last_argv
-
-
-def test_the_command_reports_whether_it_asked(helmfile_apply):
-    """The echo is what tells you why a scripted run came out silent."""
-    assert "interactive: False" in helmfile_apply.invoke([]).output

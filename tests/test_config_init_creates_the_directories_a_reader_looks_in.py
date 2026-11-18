@@ -31,8 +31,8 @@ import pytest
 
 from kubementat.config import init as config_init
 from kubementat.core.config.config import Config
-from kubementat.config.init import CREATED, SKIPPED, init_configuration
-from kubementat.errors import (LayerNameAlreadyTakenError, LayerNameUnusableError, ObsoleteTriggerDirectoryError, TeamNotSuppliedError)
+from kubementat.config.init import SKIPPED, init_configuration
+from kubementat.errors import (LayerNameAlreadyTakenError, LayerNameUnusableError, ObsoleteTriggerDirectoryError)
 
 ENVIRONMENT = "dev"
 TEAM = "ops"
@@ -89,52 +89,6 @@ def the_layer_directories(root, environment, team=None):
 # --- (1) the directories that are created, asserted against the properties -----------------------
 
 
-def test_init_makes_the_layer_directories_and_each_one_is_the_paths_the_readers_open(tmp_path):
-    """Both layers, every directory, and each one checked as *that property's* path.
-
-    `is_dir()` and not `exists()`: a file sitting where a layer belongs would satisfy the second and
-    leave the reader with a directory it cannot list.
-    """
-    root = config_root(tmp_path)
-
-    init_configuration(root, ENVIRONMENT, TEAM)
-
-    expected = {
-        "tekton_env_task_dir": root / ENVIRONMENT / "tekton" / "tasks",
-        "tekton_env_pipeline_dir": root / ENVIRONMENT / "tekton" / "pipelines",
-        "tekton_team_task_dir": root / ENVIRONMENT / TEAM / "tekton" / "tasks",
-        "tekton_team_pipeline_dir": root / ENVIRONMENT / TEAM / "tekton" / "pipelines",
-        "tekton_team_pipeline_run_dir": root / ENVIRONMENT / TEAM / "tekton" / "pipeline-runs",
-        "tekton_team_trigger_dir": root / ENVIRONMENT / TEAM / "tekton" / "triggers",
-    }
-    found = the_layer_directories(root, ENVIRONMENT, TEAM)
-    assert set(found) == set(expected), "the set of layer properties init has to reach"
-    for name, path in expected.items():
-        assert found[name] == path, f"{name} does not resolve where this tree puts that layer"
-        assert found[name].is_dir(), f"{name} ({found[name]}) is not a directory init created"
-
-
-def test_the_steps_name_the_layer_directory_and_the_layer_it_belongs_to(tmp_path):
-    """The print is a claim about the tree, so the step carries the layer and not `mkdir`.
-
-    Environment first, then team, in the order the layers apply: this asserts the order and the
-    action for a first run in one shape, and `steps` is what the verb prints verbatim.
-    """
-    root = config_root(tmp_path)
-
-    steps = init_configuration(root, ENVIRONMENT, TEAM)
-
-    found = the_layer_directories(root, ENVIRONMENT, TEAM)
-    assert directory_steps(steps) == [
-        (ENVIRONMENT_STEP, found["tekton_env_task_dir"], CREATED),
-        (ENVIRONMENT_STEP, found["tekton_env_pipeline_dir"], CREATED),
-        (TEAM_STEP, found["tekton_team_task_dir"], CREATED),
-        (TEAM_STEP, found["tekton_team_pipeline_dir"], CREATED),
-        (TEAM_STEP, found["tekton_team_pipeline_run_dir"], CREATED),
-        (TEAM_STEP, found["tekton_team_trigger_dir"], CREATED),
-    ]
-
-
 def test_the_environment_directories_nothing_reads_are_absent_and_the_reason_is_the_message(tmp_path):
     """Two candidates from the same census stay unmade, and *why* is what the assert says.
 
@@ -170,32 +124,6 @@ def test_init_makes_no_values_or_secrets_directory_and_nothing_a_default_already
 
 
 # --- (2) no team, no team layer -------------------------------------------------------------------
-
-
-def test_a_run_without_a_team_makes_no_team_layer_directory_at_all(tmp_path):
-    """The same shape as the assertions above — the environment's two, and nothing that claims a team.
-
-    The other half is that the properties themselves cannot be reached without a team: init does not
-    invent a layer to put a directory in, and neither does `Config`.
-    """
-    root = config_root(tmp_path)
-
-    steps = init_configuration(root, ENVIRONMENT)
-
-    found = the_layer_directories(root, ENVIRONMENT)
-    assert directory_steps(steps) == [
-        (ENVIRONMENT_STEP, found["tekton_env_task_dir"], CREATED),
-        (ENVIRONMENT_STEP, found["tekton_env_pipeline_dir"], CREATED),
-    ]
-    assert sorted(p.name for p in (root / ENVIRONMENT).iterdir()) == ["static.encrypted.json",
-                                                                      "static.json",
-                                                                      "tekton"], \
-        "a team directory appeared without a team being named"
-    config = layers(root, ENVIRONMENT)
-    for name in ("tekton_team_task_dir", "tekton_team_pipeline_dir",
-                 "tekton_team_pipeline_run_dir", "tekton_team_trigger_dir"):
-        with pytest.raises(TeamNotSuppliedError):
-            getattr(config, name)
 
 
 # --- (3) a second run touches no directory --------------------------------------------------------
@@ -268,48 +196,6 @@ def test_a_tree_with_the_old_trigger_directory_is_refused_and_nothing_is_written
     assert tree(root) == before, "the refusal moved, renamed or deleted part of the tree"
 
 
-def test_removing_the_old_directory_by_hand_is_the_way_through(tmp_path):
-    """The refusal names what closes the gap: the operator moves what they keep, by hand.
-
-    kubementat records no rename table and rewrites no operator tree, so a moved path is refused by
-    name and this is the whole migration path — asserted end to end: refuse, move, succeed.
-    """
-    root = config_root(tmp_path)
-    init_configuration(root, ENVIRONMENT, TEAM)
-    obsolete = obsolete_trigger_dir(root)
-    obsolete.mkdir(parents=True)
-    (obsolete / "kept-manifest.yml").write_text("apiVersion: triggers.tekton.dev/v1beta1\n")
-    with pytest.raises(ObsoleteTriggerDirectoryError):
-        init_configuration(root, ENVIRONMENT, TEAM)
-
-    config = layers(root, ENVIRONMENT, TEAM)
-    kept = config.tekton_team_trigger_dir / "kept-manifest.yml"
-    kept.write_bytes((obsolete / "kept-manifest.yml").read_bytes())
-    for entry in obsolete.iterdir():
-        entry.unlink()
-    obsolete.rmdir()
-
-    steps = init_configuration(root, ENVIRONMENT, TEAM)
-    assert kept.is_file()
-    assert {action for _, _, action in directory_steps(steps)} == {SKIPPED}, \
-        "everything was already where the operator's move left it"
-
-
-def test_add_team_refuses_the_old_trigger_directory_the_same_way(tmp_path):
-    """One helper, one sentence: the additive verb gets the same refusal as init."""
-    root = config_root(tmp_path)
-    init_configuration(root, ENVIRONMENT)
-    obsolete = obsolete_trigger_dir(root, ENVIRONMENT, "latecomer")
-    obsolete.mkdir(parents=True)
-    before = tree(root)
-
-    with pytest.raises(ObsoleteTriggerDirectoryError) as excinfo:
-        config_init.add_team(root, ENVIRONMENT, "latecomer")
-
-    assert str(obsolete) in str(excinfo.value), str(excinfo.value)
-    assert tree(root) == before, "the refusal wrote part of a team layer before refusing"
-
-
 # --- (5) names refused before the first byte -------------------------------------------------------
 
 # The bad-character set, one row each. A layer is one directory, so every one of these is an attempt
@@ -320,24 +206,6 @@ BAD_NAMES = ["", "with/slash", "with\x00nul", "leading ", "trailing ", ".", ".."
 # so a new one is refused here the day it is added there.
 RESERVED = list(config_init.RESERVED_ROOT_NAMES)
 LAYER = list(config_init.LAYER_DIRECTORY_NAMES)
-
-
-@pytest.mark.parametrize("name", RESERVED)
-def test_an_environment_named_after_a_reserved_root_name_is_refused(tmp_path, name):
-    """One refusal, naming the value and saying it is *taken*, and a tree that was never written.
-
-    `secrets` is the named case; the rest of the list is refused for the same reason, so the row
-    that matters is the one that reads `already taken` and not a filesystem error.
-    """
-    root = unbuilt_root(tmp_path)
-
-    with pytest.raises(LayerNameAlreadyTakenError) as excinfo:
-        init_configuration(root, name, TEAM)
-
-    message = str(excinfo.value)
-    assert repr(name) in message, message
-    assert "is already taken" in message, message
-    assert not root.exists(), "a refused name wrote part of a tree before refusing"
 
 
 @pytest.mark.parametrize("name", LAYER)

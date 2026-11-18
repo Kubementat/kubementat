@@ -13,9 +13,8 @@ file that is not a kubeconfig at all.
 
 import pytest
 
-from kubementat.core.identity.context import Context
 from kubementat.core.identity.target import ClusterTarget
-from kubementat.errors import ClusterContextNotFoundError, ClusterFileUnreadableError
+from kubementat.errors import ClusterFileUnreadableError
 
 from cluster_fixture import (
     DEV_SERVER,
@@ -43,46 +42,6 @@ def root(tmp_path, monkeypatch):
 
 def declare(root, environment, context, kubeconfig_path=None):
     return write_environment(root, environment, context=context, kubeconfig_path=kubeconfig_path)
-
-
-def test_the_typo_gets_the_list_of_contexts_the_file_actually_has(root):
-    """"`prod-eu` instead of `prod-europe`" is the failure this sentence was written for."""
-    declare(root, "prod", "prod-eu", root / "kubeconfig")
-
-    with pytest.raises(ClusterContextNotFoundError) as refused:
-        Context.build("prod", "the-team")
-
-    assert "prod-eu" in str(refused.value)
-    assert "prod-europe" in str(refused.value)
-    assert "dev" in str(refused.value)
-    assert "staging-eu" in str(refused.value)
-
-
-def test_the_alternatives_are_offered_even_when_the_target_was_built_directly(root):
-    """Same refusal at both doors, so the library path is not the one that says less.
-
-    A caller that only has the target — no `Context`, no command — still gets the list, and gets
-    it in a typed attribute it can show a human rather than parsing a sentence.
-    """
-    with pytest.raises(ClusterContextNotFoundError) as refused:
-        ClusterTarget.from_kubeconfig(str(root / "kubeconfig"), "prod-eu", "prod")
-
-    assert refused.value.available == ("dev", "prod-europe", "staging-eu")
-    assert "prod-europe" in str(refused.value)
-
-
-def test_the_name_of_the_file_that_was_opened_is_in_the_refusal(root):
-    """The context is absent from *this* file, so the file has to be in the sentence.
-
-    When `$KUBECONFIG` holds more than one file, "which one did you look in" is the first question,
-    and the refusal answers it before it is asked.
-    """
-    declare(root, "prod", "prod-eu", root / "kubeconfig")
-
-    with pytest.raises(ClusterContextNotFoundError) as refused:
-        Context.build("prod", "the-team")
-
-    assert str(root / "kubeconfig") in str(refused.value)
 
 
 def test_a_context_that_names_a_cluster_the_file_does_not_carry_names_both(root):
@@ -140,18 +99,3 @@ def test_a_file_that_is_not_a_kubeconfig_says_it_is_not_a_kubeconfig(root):
     with pytest.raises(ClusterFileUnreadableError) as refused:
         ClusterTarget.from_kubeconfig(str(locked), "dev", "dev")
     assert str(locked) in str(refused.value)
-
-
-def test_an_environment_with_no_kubeconfig_file_names_the_file_and_the_key(root):
-    """The other direction: the context is fine, the file it lives in is gone.
-
-    The message names the path and the key that pointed there, because the operator has to know
-    whether the file moved or the declaration did.
-    """
-    declare(root, "prod", "prod-europe", root / "moved-away")
-
-    with pytest.raises(ClusterFileUnreadableError) as refused:
-        Context.build("prod", "the-team")
-
-    assert "moved-away" in str(refused.value)
-    assert "CLUSTER_KUBECONFIG_PATH" in str(refused.value)

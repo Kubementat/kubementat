@@ -10,8 +10,6 @@ Verified contract that this relies on: `exit 42` in the guest exits 42 on the
 host, and stdout/stderr stay separate streams.
 """
 
-import os
-import re
 import shlex
 import subprocess
 

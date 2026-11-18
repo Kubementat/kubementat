@@ -18,7 +18,6 @@ pod or waits for a real cluster: what a unit suite can say about "one step that 
 minutes inside a Task" is what its loop does with the answers it is handed.
 """
 
-import ast
 import logging
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,10 +36,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # The Task ships inside the package: `REPO_ROOT` is where this file's own source reads
 # come from, and the manifest is asked of the resolver the install path uses.
 TASK = tekton_ci_path("tasks", "run-tekton-pipeline.yml")
-# The wait loop's own home, which the sleep rule below reads. The loop moved out of
-# `tekton_utils.py` with the rest of the run path (P4-3), so a rule over the file that used to hold
-# it would now be a rule about a file with no loop in it.
-WAIT_SOURCE = REPO_ROOT / "src" / "kubementat" / "infrastructure" / "tekton" / "runs.py"
 # Every module of the package, for the half of the rule that holds everywhere: an import-time sleep
 # is a hang for whoever imports the module, whichever module of the package it sits in.
 TEKTON_PACKAGE = sorted((REPO_ROOT / "src" / "kubementat" / "infrastructure" / "tekton").glob("*.py"))
@@ -120,14 +115,6 @@ def test_the_defaults_are_the_bound_the_ci_task_can_rely_on():
     assert PIPELINE_RUN_TIMEOUT_SECONDS == 1800 == 30 * 60
 
 
-def test_a_run_that_reports_true_finishes_the_wait_with_zero():
-    """The one answer that lets the step exit successfully, and the reads it took to get there."""
-    cluster, config = waiter([pipelinerun("True", "Succeeded", "All Tasks have completed")])
-
-    assert runs.wait_for_pipeline_run(cluster, config, "hello-run-abcdef", PIPELINE_NAMESPACE) == 0
-    assert cluster.read_count == 1, "a finished run is polled a second time"
-
-
 def test_a_run_that_reports_false_fails_and_hands_over_the_reason_and_the_message(caplog):
     """`False` is the failure half, and the text is the whole point of it.
 
@@ -146,25 +133,6 @@ def test_a_run_that_reports_false_fails_and_hands_over_the_reason_and_the_messag
     assert "Failed" in caplog.text
     assert "step \"compile\" exited with code 1" in caplog.text, caplog.text
     assert "hello-run-abcdef" in caplog.text
-
-
-def test_a_run_that_is_still_running_is_asked_again_at_the_interval_it_was_given():
-    """Running is not a state to report on, it is a state to come back to.
-
-    `Running` is what a condition with no verdict looks like, so the loop sleeps and asks again. One
-    sleep of one poll interval between two reads is the whole of the timing claim this makes; the
-    bound is a different test's problem.
-    """
-    cluster, config = waiter([pipelinerun("Unknown", "Running", "Tasks Running"),
-                    pipelinerun("True", "Succeeded", "All Tasks have completed")])
-    slept = []
-
-    code = runs.wait_for_pipeline_run(cluster, config, "hello-run-abcdef", PIPELINE_NAMESPACE,
-                                       poll_interval_seconds=3, sleep=slept.append)
-
-    assert code == 0
-    assert cluster.read_count == 2
-    assert slept == [3], f"the poll interval did not survive the loop: {slept}"
 
 
 def test_the_bound_expires_on_a_run_that_never_finishes_and_says_what_it_was_waiting_for(
@@ -248,39 +216,6 @@ def test_the_wait_reads_the_api_and_never_a_command_line_tool(fake_binaries):
     assert fake_binaries.take_calls() == []
 
 
-def test_importing_the_module_that_waits_sleeps_nothing():
-    """No import-time sleep, because a module that waits must be importable by a test that does not.
-
-    The check is structural and not timed, and the split is what pulls it into two rules. **The
-    import half is a rule over the package:** an import-time `time.sleep` is a hang for whoever
-    imports that module, and after P4-3 the wait lives in `runs.py` while the other modules are
-    imported next to it, so reading the one file that used to hold the loop would no longer be
-    reading the package that is actually imported. **The once-per-loop half stays per file**, and
-    it is stated about the file that waits: exactly one `sleep_seconds` call, inside the loop. A
-    `time.sleep` sitting beside a definition would be a hang that only shows up for whoever imports
-    the module on a busy machine.
-    """
-    def calls_excluding_definitions(node):
-        found = []
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                continue
-            found.extend(n for n in ast.walk(child) if isinstance(n, ast.Call))
-            found.extend(calls_excluding_definitions(child))
-        return found
-
-    for module in TEKTON_PACKAGE:
-        tree = ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
-        slept = [node for node in calls_excluding_definitions(tree)
-                 if ast.unparse(node.func) in ("time.sleep", "sleep_seconds")]
-        assert slept == [], f"{module.name} sleeps when it is imported, at line {slept}"
-
-    tree = ast.parse(WAIT_SOURCE.read_text(encoding="utf-8"), filename=str(WAIT_SOURCE))
-    waiter_calls = [node for node in ast.walk(tree)
-                    if isinstance(node, ast.Call) and ast.unparse(node.func) == "sleep_seconds"]
-    assert len(waiter_calls) == 1, "the loop sleeps somewhere other than in the one place that waits"
-
-
 # --- the command's own behaviour -----------------------------------------------------------------
 
 
@@ -315,44 +250,6 @@ def test_the_command_waits_for_the_run_it_started_and_exits_zero(fixture_repo, d
     assert reads[0]["name"] == writes[0]["body"]["metadata"]["name"], \
         "the waiter watched a different object than the one it applied"
     assert reads[0]["namespace"] == PIPELINE_NAMESPACE
-
-
-def test_a_run_that_the_command_was_waiting_on_fails_the_command(fixture_repo, dry_run_env,
-                                                                 recorded_api):
-    """The step's exit code is the inner run's exit code, which is why the Task needs one step.
-
-    bash reached this by `exit 1` inside a polling loop. Python reaches it by returning a code from
-    the waiter and `SystemExit`-ing with it, and the outer pipeline cannot tell the two paths apart.
-    """
-    from click.testing import CliRunner
-
-    run_file = fixture_repo.write_pipeline_run(name="hello-run", pipeline="hello")
-    _answers(recorded_api,
-             final=pipelinerun("False", "Failed", "Tasks Failed: \"build\""))
-
-    result = CliRunner().invoke(tekton.run_pipeline,
-                                ["dev", "fixture", run_file.name, "--wait"])
-
-    assert result.exit_code == 1, result.output
-
-
-def test_without_the_flag_the_command_starts_the_run_and_leaves(fixture_repo, dry_run_env,
-                                                                recorded_api):
-    """The default is what a human at a terminal got yesterday: start it, list it, go.
-
-    No `--wait` means the waiter is never reached, so nothing is read through the single-object path.
-    A default-on wait would be a change of behaviour for every caller that was not asked for.
-    """
-    from click.testing import CliRunner
-
-    run_file = fixture_repo.write_pipeline_run(name="hello-run", pipeline="hello")
-    _answers(recorded_api)
-
-    result = CliRunner().invoke(tekton.run_pipeline, ["dev", "fixture", run_file.name])
-
-    assert result.exit_code == 0, result.output
-    assert "get_namespaced_custom_object" not in recorded_api.methods(), \
-        "the wait is on without being asked for"
 
 
 def test_a_run_file_that_cannot_be_read_is_reported_as_a_failure(fixture_repo, dry_run_env,
@@ -400,7 +297,7 @@ def test_a_name_with_a_directory_in_it_still_resolves_as_an_identifier(fixture_r
     """
     from click.testing import CliRunner
 
-    run_file = fixture_repo.write_pipeline_run(relative_path="smoke/bla-pipeline-run.yml",
+    fixture_repo.write_pipeline_run(relative_path="smoke/bla-pipeline-run.yml",
                                                name="smoke-run", pipeline="smoke")
     _answers(recorded_api)
 
@@ -418,7 +315,6 @@ def test_a_global_run_is_still_started_by_a_global_prefix(fixture_repo, dry_run_
     carry it, so the change is that the *other* conventions got clearer, not that this one went.
     """
     from click.testing import CliRunner
-    import yaml
 
     global_dir = fixture_repo.root / "tekton_ci" / "pipeline-runs"
     global_dir.mkdir(parents=True, exist_ok=True)

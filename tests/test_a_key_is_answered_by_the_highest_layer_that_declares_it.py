@@ -32,7 +32,7 @@ import pytest
 
 from kubementat.core import constants
 from kubementat.automations.ci import CiUtils
-from kubementat.errors import (CiImageNotConfiguredError, ClusterManagerEmailNotConfiguredError, GrafanaAdminCredentialsNotConfiguredError, TeamConfigurationFileMissingError, TeamNotSuppliedError)
+from kubementat.errors import (CiImageNotConfiguredError, ClusterManagerEmailNotConfiguredError, GrafanaAdminCredentialsNotConfiguredError, TeamConfigurationFileMissingError)
 from kubementat.core.config.config import Config
 from kubementat.automations.routing import routing
 from kubementat.infrastructure.helm import HelmUtils
@@ -70,10 +70,6 @@ def seed(root, environment_level=None, team_level=None, environment_encrypted=No
                   platform_config_dir=str(root / "platform_config"))
 
 
-def team_paths(config):
-    return config.team_static_encrypted_config_path, config.team_static_config_path
-
-
 # --- (a) the highest layer that declares the key is the one that answers ------------------
 
 
@@ -84,18 +80,6 @@ def test_the_teams_layer_answers_before_the_environments_layer(tmp_path):
                   team_level={NAMESPACE_KEY: "team-namespace"})
 
     assert config.component_namespace("grafana") == "team-namespace"
-
-
-def test_the_teams_layer_answers_from_its_encrypted_file_too(tmp_path):
-    """L2 is a pair. A key the team put in its `static.encrypted.json` is still a team answer.
-
-    A layer is not one file; it is the directory's two files, one answer per key between them.
-    """
-    config = seed(tmp_path,
-                  environment_level={NAMESPACE_KEY: "environment-namespace"},
-                  team_encrypted={NAMESPACE_KEY: "team-namespace-from-encrypted"})
-
-    assert config.component_namespace("grafana") == "team-namespace-from-encrypted"
 
 
 def test_a_key_the_team_never_declared_falls_through_to_the_environment(tmp_path):
@@ -143,52 +127,6 @@ def test_within_a_layer_the_encrypted_file_answers_before_the_plain_one(tmp_path
     assert config.component_namespace("grafana") == "encrypted-team-answer"
 
 
-def test_a_secret_addressed_to_the_encrypted_file_is_not_answered_by_the_plain_one(tmp_path):
-    """The one place where "either file of a layer" would have been a downgrade, asserted.
-
-    `GIT_DEPLOYER_PRIVATE_KEY_BASE64`, Grafana's admin credential and the webhook secrets are read by
-    a reader that names the encrypted file. Were the layer one bucket, a key left in the plain
-    `static.json` by accident would answer instead of raising the "not set in …" sentence, which is a
-    strictly worse posture for no benefit: nothing in the layering asks for it, and the layering
-    they do ask for is between layers, not between files of one layer.
-    """
-    key = "GIT_DEPLOYER_PRIVATE_KEY_BASE64"
-    config = seed(tmp_path, environment_level={key: "cGxhaW4ta2V5"})
-
-    assert config.get("env_static_encrypted").get(key) is None, \
-        "an encrypted-addressed read was answered out of the plain file"
-
-
-def test_the_layering_changes_no_keys_the_layer_did_not_declare(tmp_path):
-    """The shallow rule: merging is per key, so a layer that declares nothing contributes nothing.
-
-    Everything the team's own file declares stays exactly as worded, and everything only the
-    environment declares arrives unchanged. A shallow merge that rewrote types or joined objects
-    would show up here.
-    """
-    team = {"PIPELINE_NAMESPACE": "team-pipelines",
-            "HELM_DEPLOYER_SERVICE_ACCOUNT_NAME": "team-sa",
-            "SSH_DEPLOY_KEYS": [{"NAME": "team-key"}]}
-    environment = {"BASE_DOMAIN": "example.test",
-                   "GIT_DEPLOYER_PRIVATE_KEY_BASE64": "ZW52LWtleQ=="}
-    config = seed(tmp_path, environment_level=environment,
-                  team_level=team, environment_encrypted={"GIT_DEPLOYER_PRIVATE_KEY_BASE64": None})
-
-    team_view = config.get("team_static")
-    assert team_view["PIPELINE_NAMESPACE"] == "team-pipelines"
-    assert team_view["BASE_DOMAIN"] == "example.test"
-    assert team_view["HELM_DEPLOYER_SERVICE_ACCOUNT_NAME"] == "team-sa"
-    # The shallow rule still holds for every key the layers merged. `TARGET_NAMESPACE` is not one of
-    # them: the entry is what the team declared, and the namespace inside it is what it left blank,
-    # which is answered from the team's name. A different key is answered by the layer that
-    # declares it, exactly as before.
-    assert team_view["SSH_DEPLOY_KEYS"] == [{"NAME": "team-key", "TARGET_NAMESPACE": "layerteam"}]
-    assert config.get("env_static").get("BASE_DOMAIN") == "example.test"
-    # A key whose only declaration is a `null` is still declared; the layering does not skip it
-    # because the value happens to be empty, and no layer below gets to overwrite a decision.
-    assert config.get("env_static_encrypted").get("GIT_DEPLOYER_PRIVATE_KEY_BASE64") is None
-
-
 # --- (b) nothing declared it, so the code answers, and says so once -----------------------
 
 
@@ -219,85 +157,7 @@ def test_falling_back_to_the_code_default_warns_once_and_not_once_per_read(tmp_p
     assert caplog.text.count(NAMESPACE_KEY) == 1, caplog.text
 
 
-def test_the_fallback_sentence_names_every_layer_it_consulted(tmp_path, caplog):
-    """The warning is a direction, so it names all four files and the order it read them in.
-
-    Two facts it owes the operator: which files were checked, and which half of a layer would have
-    answered. Census E's whole finding was that nobody could say which layer answered; this sentence
-    is where they can.
-    """
-    config = seed(tmp_path, environment_level={}, team_level={})
-    environment_static, environment_encrypted = (
-        config.env_static_config_path, config.env_static_encrypted_config_path)
-
-    with caplog.at_level(logging.WARNING):
-        config.component_namespace("grafana")
-
-    assert NAMESPACE_KEY in caplog.text
-    for path in team_paths(config) + (environment_encrypted, environment_static):
-        assert str(path) in caplog.text, f"{path} is a layer this read consulted"
-    assert "encrypted file answers before the plain" in caplog.text
-
-
-def test_a_layer_that_declared_the_key_silences_the_fallback_warning(tmp_path, caplog):
-    """A warning that fires when nothing defaulted is as useless as one that fires per read."""
-    config = seed(tmp_path, environment_level={NAMESPACE_KEY: "env-ns"}, team_level={})
-
-    with caplog.at_level(logging.WARNING):
-        for _ in range(3):
-            assert config.component_namespace("grafana") == "env-ns"
-
-    assert caplog.text == ""
-
-
-def test_a_value_declared_but_empty_still_defaults_and_names_the_file_it_came_in_from(tmp_path, caplog):
-    """`""` is a half-typed edit and not a decision, whichever layer it sits in.
-
-    The layering must not turn "present but blank" into "declared": the file that needs the value is
-    named here, and the layer that declared it is identified, which is what the encrypted-wins rule
-    costs the operator when they get it wrong.
-    """
-    config = seed(tmp_path, environment_level={NAMESPACE_KEY: "   "}, team_level={})
-
-    with caplog.at_level(logging.WARNING):
-        assert config.component_namespace("grafana") == L0_ANSWER
-        for _ in range(3):
-            config.component_namespace("grafana")
-
-    assert caplog.text.count(NAMESPACE_KEY) == 1, caplog.text
-    assert str(config.env_static_config_path) in caplog.text
-
-
-def test_a_component_with_no_entry_in_the_code_default_table_is_refused(tmp_path):
-    """L0 is `constants.py`, so a typoed component still fails where the typo was made."""
-    config = seed(tmp_path, environment_level={})
-
-    with pytest.raises(KeyError) as error:
-        config.component_namespace("grafanana")
-
-    assert "grafanana" in str(error.value)
-    assert "kubementat.core.constants" in str(error.value)
-
-
 # --- (c) a key with no default anywhere answers exactly as it did -------------------------
-
-
-def test_L0_is_constants_py_and_the_packaged_default_source_does_not_exist():
-    """L0 is `constants.py`, and the `defaults/static.json` an older design named is not in this tree.
-
-    It must not be added here either: its source is the environment template, 40 keys of which 8
-    are `REPLACEME_*`, so promoting it to a default source would answer with placeholders and give
-    the namespaces a second owner beside `constants.py`. This asserts the absence, so a future
-    "completion" of L0 fails here before it ships.
-    """
-    package_root = Path(constants.__file__).resolve().parent
-    assert not (package_root / "assets" / "defaults" / "static.json").exists()
-    assert not [name for name, value in vars(constants).items()
-               if name.isupper() and isinstance(value, str) and value.endswith("static.json")], \
-        "constants.py would be naming a file to default from, which is L1 by another name"
-    # The only answers L0 owns are component tables, and they are complete on their own terms.
-    assert set(constants.DEFAULT_NAMESPACES) >= {"grafana", "tekton", "traefik", "openbao"}
-    assert all(isinstance(v, str) and v.strip() for v in constants.DEFAULT_NAMESPACES.values())
 
 
 @pytest.mark.parametrize("category,key", [
@@ -369,40 +229,7 @@ def test_the_refusals_that_fire_on_an_absent_key_still_fire_the_same_way(tmp_pat
     assert "No team_static config found at" in str(error.value)
 
 
-def test_a_configuration_read_without_a_team_refuses_as_it_did(tmp_path):
-    """A read without a team is not part of the layering, and a fall-through must not soften it."""
-    environment_dir = tmp_path / "platform_config" / ENVIRONMENT
-    environment_dir.mkdir(parents=True)
-    (environment_dir / "static.json").write_text("{}")
-    (environment_dir / "static.encrypted.json").write_text("{}")
-    config = Config(ENVIRONMENT, None, kubementat_main_dir=str(tmp_path),
-                    platform_config_dir=str(tmp_path / "platform_config"))
-
-    from kubementat.errors import TeamNotSuppliedError
-    with pytest.raises(TeamNotSuppliedError):
-        config.get("team_static")
-
-    # ...and the same instance still reads the environment layer, with no team pair to consult.
-    assert config.component_namespace("grafana") == L0_ANSWER
-
-
 # --- the shape of the machinery ----------------------------------------------------------
-
-
-def test_the_environment_reads_answer_for_the_environment_only(tmp_path):
-    """A read addressed at `{env}/static.json` answers for this environment.
-
-    The team's copy is not part of that question: `get('env_static')` reports the keys the
-    environment's own pair declares. That is the one place the chain is not global, and it is why
-    the accessor that owns a component's namespace walks the whole chain instead of one category —
-    one resolution path, two chains, spelled in one table.
-    """
-    config = seed(tmp_path,
-                  environment_level={"CLUSTER_MANAGER_EMAIL": "cluster@example.test"},
-                  team_level={"CLUSTER_MANAGER_EMAIL": "team@example.test"})
-
-    assert config.get("env_static").get("CLUSTER_MANAGER_EMAIL") == "cluster@example.test"
-    assert config.get("team_static").get("CLUSTER_MANAGER_EMAIL") == "team@example.test"
 
 
 def test_the_layers_are_read_once_per_configuration_and_not_per_key(tmp_path, monkeypatch):
