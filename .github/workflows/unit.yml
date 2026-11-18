@@ -1,6 +1,6 @@
 # The unit suite, on every push and every pull request. Nothing else runs here.
 #
-# Five steps, each one justified rather than inherited:
+# Six steps, each one justified rather than inherited:
 #
 #   checkout          — nothing can be asserted about code that was never fetched.
 #   install uv        — `uv` is how the README tells a developer to run this suite, so the job runs
@@ -9,10 +9,16 @@
 #                       is the only source of the pin (setup-uv reads it; so does `uv run`).
 #   install git-crypt — the suite shells out to the real binary, and the runner image does not carry
 #                       it. See the step.
+#   install helmfile  — same shape of problem: sixteen cases drive the shipped manifest through this
+#                       binary and skip when it is missing, which it is. See the step.
 #   uv run pytest -q  — byte-for-byte the command a developer types at the repo root. Never written
 #                       as `-m integration`: that marker selects zero tests unless it is asked for,
 #                       and the things it marks need a cluster, which this job must not need.
 #   publish the report — `if: always()`, so that a red run still leaves behind the log to read.
+#
+# Both installed binaries are preconditions the lane could otherwise only discover by looking, because
+# a case whose binary is missing skips instead of failing: a gap in the image is a green run that
+# proved less than it appears to. Check what a run skipped before believing what it passed.
 #
 # What is deliberately absent. No lint, no typecheck, no coverage, no formatter: none of them exist
 # in this checkout today, and each would be its own change with its own baseline rather than a step
@@ -30,7 +36,8 @@ on:
   push:
   pull_request:
 
-# `actions: write` is not a fifth thing the job does; it is what step 4 needs to exist at all.
+# `actions: write` is not a sixth thing the job does; it is what publishing the report needs to exist
+# at all.
 permissions:
   contents: read
   actions: write
@@ -69,6 +76,43 @@ jobs:
       # (`tests/e2e/stages/01-provision.sh`) rather than inventing a second source for it here.
       - name: Install git-crypt
         run: sudo apt-get update -qq && sudo apt-get install -y -qq git-crypt
+
+      # The same shape of gap as git-crypt, and a wider one. Sixteen cases read the shipped manifest
+      # through `helmfile build` and skip when the binary is missing — which it is on this image, so
+      # the gate has never once seen the manifest's `installed:` booleans, the order its operator
+      # values layers are read in, or the ingress class and issuer it names. Green, and silent.
+      #
+      # The version is interpolated from `constants.PINNED_BINARY_VERSIONS` and is never written in
+      # this file. A literal is exactly how `tests/e2e/stages/01-provision.sh` came to run its guest on
+      # helm 3.22.1 and helmfile 1.8.2 while the checkout declared 4.3.1 and 1.7.0 — green, because
+      # nothing compared the two, and the disagreement lived in a JSON file nobody reads. That stage
+      # reads the table the same way: `constants.py` imports nothing, so plain `python3` can read it
+      # with the checkout on `PYTHONPATH`, and an unreadable table is an error rather than a licence to
+      # guess. A version written here would also be a version nobody has to bump when the pin moves.
+      #
+      # This costs a download and nothing else: `helmfile build` resolves the state from the manifest,
+      # whose chart versions are literals, and does not reach the network. Measured in a network
+      # namespace with no route and an empty `HOME` — so no Helm repository cache either — the sixteen
+      # pass against helmfile 1.7.0 and the image's own helm 3.22.1.
+      - name: Install helmfile at the version the product declares
+        shell: bash
+        run: |
+          set -euo pipefail
+          HELMFILE_VERSION="$(PYTHONPATH=src python3 -c 'from kubementat.core import constants; print(constants.PINNED_BINARY_VERSIONS["helmfile"])')"
+          case "$(uname -m)" in
+            x86_64)  GOARCH=amd64 ;;
+            aarch64) GOARCH=arm64 ;;
+            *) echo "no helmfile release asset for architecture $(uname -m)" >&2; exit 1 ;;
+          esac
+          curl -fsSL -o /tmp/helmfile.tgz \
+            "https://github.com/helmfile/helmfile/releases/download/v${HELMFILE_VERSION}/helmfile_${HELMFILE_VERSION}_linux_${GOARCH}.tar.gz"
+          sudo tar -xzf /tmp/helmfile.tgz -C /usr/local/bin helmfile
+          # Name the toolchain the run spoke to, the way the e2e provisioning stage states what the
+          # guest ended up running. Helm is not installed here — the image carries 3.22.1 while the
+          # table declares 4.3.1 — so the log says which helm the manifest was built against instead
+          # of leaving that to be inferred.
+          helmfile --version
+          helm version --short
 
       - name: Run the unit suite
         # `shell: bash` matters more than it looks: GitHub's default shell is `bash -e`, which does
