@@ -92,7 +92,8 @@ def _metadata_name(item) -> str:
     return ((item.get("metadata") or {}).get("name")) or ""
 
 
-def apply_resources(kubernetes_utils, resource_dir, target_namespace, kind, group, version):
+def apply_resources(kubernetes_utils, resource_dir, target_namespace, kind, group, version,
+                    render=None):
     '''
     Apply every Kubernetes resource a directory actually holds.
 
@@ -139,6 +140,10 @@ def apply_resources(kubernetes_utils, resource_dir, target_namespace, kind, grou
       document to name its own
     - group: str - API group for the documents that do not declare one
     - version: str - API version for the documents that do not declare one
+    - render: callable - What the caller wants done to each parsed document before it is
+      applied; None applies the file as read. `setup_pipelines` hands it to the product layer
+      so that an image tag the `versions.yaml` block owns is the file's answer on the way in,
+      not the literal that sits in the file for a human to read.
 
     Returns:
 
@@ -173,6 +178,8 @@ def apply_resources(kubernetes_utils, resource_dir, target_namespace, kind, grou
             if not isinstance(resource, dict):
                 logging.warning(f"{path.name} document {index} is not a resource document, skipping")
                 continue
+            if render is not None:
+                resource = render(resource)
             name = (resource.get('metadata') or {}).get('name')
             if not name:
                 raise ResourceWithoutNameError(

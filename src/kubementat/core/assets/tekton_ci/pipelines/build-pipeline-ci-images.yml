@@ -57,6 +57,8 @@ spec:
 
     - name: builder-image
       description: The image that should be used for the docker build command
+      # The name is this file's, the tag is `versions.yaml`'s, filled in at apply time — what is
+      # written here is that file's current answer, not a second owner of it.
       default: "moby/buildkit:v0.34.2-rootless"
 
     - name: buildctl-args

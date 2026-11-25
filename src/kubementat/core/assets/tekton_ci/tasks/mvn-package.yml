@@ -10,6 +10,8 @@ spec:
     mountPath: /workspace
   params:
     - name: image
+      # The name is this file's, the tag is `versions.yaml`'s, filled in at apply time — what is
+      # written here is that file's current answer, not a second owner of it.
       default: "maven:3.8.4-openjdk-17-slim"
       description: |
         The image url with tag to use as image for the mvn package execution

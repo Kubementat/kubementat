@@ -21,6 +21,7 @@ from pathlib import Path
 from kubernetes import client
 
 from kubementat.config import bootstrap as config_bootstrap, keys as config_keys
+from kubementat.core import versions
 from kubementat.infrastructure.kubernetes import KubernetesUtils, apply
 # The preflight moved out of `tekton_utils.py` (P4-2), so the call here reaches it through the
 # module: the seam is patched by module object, and a name imported past its home is a second
@@ -201,12 +202,20 @@ def setup_pipelines(ctx):
     # Nothing here deletes. kubementat applies what it ships and what the layers declare, and an
     # object that stopped being shipped stays on the cluster until the operator removes it —
     # pruning is `uninstall`'s job, never setup's.
+    #
+    # The product layer passes `_render_image_defaults`, so the tag it applies is the answer of
+    # `versions.yaml` and not the literal that is in the asset file for a human to read. The
+    # environment and team layers get no renderer on purpose: a pin they wrote is their own
+    # answer, and re-tagging manifests nobody here owns is exactly the second-owner behaviour the
+    # central versions file is meant to make impossible.
     _apply_manifest_layer(ctx, "product", config.tekton_task_asset_dir, pipeline_ns,
                                kind="Task", group=config.TEKTON_API_GROUP,
-                               version=config.TEKTON_API_VERSION)
+                               version=config.TEKTON_API_VERSION,
+                               render=_render_image_defaults)
     _apply_manifest_layer(ctx, "product", config.tekton_pipeline_asset_dir, pipeline_ns,
                                kind="Pipeline", group=config.TEKTON_API_GROUP,
-                               version=config.TEKTON_API_VERSION)
+                               version=config.TEKTON_API_VERSION,
+                               render=_render_image_defaults)
 
     # The environment layer, which is the one the product does not ship. It is between the
     # product and the team
@@ -275,7 +284,41 @@ def _setup_pipelines_setup_role_bindings(ctx, pipeline_ns, app_ns, sa_name):
     kubernetes_utils.create_or_replace_role_binding(pipeline_ns, "helm-deployer-role-binding-pipeline-namespace-access", binding)
 
 
-def _apply_manifest_layer(ctx, layer, resource_dir, target_namespace, kind, group, version):
+# Which shipped images the product's Task and Pipeline documents carry, keyed by the image name
+# exactly as it appears in a parameter default, and valued by the `images:` key that owns its
+# version. The literal tags in those files are what the file's answer happens to look like today —
+# what reaches the cluster is `image_ref`'s answer, filled in on the way through `apply_resources`.
+# The table states a fact about the *documents*, not about versions: which names the shipped
+# manifests name. A key taken out of `versions.yaml` while a document still names it fails the
+# apply loudly, which is right — the manifest is then asking for a fact the file no longer owns,
+# and applying the stale literal instead is the exact drift this table exists to make impossible.
+_ASSET_IMAGE_VERSION_KEYS = {
+    "moby/buildkit": "buildkit",
+    "maven": "maven",
+}
+
+
+def _render_image_defaults(document):
+    """Swap each product-owned image default in a document for the tag `versions.yaml` answers.
+
+    Scope is parameter defaults, and that is the whole surface: every shipped document names its
+    step images with `$(params...)`, so a tag is written down exactly once, in a `default:`. A
+    value whose name the `images:` block does not own is left exactly as written — an operator's
+    own image is not this code's to re-tag.
+    """
+    for param in ((document.get("spec") or {}).get("params") or []):
+        if not isinstance(param, dict) or not isinstance(param.get("default"), str):
+            continue
+        name, separator, tag = param["default"].rpartition(":")
+        candidate = name if separator and "/" not in tag else param["default"]
+        key = _ASSET_IMAGE_VERSION_KEYS.get(candidate)
+        if key is not None:
+            param["default"] = versions.image_ref(key)
+    return document
+
+
+def _apply_manifest_layer(ctx, layer, resource_dir, target_namespace, kind, group, version,
+                          render=None):
     '''
     One apply layer of a directory, obeying the rule that an absent layer is a no-op.
 
