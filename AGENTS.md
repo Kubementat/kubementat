@@ -3,15 +3,11 @@
 ## Main instructions
 
 Use the `mcp__codegraph__codegraph_explore` tool for searching the codebase.
+When writing code, especially code comments, load the `code-commenting` skill and follow its rules strictly.
 
 ## Implementation rules
 
-- **A comment is written for a reader who has never seen the specification.** No `§x.y`, no `R-x.y`, no
-`FR-nn`, no `TD-n`/`N-n`, no ticket id, no plan or spec filename inside a comment or a docstring. State
-the rule in prose, and say what the code does — the file it lives in is not an argument, and a pointer
-to a document that will be superseded is how a comment goes stale while the code stays correct. Where
-a decision genuinely needs its reason, the reason is written out; where it needs its source, that
-belongs in `docs/`, not in the source.
+- When writing code, especially code comments, load the `code-commenting` skill and follow its rules strictly.
 - **The test suite covers kubementat's behaviour and nothing else.** No self-audits of the harness or of
 the suite's own hygiene: not "the lane must not write configuration with jq", not "this module must
 not declare that constant", not "the docs agree with the code". Those are checked once, by reading,
@@ -65,7 +61,7 @@ Before releasing, fetch and confirm `develop` contains what both remotes call `m
 
 ```bash
 git fetch --all
-git merge-base --is-ancestor forgejo/main develop && git merge-base --is-ancestor origin/main develop
+git merge-base --is-ancestor forgejo/main develop && git merge-base --is-ancestor github/main develop
 ```
 
 If that fails, `main` has commits `develop` does not: merge those in first. A stale local `main` is the usual
@@ -73,8 +69,9 @@ reason a release push gets rejected, and `--force` is not the answer to it.
 
 ### Releases (tag-based)
 
-A release is an **annotated tag `vX.Y.Z` on the tip of `main`**, pushed to both remotes (`origin` is GitHub,
-`forgejo` is the self-hosted one). Two things record it and they must move together:
+A release is an **annotated tag `vX.Y.Z` on the tip of `main`**, pushed to both remotes. They are named
+`github` and `forgejo`, and there is no `origin` in this checkout: a command that names one fails with
+"No such remote" rather than pushing to the wrong place. Two things record it and they must move together:
 
 - the tag, which is what the release *means*, and
 - `pyproject.toml`'s `version` under `[project]` — the same number the tag carries, written without the `v`. That
@@ -115,9 +112,10 @@ place to discover a lane was broken.
 2. **Notes and version, in one commit on `develop`.** The `# Unreleased` heading moves to `# X.Y.Z`, the
    cross-check against `git log` says every change is accounted for, and `pyproject.toml` carries `X.Y.Z`.
 3. **Move `main`.** `git switch main && git merge --no-ff develop`, then push both remotes
-   (`git push origin main && git push forgejo main`). `--no-ff` is not ceremony: a fast-forward would leave no
-   trace of where the release came from.
-4. **Tag and push it.** `git tag -a vX.Y.Z -m "release vX.Y.Z"`, then `git push origin vX.Y.Z && git push
+   (`git push github main && git push forgejo main`). Name the remote every time: `push.default` is `current`,
+   so a bare `git push` answers only `branch.main.remote` and leaves the other remote behind with no error.
+   `--no-ff` is not ceremony: a fast-forward would leave no trace of where the release came from.
+4. **Tag and push it.** `git tag -a vX.Y.Z -m "release vX.Y.Z"`, then `git push github vX.Y.Z && git push
 forgejo vX.Y.Z`. Annotated only, and never move a tag that is already on a remote — cut a new tag instead.
 
 ## Architecture
@@ -161,16 +159,3 @@ the installed package.
 - An environment is exactly one cluster. The two `CLUSTER_*` keys are what make that true, and they are
   checked against each other across the whole tree before anything touches a cluster.
 
-### Git-Crypt
-
-**This repository ships no encrypted files, so nothing here is ever unlocked.** git-crypt belongs to the
-configuration directory, and `config init` sets it up in the order that makes the first encrypted file land
-encrypted. kubementat runs git-crypt for `init` and never again: a read that finds ciphertext is a named
-refusal, and unlocking is the operator's act or the pipeline's, not the library's. The operator's component
-values follow the same rule by their name: each layer is `<environment>/values/<component>.encrypted.yaml`,
-so git-crypt's `*.encrypted.*` filter matches the file rather than a directory that hides it, and
-`helmfile_apply` reads the layers that exist before helmfile starts, refusing a locked tree by name instead
-of letting helm open ciphertext.
-
-The verbs, the order and the reason each step sits where it does are in
-[docs/README_GIT_CRYPT.md](docs/README_GIT_CRYPT.md).
