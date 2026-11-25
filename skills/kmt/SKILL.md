@@ -18,9 +18,9 @@ description: >-
 license: MIT
 metadata:
   author: kubementat
-  version: 1.2.0
+  version: 1.3.0
   created: 2026-11-15
-  last_reviewed: 2026-11-16
+  last_reviewed: 2026-11-25
   review_interval_days: 90
 activation: /kmt
 provenance:
@@ -83,9 +83,10 @@ cluster reads.
 | team | positional `TEAM` where the command has one (`install`, `setup-secrets`, `setup-docker-registry-access`, `run-ci-container`, and nine of the ten `tekton` verbs), else `--team` (`tekton setup-cleanup-job`, `users *`), or `$TEAM` | **none** — kubementat does not name a team for a command that did not |
 
 The layers, highest first: `<root>/<environment>/<team>/static{,.encrypted}.json`, then
-`<root>/<environment>/static{,.encrypted}.json`, then kubementat's shipped defaults. `kmt config
-show <env> [team]` is the only command that prints which of the three answered a key; a key you
-never answered is not missing, it is a tagged default. `<root>/kubementat.yaml` stamps the tree
+`<root>/<environment>/static{,.encrypted}.json`, then kubementat's shipped defaults — whose
+versions all live in one file, `src/kubementat/core/assets/versions.yaml` (see *Versions* below).
+`kmt config show <env> [team]` is the only command that prints which of the three answered a key;
+a key you never answered is not missing, it is a tagged default. `<root>/kubementat.yaml` stamps the tree
 with the product constraint and `schema_version` it was prepared for, and a tree that predates the
 stamp is refused, not assumed. `<root>/<environment>/tekton/` and
 `<root>/<environment>/<team>/tekton/{tasks,pipelines,pipeline-runs,triggers}` are where Tekton
@@ -100,6 +101,23 @@ environment.
 
 An environment is exactly one cluster, and the two `CLUSTER_*` keys are checked against each other
 across the tree before anything touches one.
+
+## Versions
+
+Every default version kubementat runs with lives in one file:
+`src/kubementat/core/assets/versions.yaml` — chart pins per release (Concourse carries its chart
+version and image tag together), the `helm`/`helmfile` binaries, the three Tekton releases, the CI
+image's build args, and the container images the shipped tasks and the test harness run. It is the
+single owner: every consumer resolves from it, and none carries a copy. Its only reader is
+`src/kubementat/core/versions.py`, which refuses rather than guessing when a key is missing.
+
+- A `*_VERSION` knob no layer declared is answered from this file, and `config show` says so. What
+  a layer of the tree declares still outranks it.
+- `uv run python -m kubementat.core.versions --get <path>` prints one answer (e.g. `e2e.k3s`);
+  `--print-build-args` prints the CI image's `--build-arg` lines — that is all `docker_files/`
+  consumes, and a `docker build` without them fails on purpose.
+- Updating versions is one edit to one file plus Renovate keeping it fresh; nothing under
+  `helmfile.yaml.gotmpl`, the Dockerfile, or the harness carries a version to bump.
 
 ## Command map
 
