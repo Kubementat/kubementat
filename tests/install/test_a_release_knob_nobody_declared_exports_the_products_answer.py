@@ -1,4 +1,4 @@
-"""The export writes what the operator declared, and only that -- for the releases the manifest names.
+"""What the export hands helmfile: what a layer declared, and where nothing declared, what the product ships.
 """
 
 import json
@@ -8,6 +8,7 @@ import pytest
 from asset_paths import values_path
 from cluster_fixture import UNREAD_ROOT, configuration_only_context
 
+from kubementat.core import versions
 from kubementat.core.config.config import Config
 from kubementat.core.config.keys import component_config_key
 from kubementat.infrastructure.helm import HelmUtils, export_component_release_knobs
@@ -20,6 +21,17 @@ TEAM = "knobteam"
 LIVE_HELMFILE = values_path("helmfile.yaml.gotmpl")
 
 SUFFIXES = ("ENABLED", "VERSION")
+
+
+def shipped_knobs(components):
+    """`{variable: value}` for every version knob and image tag the shipped file answers."""
+    exported = {component_config_key(component, "VERSION"): versions.chart_version(component)
+                for component in sorted(components)}
+    for component in sorted(components):
+        image_tag = versions.chart_image_tag(component)
+        if image_tag is not None:
+            exported[component_config_key(component, "IMAGE_TAG")] = image_tag
+    return exported
 
 
 def seed(root, environment_level=None, team_level=None):
@@ -56,8 +68,11 @@ def clean(monkeypatch, keys):
         monkeypatch.delenv(key, raising=False)
 
 
-def test_a_release_knob_nobody_declared_exports_nothing(tmp_path, monkeypatch):
-    """An undeclared knob is not a value to export, and `os.environ` is not a place to guess at."""
+def test_a_release_knob_nobody_declared_exports_the_versions_the_product_ships(tmp_path, monkeypatch):
+    """Versions are no longer the manifest's to answer, so the apply hands them over whether or not a layer spoke.
+
+    ENABLED keeps its manifest `default` and is still exported only when declared, and `os.environ`
+    is still not a place to guess at."""
     index = live_index()
     keys = knob_keys(index)
     clean(monkeypatch, keys)
@@ -66,14 +81,17 @@ def test_a_release_knob_nobody_declared_exports_nothing(tmp_path, monkeypatch):
 
     exported = export_component_release_knobs(config, index)
 
-    assert exported == {}
+    assert exported == shipped_knobs(index)
+    assert not [key for key in exported if key.endswith("_ENABLED")], \
+        "the opt-in whose default still sits in the manifest was exported as if it were not"
     assert {key: os.environ.get(key) for key in keys} == before, \
-        "an undeclared knob was written into the environment anyway"
+        "the export was written into the process environment instead of handed to the child"
 
 
-def test_only_the_knob_that_was_declared_is_written_and_the_other_is_left_alone(tmp_path,
-                                                                                monkeypatch):
-    """One key at a time. Half a pair still exports, and the half nobody typed stays absent."""
+def test_a_declared_enabled_answers_for_itself_and_the_untouched_version_still_answers_from_the_product(
+        tmp_path, monkeypatch):
+    """One key at a time. Half a pair still exports, and the half nobody typed arrives from the file.
+    """
     index = live_index()
     keys = knob_keys(index)
     clean(monkeypatch, keys)
@@ -81,14 +99,17 @@ def test_only_the_knob_that_was_declared_is_written_and_the_other_is_left_alone(
 
     exported = export_component_release_knobs(config, index)
 
-    assert exported == {component_config_key("grafana", "ENABLED"): "false"}
+    assert exported[component_config_key("grafana", "ENABLED")] == "false"
+    assert exported[component_config_key("grafana", "VERSION")] == versions.chart_version("grafana"), \
+        "the half nobody typed lost the answer that used to sit in the manifest and now sits in the file"
     assert os.environ.get(component_config_key("grafana", "VERSION")) is None, \
-        "the half nobody typed has to stay absent from the environment it is handed out of"
+        "the answer that shipped was written into the environment it is handed out of"
 
 
 @pytest.mark.parametrize("component", sorted(live_index()))
-def test_every_release_the_manifest_names_gets_both_variables_written(tmp_path, monkeypatch,
-                                                                      component):
+def test_both_variables_the_declared_knob_and_the_shipped_answer_arrive_for_every_release(tmp_path,
+                                                                                          monkeypatch,
+                                                                                          component):
     """Per release, the pair is exported. A component that lost one of its two lines fails here."""
     index = live_index()
     keys = knob_keys(index)
@@ -102,3 +123,22 @@ def test_every_release_the_manifest_names_gets_both_variables_written(tmp_path, 
 
     assert exported[component_config_key(component, "ENABLED")] == "true"
     assert exported[component_config_key(component, "VERSION")] == "1.2.3"
+
+
+def test_the_image_tag_the_file_pairs_with_a_chart_version_is_exported_beside_it(tmp_path, monkeypatch):
+    """Concourse owns a chart version and an appVersion tag as one fact, and both leave in one dict.
+
+    The tag is not a layer knob -- there is no `CONCOURSE_IMAGE_TAG` key `Config` reads -- so what
+    this row proves is the export rule for it: one owner (`versions.yaml`), one variable per apply.
+    """
+    index = live_index()
+    clean(monkeypatch, knob_keys(index))
+    config = seed(tmp_path, environment_level={}, team_level={})
+
+    exported = export_component_release_knobs(config, index)
+
+    assert exported[component_config_key("concourse", "IMAGE_TAG")] == versions.chart_image_tag("concourse")
+    assert exported[component_config_key("concourse", "VERSION")] == versions.chart_version("concourse")
+    image_tags = [key for key in exported if key.endswith("_IMAGE_TAG")]
+    assert image_tags == [component_config_key("concourse", "IMAGE_TAG")], \
+        "releases that own no image tag of their own had one exported anyway: %s" % sorted(image_tags)

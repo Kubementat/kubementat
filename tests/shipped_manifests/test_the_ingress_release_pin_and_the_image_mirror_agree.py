@@ -4,6 +4,8 @@ import re
 
 from asset_paths import values_path
 
+from kubementat.core import versions
+
 # The manifest helmfile applies, read from the package: it is product data and no longer
 # a template `initialize` hands to the configuration.
 HELMFILE_MANIFEST = values_path("helmfile.yaml.gotmpl")
@@ -54,15 +56,20 @@ def release_block(name):
 
 
 def pinned_chart_version():
-    """The `version:` the traefik release actually writes, or None when it writes none."""
+    """The `version:` the traefik release actually binds, answered the way the apply answers it.
+
+    The manifest line names the exported variable and no longer keeps a literal of its own, so the
+    pin this check can read is the one `versions.yaml` owns — through its reader, not by copying it
+    into this file.
+    """
     for line in release_block("traefik"):
-        declared = re.match(r'^\s+version:\s*(.+?)\s*$', line)
+        declared = re.match(r'^\s+version:\s*"?\{\{\s*env\s+"([A-Z0-9_]+)"\s*\}\}"?\s*$', line)
         if not declared:
             continue
-        value = declared.group(1).strip().strip('"')
-        templated = re.match(r'^\{\{\s*env\s+"[A-Z0-9_]+"\s*\|\s*default\s+"(.*?)"\s*\}\}$',
-                             value)
-        return templated.group(1) if templated else value
+        assert declared.group(1) == "TRAEFIK_VERSION", (
+            f"the traefik `version:` line binds {declared.group(1)}, not the knob the product "
+            "exports for that release")
+        return versions.chart_version("traefik")
     return None
 
 

@@ -3,7 +3,9 @@
 `<root>/{environment}/static.json` is the source of truth and code is the fallback. That only
 holds if the fallback says the same thing the tree says, so the defaults live in exactly one module
 instead of being duplicated by every caller. A default that six callers each write down is six
-answers, and the sixth one is the one a stale tree reads.
+answers, and the sixth one is the one a stale tree reads. The version-shaped answers among them are
+owned by `core/assets/versions.yaml` and resolved through `core/versions.py` — this module is a
+reader of those, never a second spelling.
 
 Throughout this file `<root>` is the configuration root: the directory `--config-dir` names, or
 the one `$KUBEMENTAT_PLATFORM_CONFIG_DIR` already points at. There is no directory called
@@ -59,6 +61,8 @@ writes, which releases the rename guard may ask about, and which CRD groups the 
 deletes, so a name cannot be accepted by one verb and refused by another while the manifest disagrees
 with both.
 """
+
+from kubementat.core import versions
 
 # Namespace each component is deployed into. Equal to what the environment layer's witness spells
 # (`tests/fixtures/configuration_shape/environment/static.json.template`) and to what the code said
@@ -152,6 +156,10 @@ TRAEFIK_CONTROLLER_NAME = "traefik.io/ingress-controller"
 # The binaries kubementat is pinned to. One declaration of each, read by the dependency check now
 # and by a CI image build later (row 16's other half, which this change deliberately does not add).
 #
+# The numbers live in `core/assets/versions.yaml` and are resolved through `core/versions.py`; this
+# table is what the dependency check reads without re-opening the file. A default that six callers
+# each write down is six answers, and this table already learned that lesson once.
+#
 # What a version that is *not* here costs: it warns, and the run continues. That is a ruling and not
 # a hedge, and the argument is this tree's own history. `e57fed3` fixed `helm list --all` -- accepted
 # by helm 3, rejected by helm 4 -- and the fix was to spell the six statuses so the product works on
@@ -167,11 +175,13 @@ TRAEFIK_CONTROLLER_NAME = "traefik.io/ingress-controller"
 # *below* the pinned major a run may be, which is a portability decision rather than a measurement,
 # and is written as a count for exactly that reason.
 #
-# Chart versions are not here and never will be: `helmfile.yaml.gotmpl` carries those and they are a
-# different ticket (row 3a). A pinned chart under an unpinned helm has this exact bug still.
+# Chart versions moved to `versions.yaml` as well, but they do not come through this table: the
+# dependency check needs a binary name, and a chart-version table keyed by nothing would be the
+# file itself again. `helmfile.yaml.gotmpl` resolves its versions out of the exported knobs and no
+# longer carries the literals.
 PINNED_BINARY_VERSIONS = {
-    "helm": "4.3.1",
-    "helmfile": "1.7.0",
+    "helm": versions.binary_version("helm"),
+    "helmfile": versions.binary_version("helmfile"),
 }
 
 # Majors under the pinned one that are served without warning. helm: one, because `e57fed3` made the
@@ -245,12 +255,14 @@ def binary_majors_served_label(binary: str) -> str:
 DEFAULT_STATIC_ANSWERS = {
     # Which Tekton Pipelines release `kmt install` applies, and therefore which API versions the
     # cluster is expected to serve. Every PipelineRun kubementat generates is written against it.
-    "TEKTON_VERSION_PIPELINE": "1.17.1",
+    # Resolved out of `versions.yaml` like every other version: the table states the key, the file
+    # owns the number, and a spelling of the number in both would be the drift bug all over again.
+    "TEKTON_VERSION_PIPELINE": versions.tekton_version("pipeline"),
     # The dashboard release that reads the Pipelines API above, applied second because it reads it.
-    "TEKTON_VERSION_DASHBOARD": "0.73.0",
+    "TEKTON_VERSION_DASHBOARD": versions.tekton_version("dashboard"),
     # The trigger controller's release, whose `interceptors.yaml` also answers the
     # `config-triggers-core-interceptors` ConfigMap the controller fails to start without.
-    "TEKTON_VERSION_TRIGGERS": "0.37.2",
+    "TEKTON_VERSION_TRIGGERS": versions.tekton_version("triggers"),
     # The image name part of the CI container's reference — the registry base URL and the tag are the
     # other two pieces, and all three are needed to name one image and no half of one.
     "TEKTON_CI_IMAGE_NAME": "ubuntu-ci-minimal",
@@ -278,7 +290,7 @@ DEFAULT_STATIC_ANSWERS = {
 
 # The component the routing role belongs to, spelled once. The string is this file's own convention —
 # lower-case, hyphenated, equal to the helmfile release name — so it belongs beside the tables that key
-# on it and nowhere else, and `constants.py` imports nothing for it. Every routing module imports this
+# on it and nowhere else, and spelling it needs no import. Every routing module imports this
 # name instead of spelling it again: three spellings is three owners of one component name and no
 # single place a rename has to visit.
 COMPONENT = "traefik"
@@ -383,8 +395,8 @@ CONFIG_MANIFEST_FILENAME = "kubementat.yaml"
 # the registry's declaration reads to state what was declared, and by `Context`'s four resolution
 # layers to say which of them answered — and a key that three files name cannot live in one of the
 # three, because the two that are not it would have to read upward to ask. Duplicating a shared value
-# downward is the layering rule's own answer, and this file is what "downward" means: it is the one
-# module in the tree that imports nothing.
+# downward is the layering rule's own answer, and this file is what "downward" means: the only thing
+# it imports is `versions.py`, and that only ever reads versions out.
 #
 # The two keys arrived from `cluster.py`, where the comment beside them argued that a
 # constant nobody reads from the resolution order is a constant that goes stale. That argument was

@@ -8,10 +8,10 @@
 # git-crypt would undo the whole sanitizing exercise below.
 
 image: concourse/concourse
-# The two pins of one release: 20.3.3 is the chart and 8.3.3 is its `appVersion`, and bumping
-# `CONCOURSE_VERSION` without this line runs an 8.3.3 binary under a chart judged against another
-# version. Move them together, per the plan's runbook.
-imageTag: "8.3.3"
+# The tag belongs to `core/assets/versions.yaml`, whose `concourse` entry pairs the chart with the
+# appVersion it renders; the helmfile release binds it to `CONCOURSE_IMAGE_TAG`, which
+# `export_component_release_knobs` exports next to the chart-version knob. Keeping a tag here
+# would be the second owner that drifts the first time only one of the two moves.
 imagePullPolicy: IfNotPresent
 
 concourse:

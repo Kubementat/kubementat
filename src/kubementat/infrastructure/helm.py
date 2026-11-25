@@ -9,6 +9,7 @@ from kubernetes import client
 from kubementat.infrastructure import shell
 from kubementat.core.config import release_index as config_reads_index
 from kubementat.core import components, constants
+from kubementat.core import versions
 from kubementat.core.identity.target import ClusterTarget, helm_target_args
 from kubementat.core.config.keys import component_config_key
 from kubementat.core.config.reads import read_decrypted
@@ -955,8 +956,9 @@ def export_component_release_knobs(config, index) -> dict:
     r'''
     Tell helmfile which releases are installed and at which version, and return what was told.
 
-    Two variables per release and no more, because two is what a helmfile release carries that an
-    operator can state from `static.json`: `installed:` and `version:`. The read is
+    Two variables per release, and three for the one release that also ships an image tag, because
+    that is what a helmfile release carries that an operator can state from `static.json`:
+    `installed:` and `version:`, plus Concourse's `image.imageTag` set entry. The read is
     `Config.component_release_enabled` and `Config.component_release_version`, so the same
     `L2 > L1` walk a namespace gets is what answers — a team that declares
     `ALLOY_ENABLED: false` is not overridden by the environment that declares nothing.
@@ -981,14 +983,21 @@ def export_component_release_knobs(config, index) -> dict:
     block is commented in or out, and a sentence that names a number has to be re-measured to stay
     true. The rule above says the same thing without an expiry date.
 
-    Only what was declared is handed over. A key that answers `None` is not exported,
-    because helmfile's own `default` in the manifest is what a tree that declares nothing should
-    read, and writing an empty or invented value would take that answer away from the manifest and
-    hand it to a function. Like the namespaces and the coordinates, these land in the environment of
-    the child this apply spawns and not in `argv`: helmfile evaluates its templates in the
-    environment it is handed, and an argument that reaches only the child's arguments never reaches
-    the template. And because they are handed to *this* child and not written down somewhere the
-    next child will also read, a knob one apply declares is not a knob the next one inherits.
+    **The version is handed over whether or not a layer declared it, and that is the change this
+    function exists for now.** The manifest used to keep its own `default` beside every `version:`
+    line, and exporting nothing for an undeclared knob was correct then because the manifest could
+    answer for itself. It cannot any more: the literals moved to `versions.yaml`, so an apply that
+    exported only what a tree declared would hand helmfile an empty version and let the index serve
+    whatever it offers that day. ENABLED still has the manifest's own `default` standing, so `None`
+    for that half still means "the manifest answers" and still exports nothing; for VERSION, `None`
+    now only happens for a labelled release `versions.yaml` does not own. The image tag is read
+    straight from that file for the same reason: the shipped values file no longer carries it, and
+    the manifest binds `image.imageTag` to the variable this function fills. Like the namespaces and
+    the coordinates, all of it lands in the environment of the child this apply spawns and not in
+    `argv`: helmfile evaluates its templates in the environment it is handed, and an argument that
+    reaches only the child's arguments never reaches the template. And because they are handed to
+    *this* child and not written down somewhere the next child will also read, a knob one apply
+    declares is not a knob the next one inherits.
 
     Args:
         config: The `Config` this apply is reading — supplies every layer the knobs are answered from.
@@ -997,8 +1006,9 @@ def export_component_release_knobs(config, index) -> dict:
             honest: the labels decide the variables, so they had better be the labels of that file.
 
     Returns:
-        dict: The `{variable: value}` pairs exported, for the log line. An operator who declared
-        nothing gets `{}` back and an environment nothing was added to.
+        dict: The `{variable: value}` pairs exported, for the log line. A tree that declares nothing
+        gets the shipped answers and no more: every version the file owns, the Concourse image tag,
+        and no ENABLED keys, whose defaults still sit in the manifest.
     '''
     exported = {}
     for component in sorted(index):
@@ -1012,6 +1022,11 @@ def export_component_release_knobs(config, index) -> dict:
             if answer is None:
                 continue
             exported[key] = answer
+        # The one release that owns an image tag gets its variable exported beside the version
+        # knob, because the same file owns both halves and the manifest binds the set entry to it.
+        image_tag = versions.chart_image_tag(component)
+        if image_tag is not None:
+            exported[component_config_key(component, "IMAGE_TAG")] = image_tag
     return exported
 
 # The component whose class the routing release names is `constants.COMPONENT`, spelled once for the
@@ -1038,14 +1053,16 @@ def export_ingress_class(config) -> dict:
     answer that reaches only the child's argv never reaches the template.
 
     **The neighbours' skip is deliberately not copied here, and that is the finding.**
-    `export_component_release_knobs` writes nothing when a key answers `None`, correctly, because an
-    undeclared knob belongs to the manifest's `default`. Copying that here would be the bug: this key's
-    L0 *does* answer it (`constants.DEFAULT_STATIC_ANSWERS`, the last layer of the walk), so a tree that
-    declared nothing has an answer to be handed over, and an export that skipped absent keys is the
-    export that fails for exactly the common tree. There is no fallback in this function either, which
-    is the other half of the same decision: an answer that is genuinely missing is refused where it is
-    read, and `Config.component_ingress_class` raises `KeyError` naming the table that stopped
-    answering. No path in this file can produce a `traefik` nobody chose.
+    `export_component_release_knobs` still skips a key that answers `None` for ENABLED, correctly,
+    because that half's default still sits in the manifest; for VERSION it now has nothing to skip,
+    because the shipped answer comes from `versions.yaml` and not from a manifest literal. Copying
+    the skip here would be the bug: this key's L0 *does* answer it (`constants.DEFAULT_STATIC_ANSWERS`,
+    the last layer of the walk), so a tree that declared nothing has an answer to be handed over, and
+    an export that skipped absent keys is the export that fails for exactly the common tree. There is
+    no fallback in this function either, which is the other half of the same decision: an answer that
+    is genuinely missing is refused where it is read, and `Config.component_ingress_class` raises
+    `KeyError` naming the table that stopped answering. No path in this file can produce a `traefik`
+    nobody chose.
 
     Args:
         config: The `Config` this apply is reading -- the only source of the answer.

@@ -5,6 +5,7 @@ import logging
 
 import pytest
 
+from kubementat.core import versions
 from kubementat.core.config.config import Config
 from kubementat.errors import ReleaseKnobNotABooleanOrStringError
 from kubementat.infrastructure.helm import export_component_release_knobs
@@ -70,13 +71,14 @@ def test_the_encrypted_half_of_a_layer_answers_a_knob_before_the_plain_half(tmp_
     assert config.component_release_enabled("grafana") == "false"
 
 
-def test_a_knob_that_was_never_declared_answers_as_nothing_and_says_nothing(tmp_path, caplog):
-    """The absence case, stated twice on purpose."""
+def test_an_undeclared_enabled_answers_as_nothing_and_an_undeclared_version_answers_from_the_file(
+        tmp_path, caplog):
+    """The absence case, told for the half whose L0 is still the manifest and the half whose is not."""
     config = seed(tmp_path, environment_level={}, team_level={})
 
     with caplog.at_level(logging.WARNING):
         assert config.component_release_enabled("grafana") is None
-        assert config.component_release_version("grafana") is None
+        assert config.component_release_version("grafana") == versions.chart_version("grafana")
 
     assert caplog.text == ""
 
@@ -93,7 +95,8 @@ def test_a_teams_false_beats_an_environments_true_and_is_exported_as_the_string_
     with caplog.at_level(logging.WARNING):
         exported = export_component_release_knobs(config, {"grafana": ["grafana"]})
 
-    assert exported == {ENABLED_KEY: "false"}
+    assert exported == {ENABLED_KEY: "false",
+                        VERSION_KEY: versions.chart_version("grafana")}
     assert exported[ENABLED_KEY] == "false"
     assert "true" not in exported[ENABLED_KEY]
     with caplog.at_level(logging.WARNING):

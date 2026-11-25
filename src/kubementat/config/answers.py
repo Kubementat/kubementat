@@ -31,10 +31,11 @@ inferred from a listing. It is the union of five sources:
 2. **`constants.DEFAULT_NAMESPACES`** — `<NAME>_DEPLOYMENT_NAMESPACE` for each entry.
 3. **`constants.DEFAULT_SERVICE_SELECTORS`** — `<NAME>_SERVICE_SELECTOR` for each entry.
 4. **`config_reads_index.read_release_index()`** — `<NAME>_ENABLED` and `<NAME>_VERSION` for each
-   component the shipped manifest labels, whose L0 is that manifest's own `default` for the knob.
-   This is the split between the two owners spelled out: the index is the manifest half, `constants.py` is the namespace
-   half, and a default that lives in a chart-version literal is not copied into a code table where
-   two owners would have to agree.
+   component the shipped manifest labels, whose L0s now differ and are named separately: ENABLED
+   is the manifest's own `default`, because the opt-in is the release block's own decision, and
+   VERSION is `core/assets/versions.yaml`, the one file that owns chart versions since the manifest
+   gave its literals up. A default that lives in a chart-version literal is not copied into a code
+   table where two owners would have to agree.
 5. **`constants.DEFAULT_STATIC_ANSWERS`** — the answers `initialize`'s templates
    leave behind. They are keyed by the key's own name and they have no component to build a name
    from, so this is the family that has to be enumerated: a key nobody opens by hand is answered by
@@ -58,6 +59,7 @@ from typing import Any
 from kubementat.config import init as config_init
 from kubementat.core.config import derived as config_derived, release_index as config_reads_index
 from kubementat.core import constants
+from kubementat.core import versions
 from kubementat.core.config.config import Config
 from kubementat.core.config.keys import _NOTHING_DECLARED, component_config_key
 
@@ -68,10 +70,11 @@ DEFAULT_ORIGIN = "default"
 ENVIRONMENT_ORIGIN = "environment"
 TEAM_ORIGIN = "team"
 
-# Where an undecorated default came from. Two places answer, and the report's whole point is that the
-# operator does not have to open either one to find out which.
+# Where an undecorated default came from. Three places answer, and the report's whole point is that
+# the operator does not have to open any of them to find out which.
 CONSTANTS_DEFAULT_SOURCE = "constants.py"
 RELEASE_INDEX_DEFAULT_SOURCE = "release index"
+VERSIONS_DEFAULT_SOURCE = "versions.yaml"
 
 # A rule over the team's name is an L0 as well, and the report has to name the owner that answered.
 # Naming `constants.py` here would be the second owner of a fact
@@ -120,10 +123,13 @@ def _version_key(component: str) -> str:
     (`core/config/config.py:651`)."""
     return component_config_key(component, "VERSION")
 
-# The one L0 that is not in `constants.py`: the shipped manifest carries `installed: … | default
-# "true"` and `version: "… | default "1.15.0"` next to the release they belong to, so reading
-# the default back off that file reads it from its only owner. The pattern is deliberately loose
-# about whitespace and strict about the shape: it matches the templating line and nothing else.
+# The manifest's half of the release L0, the one that is not in `constants.py`: the shipped manifest
+# still carries `installed: … | default "true"` next to the release it belongs to, so reading the
+# default back off that file reads it from its only owner. The version half is deliberately not in
+# this pattern — the `version:` literals moved to `versions.yaml` and the manifest's line now names
+# the exported variable and nothing else, so the pattern would only ever read a shape this file no
+# longer writes. It stays deliberately loose about whitespace and strict about the shape: it matches
+# the templating line and nothing else.
 _RELEASE_KNOB_DEFAULT_PATTERN = re.compile(
     r'env\s+"([A-Z][A-Z0-9_]*_(?:ENABLED|VERSION))"\s*\|\s*default\s+"([^"]*)"'
 )
@@ -168,7 +174,8 @@ def effective_answers(root, environment, team=None) -> tuple[AnsweredKey, ...]:
 
 
 def default_source(key: str) -> str:
-    """Where `key`'s L0 lives: `constants.py`, the shipped release index, or the team rule.
+    """Where `key`'s L0 lives: `constants.py`, `versions.yaml`, the shipped release index, or the
+    team rule.
 
     The third answer is what a reader needs when a key came from a rule and not from a file: a key
     that came from a rule is not a default the product shipped, it is a consequence of the team this
@@ -179,15 +186,19 @@ def default_source(key: str) -> str:
     one line here and not a branch in each printing verb, because a second place that knows which
     keys are release knobs is a second place that has to agree with the first. The test is a key
     *ending*, which is the one spelling that says nothing about a file: the packaged-version guard
-    sanctions the suffix argument of `component_config_key` and nothing else, and this line is a
-    suffix match, not a path and not a spelling. A key that ends the same way for a different reason
-    would be mislabelled here, and the universe says it cannot: these two families are the only
-    derived keys that end this way, so the guard against that is the universe itself.
+    sanctions the suffix argument of `component_config_key` and nothing else, and these lines are
+    suffix matches, not paths and not spellings. The two release families now name different files
+    — ENABLED the manifest, VERSION `versions.yaml` — and the universe says a key that ends the
+    same way for a different reason cannot appear: these are the only derived families that end
+    this way.
     """
-    release_knob = key.endswith(("_ENABLED", "_VERSION"))
     if key in config_derived.RULES:
         return DERIVED_DEFAULT_SOURCE
-    return RELEASE_INDEX_DEFAULT_SOURCE if release_knob else CONSTANTS_DEFAULT_SOURCE
+    if key.endswith("_ENABLED"):
+        return RELEASE_INDEX_DEFAULT_SOURCE
+    if key.endswith("_VERSION"):
+        return VERSIONS_DEFAULT_SOURCE
+    return CONSTANTS_DEFAULT_SOURCE
 
 
 # The config layer reads the release index out of the filesystem, and the helm layer is not what
@@ -297,9 +308,10 @@ def _component_family(config, answers, key_of, defaults, answer_of) -> None:
 def _release_knob_keys(config: Config, answers: dict) -> None:
     """`<NAME>_ENABLED` and `<NAME>_VERSION` for the components the manifest labels.
 
-    Both halves of the split between the two owners, and neither is invented: the components come from the index, the
-    defaults come from the manifest's own `default` for that key, and the answers come from the two
-    accessors `helmfile_apply` exports its variables from
+    Both halves of the split between the two owners, and neither is invented: the components come
+    from the index, ENABLED's default comes from the manifest's own `default` for that key,
+    VERSION's comes from `versions.yaml` for the same reason the apply reads it there, and the
+    answers come from the two accessors `helmfile_apply` exports its variables from
     (`Config.component_release_enabled`, `Config.component_release_version`), so a report and an
     apply cannot disagree about what is installed.
     """
@@ -309,6 +321,12 @@ def _release_knob_keys(config: Config, answers: dict) -> None:
     path = config_reads_index.helmfile_state_path_for(config)
     index = config_reads_index.read_release_index(config, path)
     defaults = _release_knob_defaults(path)
+    # VERSION's L0 left the manifest with the literals, and reading a copied number out of the
+    # code table beside it would put the second owner back. The file owns it, keyed by the version
+    # key and nothing else, so no ENABLED row can be misattributed to it.
+    version_defaults = {_version_key(component): versions.chart_version(component)
+                        for component in index if component in versions.chart_names()}
+    defaults = {**defaults, **version_defaults}
     layers = config._component_layers()
     for component in index:
         # The pair below is the spelling function and the accessor that answers the knob, so neither
@@ -321,8 +339,9 @@ def _release_knob_keys(config: Config, answers: dict) -> None:
             declared = value is not _NOTHING_DECLARED and value is not None
             answers[key] = AnsweredKey(
                 key=key,
-                # An accessor that answers nothing (`None`) means the manifest answers for itself,
-                # and the manifest's own default is the only honest value to print there.
+                # An accessor that answers nothing (`None`) means the L0 behind the layers answers,
+                # and that L0 — the manifest's `default` for ENABLED, `versions.yaml` for VERSION —
+                # is the only honest value to print there.
                 value=answer_of(component) if declared else default,
                 origin=(_layer_tag(config, declared_in) if declared else DEFAULT_ORIGIN),
                 source=declared_in,
@@ -422,10 +441,11 @@ def _is_answer(value) -> bool:
 
 
 def _release_knob_defaults(path: Path) -> dict[str, str]:
-    """The manifest's own `default` for every release knob key.
+    """The manifest's own `default` for the ENABLED half of every release knob.
 
     Read from the file `helmfile_state_path_for` says this product applies, so the default the report
     names is the default helmfile would resolve — and not a copy of a chart version moved into
-    `constants.py`, which is the second owner the split refuses.
+    `constants.py`, which is the second owner the split refuses. The version half reads this file
+    for its own reasons and finds nothing: its L0 is `versions.yaml`, merged in by the one caller.
     """
     return dict(_RELEASE_KNOB_DEFAULT_PATTERN.findall(path.read_text(encoding="utf-8")))

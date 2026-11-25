@@ -12,15 +12,14 @@ from kubementat.infrastructure.helm import HelmUtils
 MANIFEST = values_path("helmfile.yaml.gotmpl")
 SUFFIXES = ("ENABLED", "VERSION")
 
-# The version kubementat resolves for a release when configuration says nothing, read off the
-# manifest's own templated `default` for that component rather than written down here. A table in this
-# file would be a second owner of the pin, and the only failure worth catching -- a block reflowed or
-# bumped without the check moving with it -- is a failure a copied table cannot see, because the copy
-# stays green while the file it claims to quote moves. So the set of components this guard can check,
-# and the version each one resolves to, come from the same read of the shipped artefact that
-# `helmfile_apply` makes.
+# The version kubementat resolves comes from `versions.yaml`, exported by `helmfile_apply`; what
+# this file can state from the artefact is the binding: the release block names the knob and keeps
+# no number of its own. Writing the set of components and the resolution path down as a table would
+# be a second owner — and the only failure worth catching, a block reflowed or a line lost, is a
+# failure a copied table cannot see, so the set this guard can check is read off the same artefact.
+# A version literal inside this pattern is the shape the census test below refuses.
 
-VERSION_KNOB = re.compile(r'^\s+version: "\{\{ env "(?P<key>[A-Z0-9_]+)" \| default "(?P<version>.*)" \}\}"$')
+VERSION_KNOB = re.compile(r'^\s+version: "\{\{ env "(?P<key>[A-Z0-9_]+)_VERSION" \}\}"$')
 # The shape either knob loses by being written the other way round: a quoted `installed` is a string
 # helmfile does not resolve, and an unquoted `version` is a number.
 INSTALLED_LITERAL = re.compile(r"^\s+installed:\s*(?P<value>\S.*?)\s*$")
@@ -84,26 +83,30 @@ def _blocks_by_label():
 
 
 def shipped_chart_versions() -> dict:
-    """`{component: the version its own release block resolves}` -- the pins, read off the artefact.
+    """`{component: the version knob its release block binds}` — the manifest binds, it does not answer.
+
+    A component whose block lost or reflowed its `version:` line drops out of this set, so the census
+    test below says the set and the release index still agree; the parametrised rows then have exactly
+    the components the manifest names to check against.
     """
-    pins = {}
+    bindings = {}
     for label, entries in _blocks_by_label().items():
         for _release, lines in entries:
             templated = [VERSION_KNOB.match(line) for line in lines if VERSION_KNOB.match(line)]
             if len(templated) == 1:
-                pins[label] = templated[0].group("version")
-    return pins
+                bindings[label] = templated[0].group("key")
+    return bindings
 
 
 # Read once, for the parametrised rows below. A component that reaches the manifest arrives here and
 # in the index, and the first test says the two answers have to be the same set.
-CHART_VERSIONS_FROM_MANIFEST = shipped_chart_versions()
+VERSION_BINDINGS_FROM_MANIFEST = shipped_chart_versions()
 
 
 # --- every release carries both lines ------------------------------------------------------
 
 
-@pytest.mark.parametrize("component", sorted(CHART_VERSIONS_FROM_MANIFEST))
+@pytest.mark.parametrize("component", sorted(VERSION_BINDINGS_FROM_MANIFEST))
 def test_no_release_carries_a_second_knob_line(component):
     """One `installed:` and one `version:` per release, and nothing else that answers either."""
     for release, lines in blocks_by_label().get(component, []):
@@ -130,3 +133,26 @@ def test_the_two_knob_lines_are_written_the_way_their_types_need():
                     assert version.group("value").startswith('"'), \
                         f"{release}'s version: is not quoted, so a version that reads like 1.0 is a number"
     assert seen == 2 * sum(len(entries) for entries in blocks_by_label().values())
+
+
+# --- the census that moved into the product as a behaviour guard -----------------------------
+
+
+def test_every_release_the_manifest_names_carries_a_version_line():
+    """The file's name is the claim: no block may lose its line and stay checked by nothing."""
+    assert set(VERSION_BINDINGS_FROM_MANIFEST) == set(blocks_by_label()), (
+        "the releases this guard can see and the releases the manifest labels disagree: "
+        f"{sorted(set(blocks_by_label()) - set(VERSION_BINDINGS_FROM_MANIFEST))}")
+
+
+def test_no_version_line_keeps_a_default_literal_the_product_no_longer_ships_in_it():
+    """Where a version answers is product shape, and every `*_VERSION` line that still hedges with
+    a literal is a second owner of that shape.
+
+    This is the census of the move turned into a guard: not "the manifest agrees with the file" — a
+    copy that agrees is exactly the bug — but "the manifest binds and never answers".
+    """
+    offenders = [line for line in MANIFEST.read_text(encoding="utf-8").splitlines()
+                 if re.search(r'_VERSION"?\s*\|\s*default\s*"', line)]
+    assert offenders == [], \
+        "a version literal is back in the manifest; versions.yaml owns it: " + "\n".join(offenders)

@@ -43,7 +43,7 @@ include = ["kubementat*","cli*"]
 # Everything the product ships and opens: the helmfile manifest and its values, and the Tekton Tasks/Pipelines plus the
 # generator templates they read (`tekton_ci/pipeline-runs` is output and is deliberately not here —
 # a half-written manifest inside site-packages is the bug R-12.1 names).
-"kubementat.core.assets" = ["values/**/*", "tekton_ci/**/*"]
+"kubementat.core.assets" = ["values/**/*", "tekton_ci/**/*", "versions.yaml"]
 
 [project.urls]
 Homepage = "https://github.com/Kubementat/kubementat"

@@ -6,6 +6,7 @@ import types
 import pytest
 
 from kubementat.core import constants
+from kubementat.core import versions
 from kubementat.core.config.config import Config
 from kubementat.core.config.keys import component_config_key
 from kubementat.core.constants import SOURCE_CONNECTION
@@ -158,11 +159,21 @@ def test_two_interleaved_applies_neither_of_which_sees_the_ones_variables(tmp_pa
                            "this apply decided is on the right.")
 
     # The half a value-by-value comparison cannot see: a key one tree declared and the other never
-    # mentioned. Under the old channel the child of the quieter apply inherited it from the process.
+    # mentioned. An ENABLED nobody declared is still the manifest's answer, so it must not arrive at
+    # all; a VERSION every apply exports is the apply's *own* shipped answer, so what the quiet
+    # child must not see is the loud tree's value, not the variable.
     quiet, loud = (inner, outer) if not inner_declared else (outer, inner)
     for key in sorted(SILENT_KNOBS):
-        assert key not in recorder.environments[quiet], (
-            f"{key}={recorder.environments[quiet].get(key)!r} reached {quiet}'s child, and only "
-            f"{loud}'s tree declared it. A variable that outlives the apply which decided it is the "
-            "channel this change removes."
-        )
+        if key.endswith("_VERSION"):
+            shipped = versions.chart_version(key[: -len("_VERSION")].lower())
+            assert recorder.environments[quiet].get(key) == shipped, (
+                f"{key}={recorder.environments[quiet].get(key)!r} reached {quiet}'s child instead of "
+                f"the shipped {shipped}. That is the answer another tree declared — a value that "
+                "outlives the apply which decided it is the channel this change removes."
+            )
+        else:
+            assert key not in recorder.environments[quiet], (
+                f"{key}={recorder.environments[quiet].get(key)!r} reached {quiet}'s child, and only "
+                f"{loud}'s tree declared it. A variable that outlives the apply which decided it is the "
+                "channel this change removes."
+            )

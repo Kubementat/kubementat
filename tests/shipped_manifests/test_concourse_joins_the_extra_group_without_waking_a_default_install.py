@@ -7,6 +7,7 @@ import yaml
 from asset_paths import values_path
 
 from kubementat.core import constants
+from kubementat.core import versions
 
 MANIFEST = values_path("helmfile.yaml.gotmpl")
 CONCOURSE_VALUES = values_path("ci", "concourse", "values.yaml")
@@ -69,7 +70,8 @@ def test_concourse_is_labelled_like_every_other_release():
 
 
 def test_concourse_namespace_default_and_constants_agree_and_the_pin_is_the_app_version_pair():
-    """Two literals, each stated once elsewhere: namespace -> `constants`, version -> `imageTag`."""
+    """Two owners named from here: namespace -> `constants`, the version/tag pair -> `versions.yaml`.
+    """
     block = release_blocks()["concourse"]
     namespace = [line for line in block if re.match(r"^\s*namespace:", line)]
     assert len(namespace) == 1, block
@@ -77,9 +79,15 @@ def test_concourse_namespace_default_and_constants_agree_and_the_pin_is_the_app_
     assert constants.DEFAULT_NAMESPACES["concourse"] == "concourse"
     version = [line for line in block if re.match(r"^\s*version:", line)]
     assert len(version) == 1, block
-    assert 'env "CONCOURSE_VERSION" | default "20.3.3"' in version[0], version
+    assert 'env "CONCOURSE_VERSION"' in version[0] and "default" not in version[0], \
+        "the release must bind the version knob and keep no version literal of its own"
+    image_tag = [line for line in block if "CONCOURSE_IMAGE_TAG" in line]
+    assert image_tag, "the release binds no image tag, so nothing moves with the chart version"
     shipped = yaml.safe_load(CONCOURSE_VALUES.read_text(encoding="utf-8"))
-    assert shipped["imageTag"] == "8.3.3", "the chart pin and the image pin must move together"
+    assert "imageTag" not in shipped, \
+        "the chart pin and the image pin must have one owner — the values file must not keep the tag"
+    assert versions.chart_image_tag("concourse"), \
+        "the `concourse` entry lost the image tag half that bumps together with the chart"
 
 
 # --- (3) the values are seeded, not seeded-with-keys ------------------------------------------

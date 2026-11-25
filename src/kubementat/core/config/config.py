@@ -8,6 +8,7 @@ from kubementat.core.config import derived as config_derived
 from kubementat.core.config import paths
 from kubementat.core.config import keys
 from kubementat.core import constants
+from kubementat.core import versions
 from kubementat.core.assets import asset_path
 from kubementat.core.config.reads import read_decrypted
 from kubementat.errors import (
@@ -617,11 +618,12 @@ class Config:
 
         **L0 for this key is the shipped manifest and not `constants.py`, and that is the one
         break in an otherwise uniform rule.** The shipped `helmfile.yaml.gotmpl` is the entry point
-        that applies the releases, so every chart-version literal is already owned there; copying
-        those literals into `constants.py` would give one version string two owners and guarantee
-        they disagree the first time a pin moves. The `default "true"` the manifest carries is
-        this key's L0, and `None` from here is what makes it answer. The absence of a code table
-        is the design rather than an unfinished one, so it is stated here and not "completed".
+        that applies the releases, so the opt-in boolean — `default "true"`, and `"false"` for what
+        the `extra` group keeps out of a default install — is owned there. The `default "true"` the
+        manifest carries is this key's L0, and `None` from here is what makes it answer. The absence
+        of a code table is the design rather than an unfinished one, so it is stated here and not
+        "completed". `component_release_version` answers its half of the pair from the one file that
+        owns chart versions.
 
         Parameters
         ----------
@@ -651,11 +653,13 @@ class Config:
         The chart version `component`'s release installs, answered by `<COMPONENT>_VERSION`.
 
         The other half of the pair, read through the same one path so that the two knobs a
-        release carries cannot disagree about which layer answered. Nothing in `constants.py`
-        is consulted, and that is deliberate rather than a gap: the version kubementat ships is
-        spelled in the manifest that applies it (see
-        `component_release_enabled` for why that is the owner), and this function's only job is
-        to say what the operator overrode. `None` here is the manifest answering for itself.
+        release carries cannot disagree about which layer answered. A layer that declared the
+        key outranks everything below it; when nothing declared it, the answer is what the
+        product ships, read out of `core/assets/versions.yaml` through `core/versions.py`. The
+        manifest used to carry that answer as its own `default` literal and this function read
+        nothing when no layer spoke — two owners, and the file now has one. `None` only remains
+        possible for a labelled release the version file does not own, which the shipped manifest
+        no longer contains.
 
         Parameters
         ----------
@@ -666,7 +670,8 @@ class Config:
         Returns
         -------
         str or None
-            The version string as declared, stripped. `None` when no layer declares the key.
+            The version string as declared, or the shipped version when nothing declared it.
+            `None` only for a release `versions.yaml` does not own.
 
         Raises
         ------
@@ -674,9 +679,12 @@ class Config:
             When the key is declared as a number, a list or a dict. A version that reads like
             `1.0` is the shape this refusal exists for: JSON would have stored it as the number
             `1.0`, which is not the string `"1.0"` and resolves to a chart helm has never seen.
-            `helmfile` quotes the manifest's own default for the same reason.
+            The shipped version is a quoted string for the same reason.
         '''
-        return self._release_knob(keys.component_config_key(component, 'VERSION'), component)
+        answer = self._release_knob(keys.component_config_key(component, 'VERSION'), component)
+        if answer is None and component in versions.chart_names():
+            return versions.chart_version(component)
+        return answer
 
     def _release_knob(self, key: str, component: str):
         r'''
@@ -695,9 +703,10 @@ class Config:
         reader, and this is the only one. `_resolved` is still the walk, `COMPONENT_LAYERS` is still
         the order, and `_component_layers` is still what decides whether the team half exists.
 
-        There is no default to fall back to here, and that is the second half of the same choice:
-        the fallback lives in the manifest's `default`, next to the literal it belongs to, so a
-        layer that declares nothing costs nothing and prints nothing.
+        This function answers only what the layers declare, and leaves the L0 behind them to the
+        accessor that owns its half of the pair: the manifest's own `default` for ENABLED, and
+        `core/assets/versions.yaml` for VERSION. A layer that declares nothing costs nothing and
+        prints nothing either way.
 
         Raises
         ------
@@ -709,7 +718,7 @@ class Config:
         value, declared_in = self._resolved(key, self._component_layers())
 
         # An absent key and a key declared `null` are the same answer to this question — nobody
-        # decided — and both reach the manifest's default. `False` is not in this branch, which is
+        # decided — and both reach the L0 that sits behind the layers. `False` is not in this branch, which is
         # the whole point: a declared `false` is a decision and has to survive the walk.
         if value is keys._NOTHING_DECLARED or value is None:
             return None

@@ -39,6 +39,16 @@
 # file ever disagree; the list is empty, which is the honest answer and the one that holds.
 
 #
+# Release versions are not written here either. The same `helmfile_apply` exports
+# `<COMPONENT>_VERSION` out of the configuration layers, and where no layer speaks,
+# `core/assets/versions.yaml` answers — the product's own version, not this file's. So no release
+# below keeps a version literal, and no `default` stands in for one. What the reader who runs
+# `helmfile` by hand gets instead is empty versions, which helm resolves as "newest" — and that
+# is the whole point of leaving no default behind: the version is product shape, the product's
+# file owns it, and a manifest that quietly answered for itself is how the pins drift. A version
+# that matters to a cluster is applied by `kmt`, never by hand.
+
+#
 # For full file format documentation see: https://helmfile.readthedocs.io/en/latest/#getting-started
 
 # Helm default configuration
@@ -210,7 +220,7 @@ releases:
   # 29.40.1 and `helm template` renders our values file against it without error.
   chart: prometheus-community/prometheus
   installed: {{ env "PROMETHEUS_ENABLED" | default "true" }}
-  version: "{{ env "PROMETHEUS_VERSION" | default "29.40.1" }}"
+  version: "{{ env "PROMETHEUS_VERSION" }}"
   namespace: {{ env "PROMETHEUS_DEPLOYMENT_NAMESPACE" | default "prometheus" }}
   labels:
     component: monitoring
@@ -230,7 +240,7 @@ releases:
   # created beside the Deployment, which is a chart decision and not a values key of ours.
   chart: prometheus-community/prometheus-blackbox-exporter
   installed: {{ env "PROMETHEUS_BLACKBOX_EXPORTER_ENABLED" | default "true" }}
-  version: "{{ env "PROMETHEUS_BLACKBOX_EXPORTER_VERSION" | default "11.20.2" }}"
+  version: "{{ env "PROMETHEUS_BLACKBOX_EXPORTER_VERSION" }}"
   namespace: {{ env "PROMETHEUS_DEPLOYMENT_NAMESPACE" | default "prometheus" }}
   labels:
     component: monitoring
@@ -247,7 +257,7 @@ releases:
   # Our values file sets `replicaCount`, which 1.4.0 still documents.
   chart: sstarcher/helm-exporter
   installed: {{ env "PROMETHEUS_HELM_EXPORTER_ENABLED" | default "true" }}
-  version: "{{ env "PROMETHEUS_HELM_EXPORTER_VERSION" | default "1.4.0+e2eee28" }}"
+  version: "{{ env "PROMETHEUS_HELM_EXPORTER_VERSION" }}"
   namespace: {{ env "PROMETHEUS_DEPLOYMENT_NAMESPACE" | default "prometheus" }}
   labels:
     component: monitoring
@@ -262,7 +272,7 @@ releases:
   # section spells out; `loki` keeps the vendor alias and is untouched by this line.
   chart: grafana-community/grafana
   installed: {{ env "GRAFANA_ENABLED" | default "true" }}
-  version: "{{ env "GRAFANA_VERSION" | default "14.2.0" }}"
+  version: "{{ env "GRAFANA_VERSION" }}"
   namespace: {{ env "GRAFANA_DEPLOYMENT_NAMESPACE" | default "grafana" }}
   labels:
     component: monitoring
@@ -302,7 +312,7 @@ releases:
 - name: loki
   chart: grafana-community/loki
   installed: {{ env "LOKI_ENABLED" | default "true" }}
-  version: "{{ env "LOKI_VERSION" | default "20.2.0" }}"
+  version: "{{ env "LOKI_VERSION" }}"
   namespace: {{ env "LOKI_DEPLOYMENT_NAMESPACE" | default "loki" }}
   labels:
     component: logging
@@ -338,7 +348,7 @@ releases:
 - name: alloy
   chart: grafana/alloy
   installed: {{ env "ALLOY_ENABLED" | default "true" }}
-  version: "{{ env "ALLOY_VERSION" | default "1.15.0" }}"
+  version: "{{ env "ALLOY_VERSION" }}"
   namespace: {{ env "LOKI_DEPLOYMENT_NAMESPACE" | default "loki" }}
   labels:
     component: logging
@@ -372,7 +382,7 @@ releases:
 - name: polaris
   chart: fairwinds-stable/polaris
   installed: {{ env "POLARIS_ENABLED" | default "true" }}
-  version: "{{ env "POLARIS_VERSION" | default "6.0.1" }}"
+  version: "{{ env "POLARIS_VERSION" }}"
   namespace: {{ env "POLARIS_DEPLOYMENT_NAMESPACE" | default "polaris" }}
   labels:
     component: analytics
@@ -397,7 +407,7 @@ releases:
 - name: cert-manager
   chart: jetstack/cert-manager
   installed: {{ env "CERT_MANAGER_ENABLED" | default "true" }}
-  version: "{{ env "CERT_MANAGER_VERSION" | default "v1.21.3" }}"
+  version: "{{ env "CERT_MANAGER_VERSION" }}"
   namespace: {{ env "CERT_MANAGER_DEPLOYMENT_NAMESPACE" | default "cert-manager" }}
   labels:
     component: routing
@@ -437,7 +447,7 @@ releases:
 - name: traefik
   chart: traefik/traefik
   installed: {{ env "TRAEFIK_ENABLED" | default "true" }}
-  version: "{{ env "TRAEFIK_VERSION" | default "42.1.3" }}"
+  version: "{{ env "TRAEFIK_VERSION" }}"
   namespace: {{ env "TRAEFIK_DEPLOYMENT_NAMESPACE" | default "traefik" }}
   labels:
     component: routing
@@ -467,7 +477,7 @@ releases:
 - name: openbao
   chart: openbao/openbao
   installed: {{ env "OPENBAO_ENABLED" | default "true" }}
-  version: "{{ env "OPENBAO_VERSION" | default "0.30.6" }}"
+  version: "{{ env "OPENBAO_VERSION" }}"
   namespace: {{ env "OPENBAO_DEPLOYMENT_NAMESPACE" | default "openbao" }}
   labels:
     component: secret_management
@@ -494,12 +504,16 @@ releases:
 # nothing installs and runs nothing here, and the two `default`s on the next lines are therefore
 # only ever read when the knob is already "true".
 #
-# 20.3.3 is Concourse 8.3.3, re-read from the chart index on 2026-11-17, where it is the newest
-# entry. The pin carries the argument every block above makes -- unpinned, helm resolves
-# "newest" and the cluster runs a chart nobody judged -- plus one that is this chart's own: the
-# chart's `appVersion` decides the `concourse/concourse` image tag, and the image and chart must
-# move as one, so the shipped values file pins `imageTag: "8.3.3"` beside this line and an upgrade
-# bumps both, per the plan's runbook.
+# What the block pins is the `versions.yaml` entry, not this file's line: at the re-read of
+# 2026-11-17 the newest entry in the chart index was chart 20.3.3, whose appVersion is Concourse
+# 8.3.3, and that pair is what the `concourse` entry holds today. The pin carries the argument
+# every block above makes -- unpinned, helm resolves "newest" and the cluster runs a chart nobody
+# judged -- plus one that is this chart's own: the chart's `appVersion` decides the
+# `concourse/concourse` image tag, so the image and the chart must move as one. Both halves answer
+# from that one entry, exported beside each other by `HelmUtils.export_component_release_knobs` --
+# the chart version into `CONCOURSE_VERSION`, the tag into `CONCOURSE_IMAGE_TAG` -- so this block
+# carries neither literal and the shipped values file that used to keep the tag as its own copy no
+# longer holds it. One bump is one edit of two adjacent lines of that file.
 #
 # Two cluster-visible facts are stated here because a failure on either is silent in the manifest
 # and loud on the cluster. **Privilege:** the worker pods are privileged -- `helm show template`
@@ -526,8 +540,11 @@ releases:
 - name: concourse
   chart: concourse/concourse
   installed: {{ env "CONCOURSE_ENABLED" | default "false" }}
-  version: "{{ env "CONCOURSE_VERSION" | default "20.3.3" }}"
+  version: "{{ env "CONCOURSE_VERSION" }}"
   namespace: {{ env "CONCOURSE_DEPLOYMENT_NAMESPACE" | default "concourse" }}
+  set:
+    - name: image.imageTag
+      value: {{ env "CONCOURSE_IMAGE_TAG" | quote }}
   labels:
     component: ci
     component_name: concourse

@@ -1177,3 +1177,31 @@ class ClusterManagerEmailNotConfiguredError(KubementatError):
     There is no built-in default for an email address, which makes this the one key the rule that
     answers the others cannot answer for.
     """
+
+
+# ---------------------------------------------------------------------------
+# The default version file refuses.
+#
+# `core/assets/versions.yaml` is the single owner of every default version kubementat runs with,
+# and the reader that owns it refuses instead of guessing: the alternative to "the file did not
+# answer" is an inline default at the call site, and every inline default is the second owner this
+# file was written to retire. One class answers for the whole walk — a missing leaf key, a block
+# that is not there, and a file that is not there are the same operator question asked at three
+# depths: *which line is missing?* So the message carries the file, the path walked, and the
+# partial reason.
+# ---------------------------------------------------------------------------
+
+
+class VersionNotDeclaredError(KubementatError):
+    """A default version `versions.yaml` owes is not there, and this reader never defaults.
+    """
+
+    def __init__(self, *, path, key: str, reason: Optional[str] = None):
+        self.path = str(path)
+        self.key = key
+        detail = f": {reason}." if reason else "."
+        super().__init__(
+            f"{key} is not answered in {self.path}{detail} kubementat ships no second owner for "
+            f"a default version, so the file has to say it: open {self.path} and add the line, or "
+            f"restore the one that was deleted."
+        )
