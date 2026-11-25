@@ -1,4 +1,9 @@
 # Unreleased
+- **The version scan has a scheduler that is not a host.** `.github/workflows/renovate.yml` starts
+  the same `renovate.json` from GitHub Actions daily inside the window the lock-file gate needs.
+  With it enabled, the host's PR-mode cron line should stop — two schedulers on one file means two
+  PR streams.
+
 - **Every default version kubementat runs with has one owner: `src/kubementat/core/assets/versions.yaml`,
   shipped with the package, and every consumer — the apply, the manifest, the CI image build, the
   shipped Tekton tasks and the end-to-end harness — resolves through it. Bumping a version is one edit

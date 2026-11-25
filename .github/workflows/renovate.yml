@@ -1,0 +1,88 @@
+# Version freshness scanning, scheduled by the platform instead of by one host's crontab.
+#
+# Renovate's CLI runs once and exits, so the scan has always had two halves: the config the
+# scan runs from (`renovate.json`, which owns the pinning story entirely) and whatever repeats
+# it. This file is the scheduler: the action starts the scan on a clock, and the repo's own
+# `renovate.json` says what the scan does. Nothing here changes what is scanned or how —
+# it is a second place the same scan can live.
+#
+# Why the platform schedules it at all: `tools/renovate/run-renovate-scan.sh` needs a host that
+# is always on and reads the checkout from disk, and it opens its pull requests against Forgejo.
+# The GitHub lane is where this tree already gets read, so it may carry the scan without a host's
+# crontab and without a second token — the workflow token is the platform answering for this run.
+#
+# Two rules that are not style.
+#
+#   concurrency  — the scan is not idempotent when it overlaps: both halves would race to write
+#                  the same branches. The group is the only serialization that exists, which is
+#                  also the instruction this file ships with: if this workflow is switched on,
+#                  the host's `--pr` cron lines stop. Two schedulers on one file means two pull
+#                  request streams disagreeing about the same versions.yaml.
+#
+#   the image    — the weekly `uv.lock` refresh delegates to uv, so every run needs the `-full`
+#                  flavour. The tag is pinned by hand, the same one
+#                  `tools/renovate/run-renovate-scan.sh` names. Nothing will bump it for you:
+#                  the scan's managers read `versions.yaml`, and the scanner's own version is
+#                  not a product version. When the tag moves, both places are expected to say so.
+#
+# What is deliberately not here. No `--dry-run` step — read-only scanning is what the script's
+# default mode is for, on a machine with a checkout to mount, and this job's own log is a full
+# PR-mode account of what it found. No cron on a second schedule — the daily slot below is the
+# same 03:17 the script's cron uses, and Monday's run at 03:17 lands inside the "before 4am on
+# monday" gate the lock-file refresh carries, so the window does not need to be remembered.
+#
+# A bump PR opened with `GITHUB_TOKEN` does not run the unit lane until a maintainer approves
+# its first run — bot-created pull requests need the approval, and the token cannot approve
+# itself. That is a deliberate trade: the alternative is a long-lived personal access token with
+# write access to this repository, which is a larger failure than one button press.
+
+name: Renovate scan
+
+on:
+  schedule:
+    # Quoted for YAML: an unquoted * means something else entirely.
+    - cron: "17 3 * * *"
+  # The out-of-band run is a button, not an edit to the schedule.
+  workflow_dispatch:
+
+# Nothing gets permissions by inheritance: the permissions below are what the run earned,
+# and the job states them again so a reader of either block sees the same claim.
+permissions:
+  contents: write
+  pull-requests: write
+  checks: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    # A cold scan measured ~11 s on this tree, but 32 lookups across five upstreams stretch
+    # when any of them rate-limits. This is room, not a measurement.
+    timeout-minutes: 15
+    concurrency: renovate-scan
+
+    # Exactly what the run does, stated here rather than inherited: push version branches,
+    # open and maintain the pull requests, and set their status checks. No secrets other than
+    # this token exist on this path, which is the whole point of running with `GITHUB_TOKEN`
+    # rather than a personal one.
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: write
+
+    steps:
+      # The action launches the scanner container and needs the configuration file on disk;
+      # the repository itself the scanner reads through the platform API, not this checkout.
+      - name: Check out the config
+        uses: actions/checkout@v7
+
+      - name: Run the scan
+        uses: renovatebot/github-action@v46.3.14
+        with:
+          configurationFile: .github/renovate-scan.json
+          renovate-image: renovate/renovate:44.251.0-full
+          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          # One repository, named by the run rather than written down: this is the repo the
+          # workflow lives in, so the scan cannot wander to anything else the token sees.
+          RENOVATE_AUTODISCOVER: "false"
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
