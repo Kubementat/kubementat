@@ -29,16 +29,18 @@
 # run on k8s cluster:
 # kubectl run ubuntu-ci --rm -i --tty --image="${DOCKER_REGISTRY_BASE_URL}/${IMAGE_NAME}:${IMAGE_TAG}" --command /bin/bash
 
-# tool versions (test.sh reads the defaults below to verify the built image)
-ARG BASE_IMAGE_URL=ubuntu:26.04
-ARG KUBECTL_MINOR_VERSION="1.37"
-ARG TKN_CLI_VERSION="0.46.2"
-ARG YQ_VERSION="4.54.1"
-ARG HELMFILE_VERSION="1.8.2"
-ARG HELM_DIFF_VERSION="3.15.15"
-ARG LINKERD_VERSION="edge-26.10.1"
-ARG NODE_VERSION="24.22.1"
-ARG UV_VERSION="0.13.6"
+# Tool versions arrive as build args from build.sh, which resolves them from
+# src/kubementat/core/assets/versions.yaml. There are no defaults here: a docker build
+# without them fails on empty versions instead of silently building stale pins.
+ARG BASE_IMAGE_URL
+ARG KUBECTL_MINOR_VERSION
+ARG TKN_CLI_VERSION
+ARG YQ_VERSION
+ARG HELMFILE_VERSION
+ARG HELM_DIFF_VERSION
+ARG LINKERD_VERSION
+ARG NODE_VERSION
+ARG UV_VERSION
 
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 

@@ -1,29 +1,37 @@
 #!/usr/bin/env bash
 # Smoke test for the ubuntu-ci-minimal image: starts a container and checks that every installed tool is present,
-# runs, and (for the pinned tools) reports the version pinned in the Dockerfile.
+# runs, and (for the pinned tools) reports the expected version.
 # usage: ./test.sh <image-url>
 # test another platform under emulation: DOCKER_RUN_ARGS="--platform linux/arm64" ./test.sh <image-url>
 set -euo pipefail
 
 IMAGE_URL="${1:?usage: $0 <image-url>}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# read the pinned version defaults from the Dockerfile, e.g. ARG YQ_VERSION="4.54.1"
-dockerfile_arg() {
-  sed -nE "s/^ARG $1=\"?([^\"]*)\"?$/\1/p" "$SCRIPT_DIR/Dockerfile" | head -1
-}
+# The expected versions come from the environment: build.sh resolves them from
+# src/kubementat/core/assets/versions.yaml and exports them before invoking this script.
+# The Dockerfile carries no defaults anymore, so a missing variable here means nobody told
+# this script what is expected — refuse instead of verifying against nothing.
+missing=()
+for var in BASE_IMAGE_URL KUBECTL_MINOR_VERSION TKN_CLI_VERSION YQ_VERSION HELMFILE_VERSION \
+           HELM_DIFF_VERSION LINKERD_VERSION NODE_VERSION UV_VERSION; do
+  [[ -v "$var" ]] || missing+=("$var")
+done
+if ((${#missing[@]})); then
+  echo "missing expected-version variables: ${missing[*]} (run via build.sh, which exports them from versions.yaml)" >&2
+  exit 1
+fi
 
 echo "Testing image: $IMAGE_URL"
 docker run --rm -i ${DOCKER_RUN_ARGS:-} \
-  -e EXPECT_UBUNTU="$(dockerfile_arg BASE_IMAGE_URL | sed 's/^ubuntu://')" \
-  -e EXPECT_KUBECTL="$(dockerfile_arg KUBECTL_MINOR_VERSION)" \
-  -e EXPECT_TKN="$(dockerfile_arg TKN_CLI_VERSION)" \
-  -e EXPECT_YQ="$(dockerfile_arg YQ_VERSION)" \
-  -e EXPECT_HELMFILE="$(dockerfile_arg HELMFILE_VERSION)" \
-  -e EXPECT_HELM_DIFF="$(dockerfile_arg HELM_DIFF_VERSION)" \
-  -e EXPECT_LINKERD="$(dockerfile_arg LINKERD_VERSION)" \
-  -e EXPECT_NODE="$(dockerfile_arg NODE_VERSION)" \
-  -e EXPECT_UV="$(dockerfile_arg UV_VERSION)" \
+  -e EXPECT_UBUNTU="${BASE_IMAGE_URL#ubuntu:}" \
+  -e EXPECT_KUBECTL="$KUBECTL_MINOR_VERSION" \
+  -e EXPECT_TKN="$TKN_CLI_VERSION" \
+  -e EXPECT_YQ="$YQ_VERSION" \
+  -e EXPECT_HELMFILE="$HELMFILE_VERSION" \
+  -e EXPECT_HELM_DIFF="$HELM_DIFF_VERSION" \
+  -e EXPECT_LINKERD="$LINKERD_VERSION" \
+  -e EXPECT_NODE="$NODE_VERSION" \
+  -e EXPECT_UV="$UV_VERSION" \
   "$IMAGE_URL" /bin/bash -s <<'EOF'
 FAILED=0
 
