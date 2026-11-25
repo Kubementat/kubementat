@@ -1,4 +1,39 @@
 # Unreleased
+- **Every default version kubementat runs with has one owner: `src/kubementat/core/assets/versions.yaml`,
+  shipped with the package, and every consumer — the apply, the manifest, the CI image build, the
+  shipped Tekton tasks and the end-to-end harness — resolves through it. Bumping a version is one edit
+  of one file, not a hunt across eight.**
+
+  Every number used to be pinned where it is consumed: eleven chart defaults in `helmfile.yaml.gotmpl`,
+  helm and helmfile in `constants.py`, the Concourse image tag in its component values file, eight tool
+  versions in the CI image Dockerfile, the image tags of the shipped Tekton tasks and the harness's
+  image strings — copies kept agreeable by roughly thirty custom Renovate managers. A second owner
+  that "happens to agree" is the shape of every drift bug this repository has already decided against,
+  so the file answers and the other places resolve. What a configured tree answers does not move, and
+  this item says so with its own tests: the layers still outrank what is below them, and the L0 below
+  them only changed owner.
+
+  - **The apply always hands helmfile an answer.** `helmfile.yaml.gotmpl` keeps every `version:` line
+    binding its knob and keeps none of the numbers: `kmt install` exports a layer's answer where a
+    layer declares one and the file's answer where none speaks, never nothing. A hand-run `helmfile`
+    gets empty versions and resolves "newest" — the version is product shape, and the product's half
+    of it is the file now, not the manifest.
+  - **`config show` names it.** An undeclared `<COMPONENT>_VERSION` is tagged
+    `(default from versions.yaml)`, so an operator finds the file to bump without being sent to a code
+    table that answers nothing about versions.
+  - **A bare `docker build` of the CI image fails.** The Dockerfile's version `ARG` lines kept their
+    declarations and lost their values, and `build.sh` passes the file's `ci_image:` block as build
+    args, so an arg-less build stops on empty versions instead of quietly building stale pins.
+  - **The shipped Tekton tasks' image defaults are rendered from the file at apply time.** The task and
+    pipeline YAMLs keep their image names and a tag beside them, but the tag that reaches the cluster is
+    filled where `kmt install` applies the assets: the renderer swaps every product-owned image name it
+    recognises for the file's answer, and leaves any image the file does not own exactly as written.
+  - **The harness resolves too.** Its container images and its k3s pin are reads from the file, so an
+    e2e lane runs the tags the product ships rather than copies that can drift.
+  - **The pin scan shrank with the move.** The custom Renovate managers that read numbers out of the
+    Dockerfile, `constants.py`, values files and manifest collapsed to managers targeting
+    `versions.yaml`, and the grouping that had to move together survived as `packageRules` over the
+    same file.
 - **The unit suite tests kubementat's behaviour and nothing else, one case per behaviour: 774 cases
   in eleven area directories under `tests/`, down from 1722 in 180 files, with the same statements
   of `src/` covered.**

@@ -9,7 +9,7 @@ from click.testing import CliRunner
 from cli.commands import config as config_module
 from kubementat.config import answers as config_answers
 from kubementat.config.init import add_team, init_configuration
-from kubementat.core import constants
+from kubementat.core import constants, versions
 from kubementat.core.config import release_index as config_reads_index
 from kubementat.core.config.config import Config
 
@@ -184,6 +184,10 @@ def test_show_on_a_fresh_tree_tags_every_key_and_prints_no_other_keys(tmp_path):
     assert lines == sorted(lines), "a diff of two runs is why a human pipes this, and order is that claim"
     assert "GRAFANA_DEPLOYMENT_NAMESPACE = grafana   (default from constants.py)" in lines
     assert "TEKTON_VERSION_PIPELINE = 1.17.1   (default from constants.py)" in lines
+    # An undeclared release version has its L0 in `versions.yaml` and not in `constants.py`, and the
+    # tag is what says so: the value alone would read the same whichever owner answered it.
+    assert f"GRAFANA_VERSION = {versions.chart_version('grafana')}   " \
+           f"(default from {config_answers.VERSIONS_DEFAULT_SOURCE})" in lines
     cluster_file = root / ENVIRONMENT / "static.json"
     assert f"CLUSTER_KUBE_CONTEXT = null   (environment from {cluster_file})" in lines
     # The seeded key is the one line in this report that is *not* a default, and it is the reason the
