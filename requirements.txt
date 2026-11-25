@@ -1,5 +1,0 @@
-click
-kubernetes
-pyyaml
-cryptography
-python-gnupg

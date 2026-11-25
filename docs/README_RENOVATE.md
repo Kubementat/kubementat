@@ -96,8 +96,6 @@ other file unchanged; the pairing is a review rule, and this page is where it is
 - **Generated configuration outside this checkout.** The per-environment mirrored image list lives
   in the operator's configuration tree, not in this repository, and its tags ride the chart bumps
   the scan already proposes.
-- **`requirements.txt`.** It carries no constraints, so there is nothing to bump; it is ignored on
-  purpose, and deleting it or generating it from `uv` is the fix.
 - **Patch churn inside a channel.** The `kubectl` rule reduces upstream tags to their minor, so the
   scan proposes "a newer stable minor is served" and never churns on patches the URL already
   installs.
