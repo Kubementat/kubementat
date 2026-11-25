@@ -434,6 +434,34 @@
         "helmfile/helmfile"
       ],
       "groupName": "helmfile (binary and CI image)"
+    },
+    {
+      "description": "the ansible manager mis-fires on this tree's Tekton YAML, reading container images as ansible tasks — 26 dependencies that are not dependencies. Verified by a dry run after the central file landed; the mis-fire is the manager's, not the tree's, so it stays disabled.",
+      "matchManagers": [
+        "ansible"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "the pyenv manager reads `.python-version` (the 3.9 floor the package declares) and would bump it to the newest release. A floor is not a freshness pin — raising it is a compatibility decision that belongs to the Python distribution's own change — so there is nothing for this manager to keep fresh here.",
+      "matchManagers": [
+        "pyenv"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "the dockerfile manager has nothing to own since the central file landed: the CI image's `FROM` lines are ARG-driven, so every version it could read arrives from versions.yaml at build time, and the 20 dependencies it still extracts from the file resolve to no branch. Disabling it removes the extraction noise without removing a single real lookup.",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "the helm-values manager finds image repositories without tags in the shipped values files, because the charts name their images in keys the manager does not pair with a version, or the tag is an env knob. Those reads become tagless dependencies that can never resolve; the images that do carry versions live in versions.yaml. All values files, not just Concourse's — the same shape appears in each.",
+      "matchManagers": [
+        "helm-values"
+      ],
+      "enabled": false
     }
   ]
 }
