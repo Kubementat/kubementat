@@ -21,6 +21,8 @@ from pathlib import Path
 from harness import asserts, config
 from harness.guest import Guest
 from harness import vmm as vmm_lib
+from kubementat import errors
+from kubementat.core import versions
 
 PROBE_POD = "kmt-e2e-probe"
 PROBE_CLAIM = "kmt-e2e-probe"
@@ -172,7 +174,7 @@ def _probe_manifest(storage_class):
         "spec:",
         "  containers:",
         "  - name: consumer",
-        "    image: docker.io/library/alpine:3.21",
+        "    image: %s" % versions.image_ref("alpine"),
         "    command: [\"sh\", \"-c\", \"touch /data/probe; sleep 3600\"]",
         "    volumeMounts:",
         "    - name: data",
@@ -497,9 +499,10 @@ class LaneRunner:
         # cluster, and D8 records its version rather than the product declaring it. That record used to be
         # the whole implementation, which is how a stable-channel promotion arrived as a guest that
         # crash-looped with nobody noticing: the version was written into `result.json`, and read by
-        # nothing. Now that the lane pins k3s in `01-provision.sh`, the pin is a fact with a check beside
-        # it — if the guest reports something other than the release the script installs, that is a
-        # named failure and not a paragraph in a log file nobody opens until the run is over.
+        # nothing. The pin itself is `versions.yaml`'s `e2e.k3s` line now, which `01-provision.sh`
+        # resolves and installs; the check beside it reads the same line, so a guest running a k3s
+        # nobody certified is a named failure and not a paragraph in a log file nobody opens until
+        # the run is over.
         k3s_drift, k3s_detail = self._k3s_version_drift()
         self.expect("guest-k3s-matches-the-pinned-release", not k3s_drift, k3s_detail, cls="infra")
         # k3s installs its own charts (traefik and its CRD) through the HelmChart
@@ -934,33 +937,30 @@ class LaneRunner:
             attempts += more
         self.record("assert:k3s-addons-deployed", "infra", passed, detail, attempts=attempts)
 
-    def _k3s_pinned_version(self):
-        """The release `01-provision.sh` installs, read out of the script that installs it.
+    @staticmethod
+    def _k3s_pinned_version():
+        """The release the lane installs, answered by `versions.yaml`'s `e2e.k3s` line.
 
-        The number lives in the shell script and not in a Python constant for one reason: the script is
-        the thing that execs `get.k3s.io`, and a copy of a version in a language that cannot install it
-        is a second place that has to agree. Here the lane reads the only place it is written, which is
-        also what makes a promotion show up as a one-line change to one file.
+        The number used to live in the provisioning script and this check read it back out of
+        the rendered file with a regex, because a silently unpinned lane is the exact shape that
+        let a stable-channel promotion crash-loop a guest with nothing naming it. The script now
+        resolves that same line, so reading it here greps the answer out of a copy of the answer.
 
-        A script that stopped declaring it is reported and not swallowed: the assert that consumes this
-        answer treats "no pin found" as drift, because a silently unpinned lane is the exact shape that
-        let a stable-channel promotion crash-loop a guest with nothing naming it.
+        A file that stopped declaring it is reported and not swallowed: the assert that consumes
+        this answer treats "no pin found" as drift, the way the script-text read did.
         """
         try:
-            script = Path(self.opts.provision_script).read_text()
-        except OSError as e:
-            return None, "the provisioning script at %s could not be read (%s), so no pin exists to check"
-        match = re.search(r'^K3S_VERSION="([^"]+)"', script, re.MULTILINE)
-        if not match:
-            return None, "01-provision.sh no longer declares K3S_VERSION; the lane is unpinned again"
-        return match.group(1), None
+            return versions.e2e_version("k3s"), None
+        except errors.VersionNotDeclaredError as missing:
+            return None, "versions.yaml answers nothing for e2e.k3s (%s), so the lane is unpinned" % missing
 
     def _k3s_version_drift(self):
-        """Whether the guest runs the k3s the lane pinned.
+        """Whether the guest runs the k3s the versions file declares.
 
-        Two answers, like `_tool_version_drift`: what the script installs, and what the guest reports.
-        They are compared exactly and not as a range, for the reason that already governs the binaries:
-        a lane that runs an unmeasured cluster is evidence about the guest image.
+        Two answers, like `_tool_version_drift`: what the file declares and installs, and what
+        the guest reports. They are compared exactly and not as a range, for the reason that
+        already governs the binaries: a lane that runs an unmeasured cluster is evidence about
+        the guest image.
         """
         pinned, problem = self._k3s_pinned_version()
         if problem:
@@ -971,10 +971,11 @@ class LaneRunner:
             return (["k3s did not answer a version this lane can parse (exit %s): %s"
                      % (result.exit_code, result.excerpt(120))], result.excerpt(160))
         if running != pinned:
-            return (["k3s on the guest is %s, but 01-provision.sh pins %s" % (running, pinned)],
-                    "The guest is running k3s %s and the lane pinned %s. Either the channel promoted "
-                    "and the pin was not bumped, or a guest survived from an earlier run; both mean the "
-                    "evidence below is about a cluster nobody certified." % (running, pinned))
+            return (["k3s on the guest is %s, but versions.yaml pins %s" % (running, pinned)],
+                    "The guest is running k3s %s and versions.yaml pins %s. A guest that survived "
+                    "from an earlier pin, or a provisioning step that installed something other "
+                    "than the file's line, means the evidence below is about a cluster nobody "
+                    "certified." % (running, pinned))
         return [], "guest k3s is %s, the pinned release" % pinned
 
     @staticmethod
@@ -1073,10 +1074,10 @@ print(json.dumps({"declared": dict(constants.PINNED_BINARY_VERSIONS), "observed"
             ("tkn", "tkn version"),
             ("uv", "uv --version"),
             ("kubectl", "kubectl version --client=true -o json"),
-            # k3s is pinned in `01-provision.sh` rather than declared in `PINNED_BINARY_VERSIONS`, because
+            # k3s is pinned in `versions.yaml` rather than declared in `PINNED_BINARY_VERSIONS`, because
             # it is the cluster and not a binary kubementat execs, and this line is what keeps the older
             # half of D8 true: a green run still names what it ran against, so a pinned version that stops
-            # matching reality is visible in the evidence instead of only in a script nobody reads.
+            # matching reality is visible in the evidence instead of only in a line no reader opens.
             ("k3s", "k3s --version | head -1"),
         ):
             result = self.guest.run(command=command, timeout=60)
@@ -3189,7 +3190,9 @@ print(json.dumps({"declared": dict(constants.PINNED_BINARY_VERSIONS), "observed"
         last so the one failure mode of the earlier steps -- a fixture that exists but points
         nowhere -- never has to be read twice.
 
-        The registry is a plain `registry:2` without a pull-through cache, for a reason that
+        The registry is a plain, push-capable registry without a pull-through cache (the versions
+        file's `registry` reference, which the fixture's image line takes from the same place as
+        the harness's own constant), for a reason that
         is easy to miss: a cache-mode distribution refuses pushes altogether, and a lane that
         asserts an image landed is a lane that must be able to push one. The CI image the
         pipeline steps run as is therefore seeded into the node's container store with the
@@ -3199,7 +3202,19 @@ print(json.dumps({"declared": dict(constants.PINNED_BINARY_VERSIONS), "observed"
         """
         if not self._dockerbuild_git_fixture():
             return False
-        applied = self.cluster.apply((DOCKERBUILD_FIXTURES / "registry.yaml").read_text(), timeout=120)
+        # The fixture spells the cluster objects and the versions file owns the image, so the
+        # image line is resolved on the way into the cluster: the Deployment and the harness's
+        # `DOCKERBUILD_REGISTRY_IMAGE` cannot disagree, and a fixture that lost the line the
+        # substitution targets is reported rather than applying some other reference quietly.
+        expected_image = "image: " + config.DOCKERBUILD_REGISTRY_IMAGE
+        manifest = (DOCKERBUILD_FIXTURES / "registry.yaml").read_text().replace(
+            "image: registry:2", expected_image)
+        if expected_image not in manifest:
+            self.expect("dockerbuild-registry-image-resolved", False,
+                        "the registry fixture no longer carries the image line resolved from "
+                        "versions.yaml, so applying it would run some other reference")
+            return False
+        applied = self.cluster.apply(manifest, timeout=120)
         self.expect("dockerbuild-registry-applied", applied.ok, applied.excerpt(200))
         if not applied.ok:
             return False

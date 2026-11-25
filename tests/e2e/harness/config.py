@@ -8,12 +8,15 @@ known product blockers the suite is expected to trip over.
 The suite speaks to exactly two things: the `virt-runner` CLI on the host, and one
 hardened ssh command line inside the guest. Nothing else.
 
-Requirements this file implements: the capability table, the image pin, the helmfile
+Requirements this file implements: the capability table, the image references (the versions file
+owns their tags; this file spells how they are used), the helmfile
 installation groups, the dummy credential set, the tunnel signature table, the resource
 kinds the idempotency hash uses, the stage budgets and the VM shapes.
 """
 
 from dataclasses import dataclass, field
+
+from kubementat.core import versions
 
 # ---------------------------------------------------------------- host / guest
 
@@ -326,23 +329,26 @@ CI_IMAGE = "%s/%s:%s" % (DOCKER_REGISTRY_BASE_URL, CI_IMAGE_NAME, CI_IMAGE_TAG)
 
 # The lane that proves the product's build pipeline builds and pushes owns a registry of its own,
 # and everything that lane is allowed to know about that registry lives here: the fixture image,
-# the port the Service pins to (it is also written in `tests/e2e/fixtures/tekton/docker-build/
-# registry.yaml`, where the cluster objects are spelled), the CI image the pipeline's steps run as,
-# and the image the build step is told to be. The last one is the shape of that swap, not its
-# history: which builder the product's build task currently invokes is a fact the task owns, the
-# lane only hands the image down as a parameter, so replacing it changes one line here and nothing
-# the lane asserts. The CI image has to carry `git`, `ssh` and `bash` for the clone step,
+# the port the Service pins to (both also spelled in `tests/e2e/fixtures/tekton/docker-build/
+# registry.yaml`, where the cluster objects themselves live; that fixture's image line is the same
+# reference this file resolves, substituted on its way into the cluster, so the two cannot disagree),
+# the CI image the pipeline's steps run as,
+# and the image the build step is told to be. The last resolves the versions file's
+# `buildkit` entry instead of writing one down: which builder the product's build task
+# currently invokes is a fact the task owns, so the lane exercises the tag the product ships
+# and a bump leaves no stale copy behind. The CI image has to carry `git`, `ssh` and `bash` for the clone step,
 # which is why it is the git-bearing buildpack image and not the ubuntu one the hello-world
 # task is content with. It is spelled `library/x` and tagged something other than `latest`
 # for one shared reason: the lane seeds it into the node's container store under the exact
 # reference the pipeline names (see `stages.py::_dockerbuild_ci_image_seeded`), and a
 # non-`latest` tag is what lets the kubelet accept the seeded image without pulling again --
-# which is also why the lane's registry is a plain, push-capable `registry:2` and not a
-# pull-through cache: a cache-mode distribution is the same software with pushes switched off.
+# which is also why the lane's registry is a plain, push-capable registry (the file's
+# `registry` entry) and not a pull-through cache: a cache-mode distribution is the same
+# software with pushes switched off.
 DOCKERBUILD_NAMESPACE = "kmt-e2e-dockerbuild"
-DOCKERBUILD_REGISTRY_IMAGE = "registry:2"
+DOCKERBUILD_REGISTRY_IMAGE = versions.image_ref("registry")
 DOCKERBUILD_REGISTRY_PORT = 31500
-DOCKERBUILD_BUILDER_IMAGE = "moby/buildkit:v0.34.2-rootless"
+DOCKERBUILD_BUILDER_IMAGE = versions.image_ref("buildkit")
 DOCKERBUILD_CI_IMAGE_NAME = "library/buildpack-deps"
 DOCKERBUILD_CI_IMAGE_TAG = "scm"
 
@@ -1028,9 +1034,12 @@ def apply_capability_for_group(group):
 # stage step for the same reason every other table in this file does -- a stage that spells out its
 # own image and its own object names is a stage nobody can audit.
 #
-# `image` is `library/` on purpose: the self-audit's `no-personal-registry-namespace` row fails on a
-# docker.io URL with a personal namespace, and `traefik/whoami` is exactly that shape. It is pinned
-# to a tag that exists because an unpinned one is the difference between a red lane and a red lane
+# `image` resolves the versions file's `nginx` reference: the lane only proves an Ingress
+# reaches something, and one line in `versions.yaml` owns which tag that is -- a bump there
+# moves this fixture with it, and writing the tag here would be the copy that outlives the bump.
+# It is `library/` on purpose: the self-audit's `no-personal-registry-namespace` row fails on a
+# docker.io URL with a personal namespace, and `traefik/whoami` is exactly that shape. The tag
+# must be one that exists, because an unpinned one is the difference between a red lane and a red lane
 # whose detail says `ImagePullBackOff`.
 #
 # `host` uses the reserved `.invalid` TLD, the same choice `BASE_DOMAIN` makes further up. It is not
@@ -1038,7 +1047,7 @@ def apply_capability_for_group(group):
 # resolve is what keeps the lane from pretending it proved real ACME issuance.
 ROUTING_LANE = {
     "backend": "kmt-e2e-routing-backend",          # Deployment + Service, one namespace: `namespace`
-    "image": "docker.io/library/nginx:1.27-alpine",
+    "image": versions.image_ref("nginx"),
     "issuer": "kmt-e2e-routing-ca",                # cert-manager self-signed Issuer
     "certificate": "kmt-e2e-routing-tls",           # Certificate -> the Secret Traefik terminates with
     "ingress": "kmt-e2e-routing",                   # spec.tls names `certificate`, class names `class`

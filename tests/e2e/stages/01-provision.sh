@@ -27,17 +27,6 @@ export DEBIAN_FRONTEND=noninteractive
 
 log() { echo "[01-provision] $*" >&2; }
 
-# The one k3s release this lane is certified against, and the only place the number is written. The
-# harness records k3s in `result.json` (`_tool_versions`) but declares it nowhere: it is the cluster
-# and not a binary kubementat execs, so `PINNED_BINARY_VERSIONS` has no row for it and no check can
-# read this number out of the product. What a green full run measured is what a pin should name, so
-# this is that version and not the stable channel's latest.
-#
-# Why a pin and not the channel: a promotion off stable used to arrive as a guest that crash-looped
-# with no owner and no note, because recording the version had been the whole implementation and
-# nothing read the record. Pinning moves that drift out of accident and into one deliberate commit.
-K3S_VERSION="v1.36.5+k3s1"
-
 sudo() { command sudo -n env DEBIAN_FRONTEND=noninteractive "$@"; }
 mkdir_p() { sudo mkdir -p "$@"; }
 
@@ -62,13 +51,21 @@ log "guest arch=$ARCH, distro=$(. /etc/os-release && echo "$PRETTY_NAME")"
 # tools that must be on the guest, and later stages read JSON back with jq. Installing them here is
 # what makes a missing one a named infra failure at stage 01 instead of an unreadable one at 02.
 # curl and ca-certificates are neither: they are only how section 2 fetches.
-log "apt update + git-crypt/yq/python3-pip"
+#
+# python3-yaml goes in for a fifth reason: the version reads below run `versions.py` on the
+# *system* python3, before any virtualenv exists, and it imports yaml to answer. Without it a
+# missing yaml module would read as a missing default version, which is the wrong sentence to
+# say about a guest that merely lacks a package.
+log "apt update + git-crypt/yq/python3-pip/python3-yaml"
 sudo apt-get -qq update
-sudo apt-get -qq install -y git-crypt yq python3-pip curl ca-certificates jq
+sudo apt-get -qq install -y git-crypt yq python3-pip python3-yaml curl ca-certificates jq
 
 # ----------------------------------------------------------------- 2. tooling
-# The versions here come from `constants.PINNED_BINARY_VERSIONS`, read out of the checkout, and
-# never from a literal. The literal is what let the guest run helm 3.22.1 and helmfile 1.8.2 while
+# The pinned binaries here (helm, helmfile) take their versions from `constants.PINNED_BINARY_VERSIONS`,
+# read out of the checkout, and never from a literal. The fixture tools this section
+# also installs -- tkn below, k3s in section 3 -- take theirs from `versions.yaml`, the file that
+# owns versions the product's binary table has no row for.
+# The literal is what let the guest run helm 3.22.1 and helmfile 1.8.2 while
 # the checkout declared 4.3.1 and 1.7.0: the lane was green, `tool_versions` knew, and the evidence
 # was about whatever the installer handed us that day rather than about kubementat.
 #
@@ -90,8 +87,9 @@ if [ -z "${PIN_SOURCE:-}" ]; then
   exit 4
 fi
 
-# `pin <binary>` -> the version that file declares for it. constants.py imports nothing, so plain
-# python3 reads it -- no virtualenv, and nothing installed later has to work first.
+# `pin <binary>` -> the version that file declares for it. constants.py now reads that answer
+# through versions.py out of `versions.yaml`, but the whole chain is yaml and pathlib, so plain
+# python3 still reads it -- no virtualenv, and nothing installed later has to work first.
 pin() {
   env PYTHONPATH="$PIN_SOURCE/src" python3 -c '
 import sys
@@ -101,6 +99,14 @@ try:
 except KeyError:
     sys.exit("constants.PINNED_BINARY_VERSIONS declares no version for " + sys.argv[1])
 ' "$1"
+}
+
+# `pin_versions <dotted.path>` -> the value `versions.yaml` declares there, read through the
+# file's own CLI. It exists for the versions constants.py has no row for -- the k3s release this
+# script installs and the tkn the CI image's build arg also carries -- so the answer and its
+# refusal come from the same reader every Python consumer uses, and nothing here parses yaml.
+pin_versions() {
+  env PYTHONPATH="$PIN_SOURCE/src" python3 -m kubementat.core.versions --get "$1"
 }
 
 # The same answer from the binary on PATH, reduced to the triple the pin is written as. The product
@@ -161,14 +167,15 @@ if ! diff_runnable="$(helm diff version 2>&1)"; then
   log "FAILED: 'helm diff version' is not runnable on the guest, and stage 02's initialize will exit 1 on it: $diff_runnable"
 fi
 
-# tkn's version is the only pin here that nothing watches. The product asks only whether tkn exists
-# (`BINARY_VERSION_ARGV` has no row for it, so section 2's table has nothing to read), and the
-# Renovate row for the stage matches `K3S_VERSION=` and nothing else -- what it *does* watch is the CI
-# image's `ARG TKN_CLI_VERSION`, which is why the two drifted apart once already. So the number is
-# written twice and checked nowhere: this line and
-# `docker_files/ci_images/ubuntu_ci_minimal/Dockerfile`. Change both together or the lane and the CI
-# image are proving different tkn binaries.
-TKN_VERSION="0.46.2"
+# The tkn version is one line of `versions.yaml` -- `ci_image.TKN_CLI_VERSION` -- and both sides
+# that used to own a copy resolve it now: this stage reads it through the file's CLI, and the CI
+# image build passes that same line as its `TKN_CLI_VERSION` build arg. It was written twice and
+# checked nowhere, which is exactly how the lane and the CI image drifted apart once; resolving
+# one owner retires the agreement-in-luck, so there is no "change both together" note left to
+# keep. The product itself still only asks whether tkn exists (`BINARY_VERSION_ARGV` has no row
+# for it), so what this stage installs is the file's pin and what records it is `result.json`'s
+# `tool_versions`, read off the guest's own binary.
+TKN_VERSION="$(pin_versions ci_image.TKN_CLI_VERSION)"
 log "tkn $TKN_VERSION"
 if [ ! -x /usr/local/bin/tkn ]; then
   curl -fsSL -o /tmp/tkn.tgz \
@@ -190,8 +197,18 @@ fi
 # ------------------------------------------------------------------- 3. k3s
 # Measured: a bare Ubuntu 26.04 guest needs no preparation of any kind -- no kernel modules, no apt
 # upgrade -- and is Ready in ~10 s (FR-20's measured 9.6 s). What it does need is a version, which
-# K3S_VERSION explains.
-log "k3s"
+# the line below resolves from `versions.yaml`'s `e2e.k3s` through the same CLI the pinned-binary
+# reads above use.
+#
+# The harness records k3s in `result.json` (`_tool_versions`) and declares it nowhere else: k3s is
+# the cluster and not a binary kubementat execs, so `PINNED_BINARY_VERSIONS` has no row for it.
+# What a green full run measured is what the pin should name, so it is a certified version and not
+# the stable channel's latest. Why a pin and not the channel: a promotion off stable used to arrive
+# as a guest that crash-looped with no owner and no note, because recording the version had been
+# the whole implementation and nothing read the record. The pin moves that drift out of accident
+# and into one deliberate edit of one line of the file.
+K3S_VERSION="$(pin_versions e2e.k3s)"
+log "k3s $K3S_VERSION"
 if [ ! -x /usr/local/bin/k3s ] && ! command -v k3s >/dev/null 2>&1; then
   curl -sfL https://get.k3s.io | sudo env INSTALL_K3S_VERSION="$K3S_VERSION" sh - >&2
 # A guest that already has k3s is skipped only when it already has *this* k3s. The original guard
