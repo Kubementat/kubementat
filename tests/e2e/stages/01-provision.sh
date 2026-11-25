@@ -1,17 +1,20 @@
 # Provisioning: single-node k3s plus kubementat's prerequisite set, in one shot.
 #
-# This is the only stage delivered as a virt-runner provisioning script (FR-13). It
-# is one-shot and parameter-free: a provisioning script gets no arguments and no
-# environment, so every later stage runs command-by-command through the ssh
-# primitive (FR-12) instead. Everything here is idempotent, because a failed script
-# keeps the VM running and the operator may re-run it.
+# This is the only stage virt-runner delivers as a `--script` (FR-13, and FR-12/FR-24 below: the
+# requirements live in `docs/plans/testsuite-requirements.md`). That delivery decides the shape of
+# this file: a `--script` arrives with no arguments and no environment beyond the `@PLACEHOLDER@`
+# paths `suite.py` substitutes, so nothing can be told to it per run and it must decide everything
+# itself. Every later stage goes command by command through the ssh primitive instead, where each
+# command gets its own exit code. Everything here is idempotent because a failed script leaves the
+# VM running, and the operator's next move is to re-run it rather than destroy it.
 #
-# The guest is `--distro ubuntu --release resolute` (Ubuntu 26.04), pinned by the
-# harness rather than taken from virt-runner's profile default (FR-24).
+# The guest is `--distro ubuntu --release resolute` (Ubuntu 26.04), which the harness names on the
+# create instead of accepting virt-runner's profile default: a profile edit must not silently change
+# which operating system the suite is proving.
 #
-# Timings this stage aims to stay inside (see docs/README_E2E_TESTS.md): apt update
-# ~15s, git-crypt ~5s, tooling ~45s, k3s 9.6s, kubeconfig fix ~8s, tree copy 1.4s,
-# `uv sync` 2.9s.
+# Budget: 600-630 s for this stage, the VM create inside it (`timeouts` in harness/config.py), of
+# which a warm-cache smoke run measured 182 s (`docs/README_E2E_TESTS.md`). The create alone is
+# 16-30 s of that, which is why each install below first asks whether the guest already has it.
 
 set -euo pipefail
 
@@ -24,13 +27,15 @@ export DEBIAN_FRONTEND=noninteractive
 
 log() { echo "[01-provision] $*" >&2; }
 
-# The one k3s release this lane is certified against, and the only place the number is written.
-# `v1.36.5+k3s1` is the version the last green full run recorded, so the pin names a cluster the harness
-# has actually measured rather than one chosen for today's mood. This replaces "recorded, not pinned"
-# (D8): a promotion off the stable channel used to arrive as a guest that crash-looped with no owner and
-# no note, because nothing in the lane noticed the version had changed. Pinning is what makes parity with
-# the Pi reference cluster checkable instead of aspirational, and it puts the drift the lane was
-# discovering by accident into one deliberate commit. See docs/plans/k3s-pi-reference-cluster.md D8.
+# The one k3s release this lane is certified against, and the only place the number is written. The
+# harness records k3s in `result.json` (`_tool_versions`) but declares it nowhere: it is the cluster
+# and not a binary kubementat execs, so `PINNED_BINARY_VERSIONS` has no row for it and no check can
+# read this number out of the product. What a green full run measured is what a pin should name, so
+# this is that version and not the stable channel's latest.
+#
+# Why a pin and not the channel: a promotion off stable used to arrive as a guest that crash-looped
+# with no owner and no note, because recording the version had been the whole implementation and
+# nothing read the record. Pinning moves that drift out of accident and into one deliberate commit.
 K3S_VERSION="v1.36.5+k3s1"
 
 sudo() { command sudo -n env DEBIAN_FRONTEND=noninteractive "$@"; }
@@ -48,8 +53,15 @@ esac
 log "guest arch=$ARCH, distro=$(. /etc/os-release && echo "$PRETTY_NAME")"
 
 # -------------------------------------------------------------------- 1. apt
-# kubementat's own dependency check requires yq and pip; jq ships in the cloud
-# image and is deliberately not installed here.
+# The packages split two ways, and the split is not what the product checks. pip, gpg and git-crypt
+# are what kubementat itself needs: `KUBEMENTAT_DEPENDENCIES` refuses a missing pip or gpg, and
+# `config init` cannot make an encrypted tree without git-crypt.
+#
+# yq and jq are not -- nothing in `src/` execs either one since their rows were deleted -- and they
+# go in anyway because the lane asks for them: `assert:guest-tools-present` counts yq among the
+# tools that must be on the guest, and later stages read JSON back with jq. Installing them here is
+# what makes a missing one a named infra failure at stage 01 instead of an unreadable one at 02.
+# curl and ca-certificates are neither: they are only how section 2 fetches.
 log "apt update + git-crypt/yq/python3-pip"
 sudo apt-get -qq update
 sudo apt-get -qq install -y git-crypt yq python3-pip curl ca-certificates jq
@@ -92,9 +104,10 @@ except KeyError:
 }
 
 # The same answer from the binary on PATH, reduced to the triple the pin is written as. The product
-# parses these answers with `automation.first_binary_version` and warns; this is its shell
-# counterpart, used only to decide whether an already-present binary is the pinned one. The verdict
-# on a wrong version is the lane's, not this script's -- see `_assert_pinned_tool_versions`.
+# reads versions with `automations.install.dependencies.first_binary_version` and warns; this is its
+# shell counterpart, used to decide whether an already-present binary is the pinned one and to name
+# the version when something below fails. The verdict on a wrong version is the lane's, not this
+# script's -- see `LaneRunner._tool_version_drift`.
 installed_version() {
   case "$1" in
     helm) helm version --short 2>/dev/null | head -1 ;;
@@ -147,10 +160,19 @@ fi
 if ! diff_runnable="$(helm diff version 2>&1)"; then
   log "FAILED: 'helm diff version' is not runnable on the guest, and stage 02's initialize will exit 1 on it: $diff_runnable"
 fi
-log "tkn"
+
+# tkn's version is the only pin here that nothing watches. The product asks only whether tkn exists
+# (`BINARY_VERSION_ARGV` has no row for it, so section 2's table has nothing to read), and the
+# Renovate row for the stage matches `K3S_VERSION=` and nothing else -- what it *does* watch is the CI
+# image's `ARG TKN_CLI_VERSION`, which is why the two drifted apart once already. So the number is
+# written twice and checked nowhere: this line and
+# `docker_files/ci_images/ubuntu_ci_minimal/Dockerfile`. Change both together or the lane and the CI
+# image are proving different tkn binaries.
+TKN_VERSION="0.46.2"
+log "tkn $TKN_VERSION"
 if [ ! -x /usr/local/bin/tkn ]; then
   curl -fsSL -o /tmp/tkn.tgz \
-    "https://github.com/tektoncd/cli/releases/download/v0.46.1/tkn_0.46.1_Linux_${ARCH_TKN}.tar.gz"
+    "https://github.com/tektoncd/cli/releases/download/v${TKN_VERSION}/tkn_${TKN_VERSION}_Linux_${ARCH_TKN}.tar.gz"
   tar -xzf /tmp/tkn.tgz -C /tmp tkn
   sudo install -m 0755 /tmp/tkn /usr/local/bin/tkn
 fi
@@ -166,36 +188,31 @@ if [ -x "$HOME/.local/bin/uv" ]; then
 fi
 
 # ------------------------------------------------------------------- 3. k3s
-# Measured: a bare Ubuntu 26.04 guest needs no preparation of any kind — no
-# kernel modules, no apt upgrade. It is Ready in ~10s. What it does need is a
-# version, which the paragraph above explains.
+# Measured: a bare Ubuntu 26.04 guest needs no preparation of any kind -- no kernel modules, no apt
+# upgrade -- and is Ready in ~10 s (FR-20's measured 9.6 s). What it does need is a version, which
+# K3S_VERSION explains.
 log "k3s"
 if [ ! -x /usr/local/bin/k3s ] && ! command -v k3s >/dev/null 2>&1; then
   curl -sfL https://get.k3s.io | sudo env INSTALL_K3S_VERSION="$K3S_VERSION" sh - >&2
-# A guest that already has k3s is skipped only when it already has *this* k3s. The
-# original guard asked "is k3s installed", which is how a promoted guest survived a
-# re-run of this script: the check passed, the wrong binary stayed, and the lane died
-# minutes later on a CRD that never finishes establishing. So a wrong version is
-# reinstalled here rather than noticed downstream.
-# A guest that already has k3s is skipped only when it already has *this* k3s. The
-# original guard asked "is k3s installed", which is how a promoted guest survived a
-# re-run of this script: the check passed, the wrong binary stayed, and the lane died
-# minutes later on a CRD that never finishes establishing. So a wrong version is
-# reinstalled here rather than noticed downstream.
+# A guest that already has k3s is skipped only when it already has *this* k3s. The original guard
+# asked "is k3s installed", which is how a promoted guest survived a re-run of this script: the check
+# passed, the wrong binary stayed, and the lane died minutes later on a CRD that never finishes
+# establishing. So a wrong version is reinstalled here rather than noticed downstream.
 #
-# The version is matched out of `k3s --version` ("k3s version v1.36.5+k3s1 (deadbeef)")
-# rather than split by position: the last field is the commit hash, so a comparison that
-# looked exact was comparing the wrong thing.
+# The version is matched out of `k3s --version` ("k3s version v1.36.5+k3s1 (deadbeef)") rather than
+# split by position: the last field is the commit hash, so a comparison that looked exact was
+# comparing the wrong thing.
 elif [ "$(k3s --version 2>/dev/null | head -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+' || true)" != "$K3S_VERSION" ]; then
   log "k3s is not $K3S_VERSION; reinstalling the pinned release"
   curl -sfL https://get.k3s.io | sudo env INSTALL_K3S_VERSION="$K3S_VERSION" sh - >&2
 fi
 
-# /etc/rancher/k3s/k3s.yaml is 0600 root:root and k3s resets it to 600 on every
-# restart, which makes even `initialize` fail (KubernetesUtils calls
-# load_kube_config). The durable fix is the config file plus a restart, and a
-# symlink for the Python client, which reads $KUBECONFIG or ~/.kube/config and
-# nothing else.
+# /etc/rancher/k3s/k3s.yaml is 0600 root:root and k3s resets it to 600 on every restart, which is
+# enough to break `initialize`: kubementat's cluster calls are kubectl calls, and kubectl falls back
+# to ~/.kube/config when nothing points it elsewhere. Hence the mode k3s writes rather than a chmod a
+# restart undoes -- the config file and a restart, not a permission bump. The symlink is for the
+# Python client, which reads $KUBECONFIG or ~/.kube/config and nothing else, and is what
+# `assert:kubeconfig-readable-by-python-client` proves.
 log "kubeconfig mode"
 if ! grep -q 'write-kubeconfig-mode' /etc/rancher/k3s/config.yaml 2>/dev/null; then
   printf 'write-kubeconfig-mode: 644\n' | sudo tee /etc/rancher/k3s/config.yaml >/dev/null
@@ -222,9 +239,8 @@ log "copying $MOUNT -> $WORKDIR"
 # there, so it tests existence: a pointer file is a supported checkout layout, not a
 # missing tree. (The `tar` below copies the whole tree, `.git` pointer included.)
 if [ -e "$MOUNT/.git" ]; then
-  # INV-1: the tree, dirty state included, copied before anything initializes in
-  # it. Built artifacts are not the tree: the guest's own virtualenv is created by
-  # `uv sync` below, so .venv/.pytest_cache are excluded.
+  # The two exclusions are the copy's only edits: the guest builds its own virtualenv in
+  # `uv sync` below, and copying the host's would hand it a tree of broken absolute paths.
   tar -C "$MOUNT" --exclude=./.venv --exclude=./.pytest_cache -cf - . | tar -C "$WORKDIR" -xf -
 else
   echo "the mounted checkout is missing at $MOUNT" >&2
@@ -235,12 +251,19 @@ fi
 log "uv sync --all-extras"
 ( cd "$WORKDIR" && env PATH="/usr/local/bin:$PATH" uv sync --all-extras ) >&2
 
-# k3s's own kubectl is what `kmt` finds; make sure it is reachable for a plain user.
+# k3s installs its own kubectl in /usr/local/bin, already on a plain user's PATH, so there is nothing
+# here to fix: the dependency check's `kubectl` row resolves to that binary. This line records the
+# version, because "the lane ran kubectl 1.35" is a fact worth having in the log without asking a
+# cluster that may no longer be up.
 if [ -x /usr/local/bin/kubectl ]; then
   log "kubectl -> $(kubectl version --client=true 2>/dev/null | head -1)"
 fi
 
-# Record what the harness needs to read back: the resolved state of this stage.
+# The one artifact this stage writes that nothing reads. The harness takes its version evidence by
+# asking the guest's own binaries (`LaneRunner._tool_versions`, and the pinned-version probe), never
+# from a file this script wrote, and that is deliberate: a number recorded here could be wrong about
+# the binary that is actually running. So $STATE/facts exists for whoever sshes into a
+# half-provisioned guest and for no automation -- do not add a reader that trusts it.
 {
   echo "arch=$ARCH"
   echo "helm=$(helm version --short 2>/dev/null | head -1)"
