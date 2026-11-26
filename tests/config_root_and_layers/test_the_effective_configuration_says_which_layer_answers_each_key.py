@@ -167,13 +167,16 @@ def test_show_on_a_fresh_tree_tags_every_key_and_prints_no_other_keys(tmp_path):
     # A release knob's default is the manifest's own `default`, not a code table.
     assert answers["GRAFANA_ENABLED"].value == "true"
     assert answers["GRAFANA_ENABLED"].origin == "default"
-    assert answers["GRAFANA_VERSION"].default == "14.2.0"
-    assert answers["ALLOY_VERSION"].default == "1.15.0"
+    # And the version knobs answer through `versions.yaml` rather than a literal copied here,
+    # so a bump moves this check with the file and not against it.
+    assert answers["GRAFANA_VERSION"].default == versions.chart_version("grafana")
+    assert answers["ALLOY_VERSION"].default == versions.chart_version("alloy")
 
     # The templated answers are answered keys too, and the report says which of the two
     # `constants.py` tables owns them: this one is a key of `DEFAULT_STATIC_ANSWERS`, not a namespace.
     pipeline = answers["TEKTON_VERSION_PIPELINE"]
-    assert (pipeline.origin, pipeline.value, pipeline.source) == ("default", "1.17.1", None)
+    assert (pipeline.origin, pipeline.value, pipeline.source) == \
+        ("default", versions.tekton_version("pipeline"), None)
     assert pipeline.default == constants.DEFAULT_STATIC_ANSWERS["TEKTON_VERSION_PIPELINE"]
 
     # ...and the line itself is the shape a `diff` reads, including the `null` that reads as JSON.

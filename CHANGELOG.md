@@ -1,4 +1,35 @@
 # Unreleased
+- **The version scan ran, and every pin it answered moved.** A dry-run scan (2026-11-26) found newer
+  upstreams for every block of `versions.yaml`: eight chart bumps (prometheus 31.0.0,
+  prometheus-blackbox-exporter 12.0.0, grafana 14.6.1, loki 21.6.0, alloy 1.16.0, traefik 43.0.0,
+  openbao 0.30.8, concourse 20.3.4 with its image tag at 8.3.4, which is that chart's `appVersion`),
+  the two binaries (helm 4.3.2, helmfile 1.8.5 for both of its lines), the three Tekton releases,
+  the CI-image build args including the Ubuntu base at 26.10 and the Node LTS at 26.13.1, the image
+  tags including the registry at 3.1.2, and k3s 1.37.2 for the harness. Maven is the exception the
+  config predicts: its `-openjdk-17-slim` suffix stopped being published after 3.8.x, so the bump
+  lands on `3.10.2-eclipse-temurin-17-alpine`, the current small JDK-17 tag, instead of a tag that
+  does not exist. The Python lock was refreshed the same way (`uv lock --upgrade`), and the
+  dev pins moved to the newest releases that still honour the 3.9 floor — pytest 9.2.0 and
+  coverage 7.17.5 need newer Pythons than the package supports, so raising the floor would have to
+  be its own decision before those majors are acceptable. The workflow pins (the Renovate image,
+  `renovatebot/github-action` and `setup-uv`) carried the same scan's candidates.
+
+- **A wait that reads between probes may not raise over an apiserver blip.** The first e2e run on
+  k3s 1.37 died in `01-provision` with `KubectlError: kubectl get pods -A` sixty seconds after a
+  node that was Ready: `Cluster.wait` guarded its probe against a mid-restart cluster but read the
+  unguarded `pending_pod_diagnosis()` between attempts, so the diagnosis call raised and the
+  retryable wait became a stage failure. The read is guarded the same way now — inside a wait loop
+  "not yet" is allowed, raising is not.
+
+- **The provisioning script writes the kubeconfig mode before k3s's first boot, not with a restart
+  after it.** k3s 1.37 dies 60 seconds into a boot whose embedded-CRD registration was interrupted —
+  a CRD left at `Established=False, reason=Installing` never completes, and the server refuses to
+  start controllers while it waits. The old script installed k3s and then restarted it to apply
+  `write-kubeconfig-mode`, and that restart hit the race on roughly one boot in three: a Ready node,
+  zero pods, and a service crash-looping forever. Now the config file is in place before the install
+  and only a guest whose k3s started without it restarts, by which point every CRD is Established.
+  The check beside it reads the mode and provokes nothing.
+
 - **The version scan has a scheduler that is not a host.** `.github/workflows/renovate.yml` starts
   the same `renovate.json` from GitHub Actions daily inside the window the lock-file gate needs.
   With it enabled, the host's PR-mode cron line should stop — two schedulers on one file means two

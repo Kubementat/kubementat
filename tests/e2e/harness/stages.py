@@ -467,14 +467,13 @@ class LaneRunner:
         if not passed:
             raise StageFailed("the node never became Ready")
 
-        # The kubeconfig mode must survive a restart, not just chmod. No
-        # restart happens here: the provisioning script already restarted k3s once
-        # for the write-kubeconfig-mode change, and restarting again this early
-        # aborts k3s's own addon deploy mid-flight (measured: node Ready, zero pods,
-        # zero StorageClasses, repeating on every restart).
+        # The kubeconfig mode is what the provisioning script's config file makes, and the check
+        # only reads the result: a harness restart this early would abort k3s's own addon deploy
+        # mid-flight (measured: node Ready, zero pods, zero StorageClasses, repeating on every
+        # restart), so provoking one is the harness bug this check must not commit.
         stat = self.guest.run(command="stat -c '%a' /etc/rancher/k3s/k3s.yaml", timeout=30)
-        self.expect("kubeconfig-mode-644-after-restart", "644" in stat.stdout,
-                    "k3s.yaml mode is %s, expected 644 after a service restart" % stat.stdout.strip())
+        self.expect("kubeconfig-mode-644", "644" in stat.stdout,
+                    "k3s.yaml mode is %s, expected 644 from write-kubeconfig-mode" % stat.stdout.strip())
         self._wait_for_addons()
 
         # `kmt --help` as a plain user with no KUBECONFIG is what the fix is *for*.

@@ -10,34 +10,34 @@
 
 charts:
   prometheus:
-    version: "29.40.1"
+    version: "31.0.0"
   prometheus-blackbox-exporter:
-    version: "11.20.2"
+    version: "12.0.0"
   prometheus-helm-exporter:
     version: "1.4.0+e2eee28"
   grafana:
-    version: "14.2.0"
+    version: "14.6.1"
   loki:
-    version: "20.2.0"
+    version: "21.6.0"
   alloy:
-    version: "1.15.0"
+    version: "1.16.0"
   polaris:
     version: "6.0.1"
   cert-manager:
     version: "v1.21.3"
   traefik:
-    version: "42.1.3"
+    version: "43.0.0"
   openbao:
-    version: "0.30.6"
+    version: "0.30.8"
   concourse:
-    version: "20.3.3"
-    image_tag: "8.3.3"
+    version: "20.3.4"
+    image_tag: "8.3.4"
 
 # The binaries kubementat execs against a cluster. Portability rule lives next to the pins in
 # `core/constants.py`; this is the number it is read from.
 binaries:
-  helm: "4.3.1"
-  helmfile: "1.7.0"
+  helm: "4.3.2"
+  helmfile: "1.8.5"
 
 # The Tekton releases `kmt install` applies, in apply order: pipeline, dashboard (reads the
 # Pipelines API), triggers.
@@ -49,24 +49,26 @@ tekton:
 # Consumed only as Docker build args, keyed by the `ARG` name in
 # `docker_files/ci_images/ubuntu_ci_minimal/Dockerfile`. `--print-build-args` is the interface.
 ci_image:
-  BASE_IMAGE_URL: "ubuntu:26.04"
+  BASE_IMAGE_URL: "ubuntu:26.10"
   KUBECTL_MINOR_VERSION: "1.37"
-  TKN_CLI_VERSION: "0.46.2"
-  YQ_VERSION: "4.54.1"
-  HELMFILE_VERSION: "1.8.2"
+  TKN_CLI_VERSION: "0.47.0"
+  YQ_VERSION: "4.54.3"
+  HELMFILE_VERSION: "1.8.5"
   HELM_DIFF_VERSION: "3.15.15"
-  LINKERD_VERSION: "edge-26.10.1"
-  NODE_VERSION: "24.22.1"
-  UV_VERSION: "0.13.6"
+  LINKERD_VERSION: "edge-26.11.2"
+  NODE_VERSION: "26.13.1"
+  UV_VERSION: "0.13.10"
 
 # Container images that are product shape rather than a cluster's: the build step's builder, the
 # Maven task image, and the references the end-to-end harness pulls.
 images:
-  buildkit: "moby/buildkit:v0.34.2-rootless"
-  maven: "maven:3.8.4-openjdk-17-slim"
-  registry: "registry:2"
-  nginx: "docker.io/library/nginx:1.27-alpine"
-  alpine: "docker.io/library/alpine:3.21"
+  buildkit: "moby/buildkit:v0.35.1-rootless"
+  # Maven's `-openjdk-17-slim` suffix stopped being published with 3.8.x, so the
+  # bump lands on the current small JDK-17 3.10.2 tag rather than a missing one.
+  maven: "maven:3.10.2-eclipse-temurin-17-alpine"
+  registry: "registry:3.1.2"
+  nginx: "docker.io/library/nginx:1.31.10-alpine"
+  alpine: "docker.io/library/alpine:3.24.4"
 
 e2e:
-  k3s: "v1.36.5+k3s1"
+  k3s: "v1.37.2+k3s1"

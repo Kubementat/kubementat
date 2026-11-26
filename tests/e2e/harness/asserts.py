@@ -295,7 +295,17 @@ class Cluster:
             passed, detail = predicate()
             if passed:
                 return True, detail, attempts
-            bad, capacity = self.pending_pod_diagnosis()
+            # The diagnosis is another read against the same cluster the probe was guarded
+            # for, and it carried the same failure it guards against: a k3s mid-restart can
+            # answer a probe with "not yet" and raise on the very next call, which turned a
+            # retryable wait into a stage failure. Inside a wait loop no read may raise over
+            # an apiserver blip -- the loop's whole contract is "not yet is allowed".
+            try:
+                bad, capacity = self.pending_pod_diagnosis()
+            except KubectlError as exc:
+                detail = "cluster not readable yet: %s" % str(exc)[:120]
+                time.sleep(interval)
+                continue
             if capacity:
                 raise CapacityAborted("%s | unschedulable/failed pods: %s" % (capacity, bad[:3]))
             if deadline_probe:

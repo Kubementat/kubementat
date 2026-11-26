@@ -207,10 +207,34 @@ fi
 # as a guest that crash-looped with no owner and no note, because recording the version had been
 # the whole implementation and nothing read the record. The pin moves that drift out of accident
 # and into one deliberate edit of one line of the file.
+
+# /etc/rancher/k3s/k3s.yaml is 0600 root:root and k3s resets it to 600 on every restart, which is
+# enough to break `initialize`: kubementat's cluster calls are kubectl calls, and kubectl falls back
+# to ~/.kube/config when nothing points it elsewhere. Hence the mode k3s writes rather than a chmod
+# a restart undoes -- the config file, not a permission bump. It is written before k3s ever starts,
+# so the guest takes it on its first boot and nothing restarts that boot mid-flight: a restart
+# during the first boot used to interrupt the embedded-CRD registration, a CRD left at
+# reason=Installing is never completed afterwards, and k3s 1.37's server spends 60s waiting on one
+# and exits -- a crash-looping service with a Ready node and zero pods. The mode and the restart
+# must not be traded away either: leaving this write until after the install left a fresh guest
+# running at 600 with nobody restarting it, and `kubectl` said only "Unable to read k3s.yaml".
+# Only a guest whose k3s started before this file existed restarts for it, and by then every CRD is
+# Established. The symlink that follows the install is for the Python client, which reads
+# $KUBECONFIG or ~/.kube/config and nothing else.
+log "kubeconfig mode"
+sudo mkdir -p /etc/rancher/k3s
+config_written=0
+if ! grep -q 'write-kubeconfig-mode' /etc/rancher/k3s/config.yaml 2>/dev/null; then
+  printf 'write-kubeconfig-mode: 644\n' | sudo tee /etc/rancher/k3s/config.yaml >/dev/null
+  config_written=1
+fi
+
 K3S_VERSION="$(pin_versions e2e.k3s)"
 log "k3s $K3S_VERSION"
+k3s_installed_now=0
 if [ ! -x /usr/local/bin/k3s ] && ! command -v k3s >/dev/null 2>&1; then
   curl -sfL https://get.k3s.io | sudo env INSTALL_K3S_VERSION="$K3S_VERSION" sh - >&2
+  k3s_installed_now=1
 # A guest that already has k3s is skipped only when it already has *this* k3s. The original guard
 # asked "is k3s installed", which is how a promoted guest survived a re-run of this script: the check
 # passed, the wrong binary stayed, and the lane died minutes later on a CRD that never finishes
@@ -222,17 +246,13 @@ if [ ! -x /usr/local/bin/k3s ] && ! command -v k3s >/dev/null 2>&1; then
 elif [ "$(k3s --version 2>/dev/null | head -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+' || true)" != "$K3S_VERSION" ]; then
   log "k3s is not $K3S_VERSION; reinstalling the pinned release"
   curl -sfL https://get.k3s.io | sudo env INSTALL_K3S_VERSION="$K3S_VERSION" sh - >&2
+  k3s_installed_now=1
 fi
 
-# /etc/rancher/k3s/k3s.yaml is 0600 root:root and k3s resets it to 600 on every restart, which is
-# enough to break `initialize`: kubementat's cluster calls are kubectl calls, and kubectl falls back
-# to ~/.kube/config when nothing points it elsewhere. Hence the mode k3s writes rather than a chmod a
-# restart undoes -- the config file and a restart, not a permission bump. The symlink is for the
-# Python client, which reads $KUBECONFIG or ~/.kube/config and nothing else, and is what
-# `assert:kubeconfig-readable-by-python-client` proves.
-log "kubeconfig mode"
-if ! grep -q 'write-kubeconfig-mode' /etc/rancher/k3s/config.yaml 2>/dev/null; then
-  printf 'write-kubeconfig-mode: 644\n' | sudo tee /etc/rancher/k3s/config.yaml >/dev/null
+# The config was answered above, before k3s started. A restart here is only for the guest whose
+# k3s had already started before this file existed, and it is safe then: the CRDs long since
+# established on that boot.
+if [ "$config_written" = 1 ] && [ "$k3s_installed_now" = 0 ] && systemctl is-active --quiet k3s; then
   sudo systemctl restart k3s
 fi
 mkdir -p "$HOME/.kube"

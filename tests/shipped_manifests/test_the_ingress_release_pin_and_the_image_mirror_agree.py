@@ -11,8 +11,8 @@ from kubementat.core import versions
 HELMFILE_MANIFEST = values_path("helmfile.yaml.gotmpl")
 
 # The chart the release pins, read from the template rather than written here (see
-# `pinned_chart_version`); this is the mapping a changed pin has to be re-derived against. Both rows
-# were produced on 2026-10-29 on this host:
+# `pinned_chart_version`); this is the mapping a changed pin has to be re-derived against. The first
+# row was produced on 2026-10-29 on this host:
 #
 #     $ helm show chart traefik/traefik --version 42.1.3
 #     appVersion: v3.7.16
@@ -22,11 +22,15 @@ HELMFILE_MANIFEST = values_path("helmfile.yaml.gotmpl")
 #     $ helm template traefik traefik/traefik --version 42.1.3 | grep 'image:'
 #             image: docker.io/traefik:v3.7.16
 #
-# so `v3.7.16` is the tag the chart itself renders, not a tag chosen here. A pin that moves off a row
+# `v3.7.16` is the tag the chart itself renders, not a tag chosen here. A pin that moves off a row
 # in this table fails the check that reads it, and the fix it demands is a re-derivation and not a new
 # row -- the same is true of the CRD groups that ship beside the chart.
+#
+# The 43.0.0 row was produced on 2026-11-26, when the pin moved to the chart's major bump, by the
+# same two commands.
 CHART_VERSION_TO_IMAGE_TAG = {
     "42.1.3": "v3.7.16",
+    "43.0.0": "v3.8.0",
 }
 
 # The chart the release names, so a rewrite that swaps the chart over for a different product is

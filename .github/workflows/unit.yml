@@ -60,7 +60,7 @@ jobs:
       # `v9` and `v10` answer 404 against the repo — so `@v10` is not an older major, it is a ref the
       # runner cannot resolve, and the job dies before `uv` exists. Bumping this is a commit of its own.
       - name: Install uv
-        uses: astral-sh/setup-uv@v10.3.3
+        uses: astral-sh/setup-uv@v10.4.0
 
       # `git-crypt` is not on the runner image — `git` is, `git-crypt` is not, and the request to add
       # it (actions/runner-images#6171) was closed without action — so a checkout of this repository
